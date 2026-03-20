@@ -1,0 +1,712 @@
+/* 颜色变量 */
+
+:root {
+    --bg-color: #ffffff;
+    --text-color: #333333;
+    --nav-bg-color: #f8f8f8;
+    --nav-link-color: #555555;
+    --nav-link-hover-color: #55b2f5;
+    --border-color: #ddd;
+    --username-color: #555555;
+    --ping-color: #999999;
+    --notify-bg-color: #fff;
+    --notify-text-color: #333;
+    --notify-border-color: #ccc;
+    --notify-close-hover-bg: #eee;
+    --save-button-bg: #4caf50;
+    --save-button-bg-hover: #43a047;
+    --edit-button-bg: #2196f3;
+    --edit-button-bg-hover: #1976d2;
+    --delete-button-bg: #f44336;
+    --delete-button-bg-hover: #e53935;
+    --button-text-color: #fff;
+    --title-color: #0259aa;
+    --title-color-right: #00b8b1;
+    --clear-button-color: rgba(255, 255, 255, 0.466);
+}
+
+[data-theme="white"] {
+    --bg-color: #ffffff;
+    --text-color: #333333;
+    --nav-bg-color: #f8f8f8;
+    --nav-link-color: #555555;
+    --nav-link-hover-color: #55b2f5;
+    --border-color: #ddd;
+    --username-color: #555555;
+    --ping-color: #999999;
+    --notify-bg-color: #fff;
+    --notify-text-color: #333;
+    --notify-border-color: #ccc;
+    --notify-close-hover-bg: #eee;
+    --save-button-bg: #4caf50;
+    --save-button-bg-hover: #43a047;
+    --edit-button-bg: #2196f3;
+    --edit-button-bg-hover: #1976d2;
+    --delete-button-bg: #f44336;
+    --delete-button-bg-hover: #e53935;
+    --button-text-color: #fff;
+    --title-color: #0259aa;
+    --title-color-right: #00b8b1;
+    --clear-button-color: rgba(255, 255, 255, 0.466);
+}
+
+[data-theme="dark"] {
+    --bg-color: #121212;
+    --text-color: #eeeeee;
+    --nav-bg-color: #1e1e1e;
+    --nav-link-color: #bbbbbb;
+    --nav-link-hover-color: #7abaff;
+    --border-color: #444;
+    --username-color: #bbbbbb;
+    --ping-color: #777777;
+    --notify-bg-color: #222;
+    --notify-text-color: #eee;
+    --notify-border-color: #555;
+    --notify-close-hover-bg: #444;
+    --save-button-bg: #388e3c;
+    --save-button-bg-hover: #2e7d32;
+    --edit-button-bg: #1976d2;
+    --edit-button-bg-hover: #1565c0;
+    --delete-button-bg: #d32f2f;
+    --delete-button-bg-hover: #c62828;
+    --title-color: #bbbbbb;
+    --title-color-right: #7abaff;
+    --clear-button-color: rgba(255, 255, 255, 0.473);
+}
+
+[data-theme="pink"] {
+    --bg-color: #fff0f5;
+    --text-color: #4a154b;
+    --nav-bg-color: #ffe4f0;
+    --nav-link-color: #d81b60;
+    --nav-link-hover-color: #f06292;
+    --border-color: #f8bbd0;
+    --username-color: #ad1457;
+    --ping-color: #ec407a;
+    --notify-bg-color: #fff0f5;
+    --notify-text-color: #4a154b;
+    --notify-border-color: #f48fb1;
+    --notify-close-hover-bg: #fce4ec;
+    --save-button-bg: #ec407a;
+    --save-button-bg-hover: #d81b60;
+    --edit-button-bg: #f06292;
+    --edit-button-bg-hover: #e91e63;
+    --delete-button-bg: #f44336;
+    --delete-button-bg-hover: #e53935;
+    --button-text-color: #fff;
+    --title-color: #ec407a;
+    --title-color-right: #f48fb1;
+    --clear-button-color: rgba(255, 182, 193, 0.507);
+}
+
+[data-theme="blue"] {
+    --bg-color: #e3f2fd;
+    --text-color: #0d47a1;
+    --nav-bg-color: #bbdefb;
+    --nav-link-color: #1976d2;
+    --nav-link-hover-color: #64b5f6;
+    --border-color: #90caf9;
+    --username-color: #0d47a1;
+    --ping-color: #42a5f5;
+    --notify-bg-color: #e3f2fd;
+    --notify-text-color: #0d47a1;
+    --notify-border-color: #64b5f6;
+    --notify-close-hover-bg: #bbdefb;
+    --save-button-bg: #42a5f5;
+    --save-button-bg-hover: #1e88e5;
+    --edit-button-bg: #2196f3;
+    --edit-button-bg-hover: #1976d2;
+    --delete-button-bg: #f44336;
+    --delete-button-bg-hover: #e53935;
+    --button-text-color: #fff;
+    --title-color: #007cf0;
+    --title-color-right: #00dfd8;
+    --clear-button-color: rgba(173, 216, 230, 0.541);
+}
+
+[data-theme="green"] {
+    --bg-color: #e8f5e9;
+    --text-color: #1b5e20;
+    --nav-bg-color: #c8e6c9;
+    --nav-link-color: #388e3c;
+    --nav-link-hover-color: #81c784;
+    --border-color: #a5d6a7;
+    --username-color: #2e7d32;
+    --ping-color: #66bb6a;
+    --notify-bg-color: #e8f5e9;
+    --notify-text-color: #1b5e20;
+    --notify-border-color: #a5d6a7;
+    --notify-close-hover-bg: #c8e6c9;
+    --save-button-bg: #43a047;
+    --save-button-bg-hover: #2e7d32;
+    --edit-button-bg: #66bb6a;
+    --edit-button-bg-hover: #43a047;
+    --delete-button-bg: #f44336;
+    --delete-button-bg-hover: #e53935;
+    --button-text-color: #fff;
+    --title-color: #43a047;
+    --title-color-right: #66bb6a;
+    --clear-button-color: rgba(144, 238, 144, 0.507);
+}
+
+[data-theme="dark-blue"] {
+    --bg-color: #0d1117;
+    /* 主背景深蓝 */
+    --text-color: #dbe9f9;
+    /* 主文本淡蓝白 */
+    --nav-bg-color: #161b22;
+    /* 导航背景 */
+    --nav-link-color: #4ea1f3;
+    /* 链接颜色 */
+    --nav-link-hover-color: #90caf9;
+    /* 链接悬停 */
+    --border-color: #30363d;
+    /* 边框颜色 */
+    --username-color: #58a6ff;
+    /* 用户名颜色 */
+    --ping-color: #79c0ff;
+    /* @提及颜色 */
+    --notify-bg-color: #161b22;
+    /* 通知背景 */
+    --notify-text-color: #dbe9f9;
+    /* 通知文字 */
+    --notify-border-color: #30363d;
+    /* 通知边框 */
+    --notify-close-hover-bg: #1e2530;
+    /* 通知关闭悬停 */
+    --save-button-bg: #238636;
+    /* 保存按钮：绿色 */
+    --save-button-bg-hover: #2ea043;
+    /* 保存按钮悬停 */
+    --edit-button-bg: #2d6cdf;
+    /* 编辑按钮：亮蓝 */
+    --edit-button-bg-hover: #1f4fbf;
+    /* 编辑按钮悬停 */
+    --delete-button-bg: #da3633;
+    /* 删除按钮：红色 */
+    --delete-button-bg-hover: #b62324;
+    /* 删除按钮悬停 */
+    --button-text-color: #ffffff;
+    --title-color: #58a6ff;
+    /* 渐变起始：亮蓝 */
+    --title-color-right: #a5d6ff;
+    /* 渐变结束：更浅的亮蓝 */
+    --clear-button-color: rgba(88, 166, 255, 0.521);
+}
+
+@keyframes dashCircle {
+    to {
+        stroke-dashoffset: 0;
+    }
+}
+
+@keyframes dashCheck {
+    to {
+        stroke-dashoffset: 0;
+    }
+}
+
+@keyframes modalPop {
+    0% {
+        transform: translate(-50%, -50%) scale(0.8);
+    }
+    50% {
+        transform: translate(-50%, -50%) scale(1.05);
+    }
+    100% {
+        transform: translate(-50%, -50%) scale(1);
+    }
+}
+
+
+/* 全局基础样式 */
+
+body {
+    max-width: 100vw;
+    margin: 0;
+    font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+    background-color: var(--bg-color);
+    color: var(--text-color);
+}
+
+.template_title {
+    text-align: center;
+    font-size: 2.8em;
+    font-weight: bold;
+    font-family: 'Poppins', sans-serif;
+    background: linear-gradient(90deg, var(--title-color), var(--title-color-right));
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    margin: 40px 0;
+    position: relative;
+}
+
+.template_title::after {
+    content: '';
+    display: block;
+    width: 80px;
+    height: 4px;
+    background: linear-gradient(to right, var(--title-color), var(--title-color-right));
+    margin: 12px auto 0;
+    border-radius: 5px;
+    animation: underlineFadeIn 1s ease-in-out forwards;
+}
+
+@keyframes underlineFadeIn {
+    0% {
+        width: 0;
+        opacity: 0;
+    }
+    100% {
+        width: 100px;
+        opacity: 1;
+    }
+}
+
+
+/* container 居中和宽度限制 */
+
+.container {
+    background-color: var(--nav-bg-color);
+    max-width: 100%;
+    margin: 0 auto;
+    display: flex;
+    justify-content: space-between;
+    padding: 0 1rem;
+    position: relative;
+}
+
+.container a {
+    display: inline-flex;
+    align-items: center;
+    text-decoration: none;
+}
+
+.logo {
+    height: 30px;
+    /* 控制 logo 高度 */
+    width: auto;
+    /* 保持宽高比 */
+    border-radius: 8px;
+    /* 圆角 */
+    object-fit: contain;
+    /* 保证不变形 */
+    transition: transform 0.2s ease-in-out;
+}
+
+.logo:hover {
+    transform: scale(1.05);
+    /* 鼠标悬停放大一点 */
+}
+
+#nav_select_list {
+    list-style: none;
+    background-color: var(--nav-bg-color);
+    position: absolute;
+    left: 50%;
+    transform: translateX(-50%);
+    display: flex;
+    gap: 2rem;
+    max-width: 50%;
+    height: 100%;
+    overflow-x: auto;
+    /* 火狐 */
+    scrollbar-width: none;
+    /* IE/Edge (旧版) */
+    -ms-overflow-style: none;
+}
+
+
+/* Chrome / Safari / Edge (新) */
+
+#nav_select_list::-webkit-scrollbar {
+    display: none;
+}
+
+
+/* ul 去默认样式，改成水平排列 */
+
+#nav_select_list ul {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+}
+
+
+/* 链接样式 */
+
+
+/* 链接样式 */
+
+.nav-link {
+    text-decoration: none;
+    color: var(--nav-link-color);
+    font-weight: 600;
+    font-size: 1rem;
+    display: inline-block;
+    transition: color 0.3s ease, transform 0.3s ease;
+}
+
+
+/* 悬停效果 */
+
+.nav-link:hover {
+    color: var(--nav-link-hover-color);
+    transform: scale(1.15);
+}
+
+#contorl_panel {
+    display: flex;
+    flex-wrap: nowrap;
+    gap: 10px;
+    max-height: 30px;
+    overflow: hidden;
+}
+
+#BMW_color_line {
+    display: flex;
+    align-items: center;
+}
+
+#BMW_color_line a {
+    line-height: 50px;
+    /* 跟父容器高度一致 */
+    font-size: 100px;
+    /* 文字仍然大 */
+    margin-right: -20px;
+}
+
+
+/* 各色主题 */
+
+#white_theme {
+    color: #ffffff;
+}
+
+#white_theme:hover {
+    color: #cccccc;
+}
+
+#dark_theme {
+    color: #121212;
+}
+
+#dark_theme:hover {
+    color: #444;
+}
+
+#pink_theme {
+    color: #ec407a;
+}
+
+#pink_theme:hover {
+    color: #d81b60;
+}
+
+#blue_theme {
+    color: #1976d2;
+}
+
+#blue_theme:hover {
+    color: #64b5f6;
+}
+
+#dark_blue_theme {
+    color: #161b22;
+}
+
+#dark_blue_theme:hover {
+    color: #4ea1f3;
+}
+
+#green_theme {
+    color: #43a047;
+}
+
+#green_theme:hover {
+    color: #66bb6a;
+}
+
+
+/* username 样式 */
+
+#username {
+    display: inline-block;
+    /* ✅ 关键：让 div 只占内容宽度 */
+    color: var(--username-color);
+    font-size: 1rem;
+    padding-right: 1rem;
+}
+
+
+/* ping_ms 样式 */
+
+#ping_ms {
+    position: fixed;
+    bottom: 5px;
+    right: 5px;
+    font-size: 0.8rem;
+    color: var(--ping-color);
+}
+
+#notification-bell {
+    cursor: pointer;
+    font-size: 24px;
+    color: var(--username-color);
+    transition: color 0.3s ease, transform 0.3s ease;
+}
+
+#notification-bell:hover {
+    color: var(--nav-link-hover-color);
+}
+
+#notification-count {
+    display: none;
+}
+
+
+/* 弹窗动画 */
+
+@keyframes fadeInScale {
+    0% {
+        opacity: 0;
+        transform: translate(-50%, -50%) scale(0.85);
+    }
+    100% {
+        opacity: 1;
+        transform: translate(-50%, -50%) scale(1);
+    }
+}
+
+
+/* 弹窗容器 */
+
+#custom-notify-popup {
+    position: fixed;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    background-color: var(--bg-color);
+    color: var(--text-color);
+    min-width: 320px;
+    max-width: 90vw;
+    max-height: 70vh;
+    overflow-y: auto;
+    padding: 1rem 1.5rem;
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+    border-radius: 8px;
+    z-index: 97;
+    font-family: Arial, sans-serif;
+    animation: fadeInScale 0.25s ease forwards;
+}
+
+
+/* 关闭按钮 */
+
+#custom-notify-popup button.close-btn {
+    position: absolute;
+    top: 8px;
+    right: 12px;
+    background: transparent;
+    border: none;
+    font-size: 1.4rem;
+    color: var(--text-color);
+    cursor: pointer;
+}
+
+
+/* 标题 */
+
+#custom-notify-popup h3 {
+    margin-top: 0;
+    margin-bottom: 1rem;
+    user-select: none;
+}
+
+
+/* 通知链接列表 */
+
+#custom-notify-popup div.content {
+    display: flex;
+    flex-direction: column;
+    gap: 0.5rem;
+}
+
+#custom-notify-popup div.content a {
+    color: var(--text-color);
+    text-decoration: underline;
+    cursor: pointer;
+}
+
+#custom-notify-popup div.content a:hover {
+    color: var(--nav-link-hover-color);
+    font-size: larger;
+}
+
+
+/* 遮罩层 */
+
+#custom-notify-mask {
+    position: fixed;
+    inset: 0;
+    background: rgba(0, 0, 0, 0.3);
+    z-index: 95;
+    backdrop-filter: blur(2px);
+}
+
+#base_container {
+    width: 100%;
+    margin: auto;
+    overflow: hidden;
+}
+
+#status-mask {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100vw;
+    height: 100vh;
+    background-color: rgba(0, 0, 0, 0.5);
+    /* 半透明黑背景 */
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    z-index: 9999;
+    animation: fadeIn 0.3s ease-out;
+}
+
+.loading-logo {
+    width: 80px;
+    height: 80px;
+    animation: pulse 1.5s infinite ease-in-out;
+    border-radius: 8px;
+}
+
+.clear-all-btn {
+    background-color: var(--edit-button-bg);
+    /* 使用变量设置背景色 */
+    color: var(--button-text-color);
+    /* 使用变量设置文本颜色 */
+    border: 1px solid var(--notify-border-color);
+    /* 使用变量设置边框颜色 */
+    padding: 6px 12px;
+    font-size: 14px;
+    border-radius: 4px;
+    cursor: pointer;
+    transition: all 0.3s ease;
+    /* 平滑过渡 */
+}
+
+.clear-all-btn:hover {
+    background-color: var(--edit-button-bg-hover);
+    /* 使用变量设置悬停背景色 */
+    border-color: var(--notify-border-color);
+    /* 使用变量设置悬停时的边框颜色 */
+}
+
+.clear-all-btn:focus {
+    outline: none;
+    /* 去掉焦点时的默认蓝色边框 */
+    box-shadow: 0 0 5px rgba(0, 123, 255, 0.5);
+    /* 聚焦时的阴影效果 */
+}
+
+.clear-all-btn:active {
+    background-color: var(--edit-button-bg-hover);
+    /* 按下按钮时的背景色 */
+    transform: scale(0.98);
+    /* 按下时的轻微缩小效果 */
+}
+
+@keyframes pulse {
+    0% {
+        transform: scale(1);
+        opacity: 0.6;
+    }
+    50% {
+        transform: scale(1.15);
+        opacity: 1;
+    }
+    100% {
+        transform: scale(1);
+        opacity: 0.6;
+    }
+}
+
+@keyframes fadeIn {
+    from {
+        opacity: 0;
+    }
+    to {
+        opacity: 1;
+    }
+}
+
+
+/* PushPopup 样式 */
+
+#pushpopup-container {
+    position: fixed;
+    top: 20px;
+    left: 5px;
+    display: flex;
+    flex-direction: column-reverse;
+    gap: 10px;
+    z-index: 9999;
+}
+
+.pushpopup {
+    background-color: var(--notify-bg-color);
+    color: var(--notify-text-color);
+    border: 1px solid var(--notify-border-color);
+    padding: 12px 16px;
+    border-radius: 8px;
+    box-shadow: 0 2px 10px var(--title-color-right);
+    font-size: 14px;
+    min-width: 200px;
+    max-width: 300px;
+    opacity: 0;
+    transform: translateX(-100%);
+    animation: slideIn 0.4s forwards, fadeOut 0.5s 4.5s forwards;
+    position: relative;
+}
+
+#user_image_icon {
+    cursor: pointer;
+    width: 30px;
+    /* 可以根据需要调整大小 */
+    height: 30px;
+    border-radius: 50%;
+    /* 保证容器是圆的 */
+    overflow: hidden;
+    /* 关键：裁剪超出圆形部分 */
+}
+
+#user_image {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+    /* 保证图片铺满并居中裁剪 */
+    border-radius: 50%;
+    /* 再次加圆角，防止图片本身是方的 */
+}
+
+@keyframes slideIn {
+    to {
+        opacity: 1;
+        transform: translateX(0);
+    }
+}
+
+@keyframes fadeOut {
+    to {
+        opacity: 0;
+        transform: translateX(-100%);
+    }
+}
+
+@media screen and (max-width: 768px) {
+    #BMW_color_line {
+        display: none;
+    }
+}

@@ -1,0 +1,31 @@
+<!doctype html>
+<html lang="zh-Hans">
+  <head>
+    <meta charset="UTF-8" />
+    <title>{{ form.title or "报名付款" }}</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <link rel="icon" href="/api/form/event_poster/{{ form.id }}/cache" />
+    <meta property="og:image" content="/api/form/event_poster/{{ form.id }}/cache" />
+    <style>
+      body,
+      html {
+        margin: 0;
+        padding: 0;
+        min-height: 100%;
+        width: 100%;
+        font-family:
+          -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto,
+          "Helvetica Neue", Arial, sans-serif;
+        background: #f7f7f7;
+      }
+    </style>
+  </head>
+  <body>
+    <div class="container"></div>
+    <script>
+      window.form_data = {{ form | tojson }};
+    </script>
+    <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
+    <script src="/static/js/form/payment/init.js" type="module"></script>
+  </body>
+</html>

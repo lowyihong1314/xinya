@@ -1,0 +1,612 @@
+import { useEffect, useState } from "react";
+
+import { ensureDesignTokens } from "../../theme/designTokens";
+import { useUserState } from "../../app/UserState";
+import { LAMP_META } from "../../lamp/render_lamp_init.js";
+import { approvePayment, fetchPayments, removePayment } from "./api";
+import type { PaymentRecord, RegistrationRecord } from "./types";
+
+const PAGE_SIZE = 8;
+
+type ContextMenuState = {
+  payment: PaymentRecord;
+  x: number;
+  y: number;
+};
+
+type DetailState = {
+  payment: PaymentRecord;
+  edit: boolean;
+};
+
+export function FahuiPage() {
+  ensureDesignTokens();
+
+  const { isMobile } = useUserState();
+  const [payments, setPayments] = useState<PaymentRecord[]>([]);
+  const [query, setQuery] = useState("");
+  const [page, setPage] = useState(1);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState("");
+  const [actionMessage, setActionMessage] = useState("");
+  const [contextMenu, setContextMenu] = useState<ContextMenuState | null>(null);
+  const [detail, setDetail] = useState<DetailState | null>(null);
+
+  useEffect(() => {
+    void loadPayments();
+  }, []);
+
+  useEffect(() => {
+    if (!contextMenu) {
+      return;
+    }
+
+    const close = () => setContextMenu(null);
+
+    window.addEventListener("click", close);
+    window.addEventListener("contextmenu", close);
+    window.addEventListener("scroll", close, true);
+
+    return () => {
+      window.removeEventListener("click", close);
+      window.removeEventListener("contextmenu", close);
+      window.removeEventListener("scroll", close, true);
+    };
+  }, [contextMenu]);
+
+  useEffect(() => {
+    if (!actionMessage) {
+      return;
+    }
+
+    const timer = window.setTimeout(() => setActionMessage(""), 2400);
+    return () => window.clearTimeout(timer);
+  }, [actionMessage]);
+
+  const normalizedQuery = query.trim().toLowerCase();
+  const filteredPayments = payments.filter((payment) => {
+    if (!normalizedQuery) {
+      return true;
+    }
+
+    if ((payment.phone || "").toLowerCase().includes(normalizedQuery)) {
+      return true;
+    }
+
+    if ((payment.payer_name || "").toLowerCase().includes(normalizedQuery)) {
+      return true;
+    }
+
+    return (payment.registrations || []).some((registration) =>
+      (registration.devotee_name || "").toLowerCase().includes(normalizedQuery),
+    );
+  });
+
+  const totalPages = Math.max(1, Math.ceil(filteredPayments.length / PAGE_SIZE));
+  const safePage = Math.min(page, totalPages);
+  const pageItems = filteredPayments.slice((safePage - 1) * PAGE_SIZE, safePage * PAGE_SIZE);
+
+  useEffect(() => {
+    if (page !== safePage) {
+      setPage(safePage);
+    }
+  }, [page, safePage]);
+
+  async function loadPayments() {
+    setLoading(true);
+    setError("");
+
+    try {
+      const response = await fetchPayments();
+      setPayments(response.data || []);
+    } catch (loadError) {
+      setError(loadError instanceof Error ? loadError.message : "加载失败");
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  async function handleApprove(payment: PaymentRecord) {
+    setContextMenu(null);
+    setError("");
+
+    try {
+      await approvePayment(payment.payment_id);
+      setPayments((current) =>
+        current.map((item) =>
+          item.payment_id === payment.payment_id
+            ? {
+                ...item,
+                submitter_id: item.submitter_id ?? 1,
+                paid_at: item.paid_at || new Date().toISOString(),
+              }
+            : item,
+        ),
+      );
+      setActionMessage("审核已通过");
+    } catch (actionError) {
+      setError(actionError instanceof Error ? actionError.message : "操作失败");
+    }
+  }
+
+  async function handleRemove(payment: PaymentRecord, mode: "revoke" | "delete") {
+    setContextMenu(null);
+    setError("");
+
+    const confirmed = window.confirm(mode === "delete" ? "确认删除这笔付款？" : "确认撤销审核？");
+    if (!confirmed) {
+      return;
+    }
+
+    try {
+      await removePayment(payment.payment_id);
+      setPayments((current) => current.filter((item) => item.payment_id !== payment.payment_id));
+      setActionMessage(mode === "delete" ? "付款已删除" : "审核已撤销");
+    } catch (actionError) {
+      setError(actionError instanceof Error ? actionError.message : "操作失败");
+    }
+  }
+
+  function renderRegistration(registration: RegistrationRecord, index: number) {
+    return (
+      <section key={`${registration.devotee_name || "registration"}-${index}`} style={styles.detailSection}>
+        <div style={styles.detailSectionTitle}>
+          {`报名 #${index + 1} · ${registration.devotee_name || "-"}`}
+        </div>
+        <div style={styles.detailInfo}>
+          <div>{`📞 ${registration.phone || "-"}`}</div>
+          <div>{`📍 ${registration.address || "-"}`}</div>
+          <div>{`💰 合计：${registration.total_amount ?? "-"}`}</div>
+        </div>
+        <ul style={styles.lampList}>
+          {(registration.lamps || []).map((lamp, lampIndex) => {
+            const meta = LAMP_META[lamp.lamp_type] || {};
+            const label = meta.withAmount
+              ? `${meta.label || lamp.lamp_type}：${lamp.amount ?? "-"}`
+              : `${meta.label || lamp.lamp_type}`;
+
+            return <li key={`${lamp.lamp_type}-${lampIndex}`}>{label}</li>;
+          })}
+        </ul>
+      </section>
+    );
+  }
+
+  return (
+    <div style={styles.page}>
+      <div style={styles.hero}>
+        <div>
+          <div style={styles.eyebrow}>Dharma CRM</div>
+          <h1 style={styles.title}>法会付款管理</h1>
+          <p style={styles.subtitle}>按付款人、电话或祈福者检索，右键执行审核和删除操作。</p>
+        </div>
+        <button type="button" style={styles.refreshButton} onClick={() => void loadPayments()}>
+          刷新数据
+        </button>
+      </div>
+
+      <div style={{ ...styles.toolbar, flexDirection: isMobile ? "column" : "row" }}>
+        <input
+          value={query}
+          onChange={(event) => {
+            setQuery(event.target.value);
+            setPage(1);
+          }}
+          placeholder="搜索手机号 / 付款人 / 祈福者"
+          style={styles.searchInput}
+        />
+        <div style={styles.summary}>{`共 ${filteredPayments.length} 条，当前第 ${safePage}/${totalPages} 页`}</div>
+      </div>
+
+      {actionMessage ? <div style={styles.toast}>{actionMessage}</div> : null}
+
+      {loading ? <div style={styles.stateCard}>加载中…</div> : null}
+      {!loading && error ? <div style={styles.stateCard}>{error}</div> : null}
+
+      {!loading && !error ? (
+        <>
+          <div style={styles.pagination}>
+            {Array.from({ length: totalPages }, (_, index) => {
+              const nextPage = index + 1;
+              const active = nextPage === safePage;
+
+              return (
+                <button
+                  key={nextPage}
+                  type="button"
+                  onClick={() => setPage(nextPage)}
+                  style={{
+                    ...styles.pageButton,
+                    ...(active ? styles.pageButtonActive : null),
+                  }}
+                >
+                  {nextPage}
+                </button>
+              );
+            })}
+          </div>
+
+          <div style={styles.grid}>
+            {pageItems.map((payment) => {
+              const approved = Boolean(payment.submitter_id);
+              const registrations = (payment.registrations || [])
+                .map((registration) => registration.devotee_name)
+                .filter(Boolean)
+                .join("、");
+
+              return (
+                <article
+                  key={payment.payment_id}
+                  style={{
+                    ...styles.card,
+                    ...(approved ? styles.cardApproved : styles.cardPending),
+                  }}
+                  onClick={() => setDetail({ payment, edit: false })}
+                  onContextMenu={(event) => {
+                    event.preventDefault();
+                    setContextMenu({
+                      payment,
+                      x: event.clientX,
+                      y: event.clientY,
+                    });
+                  }}
+                >
+                  {approved && payment.submitter_id ? (
+                    <img
+                      src={`/api/user_control/get_profile_image/${payment.submitter_id}`}
+                      alt=""
+                      style={styles.avatar}
+                    />
+                  ) : null}
+                  <div style={styles.cardTitle}>{payment.payer_name || "-"}</div>
+                  <div style={styles.cardMeta}>{`📞 ${payment.phone || "-"}`}</div>
+                  <div style={styles.cardMeta}>{`💰 ${payment.amount ?? "-"} (${payment.method || "-"})`}</div>
+                  <div style={styles.cardRegistrations}>{registrations || "暂无祈福者信息"}</div>
+                </article>
+              );
+            })}
+          </div>
+        </>
+      ) : null}
+
+      {contextMenu ? (
+        <div
+          style={{
+            ...styles.contextMenu,
+            top: contextMenu.y,
+            left: contextMenu.x,
+          }}
+          onClick={(event) => event.stopPropagation()}
+        >
+          <button
+            type="button"
+            style={styles.menuItem}
+            onClick={() => {
+              setContextMenu(null);
+              setDetail({ payment: contextMenu.payment, edit: true });
+            }}
+          >
+            ✏️ 编辑
+          </button>
+          <button
+            type="button"
+            style={{ ...styles.menuItem, ...styles.menuItemApprove }}
+            onClick={() =>
+              void (contextMenu.payment.submitter_id
+                ? handleRemove(contextMenu.payment, "revoke")
+                : handleApprove(contextMenu.payment))
+            }
+          >
+            {contextMenu.payment.submitter_id ? "🚫 撤销审核" : "✅ 审核通过"}
+          </button>
+          <button
+            type="button"
+            style={{ ...styles.menuItem, ...styles.menuItemDelete }}
+            onClick={() => void handleRemove(contextMenu.payment, "delete")}
+          >
+            🗑 删除
+          </button>
+        </div>
+      ) : null}
+
+      {detail ? (
+        <div style={styles.overlay} onClick={() => setDetail(null)}>
+          <div style={styles.modal} onClick={(event) => event.stopPropagation()}>
+            <div style={styles.modalTitle}>{detail.edit ? "付款详情 / 编辑预览" : "付款详情"}</div>
+            <DetailField label="付款人姓名" value={detail.payment.payer_name} readOnly={!detail.edit} />
+            <DetailField label="付款电话" value={detail.payment.phone} readOnly={!detail.edit} />
+            <DetailField label="付款金额" value={detail.payment.amount} readOnly={!detail.edit} />
+            <DetailField label="付款方式" value={detail.payment.method} readOnly={!detail.edit} />
+            <DetailField label="付款时间" value={detail.payment.paid_at} readOnly={!detail.edit} />
+            <DetailField label="创建时间" value={detail.payment.created_at} readOnly={!detail.edit} />
+            {(detail.payment.registrations || []).map(renderRegistration)}
+            <button type="button" style={styles.closeButton} onClick={() => setDetail(null)}>
+              关闭
+            </button>
+          </div>
+        </div>
+      ) : null}
+    </div>
+  );
+}
+
+function DetailField({
+  label,
+  value,
+  readOnly,
+}: {
+  label: string;
+  value: number | string | null | undefined;
+  readOnly: boolean;
+}) {
+  return (
+    <label style={styles.detailField}>
+      <span style={styles.detailLabel}>{label}</span>
+      <input value={value ?? ""} readOnly={readOnly} style={styles.detailInput(readOnly)} />
+    </label>
+  );
+}
+
+const styles = {
+  page: {
+    minHeight: "100%",
+    padding: "20px",
+    color: "#3b2f1b",
+    fontFamily: '"PingFang SC","Microsoft YaHei",serif',
+    background:
+      "radial-gradient(circle at top left, rgba(255,243,214,0.95), rgba(248,239,223,0.92) 42%, rgba(243,232,211,0.96) 100%)",
+  },
+  hero: {
+    display: "flex",
+    justifyContent: "space-between",
+    gap: "16px",
+    alignItems: "flex-start",
+    padding: "20px",
+    borderRadius: "24px",
+    background: "linear-gradient(135deg, rgba(121,82,31,0.94), rgba(184,145,83,0.9))",
+    color: "#fff7eb",
+    boxShadow: "0 20px 40px rgba(90, 58, 18, 0.18)",
+  },
+  eyebrow: {
+    fontSize: "12px",
+    letterSpacing: "0.2em",
+    textTransform: "uppercase" as const,
+    opacity: 0.84,
+    marginBottom: "8px",
+  },
+  title: {
+    margin: 0,
+    fontSize: "30px",
+    fontWeight: 900,
+  },
+  subtitle: {
+    margin: "10px 0 0",
+    maxWidth: "640px",
+    lineHeight: 1.6,
+    fontSize: "14px",
+    color: "rgba(255,247,235,0.86)",
+  },
+  refreshButton: {
+    border: "none",
+    borderRadius: "999px",
+    padding: "12px 18px",
+    background: "#fff7eb",
+    color: "#6f4918",
+    fontWeight: 800,
+    cursor: "pointer",
+    whiteSpace: "nowrap" as const,
+  },
+  toolbar: {
+    display: "flex",
+    gap: "12px",
+    alignItems: "center",
+    marginTop: "18px",
+    marginBottom: "12px",
+  },
+  searchInput: {
+    flex: 1,
+    width: "100%",
+    padding: "13px 16px",
+    borderRadius: "14px",
+    border: "1px solid rgba(156, 121, 70, 0.35)",
+    background: "rgba(255, 251, 243, 0.96)",
+    boxSizing: "border-box" as const,
+    fontSize: "14px",
+    color: "#47331e",
+  },
+  summary: {
+    padding: "12px 14px",
+    borderRadius: "14px",
+    background: "rgba(255, 251, 243, 0.72)",
+    color: "#6f5a38",
+    fontSize: "13px",
+    whiteSpace: "nowrap" as const,
+  },
+  toast: {
+    marginBottom: "12px",
+    padding: "12px 14px",
+    borderRadius: "14px",
+    background: "#ecf6e8",
+    color: "#2f6b3a",
+    fontWeight: 700,
+  },
+  stateCard: {
+    marginTop: "16px",
+    padding: "28px",
+    borderRadius: "20px",
+    background: "rgba(255, 251, 243, 0.88)",
+    boxShadow: "0 12px 28px rgba(96, 74, 39, 0.08)",
+    textAlign: "center" as const,
+    color: "#6f5a38",
+  },
+  pagination: {
+    display: "flex",
+    gap: "8px",
+    flexWrap: "wrap" as const,
+    marginBottom: "14px",
+  },
+  pageButton: {
+    minWidth: "40px",
+    padding: "8px 12px",
+    borderRadius: "10px",
+    border: "1px solid #cbb37a",
+    background: "#fff",
+    color: "#6b5a3c",
+    fontWeight: 700,
+    cursor: "pointer",
+  },
+  pageButtonActive: {
+    background: "#cbb37a",
+    color: "#fff",
+  },
+  grid: {
+    display: "grid",
+    gridTemplateColumns: "repeat(auto-fill,minmax(260px,1fr))",
+    gap: "14px",
+  },
+  card: {
+    position: "relative" as const,
+    minHeight: "152px",
+    padding: "16px",
+    borderRadius: "18px",
+    boxShadow: "0 14px 30px rgba(76, 53, 21, 0.12)",
+    cursor: "pointer",
+    transition: "transform 140ms ease, box-shadow 140ms ease",
+  },
+  cardApproved: {
+    background: "linear-gradient(180deg, #eef7ee, #f7fbf4)",
+  },
+  cardPending: {
+    background: "linear-gradient(180deg, #fffaf2, #fff4df)",
+  },
+  avatar: {
+    position: "absolute" as const,
+    top: "12px",
+    right: "12px",
+    width: "30px",
+    height: "30px",
+    borderRadius: "50%",
+    objectFit: "cover" as const,
+    border: "2px solid #d7e8d0",
+    background: "#fff",
+  },
+  cardTitle: {
+    marginBottom: "6px",
+    fontSize: "18px",
+    fontWeight: 900,
+    paddingRight: "40px",
+  },
+  cardMeta: {
+    fontSize: "13px",
+    marginTop: "4px",
+    color: "#5c4a2e",
+  },
+  cardRegistrations: {
+    marginTop: "10px",
+    fontSize: "12px",
+    lineHeight: 1.6,
+    color: "#6b5a3c",
+  },
+  contextMenu: {
+    position: "fixed" as const,
+    zIndex: 1000,
+    minWidth: "168px",
+    padding: "6px",
+    borderRadius: "14px",
+    background: "#fff",
+    boxShadow: "0 12px 28px rgba(0,0,0,0.18)",
+  },
+  menuItem: {
+    display: "block",
+    width: "100%",
+    padding: "10px 12px",
+    border: "none",
+    borderRadius: "10px",
+    background: "transparent",
+    textAlign: "left" as const,
+    fontSize: "14px",
+    fontWeight: 700,
+    cursor: "pointer",
+    color: "#3b2f1b",
+  },
+  menuItemApprove: {
+    color: "#2c7a3f",
+  },
+  menuItemDelete: {
+    color: "#c0392b",
+  },
+  overlay: {
+    position: "fixed" as const,
+    inset: 0,
+    zIndex: 1001,
+    display: "flex",
+    alignItems: "center",
+    justifyContent: "center",
+    padding: "20px",
+    background: "rgba(0,0,0,0.45)",
+  },
+  modal: {
+    width: "min(520px, 100%)",
+    maxHeight: "90vh",
+    overflowY: "auto" as const,
+    padding: "20px",
+    borderRadius: "20px",
+    background: "#fffaf2",
+    boxShadow: "0 20px 50px rgba(0,0,0,0.25)",
+  },
+  modalTitle: {
+    marginBottom: "14px",
+    fontSize: "20px",
+    fontWeight: 900,
+    textAlign: "center" as const,
+  },
+  detailField: {
+    display: "block",
+    marginBottom: "12px",
+  },
+  detailLabel: {
+    display: "block",
+    marginBottom: "4px",
+    fontSize: "13px",
+    fontWeight: 700,
+  },
+  detailInput: (readOnly: boolean) => ({
+    width: "100%",
+    padding: "10px 12px",
+    borderRadius: "10px",
+    border: "1px solid #d6c9a8",
+    background: readOnly ? "#f3efe6" : "#fff",
+    boxSizing: "border-box" as const,
+    fontSize: "14px",
+  }),
+  detailSection: {
+    marginTop: "14px",
+    paddingTop: "10px",
+    borderTop: "1px dashed #d6c9a8",
+  },
+  detailSectionTitle: {
+    marginBottom: "6px",
+    fontWeight: 800,
+  },
+  detailInfo: {
+    fontSize: "13px",
+    lineHeight: 1.6,
+  },
+  lampList: {
+    marginTop: "6px",
+    paddingLeft: "18px",
+    fontSize: "13px",
+  },
+  closeButton: {
+    marginTop: "18px",
+    width: "100%",
+    padding: "14px",
+    borderRadius: "14px",
+    border: "none",
+    background: "linear-gradient(135deg,#8b6f3d,#b59a5a)",
+    color: "#fff",
+    fontWeight: 900,
+    fontSize: "15px",
+    cursor: "pointer",
+  },
+};

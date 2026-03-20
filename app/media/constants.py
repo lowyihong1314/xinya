@@ -1,0 +1,48 @@
+ALLOWED_EXTENSIONS = {
+    ".png",
+    ".jpg",
+    ".jpeg",
+    ".heic",
+    ".heif",
+    ".bmp",
+    ".tif",
+    ".tiff",
+    ".webp",
+    ".svg",
+    ".raw",
+    ".mp4",
+    ".mov",
+    ".m4v",
+    ".avi",
+    ".mkv",
+    ".webm",
+    ".flv",
+    ".mts",
+    ".m2ts",
+    ".3gp",
+    ".wmv",
+}
+
+VIDEO_EXTS = {
+    ".mp4",
+    ".mov",
+    ".avi",
+    ".mkv",
+    ".flv",
+    ".wmv",
+    ".3gp",
+    ".mts",
+    ".m2ts",
+    ".webm",
+    ".m4v",
+}
+
+IMAGE_EXTS = {
+    ".jpg",
+    ".jpeg",
+    ".png",
+    ".bmp",
+    ".tif",
+    ".tiff",
+    ".webp",
+}
