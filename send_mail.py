@@ -5,7 +5,7 @@ from _token import GMAIL_APP_PASSWORD
 # ===== 配置区域 =====
 SMTP_SERVER = "smtp.gmail.com"
 SMTP_PORT = 587
-
+# ===== User ====
 GMAIL_USER = "lowyihong1314@gmail.com"       # 你的 Gmail
 
 FROM_EMAIL = "yukang@utbabuddha.com"      # 域名邮箱
