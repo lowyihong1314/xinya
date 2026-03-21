@@ -236,7 +236,7 @@ function renderCalendarCells(
           </div>
         ))}
         {cell.items.length > 3 ? <div style={dayMoreStyle}>+{cell.items.length - 3}</div> : null}
-      </button>,
+      </button>
     );
   });
 }

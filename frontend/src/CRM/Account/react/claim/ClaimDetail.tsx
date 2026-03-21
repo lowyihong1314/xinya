@@ -29,6 +29,7 @@ import {
   sectionTitleStyle,
   statusBadgeStyle,
 } from "./claimStyles";
+import { PaymentVoucherModal } from "./PaymentVoucherModal";
 import type { ApproverUserProfile, ClaimAttachment, ClaimRecord } from "./types";
 
 type ClaimDetailProps = {
@@ -59,6 +60,7 @@ export function ClaimDetail({
     name: string;
     sign: { strokes?: Array<{ points?: Array<{ x: number; y: number }> }> } | null;
   } | null>(null);
+  const [voucherOpen, setVoucherOpen] = useState(false);
   const claimStatus = useMemo(() => getClaimStatus(claim), [claim]);
 
   useEffect(() => {
@@ -239,12 +241,7 @@ export function ClaimDetail({
             <button
               type="button"
               style={buttonPrimaryStyle}
-              onClick={() =>
-                window.open(
-                  `/api/account/print_payment_voucher/download_payment_voucher/${claim.id}`,
-                  "_blank",
-                )
-              }
+              onClick={() => setVoucherOpen(true)}
             >
               Payment Voucher
             </button>
@@ -255,14 +252,21 @@ export function ClaimDetail({
       {selectedApprover ? (
         <SignViewerModal approver={selectedApprover} onClose={() => setSelectedApprover(null)} />
       ) : null}
+
+      {voucherOpen ? <PaymentVoucherModal claimId={claim.id} onClose={() => setVoucherOpen(false)} /> : null}
     </div>
   );
 }
 
 function AttachmentCard({ attachment }: { attachment: ClaimAttachment }) {
+  const normalizedAttachment = {
+    ...attachment,
+    file_name: ensureAttachmentDownloadName(attachment),
+  };
+
   return (
-    <button type="button" style={attachmentCardStyle} onClick={() => openPreviewModal(attachment)}>
-      <div className="claim-detail__attachment-name" style={attachmentNameStyle}>{attachment.file_name || attachment.file_path}</div>
+    <button type="button" style={attachmentCardStyle} onClick={() => openPreviewModal(normalizedAttachment)}>
+      <div className="claim-detail__attachment-name" style={attachmentNameStyle}>{normalizedAttachment.file_name || attachment.file_path}</div>
       <div className="claim-detail__attachment-meta" style={attachmentMetaStyle}>{attachment.mime_type || "点击预览"}</div>
     </button>
   );
@@ -451,6 +455,62 @@ function parseApproverSign(value: unknown) {
     }
   }
   return null;
+}
+
+function ensureAttachmentDownloadName(attachment: ClaimAttachment) {
+  const fileName = (attachment.file_name || "").trim();
+  const pathName = (attachment.file_path || "").split("/").pop() || "";
+  const fallbackName = fileName || pathName || "attachment";
+
+  if (hasFileExtension(fallbackName)) {
+    return fallbackName;
+  }
+
+  const extension = getAttachmentExtension(attachment.mime_type, pathName);
+  return extension ? `${fallbackName}${extension}` : fallbackName;
+}
+
+function hasFileExtension(value: string) {
+  const lastSegment = value.split(/[\\/]/).pop() || "";
+  const dotIndex = lastSegment.lastIndexOf(".");
+  return dotIndex > 0 && dotIndex < lastSegment.length - 1;
+}
+
+function getAttachmentExtension(mimeType?: string, fallbackName?: string) {
+  const normalizedMime = (mimeType || "").toLowerCase();
+  const normalizedFallback = (fallbackName || "").toLowerCase();
+
+  if (normalizedMime.includes("pdf")) {
+    return ".pdf";
+  }
+  if (normalizedMime.includes("png")) {
+    return ".png";
+  }
+  if (normalizedMime.includes("jpeg") || normalizedMime.includes("jpg")) {
+    return ".jpg";
+  }
+  if (normalizedMime.includes("webp")) {
+    return ".webp";
+  }
+  if (normalizedMime.includes("gif")) {
+    return ".gif";
+  }
+  if (normalizedMime.includes("bmp")) {
+    return ".bmp";
+  }
+  if (normalizedMime.includes("heic")) {
+    return ".heic";
+  }
+  if (normalizedMime.includes("heif")) {
+    return ".heif";
+  }
+
+  const dotIndex = normalizedFallback.lastIndexOf(".");
+  if (dotIndex > 0 && dotIndex < normalizedFallback.length - 1) {
+    return normalizedFallback.slice(dotIndex);
+  }
+
+  return "";
 }
 
 function getClaimStatus(claim: ClaimRecord) {

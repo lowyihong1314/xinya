@@ -7,9 +7,13 @@ from app.account.permissions import require_account_permission, require_authenti
 from app.account.serializers import serialize_request_data
 from app.account.services import (
     build_payment_voucher_context,
+    build_public_payment_voucher_context,
     create_claim_from_form,
+    get_payment_voucher_share_data,
+    get_public_payment_voucher_data,
     list_claims_for_user,
     record_claim_decision,
+    submit_public_payment_voucher_signature,
 )
 
 account_bp = Blueprint("account", __name__)
@@ -92,6 +96,67 @@ def download_payment_voucher(request_id):
     try:
         user = require_authenticated_user()
         data, approver_list = build_payment_voucher_context(request_id, user)
+        pdf_buffer = build_payment_voucher_pdf(data, approver_list)
+        return send_file(
+            pdf_buffer,
+            mimetype="application/pdf",
+            as_attachment=True,
+            download_name=f"PaymentVoucher_{data['id']}.pdf",
+        )
+    except AccountError as exc:
+        return _error_response(exc)
+
+
+@payment_voucher_bp.get("/share_payment_voucher/<int:request_id>")
+def share_payment_voucher(request_id):
+    try:
+        user = require_authenticated_user()
+        return jsonify(
+            {
+                "status": "success",
+                "data": get_payment_voucher_share_data(request_id, user),
+            }
+        )
+    except AccountError as exc:
+        return _error_response(exc)
+
+
+@payment_voucher_bp.get("/public/<string:token>")
+def get_public_payment_voucher(token):
+    try:
+        return jsonify(
+            {
+                "status": "success",
+                "data": get_public_payment_voucher_data(token),
+            }
+        )
+    except AccountError as exc:
+        return _error_response(exc)
+
+
+@payment_voucher_bp.post("/public/<string:token>/sign")
+def sign_public_payment_voucher(token):
+    try:
+        payload = request.get_json(silent=True) or {}
+        return jsonify(
+            {
+                "status": "success",
+                "data": submit_public_payment_voucher_signature(token, payload),
+            }
+        )
+    except AccountError as exc:
+        return _error_response(exc)
+    except Exception as exc:
+        from models import db
+
+        db.session.rollback()
+        return jsonify({"status": "error", "message": str(exc)}), 500
+
+
+@payment_voucher_bp.get("/public/<string:token>/download")
+def download_public_payment_voucher(token):
+    try:
+        data, approver_list = build_public_payment_voucher_context(token)
         pdf_buffer = build_payment_voucher_pdf(data, approver_list)
         return send_file(
             pdf_buffer,

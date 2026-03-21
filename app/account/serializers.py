@@ -15,6 +15,11 @@ def serialize_request_data(request_obj, with_children=True):
         "purpose": request_obj.purpose,
         "public_token": request_obj.public_token,
         "sign_json_data": request_obj.sign_json_data,
+        "voucher_recipient_name": request_obj.voucher_recipient_name,
+        "voucher_recipient_sign_json": request_obj.voucher_recipient_sign_json,
+        "voucher_signed_at": request_obj.voucher_signed_at.isoformat()
+        if request_obj.voucher_signed_at
+        else None,
         "event_id": request_obj.event_id,
         "event_name": request_obj.event.event_name if request_obj.event else None,
         "created_at": request_obj.created_at.isoformat()

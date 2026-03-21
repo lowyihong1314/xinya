@@ -1,4 +1,8 @@
-import type { ClaimListResponse } from "./types";
+import type {
+  ClaimListResponse,
+  PaymentVoucherPublicPayload,
+  PaymentVoucherSharePayload,
+} from "./types";
 
 async function parseJson<T>(response: Response): Promise<T> {
   const data = (await response.json().catch(() => ({}))) as T & { error?: string; message?: string };
@@ -35,4 +39,39 @@ export async function decideClaim(
     body: JSON.stringify(payload),
   });
   return parseJson<Record<string, unknown>>(response);
+}
+
+export async function fetchPaymentVoucherShare(requestId: number) {
+  const response = await fetch(`/api/account/print_payment_voucher/share_payment_voucher/${requestId}`, {
+    credentials: "include",
+  });
+  const payload = await parseJson<{ data?: PaymentVoucherSharePayload }>(response);
+  if (!payload.data) {
+    throw new Error("Payment Voucher 数据缺失");
+  }
+  return payload.data;
+}
+
+export async function fetchPublicPaymentVoucher(token: string) {
+  const response = await fetch(`/api/account/print_payment_voucher/public/${token}`, {
+    credentials: "include",
+  });
+  const payload = await parseJson<{ data?: PaymentVoucherPublicPayload }>(response);
+  if (!payload.data) {
+    throw new Error("Payment Voucher 数据缺失");
+  }
+  return payload.data;
+}
+
+export async function submitPublicPaymentVoucherSign(
+  token: string,
+  payload: { full_name: string; sign_json_data: unknown },
+) {
+  const response = await fetch(`/api/account/print_payment_voucher/public/${token}/sign`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    credentials: "include",
+    body: JSON.stringify(payload),
+  });
+  return parseJson<{ data?: { download_url?: string } }>(response);
 }

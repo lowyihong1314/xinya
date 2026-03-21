@@ -48,6 +48,10 @@ export type ClaimRecord = {
   created_at?: string;
   status?: string;
   sign_json_data?: unknown;
+  public_token?: string;
+  voucher_recipient_name?: string;
+  voucher_recipient_sign_json?: unknown;
+  voucher_signed_at?: string;
   attachments?: ClaimAttachment[];
   approver_data?: ClaimApprover[];
 };
@@ -55,6 +59,20 @@ export type ClaimRecord = {
 export type ClaimListResponse = {
   data?: ClaimRecord[];
   can_view_all?: boolean;
+};
+
+export type PaymentVoucherSharePayload = {
+  share_url: string;
+  token: string;
+  claim: ClaimRecord;
+  approver_data?: ClaimApprover[];
+  is_signed: boolean;
+};
+
+export type PaymentVoucherPublicPayload = {
+  claim: ClaimRecord;
+  approver_data?: ClaimApprover[];
+  is_signed: boolean;
 };
 
 export type ApproverUserProfile = {

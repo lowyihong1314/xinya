@@ -39,6 +39,9 @@ class ReimbursementRequest(db.Model):
 
     # 公开/表单额外配置（JSON 字符串）
     sign_json_data = db.Column(db.Text, nullable=True)
+    voucher_recipient_name = db.Column(db.String(160), nullable=True)
+    voucher_recipient_sign_json = db.Column(db.Text, nullable=True)
+    voucher_signed_at = db.Column(db.DateTime, nullable=True)
 
     # 关联活动（可为空）
     event_id = db.Column(
@@ -133,4 +136,3 @@ class ReimbursementApproverData(db.Model):
     )
     user = db.relationship("User", foreign_keys=[user_id])
     department = db.relationship("Department", foreign_keys=[dep_id])
-

@@ -8,6 +8,7 @@ import { InfoPage } from "../info/react/InfoPage";
 import { LampPage } from "../lamp/react/LampPage";
 import { MusicPage } from "../music/react/MusicPage";
 import { ProfilePage } from "../profile/react/ProfilePage";
+import { PaymentVoucherSignPage } from "../CRM/Account/react/claim/PaymentVoucherSignPage";
 import { AppLayout } from "./AppLayout";
 
 function ErrorPage({ message }: { message: string }) {
@@ -41,5 +42,6 @@ export const appRouter = createHashRouter([
       { path: "*", element: <ErrorPage message="页面不存在" /> },
     ],
   },
+  { path: "/payment-voucher-sign/:token", element: <PaymentVoucherSignPage /> },
   { path: "*", element: <Navigate to="/" replace /> },
 ]);
