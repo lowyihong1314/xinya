@@ -4,11 +4,12 @@ from flask import Flask
 from flask_cors import CORS
 
 from app.blueprints import register_blueprints
-from app.extensions import login_manager, socketio
+from app.cli import register_cli
+from app.extensions import login_manager, migrate, socketio
 from app.paths import STATIC_ROOT, TEMPLATE_ROOT
 from app.settings import DefaultConfig
 from app.web import register_web_routes
-from models import db
+from models import db, load_model_modules
 
 
 def create_app(socket=False):
@@ -18,11 +19,14 @@ def create_app(socket=False):
         template_folder=str(TEMPLATE_ROOT),
     )
     app.config.from_object(DefaultConfig)
+    load_model_modules()
 
     CORS(app, resources={r"/*": {"origins": "*"}}, supports_credentials=True)
 
     db.init_app(app)
+    migrate.init_app(app, db)
     login_manager.init_app(app)
+    register_cli(app)
 
     if socket:
         socketio.init_app(app)

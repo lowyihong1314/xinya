@@ -1,7 +1,7 @@
 import json
 from datetime import datetime
+
 from models import db
-from models.user_data import User 
 
 class Music(db.Model):
     __tablename__ = 'music'
@@ -89,8 +89,8 @@ class Artist(db.Model):
 
 playlist_music = db.Table(
     'playlist_music',
-    db.Column('playlist_id', db.Integer, db.ForeignKey('playlist.id')),
-    db.Column('music_id', db.Integer, db.ForeignKey('music.id'))
+    db.Column('playlist_id', db.Integer, db.ForeignKey('playlist.id'), nullable=False),
+    db.Column('music_id', db.Integer, db.ForeignKey('music.id'), nullable=False)
 )
 
 class Playlist(db.Model):

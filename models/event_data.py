@@ -1,11 +1,10 @@
 import mimetypes
 import os
-from datetime import date, time,datetime
-from flask_sqlalchemy import SQLAlchemy
+from datetime import date, datetime
+
 from models import db
+from sqlalchemy import and_, asc, desc, or_
 from sqlalchemy.dialects.mysql import LONGTEXT
-from models.user_data import User
-from sqlalchemy import asc, desc,and_, or_, func
 
 event_organizer = db.Table(
     "event_organizer",
@@ -57,10 +56,20 @@ class EventData(db.Model):
 
     event_image_id = db.Column(
         db.Integer,
-        db.ForeignKey('album_files.id', ondelete="SET NULL", onupdate="CASCADE"),
+        db.ForeignKey(
+            'album_files.id',
+            name='fk_event_image',
+            use_alter=True,
+            ondelete="SET NULL",
+            onupdate="CASCADE",
+        ),
         nullable=True
     )
-    event_image = db.relationship("AlbumFiles", foreign_keys=[event_image_id])
+    event_image = db.relationship(
+        "AlbumFiles",
+        foreign_keys=[event_image_id],
+        post_update=True,
+    )
 
     album_files = db.relationship(
         "AlbumFiles",

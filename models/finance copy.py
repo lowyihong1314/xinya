@@ -1,11 +1,7 @@
-
 from datetime import datetime
-from flask_sqlalchemy import SQLAlchemy
 from sqlalchemy import func
 
 from models import db
-import os
-import mimetypes
 
 
 class FinanceReport(db.Model):

@@ -1,8 +1,7 @@
-from datetime import datetime
-from flask_sqlalchemy import SQLAlchemy
-from models import db
-import os
 import mimetypes
+from datetime import datetime, timedelta
+
+from models import db
 
 
 class File(db.Model):
@@ -59,9 +58,6 @@ class File(db.Model):
                 } for h in histories
             ]
         }
-
-from datetime import datetime, timedelta
-import secrets
 
 class SharePublic(db.Model):
     __tablename__ = 'share_public'

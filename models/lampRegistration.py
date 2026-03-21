@@ -14,8 +14,8 @@ from models import db
 
 lamp_payment_registration = db.Table(
     "lamp_payment_registration",
-    Column("payment_id", BigInteger, ForeignKey("lamp_payment.id")),
-    Column("registration_id", BigInteger, ForeignKey("lamp_registration.id")),
+    Column("payment_id", BigInteger, ForeignKey("lamp_payment.id"), nullable=False),
+    Column("registration_id", BigInteger, ForeignKey("lamp_registration.id"), nullable=False),
 )
 
 
