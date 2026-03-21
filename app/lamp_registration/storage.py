@@ -3,19 +3,19 @@ import os
 from flask import abort, jsonify, send_file
 from werkzeug.utils import secure_filename
 
-from app.paths import PROJECT_ROOT
+from app.paths import DATA_ROOT
 
 
-LAMP_PAYMENT_IMAGE_DIR = os.path.join(PROJECT_ROOT, "database", "lamp_paymet_images")
+LAMP_PAYMENT_IMAGE_DIR = DATA_ROOT / "lamp_paymet_images"
 os.makedirs(LAMP_PAYMENT_IMAGE_DIR, exist_ok=True)
 
 
 def save_payment_upload(payment_id, upload):
     filename = secure_filename(upload.filename)
     save_name = f"{payment_id}_{filename}"
-    save_path = os.path.join(LAMP_PAYMENT_IMAGE_DIR, save_name)
+    save_path = LAMP_PAYMENT_IMAGE_DIR / save_name
     upload.save(save_path)
-    return save_path
+    return str(save_path)
 
 
 def remove_payment_file(file_path):

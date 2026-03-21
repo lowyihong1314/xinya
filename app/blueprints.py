@@ -16,7 +16,6 @@ BLUEPRINT_SPECS = [
     ("app.music", "music_bp", "/music", "api"),
     ("app.form", "form_bp", "/form", "api"),
     ("app.permission_mgmt", "permission_bp", "/permission", "api"),
-    ("app.camera", "move_camera_bp", "/move_camera", "api"),
     ("app.lamp_registration", "lamp_registration_bp", "/lampRegistration_API", "api"),
 ]
 

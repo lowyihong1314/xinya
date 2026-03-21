@@ -1,4 +1,5 @@
 from app import create_app
+from _token import DEBUG, DEBUG_PORT
 
 app = create_app()
 
@@ -9,4 +10,4 @@ app = create_app()
 # sudo tail -f /var/log/nginx/access.log
 
 if __name__ == "__main__":
-    app.run(host="0.0.0.0", port=5015, debug=True)
+    app.run(host="0.0.0.0", port=DEBUG_PORT, debug=DEBUG)
