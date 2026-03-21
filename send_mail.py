@@ -11,7 +11,6 @@ GMAIL_USER = "lowyihong1314@gmail.com"       # 你的 Gmail
 FROM_EMAIL = "yukang@utbabuddha.com"      # 域名邮箱
 TO_EMAIL = "lowkeyin1234@gmail.com"         # 测试收件人（可以是自己）
 
-# ===== 构建邮件 =====
 msg = EmailMessage()
 msg["Subject"] = "UTBABUDDHA SMTP 测试邮件"
 msg["From"] = FROM_EMAIL
