@@ -130,7 +130,10 @@
         const data = await res.json();
         if (!res.ok || data.status !== "success") throw new Error(data.message || "提交失败，请稍后再试");
         form.reset();
-        showBox(notice, "报名已提交成功，我们已收到你的资料。", "ok");
+        showBox(notice, "报名成功，3 秒后将返回主页。", "ok");
+        setTimeout(() => {
+          window.location.href = "/#/";
+        }, 3000);
       } catch (error) {
         showBox(notice, error instanceof Error ? error.message : "提交失败，请稍后再试", "bad");
       }
