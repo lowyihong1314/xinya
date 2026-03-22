@@ -38,7 +38,16 @@ def _extract_docx_sections(docx_path):
     sections = []
     current = None
     for para in root.findall(".//w:body/w:p", DOCX_NS):
-        text = "".join((node.text or "") for node in para.findall(".//w:t", DOCX_NS)).strip()
+        parts = []
+        for node in para.iter():
+            tag = node.tag.split("}")[-1]
+            if tag == "t":
+                parts.append(node.text or "")
+            elif tag == "tab":
+                parts.append("	")
+            elif tag == "br":
+                parts.append("\n")
+        text = "".join(parts).strip()
         if not text:
             continue
 
