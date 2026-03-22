@@ -10,7 +10,7 @@ from sqlalchemy import and_, asc, or_
 from app.media.paths import DATA_PATH, to_short_data_path
 from app.paths import DATA_ROOT
 from models import db
-from models.event_data import AlbumFiles, EventCheckIn, EventData, EventFlowData
+from models.event_data import AlbumFiles, EventCheckIn, EventData, EventFile, EventFlowData
 from models.user_data import User
 
 BROCHURE_EXTENSIONS = {
@@ -24,6 +24,7 @@ BROCHURE_EXTENSIONS = {
     ".dox",
 }
 BROCHURE_STORAGE_ROOT = DATA_ROOT / "NAS" / "UTBA" / "event_brochure"
+EVENT_FILE_STORAGE_ROOT = DATA_ROOT / "NAS" / "UTBA" / "event_file"
 
 
 def get_json_payload():
@@ -174,6 +175,49 @@ def _save_event_brochure_file(event, uploaded_file):
     target_path = target_dir / filename
     uploaded_file.save(target_path)
     return to_short_data_path(str(target_path))
+
+
+def _delete_event_file_path(file_path):
+    normalized = str(file_path or "").strip()
+    if not normalized:
+        return
+
+    full_path = os.path.join(DATA_PATH, normalized)
+    try:
+        if os.path.isfile(full_path):
+            os.remove(full_path)
+    except OSError:
+        pass
+
+
+def _save_event_attachment_file(event, uploaded_file):
+    if not uploaded_file or not getattr(uploaded_file, "filename", ""):
+        raise ValueError("请选择活动附件")
+
+    raw_name = os.path.basename((uploaded_file.filename or "").strip())
+    extension = os.path.splitext(raw_name)[1].lower()
+    base_name = _normalize_brochure_base_name(raw_name)
+    folder_name = event.event_code or f"event_{event.id}"
+    target_dir = EVENT_FILE_STORAGE_ROOT / folder_name
+    target_dir.mkdir(parents=True, exist_ok=True)
+
+    filename = f"{datetime.utcnow().strftime('%Y%m%d%H%M%S')}_{secrets.token_hex(6)}_{base_name}{extension}"
+    target_path = target_dir / filename
+    uploaded_file.save(target_path)
+
+    short_path = to_short_data_path(str(target_path))
+    file_size = None
+    try:
+        file_size = target_path.stat().st_size
+    except OSError:
+        file_size = None
+
+    return {
+        "file_path": short_path,
+        "file_name": raw_name or filename,
+        "mime_type": uploaded_file.mimetype or None,
+        "file_size": file_size,
+    }
 
 
 def save_event_check_in(data):
@@ -577,6 +621,43 @@ def upload_event_brochure(event_id, uploaded_file):
     except ValueError as exc:
         db.session.rollback()
         return jsonify({"status": "error", "message": str(exc)}), 400
+    except Exception as exc:
+        db.session.rollback()
+        return jsonify({"status": "error", "message": str(exc)}), 500
+
+
+def upload_event_file(event_id, uploaded_file):
+    try:
+        event = EventData.query.get_or_404(event_id)
+        saved = _save_event_attachment_file(event, uploaded_file)
+        record = EventFile(
+            event_id=event.id,
+            user_id=current_user.id if current_user.is_authenticated else None,
+            file_path=saved["file_path"],
+            file_name=saved["file_name"],
+            mime_type=saved["mime_type"],
+            file_size=saved["file_size"],
+        )
+        db.session.add(record)
+        db.session.commit()
+        return jsonify({"status": "success", "message": "活动附件已上传", "data": record.to_dict()})
+    except ValueError as exc:
+        db.session.rollback()
+        return jsonify({"status": "error", "message": str(exc)}), 400
+    except Exception as exc:
+        db.session.rollback()
+        return jsonify({"status": "error", "message": str(exc)}), 500
+
+
+
+def delete_event_file(file_id):
+    record = EventFile.query.get_or_404(file_id)
+    file_path = record.file_path
+    try:
+        db.session.delete(record)
+        db.session.commit()
+        _delete_event_file_path(file_path)
+        return jsonify({"status": "success", "message": "活动附件已删除", "id": file_id})
     except Exception as exc:
         db.session.rollback()
         return jsonify({"status": "error", "message": str(exc)}), 500

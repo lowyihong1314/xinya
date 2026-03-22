@@ -1,7 +1,7 @@
 import { useMemo, useState } from "react";
 import type { CSSProperties } from "react";
 
-import type { DepartmentRecord, PermissionRecord, UserRecord } from "./types";
+import type { DepartmentRecord, MemberRenewalRecord, PermissionRecord, UserRecord } from "./types";
 
 type Toast = { type: "success" | "error"; text: string } | null;
 
@@ -38,6 +38,8 @@ export function UserControlView(props: {
   onSaveUser: (payload: Record<string, unknown>) => void;
   onDeleteUser: (userId: number) => void;
   onResetPassword: (userId: number) => void;
+  onCreateRenewal: (payload: { renewal_date: string; note?: string; proof?: File | null }) => void;
+  onDeleteRenewal: (renewalId: number) => void;
 }) {
   const isMobile = props.isMobile ?? false;
   const [newDepartmentName, setNewDepartmentName] = useState("");
@@ -47,15 +49,23 @@ export function UserControlView(props: {
       <header style={headerStyle}>
         <div>
           <div style={eyebrowStyle}>User Control</div>
-          <h3 style={titleStyle}>用户管理</h3>
+          <h3 style={titleStyle}>{props.userEditorOpen && props.selectedUser ? "编辑用户" : "用户管理"}</h3>
         </div>
         <div style={toolbarStyle(isMobile)}>
-          <button type="button" style={secondaryButtonStyle} onClick={props.onRefresh}>
-            刷新
-          </button>
-          <button type="button" style={primaryButtonStyle} onClick={props.onOpenNewUser}>
-            新增用户
-          </button>
+          {props.userEditorOpen && props.selectedUser ? (
+            <button type="button" style={secondaryButtonStyle} onClick={props.onCloseUserEditor}>
+              返回列表
+            </button>
+          ) : (
+            <>
+              <button type="button" style={secondaryButtonStyle} onClick={props.onRefresh}>
+                刷新
+              </button>
+              <button type="button" style={primaryButtonStyle} onClick={props.onOpenNewUser}>
+                新增用户
+              </button>
+            </>
+          )}
         </div>
       </header>
 
@@ -63,130 +73,136 @@ export function UserControlView(props: {
         <div style={props.toast.type === "success" ? successBannerStyle : errorBannerStyle}>{props.toast.text}</div>
       ) : null}
 
-      <div style={layoutStyle(isMobile)}>
-        <section style={panelStyle}>
-          <div style={panelHeaderStyle}>
-            <div>
-              <div style={sectionEyebrowStyle}>Departments</div>
-              <h4 style={sectionTitleStyle}>部门</h4>
-            </div>
-          </div>
-          <div style={createRowStyle(isMobile)}>
-            <input
-              style={inputStyle}
-              value={newDepartmentName}
-              placeholder="新部门名称"
-              onChange={(event) => setNewDepartmentName(event.target.value)}
-            />
-            <button
-              type="button"
-              style={secondaryButtonStyle}
-              onClick={() => {
-                if (!newDepartmentName.trim()) return;
-                props.onCreateDepartment(newDepartmentName.trim());
-                setNewDepartmentName("");
-              }}
-            >
-              添加
-            </button>
-          </div>
-          <div style={departmentListStyle}>
-            {props.departments.map((department) => (
-              <button
-                key={department.id}
-                type="button"
-                style={departmentCardStyle(props.selectedDepartmentId === department.id)}
-                onClick={() => props.onSelectDepartment(department.id)}
-              >
-                <div style={departmentTitleStyle}>{department.name}</div>
-                <div style={departmentMetaStyle}>{(department.permissions || []).length} 个权限</div>
-              </button>
-            ))}
-          </div>
+      {props.userEditorOpen && props.selectedUser ? (
+        <section style={editorPageShellStyle}>
+          <UserEditorPage
+            user={props.selectedUser}
+            onBack={props.onCloseUserEditor}
+            onSave={props.onSaveUser}
+            onDelete={() => props.onDeleteUser(props.selectedUser!.id)}
+            onResetPassword={() => props.onResetPassword(props.selectedUser!.id)}
+            onCreateRenewal={props.onCreateRenewal}
+            onDeleteRenewal={props.onDeleteRenewal}
+          />
         </section>
-
-        <section style={panelStyle}>
-          <div style={panelHeaderStyle}>
-            <div>
-              <div style={sectionEyebrowStyle}>Department Users</div>
-              <h4 style={sectionTitleStyle}>{props.selectedDepartment?.name || "未选择部门"}</h4>
-            </div>
-            {props.selectedDepartment ? (
-              <div style={toolbarStyle(isMobile)}>
-                <button type="button" style={secondaryButtonStyle} onClick={props.onOpenPermissionEditor}>
-                  权限
-                </button>
+      ) : (
+        <>
+          <div style={layoutStyle(isMobile)}>
+            <section style={panelStyle}>
+              <div style={panelHeaderStyle}>
+                <div>
+                  <div style={sectionEyebrowStyle}>Departments</div>
+                  <h4 style={sectionTitleStyle}>部门</h4>
+                </div>
+              </div>
+              <div style={createRowStyle(isMobile)}>
+                <input
+                  style={inputStyle}
+                  value={newDepartmentName}
+                  placeholder="新部门名称"
+                  onChange={(event) => setNewDepartmentName(event.target.value)}
+                />
                 <button
                   type="button"
-                  style={dangerButtonStyle}
-                  onClick={() => props.onDeleteDepartment(props.selectedDepartment!.id)}
+                  style={secondaryButtonStyle}
+                  onClick={() => {
+                    if (!newDepartmentName.trim()) return;
+                    props.onCreateDepartment(newDepartmentName.trim());
+                    setNewDepartmentName("");
+                  }}
                 >
-                  删除部门
+                  添加
                 </button>
               </div>
-            ) : null}
+              <div style={departmentListStyle}>
+                {props.departments.map((department) => (
+                  <button
+                    key={department.id}
+                    type="button"
+                    style={departmentCardStyle(props.selectedDepartmentId === department.id)}
+                    onClick={() => props.onSelectDepartment(department.id)}
+                  >
+                    <div style={departmentTitleStyle}>{department.name}</div>
+                    <div style={departmentMetaStyle}>{(department.permissions || []).length} 个权限</div>
+                  </button>
+                ))}
+              </div>
+            </section>
+
+            <section style={panelStyle}>
+              <div style={panelHeaderStyle}>
+                <div>
+                  <div style={sectionEyebrowStyle}>Department Users</div>
+                  <h4 style={sectionTitleStyle}>{props.selectedDepartment?.name || "未选择部门"}</h4>
+                </div>
+                {props.selectedDepartment ? (
+                  <div style={toolbarStyle(isMobile)}>
+                    <button type="button" style={secondaryButtonStyle} onClick={props.onOpenPermissionEditor}>
+                      权限
+                    </button>
+                    <button
+                      type="button"
+                      style={dangerButtonStyle}
+                      onClick={() => props.onDeleteDepartment(props.selectedDepartment!.id)}
+                    >
+                      删除部门
+                    </button>
+                  </div>
+                ) : null}
+              </div>
+              {props.loading ? <div style={placeholderStyle}>读取中…</div> : null}
+              {!props.loading && !props.departmentUsers.length ? <div style={placeholderStyle}>该部门暂无成员</div> : null}
+              <div style={cardGridStyle}>
+                {props.departmentUsers.map((user) => (
+                  <UserCard
+                    key={user.id}
+                    user={user}
+                    actionLabel="移出"
+                    actionTone="danger"
+                    onOpen={() => props.onOpenUser(user.id)}
+                    onAction={
+                      props.selectedDepartment ? () => props.onDetachUser(props.selectedDepartment!.id, user.id) : undefined
+                    }
+                  />
+                ))}
+              </div>
+            </section>
           </div>
-          {props.loading ? <div style={placeholderStyle}>读取中…</div> : null}
-          {!props.loading && !props.departmentUsers.length ? <div style={placeholderStyle}>该部门暂无成员</div> : null}
-          <div style={cardGridStyle}>
-            {props.departmentUsers.map((user) => (
-              <UserCard
-                key={user.id}
-                user={user}
-                actionLabel="移出"
-                actionTone="danger"
-                onOpen={() => props.onOpenUser(user.id)}
-                onAction={
-                  props.selectedDepartment ? () => props.onDetachUser(props.selectedDepartment!.id, user.id) : undefined
-                }
+
+          <section style={panelStyle}>
+            <div style={panelHeaderStyle}>
+              <div>
+                <div style={sectionEyebrowStyle}>All Users</div>
+                <h4 style={sectionTitleStyle}>成员</h4>
+              </div>
+              <input
+                style={searchStyle(isMobile)}
+                value={props.search}
+                placeholder="搜索姓名 / 用户名 / 邮箱 / 电话"
+                onChange={(event) => props.onSearchChange(event.target.value)}
               />
-            ))}
-          </div>
-        </section>
-      </div>
+            </div>
+            <div style={cardGridStyle}>
+              {props.filteredUsers.map((user) => (
+                <UserCard
+                  key={user.id}
+                  user={user}
+                  actionLabel={props.selectedDepartment ? "加入部门" : undefined}
+                  actionTone="default"
+                  onOpen={() => props.onOpenUser(user.id)}
+                  onAction={
+                    props.selectedDepartment ? () => props.onAttachUser(props.selectedDepartment!.id, user.id) : undefined
+                  }
+                />
+              ))}
+            </div>
+          </section>
 
-      <section style={panelStyle}>
-        <div style={panelHeaderStyle}>
-          <div>
-            <div style={sectionEyebrowStyle}>All Users</div>
-            <h4 style={sectionTitleStyle}>成员</h4>
-          </div>
-          <input
-            style={searchStyle(isMobile)}
-            value={props.search}
-            placeholder="搜索姓名 / 用户名 / 邮箱 / 电话"
-            onChange={(event) => props.onSearchChange(event.target.value)}
-          />
-        </div>
-        <div style={cardGridStyle}>
-          {props.filteredUsers.map((user) => (
-            <UserCard
-              key={user.id}
-              user={user}
-              actionLabel={props.selectedDepartment ? "加入部门" : undefined}
-              actionTone="default"
-              onOpen={() => props.onOpenUser(user.id)}
-              onAction={
-                props.selectedDepartment ? () => props.onAttachUser(props.selectedDepartment!.id, user.id) : undefined
-              }
-            />
-          ))}
-        </div>
-      </section>
-
-      {props.newUserOpen ? (
-        <NewUserModal onClose={props.onCloseNewUser} onSubmit={props.onCreateUser} />
-      ) : null}
-
-      {props.userEditorOpen && props.selectedUser ? (
-        <UserEditorModal
-          user={props.selectedUser}
-          onClose={props.onCloseUserEditor}
-          onSave={props.onSaveUser}
-          onDelete={() => props.onDeleteUser(props.selectedUser!.id)}
-          onResetPassword={() => props.onResetPassword(props.selectedUser!.id)}
-        />
-      ) : null}
+          {props.newUserOpen ? (
+            <NewUserModal onClose={props.onCloseNewUser} onSubmit={props.onCreateUser} />
+          ) : null}
+        </>
+      )}
 
       {props.permissionOpen && props.selectedDepartment ? (
         <PermissionModal
@@ -221,6 +237,7 @@ export function UserCard({
         style={avatarStyle}
       />
       <div style={userNameStyle}>{user.display_name || user.username || `#${user.id}`}</div>
+      <div style={memberBadgeStyle(Boolean(user.is_member))}>{user.is_member ? "会员" : "非会员"}</div>
       <div style={userMetaStyle}>{user.email || user.phone || "-"}</div>
     </>
   );
@@ -271,18 +288,22 @@ function NewUserModal({
   );
 }
 
-function UserEditorModal({
+function UserEditorPage({
   user,
-  onClose,
+  onBack,
   onSave,
   onDelete,
   onResetPassword,
+  onCreateRenewal,
+  onDeleteRenewal,
 }: {
   user: UserRecord;
-  onClose: () => void;
+  onBack: () => void;
   onSave: (payload: Record<string, unknown>) => void;
   onDelete: () => void;
   onResetPassword: () => void;
+  onCreateRenewal: (payload: { renewal_date: string; note?: string; proof?: File | null }) => void;
+  onDeleteRenewal: (renewalId: number) => void;
 }) {
   const [form, setForm] = useState({
     display_name: user.display_name || "",
@@ -290,6 +311,7 @@ function UserEditorModal({
     phone: user.phone || "",
     name_NRIC: user.name_NRIC || "",
     display: Boolean(user.display),
+    is_member: Boolean(user.is_member),
     NRIC: user.NRIC || "",
     gender: user.gender || "",
     parent_1: user.parent_1 || "",
@@ -297,9 +319,23 @@ function UserEditorModal({
     medical: user.medical || "",
     allergy: user.allergy || "",
   });
+  const [renewalForm, setRenewalForm] = useState<{ renewal_date: string; note: string; proof: File | null }>({
+    renewal_date: "",
+    note: "",
+    proof: null,
+  });
 
   return (
-    <ModalFrame title={`编辑用户：${user.display_name || user.username || user.id}`} onClose={onClose}>
+    <div style={editorPageStyle}>
+      <div style={editorPageHeaderStyle}>
+        <div>
+          <div style={sectionEyebrowStyle}>User Detail</div>
+          <h4 style={editorPageTitleStyle}>{user.display_name || user.username || user.id}</h4>
+        </div>
+        <button type="button" style={secondaryButtonStyle} onClick={onBack}>
+          返回列表
+        </button>
+      </div>
       <div style={formGridStyle}>
         <Field
           label="显示名称"
@@ -321,8 +357,68 @@ function UserEditorModal({
           />
           <span>对外显示</span>
         </label>
+        <label style={checkboxRowStyle}>
+          <input
+            type="checkbox"
+            checked={form.is_member}
+            onChange={(event) => setForm((prev) => ({ ...prev, is_member: event.target.checked }))}
+          />
+          <span>会员</span>
+        </label>
         <Field label="病史" value={form.medical} textarea onChange={(value) => setForm((prev) => ({ ...prev, medical: value }))} />
         <Field label="过敏" value={form.allergy} textarea onChange={(value) => setForm((prev) => ({ ...prev, allergy: value }))} />
+      </div>
+      <div style={renewalSectionStyle}>
+        <div style={renewalSectionHeaderStyle}>
+          <div style={fieldLabelStyle}>会员续费历史</div>
+        </div>
+        <div style={renewalFormStyle}>
+          <label style={fieldStyle}>
+            <span style={fieldLabelStyle}>续费日期</span>
+            <input
+              type="date"
+              style={inputStyle}
+              value={renewalForm.renewal_date}
+              onChange={(event) => setRenewalForm((prev) => ({ ...prev, renewal_date: event.target.value }))}
+            />
+          </label>
+          <label style={fieldStyle}>
+            <span style={fieldLabelStyle}>备注</span>
+            <input
+              type="text"
+              style={inputStyle}
+              value={renewalForm.note}
+              onChange={(event) => setRenewalForm((prev) => ({ ...prev, note: event.target.value }))}
+            />
+          </label>
+          <label style={fieldStyle}>
+            <span style={fieldLabelStyle}>证明</span>
+            <input
+              type="file"
+              style={inputStyle}
+              onChange={(event) => setRenewalForm((prev) => ({ ...prev, proof: event.target.files?.[0] || null }))}
+            />
+          </label>
+          <div style={renewalActionWrapStyle}>
+            <button
+              type="button"
+              style={secondaryButtonStyle}
+              onClick={() => {
+                onCreateRenewal(renewalForm);
+                setRenewalForm({ renewal_date: "", note: "", proof: null });
+              }}
+            >
+              新增续费
+            </button>
+          </div>
+        </div>
+        <div style={renewalListStyle}>
+          {(user.member_renewals || []).length ? (
+            (user.member_renewals || []).map((item) => <RenewalCard key={item.id} item={item} onDelete={() => onDeleteRenewal(item.id)} />)
+          ) : (
+            <div style={placeholderStyle}>还没有续费记录</div>
+          )}
+        </div>
       </div>
       <div style={modalFooterStyle}>
         <button type="button" style={dangerButtonStyle} onClick={onDelete}>
@@ -335,7 +431,35 @@ function UserEditorModal({
           保存
         </button>
       </div>
-    </ModalFrame>
+    </div>
+  );
+}
+
+function RenewalCard({ item, onDelete }: { item: MemberRenewalRecord; onDelete: () => void }) {
+  return (
+    <div style={renewalCardStyle}>
+      <div style={renewalMetaStyle}>
+        <div style={renewalDateStyle}>{item.renewal_date || "-"}</div>
+        <div style={renewalInfoStyle}>
+          {item.created_by_name ? `录入：${item.created_by_name}` : ""}
+          {item.note ? `${item.created_by_name ? " · " : ""}${item.note}` : ""}
+        </div>
+      </div>
+      <div style={attachmentActionRowStyle}>
+        {item.proof_path ? (
+          <button
+            type="button"
+            style={secondaryButtonStyle}
+            onClick={() => window.open(`/media_file/${item.proof_path}`, "_blank", "noopener,noreferrer")}
+          >
+            查看证明
+          </button>
+        ) : null}
+        <button type="button" style={dangerButtonStyle} onClick={onDelete}>
+          删除
+        </button>
+      </div>
+    </div>
   );
 }
 
@@ -449,6 +573,7 @@ const readOnlyUserCardBodyStyle: CSSProperties = { padding: "16px", display: "gr
 const avatarStyle: CSSProperties = { width: "86px", height: "86px", borderRadius: "50%", objectFit: "cover", border: "3px solid var(--x-color-panel-strong)" };
 const userNameStyle: CSSProperties = { fontWeight: 700, color: "var(--x-color-ink)", textAlign: "center" };
 const userMetaStyle: CSSProperties = { fontSize: "12px", color: "var(--x-color-ink-muted)", textAlign: "center", wordBreak: "break-word" };
+const memberBadgeStyle = (active: boolean): CSSProperties => ({ display: "inline-flex", alignItems: "center", justifyContent: "center", minHeight: "24px", padding: "4px 10px", borderRadius: "999px", fontSize: "12px", fontWeight: 800, background: active ? "var(--x-color-success-soft)" : "var(--x-color-panel-alt)", color: active ? "var(--x-color-success)" : "var(--x-color-ink-muted)", border: active ? "1px solid rgba(21,128,61,0.16)" : "1px solid var(--x-color-line-soft)" });
 const actionButtonStyle = (danger?: boolean): CSSProperties => ({ width: "100%", padding: "10px 12px", border: "none", borderTop: "1px solid var(--x-color-line-soft)", background: danger ? "var(--x-color-danger-soft)" : "var(--x-color-accent-tint)", color: danger ? "var(--x-color-danger)" : "var(--x-color-accent-strong)", fontWeight: 700, cursor: "pointer" });
 const placeholderStyle: CSSProperties = { padding: "24px", borderRadius: "var(--x-radius-md)", background: "var(--x-color-panel)", border: "1px solid var(--x-color-line-soft)", color: "var(--x-color-ink-muted)" };
 function searchStyle(isMobile: boolean): CSSProperties { return { minWidth: isMobile ? "0" : "320px", maxWidth: isMobile ? "100%" : "420px", width: "100%", minHeight: "46px", padding: "12px 14px", borderRadius: "var(--x-radius-sm)", border: "1px solid var(--x-color-line-soft)", background: "var(--x-color-panel)", boxSizing: "border-box" }; }
@@ -456,6 +581,10 @@ const overlayStyle: CSSProperties = { position: "fixed", inset: 0, background: "
 const modalStyle: CSSProperties = { width: "min(820px, 100%)", maxHeight: "90vh", overflow: "auto", padding: "22px", borderRadius: "var(--x-radius-lg)", background: "var(--x-color-panel-strongest)", border: "1px solid var(--x-color-line-soft)", boxShadow: "0 24px 54px var(--x-color-shadow-strong)", display: "grid", gap: "16px" };
 const modalHeaderStyle: CSSProperties = { display: "flex", justifyContent: "space-between", gap: "14px", alignItems: "center", flexWrap: "wrap" };
 const modalTitleStyle: CSSProperties = { margin: 0, fontSize: "24px", color: "var(--x-color-ink)" };
+const editorPageShellStyle: CSSProperties = { padding: "20px", borderRadius: "var(--x-radius-lg)", background: "var(--x-color-panel-strong)", border: "1px solid var(--x-color-line-soft)", boxShadow: "0 14px 34px var(--x-color-shadow-soft)" };
+const editorPageStyle: CSSProperties = { display: "grid", gap: "18px" };
+const editorPageHeaderStyle: CSSProperties = { display: "flex", justifyContent: "space-between", gap: "14px", alignItems: "center", flexWrap: "wrap" };
+const editorPageTitleStyle: CSSProperties = { margin: "6px 0 0", fontSize: "28px", color: "var(--x-color-ink)" };
 const formGridStyle: CSSProperties = { display: "grid", gridTemplateColumns: "repeat(2, minmax(0,1fr))", gap: "14px" };
 const fieldStyle: CSSProperties = { display: "grid", gap: "8px" };
 const fieldLabelStyle: CSSProperties = { fontSize: "13px", fontWeight: 700, color: "var(--x-color-ink-muted)" };
@@ -464,6 +593,16 @@ const textareaStyle: CSSProperties = { ...inputStyle, minHeight: "120px", resize
 const modalFooterStyle: CSSProperties = { display: "flex", justifyContent: "flex-end", gap: "10px", flexWrap: "wrap" };
 const checkboxRowStyle: CSSProperties = { display: "flex", alignItems: "center", gap: "8px", minHeight: "46px", color: "var(--x-color-ink)" };
 const permissionGridStyle: CSSProperties = { display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(220px, 1fr))", gap: "10px" };
+const renewalSectionStyle: CSSProperties = { display: "grid", gap: "12px", paddingTop: "8px", borderTop: "1px solid var(--x-color-line-soft)" };
+const renewalSectionHeaderStyle: CSSProperties = { display: "flex", alignItems: "center", justifyContent: "space-between" };
+const renewalFormStyle: CSSProperties = { display: "grid", gridTemplateColumns: "repeat(2, minmax(0,1fr))", gap: "14px" };
+const renewalActionWrapStyle: CSSProperties = { display: "flex", alignItems: "end" };
+const renewalListStyle: CSSProperties = { display: "grid", gap: "10px" };
+const renewalCardStyle: CSSProperties = { display: "flex", justifyContent: "space-between", alignItems: "center", gap: "12px", flexWrap: "wrap", padding: "14px 16px", borderRadius: "var(--x-radius-md)", border: "1px solid var(--x-color-line-soft)", background: "var(--x-color-panel)" };
+const renewalMetaStyle: CSSProperties = { display: "grid", gap: "4px" };
+const renewalDateStyle: CSSProperties = { fontSize: "15px", fontWeight: 800, color: "var(--x-color-ink)" };
+const renewalInfoStyle: CSSProperties = { fontSize: "12px", color: "var(--x-color-ink-muted)" };
+const attachmentActionRowStyle: CSSProperties = { display: "flex", gap: "8px", flexWrap: "wrap" };
 const permissionItemStyle = (active: boolean): CSSProperties => ({ display: "flex", alignItems: "center", gap: "10px", padding: "12px 14px", borderRadius: "var(--x-radius-sm)", border: active ? "1px solid var(--x-color-accent-border)" : "1px solid var(--x-color-line-soft)", background: active ? "var(--x-color-accent-tint-strong)" : "var(--x-color-panel)" });
 const primaryButtonStyle: CSSProperties = { padding: "12px 18px", borderRadius: "999px", border: "none", background: "linear-gradient(135deg, var(--x-color-accent), var(--x-color-info))", color: "white", fontWeight: 700, cursor: "pointer" };
 const secondaryButtonStyle: CSSProperties = { padding: "12px 18px", borderRadius: "999px", border: "1px solid var(--x-color-line-soft)", background: "var(--x-color-panel)", color: "var(--x-color-ink)", fontWeight: 700, cursor: "pointer" };

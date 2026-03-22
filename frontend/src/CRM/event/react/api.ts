@@ -1,4 +1,10 @@
-import type { EventCreatePayload, EventListResponse, EventMutationPayload, EventRecord } from "./types";
+import type {
+  EventAttachmentRecord,
+  EventCreatePayload,
+  EventListResponse,
+  EventMutationPayload,
+  EventRecord,
+} from "./types";
 
 async function parseJson<T>(response: Response): Promise<T> {
   const data = (await response.json().catch(() => ({}))) as T & {
@@ -58,4 +64,26 @@ export async function uploadEventBrochure(eventId: number, file: File) {
   });
 
   return parseJson<{ status?: string; data?: EventRecord; message?: string }>(response);
+}
+
+export async function uploadEventFile(eventId: number, file: File) {
+  const formData = new FormData();
+  formData.append("file", file);
+
+  const response = await fetch(`/api/event_data/event_file/upload/${eventId}`, {
+    method: "POST",
+    credentials: "include",
+    body: formData,
+  });
+
+  return parseJson<{ status?: string; data?: EventAttachmentRecord; message?: string }>(response);
+}
+
+export async function deleteEventFile(fileId: number) {
+  const response = await fetch(`/api/event_data/event_file/delete/${fileId}`, {
+    method: "POST",
+    credentials: "include",
+  });
+
+  return parseJson<{ status?: string; id?: number; message?: string }>(response);
 }

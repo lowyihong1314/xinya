@@ -9,6 +9,7 @@ from sqlalchemy import Enum
 from sqlalchemy.ext.mutable import MutableList
 from flask_bcrypt import Bcrypt
 from sqlalchemy.inspection import inspect
+from sqlalchemy import desc
 
 bcrypt = Bcrypt()
 
@@ -72,6 +73,36 @@ user_department = db.Table(
     db.Column('department_id', db.Integer, db.ForeignKey('department.id'), primary_key=True)
 )
 
+class MemberRenewal(db.Model):
+    __tablename__ = 'member_renewal'
+
+    id = db.Column(db.Integer, primary_key=True, autoincrement=True)
+    user_id = db.Column(db.Integer, db.ForeignKey('user_data.id', ondelete='CASCADE', onupdate='CASCADE'), nullable=False, index=True)
+    renewal_date = db.Column(db.Date, nullable=False, index=True)
+    proof_path = db.Column(db.String(255), nullable=True)
+    proof_name = db.Column(db.String(255), nullable=True)
+    proof_mime = db.Column(db.String(120), nullable=True)
+    note = db.Column(db.String(255), nullable=True)
+    created_by = db.Column(db.Integer, db.ForeignKey('user_data.id', ondelete='SET NULL', onupdate='CASCADE'), nullable=True, index=True)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow, nullable=False)
+
+    user = db.relationship('User', foreign_keys=[user_id], back_populates='member_renewals')
+    creator = db.relationship('User', foreign_keys=[created_by])
+
+    def to_dict(self):
+        return {
+            'id': self.id,
+            'user_id': self.user_id,
+            'renewal_date': self.renewal_date.isoformat() if self.renewal_date else None,
+            'proof_path': self.proof_path,
+            'proof_name': self.proof_name,
+            'proof_mime': self.proof_mime,
+            'note': self.note,
+            'created_by': self.created_by,
+            'created_by_name': getattr(self.creator, 'display_name', None) or getattr(self.creator, 'username', None),
+            'created_at': self.created_at.isoformat() if self.created_at else None,
+        }
+
 class User(db.Model, UserMixin):
     __tablename__ = 'user_data'
 
@@ -96,6 +127,7 @@ class User(db.Model, UserMixin):
     login_version = db.Column(db.Integer, default=0)
     reject_local = db.Column(db.Boolean, nullable=False, default=False)
     reject_date = db.Column(db.DateTime, nullable=True)
+    is_member = db.Column(db.Boolean, nullable=False, default=False)
 
     playlists = db.relationship('Playlist', backref='creator', lazy=True)
 
@@ -103,6 +135,13 @@ class User(db.Model, UserMixin):
         "Department",
         secondary="user_department",
         back_populates="users"
+    )
+    member_renewals = db.relationship(
+        "MemberRenewal",
+        back_populates="user",
+        cascade="all, delete-orphan",
+        foreign_keys="[MemberRenewal.user_id]",
+        order_by="desc(MemberRenewal.renewal_date), desc(MemberRenewal.id)",
     )
     # ✅ 密码管理方法
     def set_password(self, password):
@@ -146,6 +185,8 @@ class User(db.Model, UserMixin):
             "login_version": self.login_version,
             "reject_local": reject_local,
             "reject_date": reject_date.isoformat() if reject_date else None,
+            "is_member": bool(self.is_member),
+            "member_renewals": [item.to_dict() for item in self.member_renewals[:20]],
         }
 
         # ✅ 改进部门输出 — 使用 Department.to_dict()

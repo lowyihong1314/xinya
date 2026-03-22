@@ -1,4 +1,5 @@
 import os
+import secrets
 from datetime import datetime, timedelta
 
 from PIL import Image
@@ -6,11 +7,14 @@ from flask import Blueprint, jsonify, request, send_file, session
 from flask_login import current_user, login_required, login_user, logout_user
 
 from app.auth import permission_required
+from app.media.paths import DATA_PATH, to_short_data_path
 from app.user_control.utils import PROFILE_PATH, generate_resized_image
 from models import db
-from models.user_data import Department, User
+from models.user_data import Department, MemberRenewal, User
 
 user_control_bp = Blueprint("user_control", __name__)
+
+MEMBER_RENEWAL_ROOT = os.path.join(DATA_PATH, "NAS", "UTBA", "member_renewal")
 
 
 @user_control_bp.get("/get_user_data")
@@ -87,6 +91,9 @@ def edit_user_data():
         for field in ["display_name", "email", "phone", "user_theme"]:
             if field in data:
                 setattr(user, field, data[field])
+
+        if "is_member" in data:
+            user.is_member = bool(data.get("is_member"))
 
         db.session.commit()
         return jsonify({"status": "success", "message": "用户信息更新成功"})
@@ -269,6 +276,93 @@ def remove_user_from_department(dept_id):
         return jsonify({"status": "error", "message": f"移出失败: {str(exc)}"}), 500
 
 
+def _save_member_renewal_proof(user, uploaded_file):
+    if not uploaded_file or not getattr(uploaded_file, "filename", ""):
+        return None
+
+    raw_name = os.path.basename((uploaded_file.filename or "").strip())
+    extension = os.path.splitext(raw_name)[1].lower()
+    folder_name = user.username or f"user_{user.id}"
+    target_dir = os.path.join(MEMBER_RENEWAL_ROOT, folder_name)
+    os.makedirs(target_dir, exist_ok=True)
+
+    filename = f"{datetime.utcnow().strftime('%Y%m%d%H%M%S')}_{secrets.token_hex(4)}{extension}"
+    target_path = os.path.join(target_dir, filename)
+    uploaded_file.save(target_path)
+    return {
+        "proof_path": to_short_data_path(target_path),
+        "proof_name": raw_name or filename,
+        "proof_mime": uploaded_file.mimetype or None,
+    }
+
+
+@user_control_bp.get("/member_renewal/<int:user_id>")
+@login_required
+@permission_required("account_edit")
+def get_member_renewals(user_id):
+    user = User.query.get(user_id)
+    if not user:
+        return jsonify({"status": "error", "message": "用户不存在"}), 404
+    return jsonify({"status": "success", "data": [item.to_dict() for item in user.member_renewals]})
+
+
+@user_control_bp.post("/member_renewal/<int:user_id>")
+@login_required
+@permission_required("account_edit")
+def create_member_renewal(user_id):
+    user = User.query.get(user_id)
+    if not user:
+        return jsonify({"status": "error", "message": "用户不存在"}), 404
+
+    try:
+        renewal_date_raw = request.form.get("renewal_date") or request.values.get("renewal_date")
+        if not renewal_date_raw:
+            return jsonify({"status": "error", "message": "续费日期不能为空"}), 400
+        renewal_date = datetime.strptime(renewal_date_raw, "%Y-%m-%d").date()
+        upload = request.files.get("proof") or request.files.get("file")
+        saved = _save_member_renewal_proof(user, upload) or {}
+
+        record = MemberRenewal(
+            user_id=user.id,
+            renewal_date=renewal_date,
+            note=(request.form.get("note") or request.values.get("note") or "").strip() or None,
+            proof_path=saved.get("proof_path"),
+            proof_name=saved.get("proof_name"),
+            proof_mime=saved.get("proof_mime"),
+            created_by=current_user.id,
+        )
+        db.session.add(record)
+        db.session.commit()
+        return jsonify({"status": "success", "message": "会员续费已保存", "data": record.to_dict()})
+    except ValueError:
+        db.session.rollback()
+        return jsonify({"status": "error", "message": "续费日期格式无效"}), 400
+    except Exception as exc:
+        db.session.rollback()
+        return jsonify({"status": "error", "message": f"保存失败: {str(exc)}"}), 500
+
+
+@user_control_bp.delete("/member_renewal/<int:renewal_id>")
+@login_required
+@permission_required("account_edit")
+def delete_member_renewal(renewal_id):
+    record = MemberRenewal.query.get(renewal_id)
+    if not record:
+        return jsonify({"status": "error", "message": "续费记录不存在"}), 404
+    proof_path = record.proof_path
+    try:
+        db.session.delete(record)
+        db.session.commit()
+        if proof_path:
+            full_path = os.path.join(DATA_PATH, proof_path)
+            if os.path.isfile(full_path):
+                os.remove(full_path)
+        return jsonify({"status": "success", "message": "续费记录已删除"})
+    except Exception as exc:
+        db.session.rollback()
+        return jsonify({"status": "error", "message": f"删除失败: {str(exc)}"}), 500
+
+
 @user_control_bp.delete("/delete_user/<int:user_id>")
 @permission_required("member_edit")
 def delete_user(user_id):
@@ -391,7 +485,7 @@ def update_user(user_id):
     try:
         for key, value in data.items():
             if hasattr(user, key):
-                setattr(user, key, bool(value) if key == "display" else value)
+                setattr(user, key, bool(value) if key in {"display", "is_member"} else value)
 
         db.session.commit()
         return jsonify({"status": "success", "message": "用户信息更新成功"})

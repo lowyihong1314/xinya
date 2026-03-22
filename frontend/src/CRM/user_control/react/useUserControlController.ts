@@ -4,7 +4,9 @@ import {
   addPermissionToDepartment,
   addUserToDepartment,
   createDepartment,
+  createMemberRenewal,
   deleteDepartment,
+  deleteMemberRenewal,
   deleteUser,
   editUserData,
   fetchAllPermissions,
@@ -155,6 +157,38 @@ export function useUserControlController() {
     }
   }
 
+  async function addRenewal(payload: { renewal_date: string; note?: string; proof?: File | null }) {
+    if (!selectedUser) return;
+    try {
+      await createMemberRenewal(selectedUser.id, payload);
+      const detail = await fetchUserDetail(selectedUser.id);
+      setSelectedUser(detail);
+      setToast({ type: "success", text: "续费记录已保存" });
+      await loadInitial();
+      if (selectedDepartmentId) {
+        await loadDepartmentUsers(selectedDepartmentId);
+      }
+    } catch (err) {
+      setToast({ type: "error", text: err instanceof Error ? err.message : "保存续费失败" });
+    }
+  }
+
+  async function removeRenewal(renewalId: number) {
+    if (!selectedUser) return;
+    try {
+      await deleteMemberRenewal(renewalId);
+      const detail = await fetchUserDetail(selectedUser.id);
+      setSelectedUser(detail);
+      setToast({ type: "success", text: "续费记录已删除" });
+      await loadInitial();
+      if (selectedDepartmentId) {
+        await loadDepartmentUsers(selectedDepartmentId);
+      }
+    } catch (err) {
+      setToast({ type: "error", text: err instanceof Error ? err.message : "删除续费失败" });
+    }
+  }
+
   async function createUser(payload: { username: string; email: string; phone?: string; password: string }) {
     try {
       await registerUser(payload);
@@ -260,6 +294,8 @@ export function useUserControlController() {
       saveUser,
       removeUser,
       doResetPassword,
+      addRenewal,
+      removeRenewal,
       createUser,
       createDept,
       removeDept,

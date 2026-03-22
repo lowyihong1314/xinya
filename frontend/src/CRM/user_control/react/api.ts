@@ -1,4 +1,4 @@
-import type { DepartmentRecord, DepartmentUsersResponse, PermissionRecord, UserRecord } from "./types";
+import type { DepartmentRecord, DepartmentUsersResponse, MemberRenewalRecord, PermissionRecord, UserRecord } from "./types";
 
 async function parseJson<T>(response: Response): Promise<T> {
   const data = (await response.json().catch(() => ({}))) as T & {
@@ -126,6 +126,32 @@ export async function editUserData(payload: Record<string, unknown>) {
 
 export async function deleteUser(userId: number) {
   const response = await fetch(`/api/user_control/delete_user/${userId}`, {
+    method: "DELETE",
+    credentials: "include",
+  });
+  return parseJson<{ status?: string; message?: string }>(response);
+}
+
+export async function createMemberRenewal(userId: number, payload: { renewal_date: string; note?: string; proof?: File | null }) {
+  const formData = new FormData();
+  formData.append("renewal_date", payload.renewal_date);
+  if (payload.note) {
+    formData.append("note", payload.note);
+  }
+  if (payload.proof) {
+    formData.append("proof", payload.proof);
+  }
+
+  const response = await fetch(`/api/user_control/member_renewal/${userId}`, {
+    method: "POST",
+    credentials: "include",
+    body: formData,
+  });
+  return parseJson<{ status?: string; message?: string; data?: MemberRenewalRecord }>(response);
+}
+
+export async function deleteMemberRenewal(renewalId: number) {
+  const response = await fetch(`/api/user_control/member_renewal/${renewalId}`, {
     method: "DELETE",
     credentials: "include",
   });

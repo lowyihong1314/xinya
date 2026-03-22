@@ -104,3 +104,18 @@ def upload_brochure(event_id):
     if not uploaded_file:
         return {"status": "error", "message": "请选择文件"}, 400
     return services.upload_event_brochure(event_id, uploaded_file)
+
+
+@event_data_bp.route("/event_file/upload/<int:event_id>", methods=["POST"])
+@permission_required("event")
+def upload_event_file(event_id):
+    uploaded_file = request.files.get("file")
+    if not uploaded_file:
+        return {"status": "error", "message": "请选择文件"}, 400
+    return services.upload_event_file(event_id, uploaded_file)
+
+
+@event_data_bp.route("/event_file/delete/<int:file_id>", methods=["POST", "DELETE"])
+@login_required
+def remove_event_file(file_id):
+    return services.delete_event_file(file_id)

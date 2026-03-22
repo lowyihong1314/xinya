@@ -21,6 +21,18 @@ export type EventImageRef = {
   file_name?: string;
 };
 
+export type EventAttachmentRecord = {
+  id: number;
+  event_id: number;
+  file_path: string;
+  file_name?: string;
+  mime_type?: string | null;
+  file_size?: number | null;
+  note?: string | null;
+  created_at?: string;
+  user_name?: string;
+};
+
 export type SharedEventRecord = {
   id: number;
   event_code?: string;
@@ -34,6 +46,7 @@ export type SharedEventRecord = {
   brochure_path?: string | null;
   brochure_name?: string | null;
   brochure_mime?: string | null;
+  event_files?: EventAttachmentRecord[];
   username?: string;
   display_name?: string;
   organizers?: EventOrganizer[];

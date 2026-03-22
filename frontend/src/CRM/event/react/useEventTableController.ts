@@ -3,7 +3,7 @@ import { startTransition, useEffect, useMemo, useState } from "react";
 import { smartImageURL } from "../../../js/get_img";
 import { useEventData } from "../../../event/shared/EventDataContext";
 import { select_users_modal } from "../../select_users_modal";
-import { createEvent, deleteEvent, saveEvent, uploadEventBrochure } from "./api";
+import { createEvent, deleteEvent, deleteEventFile, saveEvent, uploadEventBrochure, uploadEventFile } from "./api";
 import type { EventCreatePayload, EventMutationPayload, EventRecord } from "./types";
 import { useEventTableRealtime } from "./useEventTableRealtime";
 
@@ -18,6 +18,7 @@ export function useEventTableController() {
   const [saving, setSaving] = useState(false);
   const [creating, setCreating] = useState(false);
   const [uploadingBrochure, setUploadingBrochure] = useState(false);
+  const [uploadingEventFile, setUploadingEventFile] = useState(false);
   const [toast, setToast] = useState<Toast>(null);
   const [realtimeEnabled, setRealtimeEnabled] = useState(false);
   const [imageUrl, setImageUrl] = useState<string | null>(null);
@@ -218,6 +219,35 @@ export function useEventTableController() {
     }
   }
 
+  async function uploadAttachment(file: File) {
+    if (!selectedEventId) {
+      return;
+    }
+    setUploadingEventFile(true);
+    try {
+      await uploadEventFile(selectedEventId, file);
+      await refreshEvents();
+      setToast({ type: "success", text: "活动附件已上传" });
+    } catch (err) {
+      setToast({ type: "error", text: err instanceof Error ? err.message : "上传失败" });
+    } finally {
+      setUploadingEventFile(false);
+    }
+  }
+
+  async function removeAttachment(fileId: number) {
+    if (!selectedEventId) {
+      return;
+    }
+    try {
+      await deleteEventFile(fileId);
+      await refreshEvents();
+      setToast({ type: "success", text: "活动附件已删除" });
+    } catch (err) {
+      setToast({ type: "error", text: err instanceof Error ? err.message : "删除失败" });
+    }
+  }
+
   function setRealtime(nextValue: boolean) {
     startTransition(() => {
       setRealtimeEnabled(nextValue);
@@ -238,6 +268,7 @@ export function useEventTableController() {
       saving,
       creating,
       uploadingBrochure,
+      uploadingEventFile,
       toast,
       realtimeEnabled,
       imageUrl,
@@ -252,6 +283,8 @@ export function useEventTableController() {
       removeSelectedEvent,
       uploadBrochure,
       removeBrochure,
+      uploadAttachment,
+      removeAttachment,
       addOrganizers,
       setRealtime,
     },

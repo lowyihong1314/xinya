@@ -77,6 +77,13 @@ class EventData(db.Model):
         cascade="all, delete-orphan",
         foreign_keys="[AlbumFiles.event_id]"
     )
+    event_files = db.relationship(
+        "EventFile",
+        back_populates="event",
+        cascade="all, delete-orphan",
+        foreign_keys="[EventFile.event_id]",
+        order_by="desc(EventFile.created_at), desc(EventFile.id)",
+    )
 
     # -----------------------------------------------------
 
@@ -106,6 +113,7 @@ class EventData(db.Model):
             "event_code": self.event_code,
             "album": self.album,
             "event_image": self.event_image.to_dict() if self.event_image else None,
+            "event_files": [file.to_dict() for file in self.event_files[:12]],
 
             "user_id": self.user_id,
             "username": getattr(self.user, "username", None),
@@ -120,6 +128,10 @@ class EventData(db.Model):
         data["album_files"] = [
             file.to_dict()
             for file in self.album_files[:max_file]
+        ]
+        data["event_files"] = [
+            file.to_dict()
+            for file in self.event_files[:max_file]
         ]
 
         if not self.datetime:
@@ -244,6 +256,47 @@ class EventFlowData(db.Model):
 
             "handler_id": self.handler_id,
             "handler_name": getattr(self.handler, "display_name", None),
+        }
+
+
+class EventFile(db.Model):
+    __tablename__ = "event_file"
+
+    id = db.Column(db.Integer, primary_key=True, autoincrement=True)
+    event_id = db.Column(
+        db.Integer,
+        db.ForeignKey("event_data.id", ondelete="CASCADE", onupdate="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    user_id = db.Column(
+        db.Integer,
+        db.ForeignKey("user_data.id", ondelete="SET NULL", onupdate="CASCADE"),
+        nullable=True,
+        index=True,
+    )
+    file_path = db.Column(db.String(255), nullable=False)
+    file_name = db.Column(db.String(255), nullable=False)
+    mime_type = db.Column(db.String(120), nullable=True)
+    file_size = db.Column(db.BigInteger, nullable=True)
+    note = db.Column(db.String(255), nullable=True)
+    created_at = db.Column(db.DateTime, server_default=db.func.current_timestamp(), index=True)
+
+    event = db.relationship("EventData", back_populates="event_files", foreign_keys=[event_id])
+    user = db.relationship("User", foreign_keys=[user_id])
+
+    def to_dict(self):
+        return {
+            "id": self.id,
+            "event_id": self.event_id,
+            "user_id": self.user_id,
+            "file_path": self.file_path,
+            "file_name": self.file_name,
+            "mime_type": self.mime_type,
+            "file_size": self.file_size,
+            "note": self.note,
+            "created_at": self.created_at.isoformat() if self.created_at else None,
+            "user_name": getattr(self.user, "display_name", None) or getattr(self.user, "username", None),
         }
 
 

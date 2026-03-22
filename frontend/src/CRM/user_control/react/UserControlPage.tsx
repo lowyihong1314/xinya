@@ -43,6 +43,8 @@ export function UserControlPage() {
       onSaveUser={(payload) => void actions.saveUser(payload)}
       onDeleteUser={(userId) => void actions.removeUser(userId)}
       onResetPassword={(userId) => void actions.doResetPassword(userId)}
+      onCreateRenewal={(payload) => void actions.addRenewal(payload)}
+      onDeleteRenewal={(renewalId) => void actions.removeRenewal(renewalId)}
     />
   );
 }

@@ -1,5 +1,6 @@
 import { useRef, useState, type CSSProperties, type FormEvent } from "react";
 
+import { openPreviewModal } from "../../../js/attachment_preview";
 import { openBrochurePreviewModal } from "../../../event/shared/brochurePreview";
 import type { EventCreatePayload, EventMutationPayload, EventRecord } from "./types";
 
@@ -27,6 +28,7 @@ export function EventTableView(props: {
   saving: boolean;
   creating: boolean;
   brochureUploading: boolean;
+  attachmentUploading: boolean;
   toast: Toast;
   realtimeEnabled: boolean;
   imageUrl: string | null;
@@ -40,6 +42,8 @@ export function EventTableView(props: {
   onUpdateEvent: (patch: EventMutationPayload) => void;
   onUploadBrochure: (file: File) => void;
   onRemoveBrochure: () => void;
+  onUploadAttachment: (file: File) => void;
+  onRemoveAttachment: (fileId: number) => void;
   onDeleteEvent: () => void;
 }) {
   const isMobile = props.isMobile ?? false;
@@ -47,6 +51,7 @@ export function EventTableView(props: {
   const [draft, setDraft] = useState<CreateDraft>(() => createDefaultDraft());
   const [createError, setCreateError] = useState<string | null>(null);
   const brochureInputRef = useRef<HTMLInputElement | null>(null);
+  const attachmentInputRef = useRef<HTMLInputElement | null>(null);
 
   async function handleCreateSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -416,6 +421,86 @@ export function EventTableView(props: {
                           }}
                         />
                       </div>
+                    </div>
+                  </label>
+
+                  <label style={wideFieldStyle}>
+                    <span style={fieldLabelStyle}>活动附件</span>
+                    <div style={attachmentListStyle}>
+                      <div style={attachmentCardStyle}>
+                        <div style={attachmentMetaWrapStyle}>
+                          <div style={attachmentTitleStyle}>每个活动可上传多个附件</div>
+                          <div style={attachmentSubtitleStyle}>可用来放流程单、报名表、海报原档、赞助资料等</div>
+                        </div>
+                        <div style={attachmentActionRowStyle}>
+                          <button
+                            type="button"
+                            style={secondaryButtonStyle}
+                            disabled={props.attachmentUploading}
+                            onClick={() => attachmentInputRef.current?.click()}
+                          >
+                            {props.attachmentUploading ? "上传中…" : "新增附件"}
+                          </button>
+                          <input
+                            ref={attachmentInputRef}
+                            type="file"
+                            style={hiddenInputStyle}
+                            onChange={(event) => {
+                              const file = event.target.files?.[0];
+                              if (file) {
+                                props.onUploadAttachment(file);
+                              }
+                              event.target.value = "";
+                            }}
+                          />
+                        </div>
+                      </div>
+
+                      {(props.selectedEvent.event_files || []).length ? (
+                        props.selectedEvent.event_files!.map((file) => (
+                          <div key={file.id} style={attachmentCardStyle}>
+                            <div style={attachmentMetaWrapStyle}>
+                              <div style={attachmentTitleStyle}>{file.file_name || `附件 #${file.id}`}</div>
+                              <div style={attachmentSubtitleStyle}>
+                                {file.mime_type || "未知类型"}
+                                {file.user_name ? ` · 上传者 ${file.user_name}` : ""}
+                                {file.created_at ? ` · ${file.created_at.replace("T", " ").slice(0, 16)}` : ""}
+                              </div>
+                            </div>
+                            <div style={attachmentActionRowStyle}>
+                              <button
+                                type="button"
+                                style={secondaryButtonStyle}
+                                onClick={() =>
+                                  openPreviewModal({
+                                    file_name: file.file_name,
+                                    file_path: file.file_path,
+                                    mime_type: file.mime_type || undefined,
+                                  })
+                                }
+                              >
+                                预览
+                              </button>
+                              <button
+                                type="button"
+                                style={secondaryButtonStyle}
+                                onClick={() => window.open(`/media_file/${file.file_path}`, "_blank", "noopener,noreferrer")}
+                              >
+                                下载
+                              </button>
+                              <button
+                                type="button"
+                                style={ghostDangerStyle}
+                                onClick={() => props.onRemoveAttachment(file.id)}
+                              >
+                                删除
+                              </button>
+                            </div>
+                          </div>
+                        ))
+                      ) : (
+                        <div style={placeholderStyle}>还没有活动附件</div>
+                      )}
                     </div>
                   </label>
                 </div>
@@ -861,6 +946,11 @@ const textareaStyle: CSSProperties = {
 
 const hiddenInputStyle: CSSProperties = {
   display: "none",
+};
+
+const attachmentListStyle: CSSProperties = {
+  display: "grid",
+  gap: "12px",
 };
 
 const attachmentCardStyle: CSSProperties = {

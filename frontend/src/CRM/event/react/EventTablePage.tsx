@@ -22,6 +22,7 @@ export function EventTablePage() {
       saving={state.saving}
       creating={state.creating}
       brochureUploading={state.uploadingBrochure}
+      attachmentUploading={state.uploadingEventFile}
       toast={state.toast}
       realtimeEnabled={state.realtimeEnabled}
       imageUrl={state.imageUrl}
@@ -36,6 +37,8 @@ export function EventTablePage() {
       onUpdateEvent={(patch) => void actions.updateEvent(patch)}
       onUploadBrochure={(file) => void actions.uploadBrochure(file)}
       onRemoveBrochure={() => void actions.removeBrochure()}
+      onUploadAttachment={(file) => void actions.uploadAttachment(file)}
+      onRemoveAttachment={(fileId) => void actions.removeAttachment(fileId)}
       onDeleteEvent={() => void actions.removeSelectedEvent()}
     />
   );

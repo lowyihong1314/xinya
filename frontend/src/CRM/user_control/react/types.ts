@@ -10,6 +10,19 @@ export type DepartmentRecord = {
   permissions?: PermissionRecord[];
 };
 
+export type MemberRenewalRecord = {
+  id: number;
+  user_id: number;
+  renewal_date?: string | null;
+  proof_path?: string | null;
+  proof_name?: string | null;
+  proof_mime?: string | null;
+  note?: string | null;
+  created_by?: number | null;
+  created_by_name?: string | null;
+  created_at?: string | null;
+};
+
 export type UserRecord = {
   id: number;
   username?: string | null;
@@ -18,6 +31,8 @@ export type UserRecord = {
   phone?: string | null;
   name_NRIC?: string | null;
   display?: boolean | null;
+  is_member?: boolean | null;
+  member_renewals?: MemberRenewalRecord[];
   NRIC?: string | null;
   gender?: string | null;
   parent_1?: string | null;

@@ -1,3 +1,7 @@
+import eventlet
+
+eventlet.monkey_patch()
+
 from app import create_app, socketio
 from _token import DEBUG, DEBUG_PORT
 

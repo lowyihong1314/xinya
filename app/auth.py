@@ -17,6 +17,8 @@ permission_names = [
     "event_edit",
     "permission",
     "permission_edit",
+    "music_edit",
+    "edit_info",
 ]
 
 

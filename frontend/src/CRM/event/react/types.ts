@@ -8,6 +8,18 @@ export type EventImageRef = {
   id?: number;
 };
 
+export type EventAttachmentRecord = {
+  id: number;
+  event_id: number;
+  file_path: string;
+  file_name?: string;
+  mime_type?: string | null;
+  file_size?: number | null;
+  note?: string | null;
+  created_at?: string;
+  user_name?: string;
+};
+
 export type EventRecord = {
   id: number;
   event_name?: string;
@@ -20,6 +32,7 @@ export type EventRecord = {
   brochure_path?: string | null;
   brochure_name?: string | null;
   brochure_mime?: string | null;
+  event_files?: EventAttachmentRecord[];
   username?: string;
   display_name?: string;
   organizers?: Organizer[];

@@ -7,6 +7,8 @@ from flask import Blueprint, jsonify, request
 from flask_login import current_user
 from werkzeug.utils import secure_filename
 
+from app.auth import permission_required
+
 from models import db
 from models.info import AboutUs, OurHistory
 
@@ -100,6 +102,7 @@ def get_our_history():
 
 
 @info_bp.route("/about_us_text", methods=["POST", "DELETE"])
+@permission_required("edit_info")
 def handle_about_us_text():
     if request.method == "DELETE":
         data = request.get_json() or {}
@@ -142,6 +145,7 @@ def handle_about_us_text():
 
 
 @info_bp.route("/add_our_history", methods=["POST", "DELETE"])
+@permission_required("edit_info")
 def add_our_history():
     if request.method == "DELETE":
         data = request.get_json() or {}

@@ -1,6 +1,7 @@
 from flask import Blueprint, request
 from flask_login import login_required
 
+from app.auth import permission_required
 from . import services
 
 
@@ -9,6 +10,7 @@ music_bp = Blueprint("music_bp", __name__)
 
 @music_bp.route("/upload", methods=["POST"])
 @login_required
+@permission_required("music_edit")
 def upload_music():
     return services.upload_music(
         request.files.getlist("files"),
@@ -29,24 +31,28 @@ def get_album(album_id):
 
 @music_bp.route("/albums/<int:album_id>/upload_cover", methods=["POST"])
 @login_required
+@permission_required("music_edit")
 def upload_album_cover(album_id):
     return services.upload_album_cover(album_id, request.files.get("file"))
 
 
 @music_bp.route("/album", methods=["POST"])
 @login_required
+@permission_required("music_edit")
 def create_album():
     return services.create_album(request.get_json() or {})
 
 
 @music_bp.route("/album/<int:album_id>", methods=["DELETE"])
 @login_required
+@permission_required("music_edit")
 def delete_album(album_id):
     return services.delete_album(album_id)
 
 
 @music_bp.route("/album/<int:album_id>", methods=["POST"])
 @login_required
+@permission_required("music_edit")
 def edit_album(album_id):
     return services.edit_album(album_id, request.get_json() or {})
 
@@ -71,18 +77,21 @@ def download_music(music_id):
 
 @music_bp.route("/edit/<int:music_id>", methods=["POST"])
 @login_required
+@permission_required("music_edit")
 def edit_music(music_id):
     return services.edit_music(music_id, request.get_json() or {})
 
 
 @music_bp.route("/replace/<int:music_id>", methods=["POST"])
 @login_required
+@permission_required("music_edit")
 def replace_music(music_id):
     return services.replace_music_file(music_id, request.files.get("file"))
 
 
 @music_bp.route("/delete/<int:music_id>", methods=["DELETE"])
 @login_required
+@permission_required("music_edit")
 def delete_music(music_id):
     return services.delete_music(music_id)
 
