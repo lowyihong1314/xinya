@@ -1141,20 +1141,54 @@ def _save_youth_class_registrations(entries):
 
 def submit_youth_class_registration(payload):
     chinese_name = str(payload.get("chinese_name") or "").strip()
+    english_name = str(payload.get("english_name") or "").strip()
+    nric = str(payload.get("nric") or "").strip()
+    address = str(payload.get("address") or "").strip()
+    gender = str(payload.get("gender") or "").strip()
     phone = str(payload.get("phone") or "").strip()
+    emergency_contact_name = str(payload.get("emergency_contact_name") or "").strip()
+    emergency_contact_phone = str(payload.get("emergency_contact_phone") or "").strip()
+    emergency_contact_relation = str(payload.get("emergency_contact_relation") or "").strip()
+
     if not chinese_name:
-        return jsonify({"status": "error", "message": "请填写中文姓名"}), 400
+        return jsonify({"status": "error", "message": "请填写中文名"}), 400
+    if not english_name:
+        return jsonify({"status": "error", "message": "请填写英文名"}), 400
+    if not nric:
+        return jsonify({"status": "error", "message": "请填写 NRIC"}), 400
+    if not address:
+        return jsonify({"status": "error", "message": "请填写住家地址"}), 400
+    if gender not in {"男", "女"}:
+        return jsonify({"status": "error", "message": "请选择性别"}), 400
     if not phone:
-        return jsonify({"status": "error", "message": "请填写联络电话"}), 400
-    allowed_keys = [
-        "chinese_name", "english_name", "gender", "birth_date", "age", "phone", "whatsapp", "email",
-        "school", "education_level", "occupation", "guardian_name", "guardian_phone", "address",
-        "emergency_contact_name", "emergency_contact_phone", "buddhist_experience", "learning_goals",
-        "medical_notes", "attendance_preference", "available_time", "referral_source", "remarks", "agree_contact",
-    ]
-    entry = {key: payload.get(key) for key in allowed_keys}
-    entry["id"] = secrets.token_urlsafe(8)
-    entry["submitted_at"] = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+        return jsonify({"status": "error", "message": "请填写手机号码"}), 400
+    if not emergency_contact_name or not emergency_contact_phone or not emergency_contact_relation:
+        return jsonify({"status": "error", "message": "请完整填写紧急联络人资料"}), 400
+
+    try:
+        age = _calc_age_from_nric(nric)
+    except ValueError as exc:
+        return jsonify({"status": "error", "message": str(exc)}), 400
+
+    category, eligible = _youth_class_category_from_age(age)
+    if not eligible:
+        return jsonify({"status": "error", "message": f"年龄 {age} 岁，不符合青少年/青年佛学班报名资格"}), 400
+
+    entry = {
+        "id": secrets.token_urlsafe(8),
+        "submitted_at": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+        "chinese_name": chinese_name,
+        "english_name": english_name,
+        "nric": nric,
+        "age": age,
+        "category": category,
+        "address": address,
+        "gender": gender,
+        "phone": phone,
+        "emergency_contact_name": emergency_contact_name,
+        "emergency_contact_phone": emergency_contact_phone,
+        "emergency_contact_relation": emergency_contact_relation,
+    }
     entries = _load_youth_class_registrations()
     entries.insert(0, entry)
     _save_youth_class_registrations(entries)
@@ -1163,3 +1197,21 @@ def submit_youth_class_registration(payload):
 
 def get_youth_class_registrations():
     return jsonify({"status": "success", "entries": _load_youth_class_registrations()})
+
+
+def _youth_class_category_from_age(age):
+    if 13 <= age <= 17:
+        return "青少年", True
+    if 18 <= age <= 40:
+        return "青年", True
+    return "不符合资格", False
+
+
+def get_youth_class_nric_check(nric):
+    try:
+        age = _calc_age_from_nric(nric)
+    except ValueError as exc:
+        return jsonify({"status": "error", "message": str(exc)}), 400
+
+    category, eligible = _youth_class_category_from_age(age)
+    return jsonify({"status": "success", "age": age, "category": category, "eligible": eligible})

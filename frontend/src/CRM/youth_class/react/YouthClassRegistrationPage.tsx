@@ -11,28 +11,15 @@ type Entry = {
   submitted_at: string;
   chinese_name: string;
   english_name?: string;
-  gender?: string;
-  birth_date?: string;
-  age?: string;
-  phone: string;
-  whatsapp?: string;
-  email?: string;
-  school?: string;
-  education_level?: string;
-  occupation?: string;
-  guardian_name?: string;
-  guardian_phone?: string;
+  nric?: string;
+  age?: number;
+  category?: string;
   address?: string;
+  gender?: string;
+  phone: string;
   emergency_contact_name?: string;
   emergency_contact_phone?: string;
-  buddhist_experience?: string;
-  learning_goals?: string;
-  medical_notes?: string;
-  attendance_preference?: string;
-  available_time?: string;
-  referral_source?: string;
-  remarks?: string;
-  agree_contact?: boolean;
+  emergency_contact_relation?: string;
 };
 
 export function YouthClassRegistrationPage() {
@@ -80,7 +67,7 @@ export function YouthClassRegistrationPage() {
         <div style={panelStyle(isMobile)}>
           <div style={eyebrowStyle}>CRM / 报名管理</div>
           <h1 style={titleStyle(isMobile)}>青少年 & 青年佛学班</h1>
-          <p style={descStyle}>这个后台现在只负责两件事：给大家扫码报名，以及查看已经提交的报名结果。</p>
+          <p style={descStyle}>后台只负责展示公开报名二维码，以及查看已提交的报名结果。</p>
           <div style={statsRowStyle(isMobile)}>
             <div style={statCardStyle}>
               <div style={statLabelStyle}>报名总数</div>
@@ -96,9 +83,7 @@ export function YouthClassRegistrationPage() {
         <div style={panelStyle(isMobile)}>
           <div style={sectionTitleRowStyle(isMobile)}>
             <h2 style={sectionTitleStyle}>报名二维码</h2>
-            <a href={PUBLIC_URL} target="_blank" rel="noreferrer" style={linkStyle}>
-              打开公开报名页
-            </a>
+            <a href={PUBLIC_URL} target="_blank" rel="noreferrer" style={linkStyle}>打开公开报名页</a>
           </div>
           <div style={qrWrapStyle(isMobile)}>
             {qrDataUrl ? <img src={qrDataUrl} alt="报名二维码" style={qrImageStyle(isMobile)} /> : <div style={emptyStyle}>生成二维码中…</div>}
@@ -110,77 +95,64 @@ export function YouthClassRegistrationPage() {
       <section style={panelStyle(isMobile)}>
         <div style={sectionTitleRowStyle(isMobile)}>
           <h2 style={sectionTitleStyle}>报名结果</h2>
-          <button type="button" style={refreshButtonStyle} onClick={() => window.location.reload()}>
-            刷新
-          </button>
+          <button type="button" style={refreshButtonStyle} onClick={() => window.location.reload()}>刷新</button>
         </div>
-
         {loading ? <div style={emptyStyle}>加载中…</div> : null}
         {error ? <div style={errorStyle}>{error}</div> : null}
         {!loading && !error && !entries.length ? <div style={emptyStyle}>还没有人提交报名。</div> : null}
 
-        {!loading && !error && entries.length ?
-          isMobile ? (
-            <div style={mobileListStyle}>
-              {entries.map((entry) => (
-                <article key={entry.id} style={mobileCardStyle}>
-                  <div style={mobileCardHeaderStyle}>
-                    <div>
-                      <div style={mobileNameStyle}>{entry.chinese_name || "-"}</div>
-                      {entry.english_name ? <div style={mutedStyle}>{entry.english_name}</div> : null}
-                    </div>
-                    <div style={mobileTimeStyle}>{entry.submitted_at || "-"}</div>
+        {!loading && !error && entries.length ? isMobile ? (
+          <div style={mobileListStyle}>
+            {entries.map((entry) => (
+              <article key={entry.id} style={mobileCardStyle}>
+                <div style={mobileCardHeaderStyle}>
+                  <div>
+                    <div style={mobileNameStyle}>{entry.chinese_name || "-"}</div>
+                    <div style={mutedStyle}>{entry.english_name || "-"}</div>
                   </div>
-
-                  <div style={mobileFieldGridStyle}>
-                    <InfoItem label="电话" value={entry.phone || "-"} />
-                    <InfoItem label="WhatsApp" value={entry.whatsapp || "-"} />
-                    <InfoItem label="学校 / 职业" value={entry.school || entry.occupation || "-"} />
-                    <InfoItem label="出席方式" value={entry.attendance_preference || "-"} />
-                  </div>
-
-                  <InfoItem label="学习目标" value={entry.learning_goals || "-"} block />
-                </article>
-              ))}
-            </div>
-          ) : (
-            <div style={tableWrapStyle}>
-              <table style={tableStyle}>
-                <thead>
-                  <tr>
-                    <th style={thStyle}>提交时间</th>
-                    <th style={thStyle}>姓名</th>
-                    <th style={thStyle}>电话</th>
-                    <th style={thStyle}>学校/职业</th>
-                    <th style={thStyle}>出席方式</th>
-                    <th style={thStyle}>学习目标</th>
+                  <div style={mobileTimeStyle}>{entry.submitted_at || "-"}</div>
+                </div>
+                <div style={mobileFieldGridStyle}>
+                  <InfoItem label="NRIC" value={entry.nric || "-"} />
+                  <InfoItem label="年龄 / 组别" value={`${entry.age ?? "-"} / ${entry.category || "-"}`} />
+                  <InfoItem label="性别" value={entry.gender || "-"} />
+                  <InfoItem label="手机号码" value={entry.phone || "-"} />
+                </div>
+                <InfoItem label="住家地址" value={entry.address || "-"} block />
+                <InfoItem label="紧急联络人" value={`${entry.emergency_contact_name || "-"} / ${entry.emergency_contact_phone || "-"} / ${entry.emergency_contact_relation || "-"}`} block />
+              </article>
+            ))}
+          </div>
+        ) : (
+          <div style={tableWrapStyle}>
+            <table style={tableStyle}>
+              <thead>
+                <tr>
+                  <th style={thStyle}>提交时间</th>
+                  <th style={thStyle}>姓名</th>
+                  <th style={thStyle}>NRIC</th>
+                  <th style={thStyle}>年龄/组别</th>
+                  <th style={thStyle}>性别</th>
+                  <th style={thStyle}>手机</th>
+                  <th style={thStyle}>紧急联络人</th>
+                </tr>
+              </thead>
+              <tbody>
+                {entries.map((entry) => (
+                  <tr key={entry.id}>
+                    <td style={tdStyle}>{entry.submitted_at || "-"}</td>
+                    <td style={tdStyle}><div>{entry.chinese_name || "-"}</div><div style={mutedStyle}>{entry.english_name || "-"}</div></td>
+                    <td style={tdStyle}>{entry.nric || "-"}</td>
+                    <td style={tdStyle}>{entry.age ?? "-"} / {entry.category || "-"}</td>
+                    <td style={tdStyle}>{entry.gender || "-"}</td>
+                    <td style={tdStyle}>{entry.phone || "-"}</td>
+                    <td style={tdStyle}><div>{entry.emergency_contact_name || "-"}</div><div style={mutedStyle}>{entry.emergency_contact_phone || "-"} / {entry.emergency_contact_relation || "-"}</div></td>
                   </tr>
-                </thead>
-                <tbody>
-                  {entries.map((entry) => (
-                    <tr key={entry.id}>
-                      <td style={tdStyle}>{entry.submitted_at || "-"}</td>
-                      <td style={tdStyle}>
-                        <div>{entry.chinese_name || "-"}</div>
-                        {entry.english_name ? <div style={mutedStyle}>{entry.english_name}</div> : null}
-                      </td>
-                      <td style={tdStyle}>
-                        <div>{entry.phone || "-"}</div>
-                        {entry.whatsapp ? <div style={mutedStyle}>WA: {entry.whatsapp}</div> : null}
-                      </td>
-                      <td style={tdStyle}>
-                        <div>{entry.school || entry.occupation || "-"}</div>
-                        {entry.education_level ? <div style={mutedStyle}>{entry.education_level}</div> : null}
-                      </td>
-                      <td style={tdStyle}>{entry.attendance_preference || "-"}</td>
-                      <td style={tdStyle}>{entry.learning_goals || "-"}</td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          )
-        : null}
+                ))}
+              </tbody>
+            </table>
+          </div>
+        ) : null}
       </section>
     </div>
   );
@@ -222,79 +194,11 @@ const mobileInfoStyle: CSSProperties = { display: "grid", gap: "4px", padding: "
 const mobileInfoBlockStyle: CSSProperties = { ...mobileInfoStyle };
 const mobileInfoLabelStyle: CSSProperties = { fontSize: "11px", textTransform: "uppercase", letterSpacing: "0.08em", color: "var(--x-color-ink-muted)" };
 const mobileInfoValueStyle: CSSProperties = { fontSize: "14px", lineHeight: 1.55, wordBreak: "break-word" };
-
-function heroStyle(isMobile: boolean): CSSProperties {
-  return {
-    display: "grid",
-    gridTemplateColumns: isMobile ? "1fr" : "minmax(0, 1.2fr) minmax(320px, 0.8fr)",
-    gap: "18px",
-    alignItems: "start",
-  };
-}
-
-function panelStyle(isMobile: boolean): CSSProperties {
-  return {
-    padding: isMobile ? "16px" : "22px",
-    borderRadius: isMobile ? "18px" : "22px",
-    background: "var(--x-color-panel)",
-    border: "1px solid var(--x-color-line-soft)",
-    boxShadow: "0 18px 36px var(--x-color-shadow-soft)",
-    display: "grid",
-    gap: "16px",
-  };
-}
-
-function titleStyle(isMobile: boolean): CSSProperties {
-  return {
-    margin: "6px 0 10px",
-    fontSize: isMobile ? "24px" : "30px",
-    lineHeight: 1.15,
-  };
-}
-
-function statsRowStyle(isMobile: boolean): CSSProperties {
-  return {
-    display: "grid",
-    gridTemplateColumns: isMobile ? "1fr" : "repeat(2, minmax(0, 1fr))",
-    gap: "12px",
-    marginTop: "8px",
-  };
-}
-
-function statValueStyle(isMobile: boolean): CSSProperties {
-  return {
-    fontSize: isMobile ? "28px" : "32px",
-    fontWeight: 800,
-  };
-}
-
-function sectionTitleRowStyle(isMobile: boolean): CSSProperties {
-  return {
-    display: "flex",
-    justifyContent: "space-between",
-    alignItems: isMobile ? "flex-start" : "center",
-    gap: "12px",
-    flexWrap: "wrap",
-    flexDirection: isMobile ? "column" : "row",
-  };
-}
-
-function qrWrapStyle(isMobile: boolean): CSSProperties {
-  return {
-    display: "grid",
-    placeItems: "center",
-    minHeight: isMobile ? "220px" : "260px",
-    borderRadius: "18px",
-    background: "white",
-    border: "1px solid var(--x-color-line-soft)",
-    padding: isMobile ? "12px" : "16px",
-  };
-}
-
-function qrImageStyle(isMobile: boolean): CSSProperties {
-  return {
-    width: "100%",
-    maxWidth: isMobile ? "220px" : "280px",
-    height: "auto",
-  };
-}
+function heroStyle(isMobile: boolean): CSSProperties { return { display: "grid", gridTemplateColumns: isMobile ? "1fr" : "minmax(0, 1.2fr) minmax(320px, 0.8fr)", gap: "18px", alignItems: "start" }; }
+function panelStyle(isMobile: boolean): CSSProperties { return { padding: isMobile ? "16px" : "22px", borderRadius: isMobile ? "18px" : "22px", background: "var(--x-color-panel)", border: "1px solid var(--x-color-line-soft)", boxShadow: "0 18px 36px var(--x-color-shadow-soft)", display: "grid", gap: "16px" }; }
+function titleStyle(isMobile: boolean): CSSProperties { return { margin: "6px 0 10px", fontSize: isMobile ? "24px" : "30px", lineHeight: 1.15 }; }
+function statsRowStyle(isMobile: boolean): CSSProperties { return { display: "grid", gridTemplateColumns: isMobile ? "1fr" : "repeat(2, minmax(0, 1fr))", gap: "12px", marginTop: "8px" }; }
+function statValueStyle(isMobile: boolean): CSSProperties { return { fontSize: isMobile ? "28px" : "32px", fontWeight: 800 }; }
+function sectionTitleRowStyle(isMobile: boolean): CSSProperties { return { display: "flex", justifyContent: "space-between", alignItems: isMobile ? "flex-start" : "center", gap: "12px", flexWrap: "wrap", flexDirection: isMobile ? "column" : "row" }; }
+function qrWrapStyle(isMobile: boolean): CSSProperties { return { display: "grid", placeItems: "center", minHeight: isMobile ? "220px" : "260px", borderRadius: "18px", background: "white", border: "1px solid var(--x-color-line-soft)", padding: isMobile ? "12px" : "16px" }; }
+function qrImageStyle(isMobile: boolean): CSSProperties { return { width: "100%", maxWidth: isMobile ? "220px" : "280px", height: "auto" }; }

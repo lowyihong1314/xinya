@@ -177,3 +177,8 @@ def submit_youth_class_registration_route():
 @permission_required("member_edit")
 def get_youth_class_registration_entries():
     return services.get_youth_class_registrations()
+
+
+@form_bp.route("/youth-class-registration/nric-check", methods=["GET"])
+def get_youth_class_nric_check_route():
+    return services.get_youth_class_nric_check(request.args.get("nric"))
