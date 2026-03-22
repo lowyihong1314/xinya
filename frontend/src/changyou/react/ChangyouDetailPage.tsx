@@ -7,6 +7,7 @@ import { fetchSongbookEntries, fetchSongbookEntry } from "./api";
 import type { SongbookEntry } from "./types";
 
 const FONT_SIZE_STORAGE_KEY = "xinya.changyou.fontSize";
+const HIDE_NAV_STORAGE_KEY = "xinya.changyou.hideNav";
 const DEFAULT_FONT_SIZE = 18;
 const MIN_FONT_SIZE = 14;
 const MAX_FONT_SIZE = 30;
@@ -27,6 +28,10 @@ export function ChangyouDetailPage() {
     const saved = Number(window.localStorage.getItem(FONT_SIZE_STORAGE_KEY));
     return Number.isFinite(saved) && saved >= MIN_FONT_SIZE && saved <= MAX_FONT_SIZE ? saved : DEFAULT_FONT_SIZE;
   });
+  const [hideNav, setHideNav] = useState<boolean>(() => {
+    if (typeof window === "undefined") return false;
+    return window.localStorage.getItem(HIDE_NAV_STORAGE_KEY) === "1";
+  });
   const settingsRef = useRef<HTMLDivElement | null>(null);
 
   useEffect(() => {
@@ -40,6 +45,22 @@ export function ChangyouDetailPage() {
       window.localStorage.setItem(FONT_SIZE_STORAGE_KEY, String(fontSize));
     }
   }, [fontSize]);
+
+  useEffect(() => {
+    if (typeof window !== "undefined") {
+      window.localStorage.setItem(HIDE_NAV_STORAGE_KEY, hideNav ? "1" : "0");
+    }
+    const navbar = document.getElementById("base_navbar");
+    if (navbar) {
+      navbar.style.display = hideNav ? "none" : "flex";
+    }
+    return () => {
+      const currentNavbar = document.getElementById("base_navbar");
+      if (currentNavbar) {
+        currentNavbar.style.display = "flex";
+      }
+    };
+  }, [hideNav]);
 
   useEffect(() => {
     if (!settingsOpen) return;
@@ -123,7 +144,7 @@ export function ChangyouDetailPage() {
   if (!isAuthenticated) return <div style={stateStyle}>请先登录后再访问唱游页面。</div>;
 
   return (
-    <div style={pageStyle}>
+    <div style={pageStyle(hideNav)}>
       <div style={topBarStyle(isMobile)}>
         <button type="button" onClick={() => navigate("/changyou")} style={backButtonStyle}>← 返回歌单</button>
         <div style={topRightStyle} ref={settingsRef}>
@@ -131,6 +152,13 @@ export function ChangyouDetailPage() {
           <button type="button" onClick={() => setSettingsOpen((open) => !open)} style={settingsButtonStyle}>⚙️ 设置</button>
           {settingsOpen ? (
             <div style={settingsPopupStyle}>
+              <div style={settingsSectionStyle}>
+                <div style={settingsLabelStyle}>显示</div>
+                <label style={toggleRowStyle}>
+                  <input type="checkbox" checked={hideNav} onChange={(event) => setHideNav(event.target.checked)} />
+                  <span>隐藏导航栏</span>
+                </label>
+              </div>
               <div style={settingsSectionStyle}>
                 <div style={settingsLabelStyle}>版本切换</div>
                 <div style={chipRowStyle}>
@@ -189,7 +217,7 @@ export function ChangyouDetailPage() {
   );
 }
 
-const pageStyle = { minHeight: "calc(100vh - 60px)", padding: "20px", background: "linear-gradient(180deg, var(--x-color-canvas), var(--x-color-canvas-alt))", boxSizing: "border-box" as const, overflowX: "hidden" as const } as const;
+const pageStyle = (hideNav: boolean) => ({ minHeight: hideNav ? "100vh" : "calc(100vh - 60px)", padding: "20px", background: "linear-gradient(180deg, var(--x-color-canvas), var(--x-color-canvas-alt))", boxSizing: "border-box" as const, overflowX: "hidden" as const });
 const topBarStyle = (isMobile: boolean) => ({ display: "flex", justifyContent: "space-between", alignItems: isMobile ? "stretch" : "center", flexDirection: isMobile ? "column" : "row", gap: "12px", marginBottom: "16px" });
 const topRightStyle = { position: "relative" as const, display: "flex", alignItems: "center", gap: "10px", flexWrap: "wrap" as const };
 const backButtonStyle = { alignSelf: "flex-start", padding: "12px 16px", borderRadius: "999px", border: "1px solid var(--x-color-line)", background: "var(--x-color-panel)", color: "var(--x-color-ink)", fontWeight: 800, cursor: "pointer" } as const;
@@ -198,6 +226,7 @@ const versionPillStyle = { padding: "10px 14px", borderRadius: "999px", backgrou
 const settingsPopupStyle = { position: "absolute" as const, top: "calc(100% + 8px)", right: 0, zIndex: 20, width: "min(320px, calc(100vw - 40px))", padding: "14px", borderRadius: "18px", background: "var(--x-color-panel-strongest)", border: "1px solid var(--x-color-line-soft)", boxShadow: "0 18px 40px var(--x-color-shadow-soft)" } as const;
 const settingsSectionStyle = { display: "grid", gap: "10px", marginBottom: "14px" } as const;
 const settingsLabelStyle = { fontSize: "13px", fontWeight: 800, color: "var(--x-color-ink-muted)" } as const;
+const toggleRowStyle = { display: "flex", alignItems: "center", gap: "10px", color: "var(--x-color-ink)" } as const;
 const chipRowStyle = { display: "flex", gap: "8px", flexWrap: "wrap" as const };
 const variantChipStyle = (active: boolean) => ({ padding: "10px 14px", borderRadius: "999px", border: active ? "1px solid var(--x-color-accent)" : "1px solid var(--x-color-line)", background: active ? "var(--x-color-accent)" : "var(--x-color-panel)", color: active ? "white" : "var(--x-color-ink)", fontWeight: 800, cursor: "pointer" });
 const fontControlRowStyle = { display: "flex", alignItems: "center", justifyContent: "space-between", gap: "8px" } as const;
