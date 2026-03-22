@@ -139,7 +139,7 @@ export function ChangyouDetailPage() {
 
   async function loadEntry(editorUserId?: number | null) {
     if (!entryId) return;
-    const response = await fetchSongbookEntry(Number(entryId), editorUserId);
+    const response = await fetchSongbookEntry(Number(entryId), editorUserId ? { versionKind: "user", editorUserId } : { versionKind: "base" });
     setEntry(response.entry);
     setEditorValue(response.entry.content || "");
   }
@@ -206,7 +206,7 @@ export function ChangyouDetailPage() {
     setLoading(true);
     setError("");
     try {
-      await loadEntry(version.kind === "user" ? version.user_id ?? undefined : undefined);
+      await loadEntry(version.kind === "user" ? version.user_id ?? undefined : null);
       setEditing(false);
       setVersionPickerOpen(false);
     } catch (err) {

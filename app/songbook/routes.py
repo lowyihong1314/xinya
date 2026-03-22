@@ -35,10 +35,12 @@ def _serialize_entry(entry, include_content=False):
     return data
 
 
-def _apply_version(entry, include_content=False, editor_user_id=None):
+def _apply_version(entry, include_content=False, editor_user_id=None, version_kind=None):
     data = _serialize_entry(entry, include_content=include_content)
     override = None
-    if editor_user_id is not None:
+    if version_kind == "base":
+        override = None
+    elif editor_user_id is not None:
         override = (
             SongbookUserEdit.query.join(User, User.id == SongbookUserEdit.user_id)
             .filter(SongbookUserEdit.base_entry_id == entry.id, SongbookUserEdit.user_id == editor_user_id)
@@ -216,7 +218,8 @@ def get_songbook_entry(entry_id):
     if not entry.published and not request.args.get("include_unpublished"):
         return jsonify({"error": "歌曲不存在"}), 404
     editor_user_id = request.args.get("editor_user_id", type=int)
-    data = _apply_version(entry, include_content=True, editor_user_id=editor_user_id)
+    version_kind = request.args.get("version_kind", type=str)
+    data = _apply_version(entry, include_content=True, editor_user_id=editor_user_id, version_kind=version_kind)
     data["versions"] = _list_versions(entry)
     return jsonify({"entry": data})
 

@@ -16,9 +16,10 @@ export async function fetchSongbookEntries(query = "", variant = "") {
   return parseJson<{ entries: SongbookEntry[] }>(response);
 }
 
-export async function fetchSongbookEntry(entryId: number, editorUserId?: number | null) {
+export async function fetchSongbookEntry(entryId: number, options?: { versionKind?: "base" | "user"; editorUserId?: number | null }) {
   const search = new URLSearchParams();
-  if (editorUserId) search.set("editor_user_id", String(editorUserId));
+  if (options?.versionKind) search.set("version_kind", options.versionKind);
+  if (options?.editorUserId) search.set("editor_user_id", String(options.editorUserId));
   const suffix = search.toString() ? `?${search.toString()}` : "";
   const response = await fetch(`/api/songbook/entry/${entryId}${suffix}`, { credentials: "include" });
   return parseJson<{ entry: SongbookEntry }>(response);
