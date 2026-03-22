@@ -15,4 +15,6 @@ export type SongbookEntry = {
   created_at?: string | null;
   updated_at?: string | null;
   content?: string;
+  has_user_override?: boolean;
+  user_override_updated_at?: string | null;
 };

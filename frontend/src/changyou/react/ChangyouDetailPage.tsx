@@ -3,7 +3,7 @@ import { useNavigate, useParams } from "react-router-dom";
 
 import { useUserState } from "../../app/UserState";
 import { ensureDesignTokens } from "../../theme/designTokens";
-import { fetchSongbookEntries, fetchSongbookEntry } from "./api";
+import { deleteMySongbookEdit, fetchSongbookEntry, saveMySongbookEdit } from "./api";
 import type { SongbookEntry } from "./types";
 
 const FONT_SIZE_STORAGE_KEY = "xinya.changyou.fontSize";
@@ -23,13 +23,11 @@ function getPreferredNoteName(index: number, family: Exclude<ChordFamily, "origi
   if (family === "F") return FLAT_NAMES[index];
   return SHARP_NAMES[index];
 }
-
 function transposeRoot(root: string, offset: number, family: Exclude<ChordFamily, "original">) {
   const noteIndex = NOTE_INDEX[root.trim()];
   if (noteIndex == null) return root;
   return getPreferredNoteName((noteIndex + offset + 12) % 12, family);
 }
-
 function transposeChordToken(token: string, targetFamily: Exclude<ChordFamily, "original">) {
   const trimmed = token.trim();
   if (!trimmed || trimmed === "|" || trimmed === "/") return token;
@@ -41,18 +39,15 @@ function transposeChordToken(token: string, targetFamily: Exclude<ChordFamily, "
   const nextBass = bass ? transposeRoot(bass, offset, targetFamily) : null;
   return `${nextRoot}${suffix}${nextBass ? `/${nextBass}` : ""}`;
 }
-
 function isChordLikeToken(token: string) {
   return /^([A-G](?:#|b)?)([^/]*?)(?:\/([A-G](?:#|b)?))?$/.test(token.trim());
 }
-
 function isChordLine(line: string) {
   const pieces = line.split(/(\s+|\|)/).filter(Boolean);
   const meaningful = pieces.filter((piece) => piece.trim() && piece !== "|");
   if (!meaningful.length) return false;
   return meaningful.every(isChordLikeToken);
 }
-
 function transposeChordLine(line: string, targetFamily: Exclude<ChordFamily, "original">) {
   let result = "";
   let token = "";
@@ -72,7 +67,6 @@ function transposeChordLine(line: string, targetFamily: Exclude<ChordFamily, "or
   flush();
   return result;
 }
-
 function transformChordContent(content: string, targetFamily: ChordFamily) {
   if (targetFamily === "original") return content;
   return content.split("\n").map((line) => (isChordLine(line) ? transposeChordLine(line, targetFamily) : line)).join("\n");
@@ -85,8 +79,11 @@ export function ChangyouDetailPage() {
   const { isAuthenticated, loadingUser, openLogin, isMobile } = useUserState();
   const [entry, setEntry] = useState<SongbookEntry | null>(null);
   const [loading, setLoading] = useState(true);
+  const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
   const [settingsOpen, setSettingsOpen] = useState(false);
+  const [editing, setEditing] = useState(false);
+  const [editorValue, setEditorValue] = useState("");
   const [fontSize, setFontSize] = useState<number>(() => {
     if (typeof window === "undefined") return DEFAULT_FONT_SIZE;
     const saved = Number(window.localStorage.getItem(FONT_SIZE_STORAGE_KEY));
@@ -103,15 +100,12 @@ export function ChangyouDetailPage() {
   useEffect(() => {
     if (!loadingUser && !isAuthenticated) openLogin();
   }, [loadingUser, isAuthenticated, openLogin]);
-
   useEffect(() => {
     if (typeof window !== "undefined") window.localStorage.setItem(FONT_SIZE_STORAGE_KEY, String(fontSize));
   }, [fontSize]);
-
   useEffect(() => {
     if (typeof window !== "undefined") window.localStorage.setItem(CHORD_FAMILY_STORAGE_KEY, chordFamily);
   }, [chordFamily]);
-
   useEffect(() => {
     if (typeof window !== "undefined") window.localStorage.setItem(HIDE_NAV_STORAGE_KEY, hideNav ? "1" : "0");
     const navbar = document.getElementById("base_navbar");
@@ -121,7 +115,6 @@ export function ChangyouDetailPage() {
       if (currentNavbar) currentNavbar.style.display = "flex";
     };
   }, [hideNav]);
-
   useEffect(() => {
     if (!settingsOpen) return;
     const handleClick = (event: MouseEvent) => {
@@ -137,21 +130,61 @@ export function ChangyouDetailPage() {
       window.removeEventListener("keydown", handleEscape);
     };
   }, [settingsOpen]);
-
   useEffect(() => {
     if (!isAuthenticated || !entryId) return;
     let cancelled = false;
     setLoading(true);
     setError("");
+    setEditing(false);
     fetchSongbookEntry(Number(entryId))
-      .then((response) => { if (!cancelled) setEntry(response.entry); })
+      .then((response) => {
+        if (!cancelled) {
+          setEntry(response.entry);
+          setEditorValue(response.entry.content || "");
+        }
+      })
       .catch((err) => !cancelled && setError(err instanceof Error ? err.message : "加载失败"))
       .finally(() => !cancelled && setLoading(false));
     return () => { cancelled = true; };
   }, [entryId, isAuthenticated]);
 
-  const renderedContent = useMemo(() => transformChordContent(entry?.content || "", chordFamily), [entry, chordFamily]);
+  const renderedContent = useMemo(() => {
+    const source = editing ? editorValue : (entry?.content || "");
+    return transformChordContent(source, chordFamily);
+  }, [entry, chordFamily, editing, editorValue]);
   const titleText = useMemo(() => entry ? `${entry.song_number ? `${entry.song_number}. ` : ""}${entry.title}` : "歌曲详情", [entry]);
+
+  async function handleSaveEdit() {
+    if (!entry) return;
+    setSaving(true);
+    setError("");
+    try {
+      const response = await saveMySongbookEdit(entry.id, editorValue);
+      setEntry(response.entry);
+      setEditorValue(response.entry.content || "");
+      setEditing(false);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "保存失败");
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  async function handleResetMyEdit() {
+    if (!entry) return;
+    setSaving(true);
+    setError("");
+    try {
+      const response = await deleteMySongbookEdit(entry.id);
+      setEntry(response.entry);
+      setEditorValue(response.entry.content || "");
+      setEditing(false);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "恢复默认失败");
+    } finally {
+      setSaving(false);
+    }
+  }
 
   if (loadingUser) return <div style={stateStyle}>加载中…</div>;
   if (!isAuthenticated) return <div style={stateStyle}>请先登录后再访问唱游页面。</div>;
@@ -161,7 +194,8 @@ export function ChangyouDetailPage() {
       <div style={topBarStyle(isMobile)}>
         <button type="button" onClick={() => navigate("/changyou")} style={backButtonStyle}>← 返回歌单</button>
         <div style={topRightStyle} ref={settingsRef}>
-          <div style={versionPillStyle}>C family 基础版</div>
+          <div style={versionPillStyle}>{entry?.has_user_override ? "我的编辑版" : "默认版"}</div>
+          <button type="button" onClick={() => setEditing((value) => !value)} style={editButtonStyle}>{editing ? "取消编辑" : "✏️ 编辑"}</button>
           <button type="button" onClick={() => setSettingsOpen((open) => !open)} style={settingsButtonStyle}>⚙️ 设置</button>
           {settingsOpen ? (
             <div style={settingsPopupStyle}>
@@ -178,7 +212,7 @@ export function ChangyouDetailPage() {
                     </button>
                   ))}
                 </div>
-                {chordFamily !== "original" ? <div style={hintStyle}>所有转调都基于 C family 内容实时生成。</div> : <div style={hintStyle}>当前显示数据库保留的 C family 原始内容。</div>}
+                {chordFamily !== "original" ? <div style={hintStyle}>所有转调都基于当前载入内容实时生成。</div> : <div style={hintStyle}>当前显示默认版或你自己的编辑版。</div>}
               </div>
               <div style={settingsSectionStyle}>
                 <div style={settingsLabelStyle}>字体大小</div>
@@ -205,10 +239,20 @@ export function ChangyouDetailPage() {
               <span>选调：{entry.selected_key || "-"}</span>
               <span>BPM：{entry.bpm || "-"}</span>
               <span>拍号：{entry.time_signature || "-"}</span>
-              {chordFamily !== "original" ? <span>智能 family：{chordFamily}</span> : null}
+              {entry.has_user_override ? <span>已载入你的编辑版</span> : <span>当前为默认版</span>}
             </div>
           </div>
-          <pre style={contentStyle(fontSize)}>{renderedContent}</pre>
+          {editing ? (
+            <div style={editorWrapStyle}>
+              <textarea value={editorValue} onChange={(event) => setEditorValue(event.target.value)} style={editorStyle(fontSize)} />
+              <div style={editorActionsStyle}>
+                {entry.has_user_override ? <button type="button" onClick={() => void handleResetMyEdit()} style={secondaryDangerButtonStyle} disabled={saving}>{saving ? "处理中..." : "恢复默认版"}</button> : null}
+                <button type="button" onClick={() => void handleSaveEdit()} style={primaryButtonStyle} disabled={saving}>{saving ? "保存中..." : "保存我的编辑版"}</button>
+              </div>
+            </div>
+          ) : (
+            <pre style={contentStyle(fontSize)}>{renderedContent}</pre>
+          )}
         </div>
       ) : null}
     </div>
@@ -220,6 +264,7 @@ const topBarStyle = (isMobile: boolean) => ({ display: "flex", justifyContent: "
 const topRightStyle = { position: "relative" as const, display: "flex", alignItems: "center", gap: "10px", flexWrap: "wrap" as const };
 const backButtonStyle = { alignSelf: "flex-start", padding: "12px 16px", borderRadius: "999px", border: "1px solid var(--x-color-line)", background: "var(--x-color-panel)", color: "var(--x-color-ink)", fontWeight: 800, cursor: "pointer" } as const;
 const settingsButtonStyle = { padding: "10px 14px", borderRadius: "999px", border: "1px solid var(--x-color-line)", background: "var(--x-color-panel)", color: "var(--x-color-ink)", fontWeight: 800, cursor: "pointer" } as const;
+const editButtonStyle = { padding: "10px 14px", borderRadius: "999px", border: "1px solid var(--x-color-line)", background: "var(--x-color-panel)", color: "var(--x-color-ink)", fontWeight: 800, cursor: "pointer" } as const;
 const versionPillStyle = { padding: "10px 14px", borderRadius: "999px", background: "var(--x-color-accent-tint-strong)", color: "var(--x-color-accent-strong)", fontWeight: 800 } as const;
 const settingsPopupStyle = { position: "absolute" as const, top: "calc(100% + 8px)", right: 0, zIndex: 20, width: "min(340px, calc(100vw - 40px))", maxHeight: "70vh", overflowY: "auto" as const, padding: "14px", borderRadius: "18px", background: "var(--x-color-panel-strongest)", border: "1px solid var(--x-color-line-soft)", boxShadow: "0 18px 40px var(--x-color-shadow-soft)" } as const;
 const settingsSectionStyle = { display: "grid", gap: "10px", marginBottom: "14px" } as const;
@@ -238,5 +283,10 @@ const eyebrowStyle = { fontSize: "12px", letterSpacing: "0.18em", textTransform:
 const titleStyle = { margin: "8px 0 0", fontSize: "clamp(28px, 4vw, 40px)", fontWeight: 900, color: "var(--x-color-ink)" } as const;
 const metaStyle = { display: "flex", gap: "10px", flexWrap: "wrap" as const, marginTop: "12px", fontSize: "13px", color: "var(--x-color-ink-muted)" } as const;
 const contentStyle = (fontSize: number) => ({ margin: 0, width: "100%", maxWidth: "100%", minWidth: 0, whiteSpace: "pre-wrap" as const, wordBreak: "break-word" as const, overflowWrap: "anywhere" as const, boxSizing: "border-box" as const, tabSize: 8 as const, MozTabSize: 8 as const, fontFamily: '"SFMono-Regular",Consolas,"Liberation Mono",Menlo,monospace', lineHeight: 1.85, fontSize: `${fontSize}px`, color: "var(--x-color-ink)", overflowX: "auto" as const });
+const editorWrapStyle = { display: "grid", gap: "14px" } as const;
+const editorStyle = (fontSize: number) => ({ width: "100%", minHeight: "60vh", padding: "16px", borderRadius: "16px", border: "1px solid var(--x-color-line)", background: "var(--x-color-panel)", boxSizing: "border-box" as const, whiteSpace: "pre-wrap" as const, tabSize: 8 as const, MozTabSize: 8 as const, fontFamily: '"SFMono-Regular",Consolas,"Liberation Mono",Menlo,monospace', lineHeight: 1.85, fontSize: `${fontSize}px`, color: "var(--x-color-ink)" });
+const editorActionsStyle = { display: "flex", justifyContent: "flex-end", gap: "10px", flexWrap: "wrap" as const };
+const primaryButtonStyle = { padding: "12px 18px", borderRadius: "999px", border: "none", background: "linear-gradient(135deg, var(--x-color-accent), var(--x-color-info))", color: "white", fontWeight: 800, cursor: "pointer" } as const;
+const secondaryDangerButtonStyle = { padding: "12px 18px", borderRadius: "999px", border: "1px solid rgba(220,38,38,0.2)", background: "rgba(220,38,38,0.08)", color: "var(--x-color-danger)", fontWeight: 800, cursor: "pointer" } as const;
 const stateStyle = { minHeight: "240px", display: "grid", placeItems: "center", color: "var(--x-color-ink-muted)" } as const;
 const errorStyle = { padding: "12px 14px", borderRadius: "14px", background: "rgba(220,38,38,0.08)", color: "var(--x-color-danger)", border: "1px solid rgba(220,38,38,0.16)" } as const;

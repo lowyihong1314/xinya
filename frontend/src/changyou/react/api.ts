@@ -21,6 +21,24 @@ export async function fetchSongbookEntry(entryId: number) {
   return parseJson<{ entry: SongbookEntry }>(response);
 }
 
+export async function saveMySongbookEdit(entryId: number, content: string) {
+  const response = await fetch(`/api/songbook/entry/${entryId}/my_edit`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    credentials: "include",
+    body: JSON.stringify({ content }),
+  });
+  return parseJson<{ success: boolean; entry: SongbookEntry }>(response);
+}
+
+export async function deleteMySongbookEdit(entryId: number) {
+  const response = await fetch(`/api/songbook/entry/${entryId}/my_edit`, {
+    method: "DELETE",
+    credentials: "include",
+  });
+  return parseJson<{ success: boolean; entry: SongbookEntry }>(response);
+}
+
 export async function fetchSongbookEntriesForAdmin(query = "", variant = "") {
   const search = new URLSearchParams();
   if (query.trim()) search.set("q", query.trim());

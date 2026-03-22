@@ -14,6 +14,7 @@ MODEL_MODULES = (
     "models.finance",
     "models.lampRegistration",
     "models.songbook",
+    "models.songbook_user_edit",
 )
 
 

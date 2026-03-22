@@ -5,12 +5,13 @@ from zipfile import ZipFile
 from xml.etree import ElementTree as ET
 
 from flask import Blueprint, jsonify, request
-from flask_login import login_required
+from flask_login import current_user, login_required
 from sqlalchemy import or_
 
 from app.auth import permission_required
 from models import db
 from models.songbook import SongbookEntry, normalize_song_text
+from models.songbook_user_edit import SongbookUserEdit
 
 songbook_bp = Blueprint("songbook_bp", __name__)
 
@@ -20,6 +21,25 @@ META_RE = re.compile(
     r"原调[:：]\s*(?P<original>[^\s]+)?\s*选调[:：]\s*(?P<selected>[^\s]+)?\s*BPM[:：]\s*(?P<bpm>[^\s|]+)?\s*(?P<time>\|[^|]+\|)?"
 )
 SKIP_HEADINGS = {"目录", "Chord"}
+
+
+def _serialize_entry(entry, include_content=False):
+    data = entry.to_dict(include_content=include_content)
+    data["has_user_override"] = False
+    data["user_override_updated_at"] = None
+    return data
+
+
+def _apply_user_override(entry, include_content=False):
+    data = _serialize_entry(entry, include_content=include_content)
+    if current_user.is_authenticated:
+        override = SongbookUserEdit.query.filter_by(base_entry_id=entry.id, user_id=current_user.id).first()
+        if override:
+            data["has_user_override"] = True
+            data["user_override_updated_at"] = override.updated_at.isoformat() if override.updated_at else None
+            if include_content:
+                data["content"] = override.content
+    return data
 
 
 def _parse_heading(raw_heading, variant):
@@ -44,7 +64,7 @@ def _extract_docx_sections(docx_path):
             if tag == "t":
                 parts.append(node.text or "")
             elif tag == "tab":
-                parts.append("	")
+                parts.append("\t")
             elif tag == "br":
                 parts.append("\n")
         text = "".join(parts).strip()
@@ -102,7 +122,7 @@ def _sections_to_entries(sections, source_doc):
             search_text="",
             source_doc=source_doc,
             published=True,
-            sort_order=((song_number or 999999) * 10) + (0 if section["variant"] == "C" else 1),
+            sort_order=((song_number or 999999) * 10),
         )
         entry.sync_search_fields()
         entries.append(entry)
@@ -137,7 +157,7 @@ def _query_entries(include_unpublished=False):
 def list_songbook_entries():
     include_unpublished = str(request.args.get("include_unpublished") or "").lower() in {"1", "true", "yes"}
     entries = _query_entries(include_unpublished=include_unpublished).all()
-    return jsonify({"entries": [entry.to_dict() for entry in entries]})
+    return jsonify({"entries": [_apply_user_override(entry, include_content=False) for entry in entries]})
 
 
 @songbook_bp.get("/entry/<int:entry_id>")
@@ -145,7 +165,36 @@ def get_songbook_entry(entry_id):
     entry = SongbookEntry.query.get_or_404(entry_id)
     if not entry.published and not request.args.get("include_unpublished"):
         return jsonify({"error": "歌曲不存在"}), 404
-    return jsonify({"entry": entry.to_dict(include_content=True)})
+    return jsonify({"entry": _apply_user_override(entry, include_content=True)})
+
+
+@songbook_bp.post("/entry/<int:entry_id>/my_edit")
+@login_required
+def save_my_songbook_edit(entry_id):
+    entry = SongbookEntry.query.get_or_404(entry_id)
+    data = request.get_json() or {}
+    content = str(data.get("content") or "").rstrip()
+    if not content:
+        return jsonify({"error": "内容不能为空"}), 400
+    override = SongbookUserEdit.query.filter_by(base_entry_id=entry.id, user_id=current_user.id).first()
+    if override is None:
+        override = SongbookUserEdit(base_entry_id=entry.id, user_id=current_user.id, content=content)
+        db.session.add(override)
+    else:
+        override.content = content
+    db.session.commit()
+    return jsonify({"success": True, "entry": _apply_user_override(entry, include_content=True), "override": override.to_dict()})
+
+
+@songbook_bp.delete("/entry/<int:entry_id>/my_edit")
+@login_required
+def delete_my_songbook_edit(entry_id):
+    entry = SongbookEntry.query.get_or_404(entry_id)
+    override = SongbookUserEdit.query.filter_by(base_entry_id=entry.id, user_id=current_user.id).first()
+    if override:
+        db.session.delete(override)
+        db.session.commit()
+    return jsonify({"success": True, "entry": _apply_user_override(entry, include_content=True)})
 
 
 @songbook_bp.post("/entry")
@@ -194,7 +243,7 @@ def save_songbook_entry():
 
     db.session.add(entry)
     db.session.commit()
-    return jsonify({"success": True, "entry": entry.to_dict(include_content=True)})
+    return jsonify({"success": True, "entry": _apply_user_override(entry, include_content=True)})
 
 
 @songbook_bp.delete("/entry/<int:entry_id>")
@@ -225,6 +274,7 @@ def import_songbook_docx():
         return jsonify({"error": "没有解析到歌曲"}), 400
 
     if replace_existing:
+        SongbookUserEdit.query.delete()
         SongbookEntry.query.delete()
         db.session.commit()
 
@@ -256,10 +306,4 @@ def import_songbook_docx():
             saved += 1
 
     db.session.commit()
-    return jsonify({
-        "success": True,
-        "saved": saved,
-        "updated": updated,
-        "total": len(entries),
-        "source_doc": str(docx_path),
-    })
+    return jsonify({"success": True, "saved": saved, "updated": updated, "total": len(entries), "source_doc": str(docx_path)})
