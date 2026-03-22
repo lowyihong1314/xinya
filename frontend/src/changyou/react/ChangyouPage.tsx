@@ -75,6 +75,7 @@ export function ChangyouPage() {
       </div>
 
       <div style={{ ...toolbarStyle, flexDirection: isMobile ? "column" : "row" }}>
+        <button type="button" onClick={() => navigate("/changyou-room")} style={roomButtonStyle}>房间</button>
         <input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="搜索歌名 / 歌词 / chord" style={inputStyle} />
         <select value={variant} onChange={(event) => setVariant(event.target.value as "" | "C" | "G")} style={selectStyle}>
           <option value="">全部版本</option>
@@ -121,6 +122,7 @@ const subtitleStyle = { margin: "10px 0 0", lineHeight: 1.6, fontSize: "14px", c
 const toolbarStyle = { display: "flex", gap: "12px", marginTop: "18px", marginBottom: "18px" } as const;
 const inputStyle = { flex: 1, minWidth: "240px", padding: "13px 16px", borderRadius: "14px", border: "1px solid var(--x-color-line)", background: "var(--x-color-panel-strongest)" } as const;
 const selectStyle = { padding: "13px 16px", borderRadius: "14px", border: "1px solid var(--x-color-line)", background: "var(--x-color-panel-strongest)" } as const;
+const roomButtonStyle = { padding: "13px 18px", borderRadius: "14px", border: "1px solid var(--x-color-line)", background: "var(--x-color-panel-strongest)", color: "var(--x-color-ink)", fontWeight: 800, cursor: "pointer" } as const;
 const summaryStyle = { padding: "12px 14px", borderRadius: "14px", background: "var(--x-color-panel-glass)", border: "1px solid var(--x-color-line-soft)", color: "var(--x-color-ink-muted)", fontSize: "13px", whiteSpace: "nowrap" as const };
 const paginationStyle = { display: "flex", gap: "8px", flexWrap: "wrap" as const, marginBottom: "14px" } as const;
 const pageButtonStyle = (disabled: boolean) => ({ padding: "10px 14px", borderRadius: "10px", border: "1px solid var(--x-color-line)", background: disabled ? "var(--x-color-panel-alt)" : "var(--x-color-panel)", color: disabled ? "var(--x-color-ink-muted)" : "var(--x-color-ink)", cursor: disabled ? "not-allowed" : "pointer", fontWeight: 700 });

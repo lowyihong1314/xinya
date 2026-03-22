@@ -11,6 +11,7 @@ import { ProfilePage } from "../profile/react/ProfilePage";
 import { PaymentVoucherSignPage } from "../CRM/Account/react/claim/PaymentVoucherSignPage";
 import { ChangyouPage } from "../changyou/react/ChangyouPage";
 import { ChangyouDetailPage } from "../changyou/react/ChangyouDetailPage";
+import { ChangyouRoomPage } from "../changyou/react/ChangyouRoomPage";
 import { AppLayout } from "./AppLayout";
 
 function ErrorPage({ message }: { message: string }) {
@@ -46,6 +47,7 @@ export const appRouter = createHashRouter([
       { path: "*", element: <ErrorPage message="页面不存在" /> },
     ],
   },
+  { path: "/changyou-room", element: <ChangyouRoomPage /> },
   { path: "/payment-voucher-sign/:token", element: <PaymentVoucherSignPage /> },
   { path: "*", element: <Navigate to="/" replace /> },
 ]);
