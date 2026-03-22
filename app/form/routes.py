@@ -166,3 +166,14 @@ def edit_form(form_id):
 @form_bp.route("/html_to_pdf", methods=["POST"])
 def html_to_pdf():
     return services.html_to_pdf()
+
+
+@form_bp.route("/youth-class-registration/submit", methods=["POST"])
+def submit_youth_class_registration_route():
+    return services.submit_youth_class_registration(request.get_json(silent=True) or {})
+
+
+@form_bp.route("/youth-class-registration/entries", methods=["GET"])
+@permission_required("member_edit")
+def get_youth_class_registration_entries():
+    return services.get_youth_class_registrations()

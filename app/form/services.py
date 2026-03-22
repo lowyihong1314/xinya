@@ -43,6 +43,7 @@ FIELD_SWITCH_KEYS = [
 ALLOWED_FEE_IMAGE_EXTENSIONS = {".png", ".jpg", ".jpeg", ".heic", ".heif"}
 REGISTER_FEE_IMAGE_DIR = STATIC_ROOT / "images" / "register_fee_image"
 REGISTER_PAYMENT_PROOF_DIR = STATIC_ROOT / "images" / "register_payment_proof"
+YOUTH_CLASS_REGISTRATION_FILE = PROJECT_ROOT / "tmp" / "youth_class_registrations.json"
 
 
 def form_index_response(form_id):
@@ -1119,3 +1120,46 @@ def edit_form(form_id, data):
 
 def html_to_pdf():
     return merge_html_files_to_pdf(request.files.getlist("files"))
+
+
+def _load_youth_class_registrations():
+    if not YOUTH_CLASS_REGISTRATION_FILE.exists():
+        return []
+    try:
+        with open(YOUTH_CLASS_REGISTRATION_FILE, "r", encoding="utf-8") as file:
+            data = json.load(file)
+        return data if isinstance(data, list) else []
+    except Exception:
+        return []
+
+
+def _save_youth_class_registrations(entries):
+    YOUTH_CLASS_REGISTRATION_FILE.parent.mkdir(parents=True, exist_ok=True)
+    with open(YOUTH_CLASS_REGISTRATION_FILE, "w", encoding="utf-8") as file:
+        json.dump(entries, file, ensure_ascii=False, indent=2)
+
+
+def submit_youth_class_registration(payload):
+    chinese_name = str(payload.get("chinese_name") or "").strip()
+    phone = str(payload.get("phone") or "").strip()
+    if not chinese_name:
+        return jsonify({"status": "error", "message": "请填写中文姓名"}), 400
+    if not phone:
+        return jsonify({"status": "error", "message": "请填写联络电话"}), 400
+    allowed_keys = [
+        "chinese_name", "english_name", "gender", "birth_date", "age", "phone", "whatsapp", "email",
+        "school", "education_level", "occupation", "guardian_name", "guardian_phone", "address",
+        "emergency_contact_name", "emergency_contact_phone", "buddhist_experience", "learning_goals",
+        "medical_notes", "attendance_preference", "available_time", "referral_source", "remarks", "agree_contact",
+    ]
+    entry = {key: payload.get(key) for key in allowed_keys}
+    entry["id"] = secrets.token_urlsafe(8)
+    entry["submitted_at"] = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    entries = _load_youth_class_registrations()
+    entries.insert(0, entry)
+    _save_youth_class_registrations(entries)
+    return jsonify({"status": "success", "entry": entry})
+
+
+def get_youth_class_registrations():
+    return jsonify({"status": "success", "entries": _load_youth_class_registrations()})

@@ -1,6 +1,6 @@
 import os
 
-from flask import send_from_directory
+from flask import render_template, send_from_directory
 
 from app.paths import STATIC_ROOT
 
@@ -17,3 +17,8 @@ def register_web_routes(app):
             "logo.png",
             mimetype="image/png",
         )
+
+
+    @app.route("/template/youth-class-registration")
+    def youth_class_registration_template():
+        return render_template("form/youth_class_registration_public.html")
