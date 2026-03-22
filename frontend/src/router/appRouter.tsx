@@ -9,6 +9,7 @@ import { LampPage } from "../lamp/react/LampPage";
 import { MusicPage } from "../music/react/MusicPage";
 import { ProfilePage } from "../profile/react/ProfilePage";
 import { PaymentVoucherSignPage } from "../CRM/Account/react/claim/PaymentVoucherSignPage";
+import { ChangyouPage } from "../changyou/react/ChangyouPage";
 import { AppLayout } from "./AppLayout";
 
 function ErrorPage({ message }: { message: string }) {
@@ -34,6 +35,7 @@ export const appRouter = createHashRouter([
       { path: "crm", element: <CRMPage /> },
       { path: "profile", element: <ProfilePage /> },
       { path: "music", element: <MusicPage /> },
+      { path: "changyou", element: <ChangyouPage /> },
       { path: "lamp-registration", element: <LampPage /> },
       { path: "event/:eventId", element: <EventDetailPage /> },
       { path: "image/:imageId", element: <ImageDetailPage /> },

@@ -5,6 +5,7 @@ export type RouteKey =
   | "profile"
   | "fileSystem"
   | "music"
+  | "changyou"
   | "login"
   | "lamp_registration"
   | "event_detail"
@@ -26,6 +27,7 @@ export const NAV_ITEMS: NavItem[] = [
   { key: "profile", title: "用户资料", icon: "fas fa-user", auth: true, path: "/profile" },
   // { key: "fileSystem", title: "文件管理", icon: "fas fa-folder", auth: true, path: "/files" },
   { key: "music", title: "音乐播放器", icon: "fas fa-music", auth: true, path: "/music" },
+  { key: "changyou", title: "唱游", icon: "fas fa-microphone-lines", auth: true, path: "/changyou" },
   { key: "login", title: "登录", icon: "fas fa-right-to-bracket", auth: false, modal: true, path: "/login" },
 ];
 
@@ -36,6 +38,7 @@ export const legacyPageToPath: Record<string, string> = {
   profile: "/profile",
   fileSystem: "/files",
   music: "/music",
+  changyou: "/changyou",
   login: "/login",
   lamp_registration: "/lamp-registration",
 };
@@ -47,6 +50,7 @@ export function pageKeyFromPath(pathname: string) {
   if (pathname.startsWith("/profile")) return "profile";
   if (pathname.startsWith("/files")) return "fileSystem";
   if (pathname.startsWith("/music")) return "music";
+  if (pathname.startsWith("/changyou")) return "changyou";
   if (pathname.startsWith("/lamp-registration")) return "lamp_registration";
   if (pathname.startsWith("/event/")) return "event_detail";
   if (pathname.startsWith("/image/")) return "image_detail";
