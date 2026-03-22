@@ -1,3 +1,12 @@
+export type SongbookVersionOption = {
+  kind: "base" | "user";
+  label: string;
+  user_id?: number | null;
+  editor_name?: string | null;
+  updated_at?: string | null;
+  is_me?: boolean;
+};
+
 export type SongbookEntry = {
   id: number;
   song_number?: number | null;
@@ -17,4 +26,9 @@ export type SongbookEntry = {
   content?: string;
   has_user_override?: boolean;
   user_override_updated_at?: string | null;
+  active_version?: "base" | "user";
+  active_version_label?: string;
+  active_editor_user_id?: number | null;
+  active_editor_name?: string | null;
+  versions?: SongbookVersionOption[];
 };

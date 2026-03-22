@@ -12,6 +12,7 @@ from app.auth import permission_required
 from models import db
 from models.songbook import SongbookEntry, normalize_song_text
 from models.songbook_user_edit import SongbookUserEdit
+from models.user_data import User
 
 songbook_bp = Blueprint("songbook_bp", __name__)
 
@@ -25,21 +26,70 @@ SKIP_HEADINGS = {"目录", "Chord"}
 
 def _serialize_entry(entry, include_content=False):
     data = entry.to_dict(include_content=include_content)
+    data["active_version"] = "base"
+    data["active_version_label"] = "原版"
+    data["active_editor_user_id"] = None
+    data["active_editor_name"] = None
     data["has_user_override"] = False
     data["user_override_updated_at"] = None
     return data
 
 
-def _apply_user_override(entry, include_content=False):
+def _apply_version(entry, include_content=False, editor_user_id=None):
     data = _serialize_entry(entry, include_content=include_content)
-    if current_user.is_authenticated:
-        override = SongbookUserEdit.query.filter_by(base_entry_id=entry.id, user_id=current_user.id).first()
-        if override:
-            data["has_user_override"] = True
-            data["user_override_updated_at"] = override.updated_at.isoformat() if override.updated_at else None
-            if include_content:
-                data["content"] = override.content
+    override = None
+    if editor_user_id is not None:
+        override = (
+            SongbookUserEdit.query.join(User, User.id == SongbookUserEdit.user_id)
+            .filter(SongbookUserEdit.base_entry_id == entry.id, SongbookUserEdit.user_id == editor_user_id)
+            .first()
+        )
+    elif current_user.is_authenticated:
+        override = (
+            SongbookUserEdit.query.join(User, User.id == SongbookUserEdit.user_id)
+            .filter(SongbookUserEdit.base_entry_id == entry.id, SongbookUserEdit.user_id == current_user.id)
+            .first()
+        )
+    if override:
+        user = User.query.get(override.user_id)
+        editor_name = (getattr(user, "display_name", None) or getattr(user, "username", None) or f"用户 {override.user_id}") if user else f"用户 {override.user_id}"
+        data["active_version"] = "user"
+        data["active_version_label"] = f"{editor_name} 的编辑版"
+        data["active_editor_user_id"] = override.user_id
+        data["active_editor_name"] = editor_name
+        data["has_user_override"] = current_user.is_authenticated and override.user_id == current_user.id
+        data["user_override_updated_at"] = override.updated_at.isoformat() if override.updated_at else None
+        if include_content:
+            data["content"] = override.content
     return data
+
+
+def _list_versions(entry):
+    versions = [{
+        "kind": "base",
+        "label": "原版",
+        "user_id": None,
+        "editor_name": None,
+        "updated_at": entry.updated_at.isoformat() if entry.updated_at else None,
+    }]
+    overrides = (
+        SongbookUserEdit.query.join(User, User.id == SongbookUserEdit.user_id)
+        .filter(SongbookUserEdit.base_entry_id == entry.id)
+        .order_by(SongbookUserEdit.updated_at.desc())
+        .all()
+    )
+    for item in overrides:
+        user = User.query.get(item.user_id)
+        editor_name = (getattr(user, "display_name", None) or getattr(user, "username", None) or f"用户 {item.user_id}") if user else f"用户 {item.user_id}"
+        versions.append({
+            "kind": "user",
+            "label": f"{editor_name} 的编辑版",
+            "user_id": item.user_id,
+            "editor_name": editor_name,
+            "updated_at": item.updated_at.isoformat() if item.updated_at else None,
+            "is_me": current_user.is_authenticated and item.user_id == current_user.id,
+        })
+    return versions
 
 
 def _parse_heading(raw_heading, variant):
@@ -157,7 +207,7 @@ def _query_entries(include_unpublished=False):
 def list_songbook_entries():
     include_unpublished = str(request.args.get("include_unpublished") or "").lower() in {"1", "true", "yes"}
     entries = _query_entries(include_unpublished=include_unpublished).all()
-    return jsonify({"entries": [_apply_user_override(entry, include_content=False) for entry in entries]})
+    return jsonify({"entries": [_apply_version(entry, include_content=False) for entry in entries]})
 
 
 @songbook_bp.get("/entry/<int:entry_id>")
@@ -165,7 +215,10 @@ def get_songbook_entry(entry_id):
     entry = SongbookEntry.query.get_or_404(entry_id)
     if not entry.published and not request.args.get("include_unpublished"):
         return jsonify({"error": "歌曲不存在"}), 404
-    return jsonify({"entry": _apply_user_override(entry, include_content=True)})
+    editor_user_id = request.args.get("editor_user_id", type=int)
+    data = _apply_version(entry, include_content=True, editor_user_id=editor_user_id)
+    data["versions"] = _list_versions(entry)
+    return jsonify({"entry": data})
 
 
 @songbook_bp.post("/entry/<int:entry_id>/my_edit")
@@ -183,7 +236,9 @@ def save_my_songbook_edit(entry_id):
     else:
         override.content = content
     db.session.commit()
-    return jsonify({"success": True, "entry": _apply_user_override(entry, include_content=True), "override": override.to_dict()})
+    data = _apply_version(entry, include_content=True, editor_user_id=current_user.id)
+    data["versions"] = _list_versions(entry)
+    return jsonify({"success": True, "entry": data, "override": override.to_dict()})
 
 
 @songbook_bp.delete("/entry/<int:entry_id>/my_edit")
@@ -194,7 +249,9 @@ def delete_my_songbook_edit(entry_id):
     if override:
         db.session.delete(override)
         db.session.commit()
-    return jsonify({"success": True, "entry": _apply_user_override(entry, include_content=True)})
+    data = _apply_version(entry, include_content=True)
+    data["versions"] = _list_versions(entry)
+    return jsonify({"success": True, "entry": data})
 
 
 @songbook_bp.post("/entry")
@@ -243,7 +300,9 @@ def save_songbook_entry():
 
     db.session.add(entry)
     db.session.commit()
-    return jsonify({"success": True, "entry": _apply_user_override(entry, include_content=True)})
+    data = _apply_version(entry, include_content=True)
+    data["versions"] = _list_versions(entry)
+    return jsonify({"success": True, "entry": data})
 
 
 @songbook_bp.delete("/entry/<int:entry_id>")
