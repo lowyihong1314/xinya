@@ -1,8 +1,9 @@
 import { useEffect, useMemo, useState } from "react";
+import { useNavigate } from "react-router-dom";
 
 import { useUserState } from "../../app/UserState";
 import { ensureDesignTokens } from "../../theme/designTokens";
-import { fetchSongbookEntries, fetchSongbookEntry } from "./api";
+import { fetchSongbookEntries } from "./api";
 import type { SongbookEntry } from "./types";
 
 const PAGE_SIZE = 20;
@@ -10,14 +11,12 @@ const PAGE_SIZE = 20;
 export function ChangyouPage() {
   ensureDesignTokens();
 
+  const navigate = useNavigate();
   const { isAuthenticated, loadingUser, openLogin, isMobile } = useUserState();
   const [query, setQuery] = useState("");
   const [variant, setVariant] = useState<"" | "C" | "G">("");
   const [entries, setEntries] = useState<SongbookEntry[]>([]);
-  const [selectedId, setSelectedId] = useState<number | null>(null);
-  const [selectedEntry, setSelectedEntry] = useState<SongbookEntry | null>(null);
   const [loading, setLoading] = useState(true);
-  const [detailLoading, setDetailLoading] = useState(false);
   const [error, setError] = useState("");
   const [page, setPage] = useState(1);
 
@@ -38,8 +37,9 @@ export function ChangyouPage() {
     setError("");
     fetchSongbookEntries(query, variant)
       .then((response) => {
-        if (cancelled) return;
-        setEntries(response.entries || []);
+        if (!cancelled) {
+          setEntries(response.entries || []);
+        }
       })
       .catch((err) => !cancelled && setError(err instanceof Error ? err.message : "加载失败"))
       .finally(() => !cancelled && setLoading(false));
@@ -61,57 +61,6 @@ export function ChangyouPage() {
     }
   }, [page, safePage]);
 
-  useEffect(() => {
-    if (!entries.length) {
-      setSelectedId(null);
-      setSelectedEntry(null);
-      return;
-    }
-
-    const existsInAll = selectedId ? entries.some((entry) => entry.id === selectedId) : false;
-    if (!existsInAll) {
-      setSelectedId(pagedEntries[0]?.id ?? entries[0]?.id ?? null);
-      return;
-    }
-
-    const existsInPage = selectedId ? pagedEntries.some((entry) => entry.id === selectedId) : false;
-    if (!existsInPage && pagedEntries.length > 0) {
-      setSelectedId(pagedEntries[0].id);
-    }
-  }, [entries, pagedEntries, selectedId]);
-
-  useEffect(() => {
-    if (!selectedId) {
-      setSelectedEntry(null);
-      return;
-    }
-    let cancelled = false;
-    setDetailLoading(true);
-    setError("");
-    fetchSongbookEntry(selectedId)
-      .then((response) => {
-        if (!cancelled) {
-          setSelectedEntry(response.entry);
-        }
-      })
-      .catch((err) => {
-        if (!cancelled) {
-          setSelectedEntry(null);
-          setError(err instanceof Error ? err.message : "加载详情失败");
-        }
-      })
-      .finally(() => !cancelled && setDetailLoading(false));
-    return () => {
-      cancelled = true;
-    };
-  }, [selectedId]);
-
-  const titleText = useMemo(() => {
-    if (!selectedEntry) return "请选择歌曲";
-    const number = selectedEntry.song_number ? `${selectedEntry.song_number}. ` : "";
-    return `${number}${selectedEntry.title} · ${selectedEntry.variant}`;
-  }, [selectedEntry]);
-
   if (loadingUser) return <div style={stateStyle}>加载中…</div>;
   if (!isAuthenticated) return <div style={stateStyle}>请先登录后再访问唱游页面。</div>;
 
@@ -121,17 +70,12 @@ export function ChangyouPage() {
         <div>
           <div style={eyebrowStyle}>Changyou</div>
           <h1 style={titleStyle}>唱游歌簿</h1>
-          <p style={subtitleStyle}>搜索歌名，快速查看歌词和 chord。当前是内部使用版本。</p>
+          <p style={subtitleStyle}>搜索歌名，点进去单独查看歌词和 chord。</p>
         </div>
       </div>
 
       <div style={{ ...toolbarStyle, flexDirection: isMobile ? "column" : "row" }}>
-        <input
-          value={query}
-          onChange={(event) => setQuery(event.target.value)}
-          placeholder="搜索歌名 / 歌词 / chord"
-          style={inputStyle}
-        />
+        <input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="搜索歌名 / 歌词 / chord" style={inputStyle} />
         <select value={variant} onChange={(event) => setVariant(event.target.value as "" | "C" | "G")} style={selectStyle}>
           <option value="">全部版本</option>
           <option value="C">C family</option>
@@ -144,73 +88,33 @@ export function ChangyouPage() {
 
       {!loading && entries.length > 0 ? (
         <div style={paginationStyle}>
-          <button type="button" onClick={() => setPage((current) => Math.max(1, current - 1))} disabled={safePage <= 1} style={pageButtonStyle(safePage <= 1)}>
-            上一页
-          </button>
+          <button type="button" onClick={() => setPage((current) => Math.max(1, current - 1))} disabled={safePage <= 1} style={pageButtonStyle(safePage <= 1)}>上一页</button>
           {Array.from({ length: totalPages }, (_, index) => index + 1)
             .filter((pageNumber) => totalPages <= 7 || Math.abs(pageNumber - safePage) <= 2 || pageNumber === 1 || pageNumber === totalPages)
             .filter((pageNumber, index, array) => array.indexOf(pageNumber) === index)
             .map((pageNumber) => (
-              <button key={pageNumber} type="button" onClick={() => setPage(pageNumber)} style={numberButtonStyle(pageNumber === safePage)}>
-                {pageNumber}
-              </button>
+              <button key={pageNumber} type="button" onClick={() => setPage(pageNumber)} style={numberButtonStyle(pageNumber === safePage)}>{pageNumber}</button>
             ))}
-          <button type="button" onClick={() => setPage((current) => Math.min(totalPages, current + 1))} disabled={safePage >= totalPages} style={pageButtonStyle(safePage >= totalPages)}>
-            下一页
-          </button>
+          <button type="button" onClick={() => setPage((current) => Math.min(totalPages, current + 1))} disabled={safePage >= totalPages} style={pageButtonStyle(safePage >= totalPages)}>下一页</button>
         </div>
       ) : null}
 
-      <div style={layoutStyle(isMobile)}>
-        <aside style={listStyle}>
-          {loading ? <div style={stateStyle}>加载歌曲中…</div> : null}
-          {!loading && entries.length === 0 ? <div style={stateStyle}>没有找到歌曲。</div> : null}
-          {!loading && pagedEntries.map((entry) => {
-            const active = entry.id === selectedId;
-            return (
-              <button key={entry.id} type="button" onClick={() => setSelectedId(entry.id)} style={listItemStyle(active)}>
-                <div style={listItemTitleStyle}>{entry.song_number ? `${entry.song_number}. ` : ""}{entry.title}</div>
-                <div style={listItemMetaStyle}>{entry.variant} · {entry.selected_key || "-"} · BPM {entry.bpm || "-"}</div>
-              </button>
-            );
-          })}
-        </aside>
-
-        <section style={detailStyle}>
-          {detailLoading ? <div style={stateStyle}>加载详情中…</div> : null}
-          {!detailLoading && !selectedEntry ? <div style={stateStyle}>请选择左侧歌曲查看内容。</div> : null}
-          {!detailLoading && selectedEntry ? (
-            <>
-              <div style={detailHeaderStyle}>
-                <h2 style={detailTitleStyle}>{titleText}</h2>
-                <div style={detailMetaStyle}>
-                  <span>原调：{selectedEntry.original_key || "-"}</span>
-                  <span>选调：{selectedEntry.selected_key || "-"}</span>
-                  <span>BPM：{selectedEntry.bpm || "-"}</span>
-                  <span>拍号：{selectedEntry.time_signature || "-"}</span>
-                </div>
-              </div>
-              <pre style={contentBlockStyle}>{selectedEntry.content || ""}</pre>
-            </>
-          ) : null}
-        </section>
+      <div style={listStyle}>
+        {loading ? <div style={stateStyle}>加载歌曲中…</div> : null}
+        {!loading && entries.length === 0 ? <div style={stateStyle}>没有找到歌曲。</div> : null}
+        {!loading && pagedEntries.map((entry) => (
+          <button key={entry.id} type="button" onClick={() => navigate(`/changyou/${entry.id}`)} style={listItemStyle}>
+            <div style={listItemTitleStyle}>{entry.song_number ? `${entry.song_number}. ` : ""}{entry.title}</div>
+            <div style={listItemMetaStyle}>{entry.variant} · {entry.selected_key || "-"} · BPM {entry.bpm || "-"}</div>
+          </button>
+        ))}
       </div>
     </div>
   );
 }
 
-const pageStyle = {
-  minHeight: "calc(100vh - 60px)",
-  padding: "24px",
-  background: "radial-gradient(circle at top left, var(--x-color-accent-tint-strong), var(--x-color-canvas) 42%, var(--x-color-canvas-alt) 100%)",
-} as const;
-const heroStyle = {
-  padding: "22px",
-  borderRadius: "24px",
-  background: "linear-gradient(135deg, var(--x-color-nav-start), var(--x-color-accent))",
-  color: "white",
-  boxShadow: "0 20px 40px var(--x-color-shadow)",
-} as const;
+const pageStyle = { minHeight: "calc(100vh - 60px)", padding: "24px", background: "radial-gradient(circle at top left, var(--x-color-accent-tint-strong), var(--x-color-canvas) 42%, var(--x-color-canvas-alt) 100%)" } as const;
+const heroStyle = { padding: "22px", borderRadius: "24px", background: "linear-gradient(135deg, var(--x-color-nav-start), var(--x-color-accent))", color: "white", boxShadow: "0 20px 40px var(--x-color-shadow)" } as const;
 const eyebrowStyle = { fontSize: "12px", letterSpacing: "0.2em", textTransform: "uppercase", opacity: 0.84 } as const;
 const titleStyle = { margin: "8px 0 0", fontSize: "30px", fontWeight: 900 } as const;
 const subtitleStyle = { margin: "10px 0 0", lineHeight: 1.6, fontSize: "14px", color: "rgba(255,255,255,0.84)" } as const;
@@ -221,15 +125,9 @@ const summaryStyle = { padding: "12px 14px", borderRadius: "14px", background: "
 const paginationStyle = { display: "flex", gap: "8px", flexWrap: "wrap" as const, marginBottom: "14px" } as const;
 const pageButtonStyle = (disabled: boolean) => ({ padding: "10px 14px", borderRadius: "10px", border: "1px solid var(--x-color-line)", background: disabled ? "var(--x-color-panel-alt)" : "var(--x-color-panel)", color: disabled ? "var(--x-color-ink-muted)" : "var(--x-color-ink)", cursor: disabled ? "not-allowed" : "pointer", fontWeight: 700 });
 const numberButtonStyle = (active: boolean) => ({ minWidth: "40px", padding: "10px 12px", borderRadius: "10px", border: active ? "1px solid var(--x-color-accent)" : "1px solid var(--x-color-line)", background: active ? "var(--x-color-accent)" : "var(--x-color-panel)", color: active ? "white" : "var(--x-color-ink)", cursor: "pointer", fontWeight: 700 });
-const layoutStyle = (isMobile: boolean) => ({ display: "grid", gridTemplateColumns: isMobile ? "1fr" : "320px minmax(0,1fr)", gap: "16px" });
-const listStyle = { display: "grid", gap: "10px", alignContent: "start" } as const;
-const listItemStyle = (active: boolean) => ({ padding: "14px", borderRadius: "16px", border: active ? "1px solid var(--x-color-accent)" : "1px solid var(--x-color-line-soft)", background: active ? "var(--x-color-accent-tint-strong)" : "var(--x-color-panel-strong)", textAlign: "left" as const, cursor: "pointer", boxShadow: "0 10px 24px var(--x-color-shadow-soft)" });
-const listItemTitleStyle = { fontWeight: 800, color: "var(--x-color-ink)" } as const;
+const listStyle = { display: "grid", gap: "10px" } as const;
+const listItemStyle = { padding: "16px", borderRadius: "16px", border: "1px solid var(--x-color-line-soft)", background: "var(--x-color-panel-strong)", textAlign: "left" as const, cursor: "pointer", boxShadow: "0 10px 24px var(--x-color-shadow-soft)" } as const;
+const listItemTitleStyle = { fontWeight: 800, color: "var(--x-color-ink)", fontSize: "16px" } as const;
 const listItemMetaStyle = { marginTop: "6px", fontSize: "12px", color: "var(--x-color-ink-muted)" } as const;
-const detailStyle = { minHeight: "60vh", padding: "20px", borderRadius: "20px", background: "var(--x-color-panel-strongest)", border: "1px solid var(--x-color-line-soft)", boxShadow: "0 16px 36px var(--x-color-shadow-soft)", overflow: "hidden" } as const;
-const detailHeaderStyle = { marginBottom: "16px", paddingBottom: "12px", borderBottom: "1px solid var(--x-color-line-soft)" } as const;
-const detailTitleStyle = { margin: 0, fontSize: "26px", fontWeight: 900, color: "var(--x-color-ink)" } as const;
-const detailMetaStyle = { display: "flex", gap: "12px", flexWrap: "wrap", marginTop: "10px", fontSize: "13px", color: "var(--x-color-ink-muted)" } as const;
-const contentBlockStyle = { margin: 0, whiteSpace: "pre-wrap" as const, fontFamily: '"SFMono-Regular",Consolas,"Liberation Mono",Menlo,monospace', lineHeight: 1.75, fontSize: "14px", color: "var(--x-color-ink)", overflowX: "auto" as const, overflowY: "auto" as const, maxHeight: "calc(100vh - 320px)", paddingRight: "8px" } as const;
 const stateStyle = { minHeight: "120px", display: "grid", placeItems: "center", color: "var(--x-color-ink-muted)" } as const;
 const errorStyle = { marginBottom: "12px", padding: "12px 14px", borderRadius: "14px", background: "rgba(220,38,38,0.08)", color: "var(--x-color-danger)", border: "1px solid rgba(220,38,38,0.16)" } as const;

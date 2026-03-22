@@ -10,6 +10,7 @@ import { MusicPage } from "../music/react/MusicPage";
 import { ProfilePage } from "../profile/react/ProfilePage";
 import { PaymentVoucherSignPage } from "../CRM/Account/react/claim/PaymentVoucherSignPage";
 import { ChangyouPage } from "../changyou/react/ChangyouPage";
+import { ChangyouDetailPage } from "../changyou/react/ChangyouDetailPage";
 import { AppLayout } from "./AppLayout";
 
 function ErrorPage({ message }: { message: string }) {
@@ -36,6 +37,7 @@ export const appRouter = createHashRouter([
       { path: "profile", element: <ProfilePage /> },
       { path: "music", element: <MusicPage /> },
       { path: "changyou", element: <ChangyouPage /> },
+      { path: "changyou/:entryId", element: <ChangyouDetailPage /> },
       { path: "lamp-registration", element: <LampPage /> },
       { path: "event/:eventId", element: <EventDetailPage /> },
       { path: "image/:imageId", element: <ImageDetailPage /> },
