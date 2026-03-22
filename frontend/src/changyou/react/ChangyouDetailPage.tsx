@@ -14,52 +14,20 @@ const MIN_FONT_SIZE = 14;
 const MAX_FONT_SIZE = 30;
 type ChordFamily = "original" | "C" | "D" | "E" | "F" | "G" | "A" | "B";
 const CHORD_FAMILY_OPTIONS: ChordFamily[] = ["original", "C", "D", "E", "F", "G", "A", "B"];
-const FAMILY_OFFSETS: Record<Exclude<ChordFamily, "original">, number> = {
-  C: 0,
-  D: 2,
-  E: 4,
-  F: 5,
-  G: 7,
-  A: 9,
-  B: 11,
-};
+const FAMILY_OFFSETS: Record<Exclude<ChordFamily, "original">, number> = { C: 0, D: 2, E: 4, F: 5, G: 7, A: 9, B: 11 };
 const SHARP_NAMES = ["C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "A#", "B"];
 const FLAT_NAMES = ["C", "Db", "D", "Eb", "E", "F", "Gb", "G", "Ab", "A", "Bb", "B"];
-const NOTE_INDEX: Record<string, number> = {
-  C: 0, "B#": 0,
-  "C#": 1, Db: 1,
-  D: 2,
-  "D#": 3, Eb: 3,
-  E: 4, Fb: 4,
-  F: 5, "E#": 5,
-  "F#": 6, Gb: 6,
-  G: 7,
-  "G#": 8, Ab: 8,
-  A: 9,
-  "A#": 10, Bb: 10,
-  B: 11, Cb: 11,
-};
-
-function normalizeSongTitle(value: string) {
-  return value.replace(/\s*G\s*$/i, "").trim();
-}
+const NOTE_INDEX: Record<string, number> = { C: 0, "B#": 0, "C#": 1, Db: 1, D: 2, "D#": 3, Eb: 3, E: 4, Fb: 4, F: 5, "E#": 5, "F#": 6, Gb: 6, G: 7, "G#": 8, Ab: 8, A: 9, "A#": 10, Bb: 10, B: 11, Cb: 11 };
 
 function getPreferredNoteName(index: number, family: Exclude<ChordFamily, "original">) {
-  if (family === "F") {
-    return FLAT_NAMES[index];
-  }
-  if (["D", "E", "A", "B"].includes(family)) {
-    return SHARP_NAMES[index];
-  }
+  if (family === "F") return FLAT_NAMES[index];
   return SHARP_NAMES[index];
 }
 
 function transposeRoot(root: string, offset: number, family: Exclude<ChordFamily, "original">) {
-  const normalized = root.trim();
-  const noteIndex = NOTE_INDEX[normalized];
+  const noteIndex = NOTE_INDEX[root.trim()];
   if (noteIndex == null) return root;
-  const nextIndex = (noteIndex + offset + 12) % 12;
-  return getPreferredNoteName(nextIndex, family);
+  return getPreferredNoteName((noteIndex + offset + 12) % 12, family);
 }
 
 function transposeChordToken(token: string, targetFamily: Exclude<ChordFamily, "original">) {
@@ -82,8 +50,7 @@ function isChordLine(line: string) {
   const pieces = line.split(/(\s+|\|)/).filter(Boolean);
   const meaningful = pieces.filter((piece) => piece.trim() && piece !== "|");
   if (!meaningful.length) return false;
-  const chordCount = meaningful.filter(isChordLikeToken).length;
-  return chordCount > 0 && chordCount === meaningful.length;
+  return meaningful.every(isChordLikeToken);
 }
 
 function transposeChordLine(line: string, targetFamily: Exclude<ChordFamily, "original">) {
@@ -108,21 +75,15 @@ function transposeChordLine(line: string, targetFamily: Exclude<ChordFamily, "or
 
 function transformChordContent(content: string, targetFamily: ChordFamily) {
   if (targetFamily === "original") return content;
-  return content
-    .split("\n")
-    .map((line) => (isChordLine(line) ? transposeChordLine(line, targetFamily) : line))
-    .join("\n");
+  return content.split("\n").map((line) => (isChordLine(line) ? transposeChordLine(line, targetFamily) : line)).join("\n");
 }
 
 export function ChangyouDetailPage() {
   ensureDesignTokens();
-
   const navigate = useNavigate();
   const { entryId } = useParams();
   const { isAuthenticated, loadingUser, openLogin, isMobile } = useUserState();
   const [entry, setEntry] = useState<SongbookEntry | null>(null);
-  const [siblings, setSiblings] = useState<SongbookEntry[]>([]);
-  const [baseCEntry, setBaseCEntry] = useState<SongbookEntry | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [settingsOpen, setSettingsOpen] = useState(false);
@@ -131,10 +92,7 @@ export function ChangyouDetailPage() {
     const saved = Number(window.localStorage.getItem(FONT_SIZE_STORAGE_KEY));
     return Number.isFinite(saved) && saved >= MIN_FONT_SIZE && saved <= MAX_FONT_SIZE ? saved : DEFAULT_FONT_SIZE;
   });
-  const [hideNav, setHideNav] = useState<boolean>(() => {
-    if (typeof window === "undefined") return false;
-    return window.localStorage.getItem(HIDE_NAV_STORAGE_KEY) === "1";
-  });
+  const [hideNav, setHideNav] = useState<boolean>(() => typeof window !== "undefined" && window.localStorage.getItem(HIDE_NAV_STORAGE_KEY) === "1");
   const [chordFamily, setChordFamily] = useState<ChordFamily>(() => {
     if (typeof window === "undefined") return "original";
     const saved = window.localStorage.getItem(CHORD_FAMILY_STORAGE_KEY) as ChordFamily | null;
@@ -143,50 +101,34 @@ export function ChangyouDetailPage() {
   const settingsRef = useRef<HTMLDivElement | null>(null);
 
   useEffect(() => {
-    if (!loadingUser && !isAuthenticated) {
-      openLogin();
-    }
+    if (!loadingUser && !isAuthenticated) openLogin();
   }, [loadingUser, isAuthenticated, openLogin]);
 
   useEffect(() => {
-    if (typeof window !== "undefined") {
-      window.localStorage.setItem(FONT_SIZE_STORAGE_KEY, String(fontSize));
-    }
+    if (typeof window !== "undefined") window.localStorage.setItem(FONT_SIZE_STORAGE_KEY, String(fontSize));
   }, [fontSize]);
 
   useEffect(() => {
-    if (typeof window !== "undefined") {
-      window.localStorage.setItem(HIDE_NAV_STORAGE_KEY, hideNav ? "1" : "0");
-    }
+    if (typeof window !== "undefined") window.localStorage.setItem(CHORD_FAMILY_STORAGE_KEY, chordFamily);
+  }, [chordFamily]);
+
+  useEffect(() => {
+    if (typeof window !== "undefined") window.localStorage.setItem(HIDE_NAV_STORAGE_KEY, hideNav ? "1" : "0");
     const navbar = document.getElementById("base_navbar");
-    if (navbar) {
-      navbar.style.display = hideNav ? "none" : "flex";
-    }
+    if (navbar) navbar.style.display = hideNav ? "none" : "flex";
     return () => {
       const currentNavbar = document.getElementById("base_navbar");
-      if (currentNavbar) {
-        currentNavbar.style.display = "flex";
-      }
+      if (currentNavbar) currentNavbar.style.display = "flex";
     };
   }, [hideNav]);
 
   useEffect(() => {
-    if (typeof window !== "undefined") {
-      window.localStorage.setItem(CHORD_FAMILY_STORAGE_KEY, chordFamily);
-    }
-  }, [chordFamily]);
-
-  useEffect(() => {
     if (!settingsOpen) return;
     const handleClick = (event: MouseEvent) => {
-      if (settingsRef.current && !settingsRef.current.contains(event.target as Node)) {
-        setSettingsOpen(false);
-      }
+      if (settingsRef.current && !settingsRef.current.contains(event.target as Node)) setSettingsOpen(false);
     };
     const handleEscape = (event: KeyboardEvent) => {
-      if (event.key === "Escape") {
-        setSettingsOpen(false);
-      }
+      if (event.key === "Escape") setSettingsOpen(false);
     };
     window.addEventListener("mousedown", handleClick);
     window.addEventListener("keydown", handleEscape);
@@ -201,69 +143,15 @@ export function ChangyouDetailPage() {
     let cancelled = false;
     setLoading(true);
     setError("");
-    setBaseCEntry(null);
     fetchSongbookEntry(Number(entryId))
-      .then((response) => {
-        if (cancelled) return null;
-        setEntry(response.entry);
-        return response.entry;
-      })
-      .then(async (loadedEntry) => {
-        if (!loadedEntry || cancelled) return;
-        const query = loadedEntry.song_number ? String(loadedEntry.song_number) : normalizeSongTitle(loadedEntry.title);
-        const response = await fetchSongbookEntries(query, "");
-        if (cancelled) return;
-        const normalizedTitle = normalizeSongTitle(loadedEntry.title);
-        const related = (response.entries || []).filter((item) => {
-          if (loadedEntry.song_number && item.song_number === loadedEntry.song_number) return true;
-          return normalizeSongTitle(item.title) === normalizedTitle;
-        });
-        setSiblings(related);
-        const cCandidate = related.find((item) => item.variant === "C");
-        if (cCandidate) {
-          const cDetail = await fetchSongbookEntry(cCandidate.id);
-          if (!cancelled) {
-            setBaseCEntry(cDetail.entry);
-          }
-        }
-      })
+      .then((response) => { if (!cancelled) setEntry(response.entry); })
       .catch((err) => !cancelled && setError(err instanceof Error ? err.message : "加载失败"))
       .finally(() => !cancelled && setLoading(false));
-    return () => {
-      cancelled = true;
-    };
+    return () => { cancelled = true; };
   }, [entryId, isAuthenticated]);
 
-  const titleText = useMemo(() => {
-    if (!entry) return "歌曲详情";
-    return `${entry.song_number ? `${entry.song_number}. ` : ""}${normalizeSongTitle(entry.title)} · ${entry.variant}`;
-  }, [entry]);
-
-  const availableVariants = useMemo(() => {
-    const map = new Map<string, SongbookEntry>();
-    siblings.forEach((item) => {
-      if (!map.has(item.variant)) map.set(item.variant, item);
-    });
-    if (entry && !map.has(entry.variant)) map.set(entry.variant, entry);
-    return Array.from(map.values()).sort((a, b) => a.variant.localeCompare(b.variant));
-  }, [entry, siblings]);
-
-  const renderedContent = useMemo(() => {
-    if (!entry) return "";
-    if (chordFamily === "original") {
-      return entry.content || "";
-    }
-    const source = baseCEntry?.content || entry.content || "";
-    return transformChordContent(source, chordFamily);
-  }, [entry, baseCEntry, chordFamily]);
-
-  function switchVariant(variant: "C" | "G") {
-    const target = availableVariants.find((item) => item.variant === variant);
-    if (target && target.id !== entry?.id) {
-      navigate(`/changyou/${target.id}`);
-      setSettingsOpen(false);
-    }
-  }
+  const renderedContent = useMemo(() => transformChordContent(entry?.content || "", chordFamily), [entry, chordFamily]);
+  const titleText = useMemo(() => entry ? `${entry.song_number ? `${entry.song_number}. ` : ""}${entry.title}` : "歌曲详情", [entry]);
 
   if (loadingUser) return <div style={stateStyle}>加载中…</div>;
   if (!isAuthenticated) return <div style={stateStyle}>请先登录后再访问唱游页面。</div>;
@@ -273,26 +161,13 @@ export function ChangyouDetailPage() {
       <div style={topBarStyle(isMobile)}>
         <button type="button" onClick={() => navigate("/changyou")} style={backButtonStyle}>← 返回歌单</button>
         <div style={topRightStyle} ref={settingsRef}>
-          {entry ? <div style={versionPillStyle}>{entry.variant} 版本</div> : null}
+          <div style={versionPillStyle}>C family 基础版</div>
           <button type="button" onClick={() => setSettingsOpen((open) => !open)} style={settingsButtonStyle}>⚙️ 设置</button>
           {settingsOpen ? (
             <div style={settingsPopupStyle}>
               <div style={settingsSectionStyle}>
                 <div style={settingsLabelStyle}>显示</div>
-                <label style={toggleRowStyle}>
-                  <input type="checkbox" checked={hideNav} onChange={(event) => setHideNav(event.target.checked)} />
-                  <span>隐藏导航栏</span>
-                </label>
-              </div>
-              <div style={settingsSectionStyle}>
-                <div style={settingsLabelStyle}>版本切换</div>
-                <div style={chipRowStyle}>
-                  {availableVariants.map((item) => (
-                    <button key={item.id} type="button" onClick={() => switchVariant(item.variant)} style={variantChipStyle(item.id === entry?.id)}>
-                      {item.variant}
-                    </button>
-                  ))}
-                </div>
+                <label style={toggleRowStyle}><input type="checkbox" checked={hideNav} onChange={(event) => setHideNav(event.target.checked)} /><span>隐藏导航栏</span></label>
               </div>
               <div style={settingsSectionStyle}>
                 <div style={settingsLabelStyle}>智能调整 chord family</div>
@@ -303,7 +178,7 @@ export function ChangyouDetailPage() {
                     </button>
                   ))}
                 </div>
-                {chordFamily !== "original" ? <div style={hintStyle}>基于 C family 内容实时转换，仅影响当前显示。</div> : null}
+                {chordFamily !== "original" ? <div style={hintStyle}>所有转调都基于 C family 内容实时生成。</div> : <div style={hintStyle}>当前显示数据库保留的 C family 原始内容。</div>}
               </div>
               <div style={settingsSectionStyle}>
                 <div style={settingsLabelStyle}>字体大小</div>
@@ -318,10 +193,8 @@ export function ChangyouDetailPage() {
           ) : null}
         </div>
       </div>
-
       {loading ? <div style={stateStyle}>加载歌曲中…</div> : null}
       {!loading && error ? <div style={errorStyle}>{error}</div> : null}
-
       {!loading && entry ? (
         <div style={readerStyle(isMobile)}>
           <div style={headerStyle}>

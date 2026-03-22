@@ -58,8 +58,10 @@ def _extract_docx_sections(docx_path):
             if text in SKIP_HEADINGS:
                 current = None
                 continue
-            variant = "C" if style == "Heading1" else "G"
-            current = {"heading": text, "variant": variant, "lines": []}
+            if style != "Heading1":
+                current = None
+                continue
+            current = {"heading": text, "variant": "C", "lines": []}
             sections.append(current)
             continue
 
