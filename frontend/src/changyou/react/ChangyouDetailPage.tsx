@@ -73,15 +73,15 @@ export function ChangyouDetailPage() {
   );
 }
 
-const pageStyle = { minHeight: "calc(100vh - 60px)", padding: "20px", background: "linear-gradient(180deg, var(--x-color-canvas), var(--x-color-canvas-alt))" } as const;
+const pageStyle = { minHeight: "calc(100vh - 60px)", padding: "20px", background: "linear-gradient(180deg, var(--x-color-canvas), var(--x-color-canvas-alt))", boxSizing: "border-box" as const, overflowX: "hidden" as const } as const;
 const topBarStyle = (isMobile: boolean) => ({ display: "flex", justifyContent: "space-between", alignItems: isMobile ? "stretch" : "center", flexDirection: isMobile ? "column" : "row", gap: "12px", marginBottom: "16px" });
 const backButtonStyle = { alignSelf: "flex-start", padding: "12px 16px", borderRadius: "999px", border: "1px solid var(--x-color-line)", background: "var(--x-color-panel)", color: "var(--x-color-ink)", fontWeight: 800, cursor: "pointer" } as const;
 const versionPillStyle = { padding: "10px 14px", borderRadius: "999px", background: "var(--x-color-accent-tint-strong)", color: "var(--x-color-accent-strong)", fontWeight: 800 } as const;
-const readerStyle = (isMobile: boolean) => ({ width: "min(980px, 100%)", margin: "0 auto", padding: isMobile ? "18px" : "28px", borderRadius: "24px", background: "var(--x-color-panel-strongest)", border: "1px solid var(--x-color-line-soft)", boxShadow: "0 20px 50px var(--x-color-shadow-soft)" });
+const readerStyle = (isMobile: boolean) => ({ width: "100%", maxWidth: "980px", minWidth: 0, margin: "0 auto", padding: isMobile ? "18px" : "28px", borderRadius: "24px", background: "var(--x-color-panel-strongest)", border: "1px solid var(--x-color-line-soft)", boxShadow: "0 20px 50px var(--x-color-shadow-soft)", boxSizing: "border-box" as const, overflowX: "hidden" as const });
 const headerStyle = { paddingBottom: "16px", marginBottom: "16px", borderBottom: "1px solid var(--x-color-line-soft)" } as const;
 const eyebrowStyle = { fontSize: "12px", letterSpacing: "0.18em", textTransform: "uppercase", color: "var(--x-color-ink-muted)" } as const;
 const titleStyle = { margin: "8px 0 0", fontSize: "clamp(28px, 4vw, 40px)", fontWeight: 900, color: "var(--x-color-ink)" } as const;
 const metaStyle = { display: "flex", gap: "10px", flexWrap: "wrap" as const, marginTop: "12px", fontSize: "13px", color: "var(--x-color-ink-muted)" } as const;
-const contentStyle = (isMobile: boolean) => ({ margin: 0, whiteSpace: "pre-wrap" as const, fontFamily: '"SFMono-Regular",Consolas,"Liberation Mono",Menlo,monospace', lineHeight: 1.85, fontSize: isMobile ? "16px" : "18px", color: "var(--x-color-ink)", overflowX: "auto" as const });
+const contentStyle = (isMobile: boolean) => ({ margin: 0, width: "100%", maxWidth: "100%", minWidth: 0, whiteSpace: "pre-wrap" as const, wordBreak: "break-word" as const, overflowWrap: "anywhere" as const, boxSizing: "border-box" as const, fontFamily: '"SFMono-Regular",Consolas,"Liberation Mono",Menlo,monospace', lineHeight: 1.85, fontSize: isMobile ? "16px" : "18px", color: "var(--x-color-ink)", overflowX: "auto" as const });
 const stateStyle = { minHeight: "240px", display: "grid", placeItems: "center", color: "var(--x-color-ink-muted)" } as const;
 const errorStyle = { padding: "12px 14px", borderRadius: "14px", background: "rgba(220,38,38,0.08)", color: "var(--x-color-danger)", border: "1px solid rgba(220,38,38,0.16)" } as const;
