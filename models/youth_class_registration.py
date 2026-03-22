@@ -1,0 +1,71 @@
+from datetime import datetime
+
+from models import db
+
+
+class YouthClassRegistration(db.Model):
+    __tablename__ = "youth_class_registration"
+
+    id = db.Column(db.Integer, primary_key=True, autoincrement=True)
+    submitted_at = db.Column(db.DateTime, nullable=False, default=datetime.utcnow)
+
+    chinese_name = db.Column(db.String(255), nullable=False)
+    english_name = db.Column(db.String(255), nullable=False)
+    nric = db.Column(db.String(32), nullable=False, index=True)
+    age = db.Column(db.Integer, nullable=False)
+    category = db.Column(db.Enum("青少年", "青年", name="youth_class_category_enum"), nullable=False)
+    address = db.Column(db.Text, nullable=False)
+    gender = db.Column(db.Enum("男", "女", name="youth_class_gender_enum"), nullable=False)
+    phone = db.Column(db.String(32), nullable=False)
+    emergency_contact_name = db.Column(db.String(255), nullable=False)
+    emergency_contact_phone = db.Column(db.String(32), nullable=False)
+    emergency_contact_relation = db.Column(db.String(255), nullable=False)
+
+    status = db.Column(
+        db.Enum("paid", "process", "reject", name="youth_class_registration_status_enum"),
+        nullable=False,
+        default="process",
+    )
+    regis_payment_id = db.Column(
+        db.Integer,
+        db.ForeignKey("regis_payment.id", ondelete="SET NULL", onupdate="CASCADE"),
+        nullable=True,
+        index=True,
+    )
+    payment = db.relationship("RegisPayment", foreign_keys=[regis_payment_id], lazy="joined")
+
+    def sync_status_from_payment(self):
+        payment = self.payment
+        if not payment:
+            return self.status
+
+        mapping = {
+            "checked": "paid",
+            "process": "process",
+            "fail": "reject",
+        }
+        mapped = mapping.get(payment.status or "")
+        if mapped and self.status != mapped:
+            self.status = mapped
+        return self.status
+
+    def to_dict(self):
+        payment = self.payment
+        return {
+            "id": self.id,
+            "submitted_at": self.submitted_at.strftime("%Y-%m-%d %H:%M:%S") if self.submitted_at else None,
+            "chinese_name": self.chinese_name,
+            "english_name": self.english_name,
+            "nric": self.nric,
+            "age": self.age,
+            "category": self.category,
+            "address": self.address,
+            "gender": self.gender,
+            "phone": self.phone,
+            "emergency_contact_name": self.emergency_contact_name,
+            "emergency_contact_phone": self.emergency_contact_phone,
+            "emergency_contact_relation": self.emergency_contact_relation,
+            "status": self.status,
+            "regis_payment_id": self.regis_payment_id,
+            "payment": payment.to_dict() if payment else None,
+        }

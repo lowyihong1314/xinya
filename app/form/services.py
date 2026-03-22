@@ -1,5 +1,4 @@
 import base64
-import json
 import os
 import secrets
 from datetime import datetime
@@ -24,6 +23,7 @@ from models.form import (
 )
 from models.user_data import db
 from models.event_data import AlbumFiles, EventData
+from models.youth_class_registration import YouthClassRegistration
 
 PARENTAL_SHARE_PREFIX = "parental_sign_share"
 PARENTAL_SHARE_TTL = 60 * 60 * 12
@@ -43,7 +43,6 @@ FIELD_SWITCH_KEYS = [
 ALLOWED_FEE_IMAGE_EXTENSIONS = {".png", ".jpg", ".jpeg", ".heic", ".heif"}
 REGISTER_FEE_IMAGE_DIR = STATIC_ROOT / "images" / "register_fee_image"
 REGISTER_PAYMENT_PROOF_DIR = STATIC_ROOT / "images" / "register_payment_proof"
-YOUTH_CLASS_REGISTRATION_FILE = PROJECT_ROOT / "tmp" / "youth_class_registrations.json"
 
 
 def form_index_response(form_id):
@@ -1122,21 +1121,24 @@ def html_to_pdf():
     return merge_html_files_to_pdf(request.files.getlist("files"))
 
 
-def _load_youth_class_registrations():
-    if not YOUTH_CLASS_REGISTRATION_FILE.exists():
-        return []
-    try:
-        with open(YOUTH_CLASS_REGISTRATION_FILE, "r", encoding="utf-8") as file:
-            data = json.load(file)
-        return data if isinstance(data, list) else []
-    except Exception:
-        return []
+def _sync_youth_registration_status(entry):
+    if not entry:
+        return entry
 
+    payment = entry.payment
+    if payment is None:
+        payment = (
+            RegisPayment.query.filter_by(nric=entry.nric)
+            .order_by(RegisPayment.id.desc())
+            .first()
+        )
+        if payment and entry.regis_payment_id != payment.id:
+            entry.regis_payment_id = payment.id
+            entry.payment = payment
 
-def _save_youth_class_registrations(entries):
-    YOUTH_CLASS_REGISTRATION_FILE.parent.mkdir(parents=True, exist_ok=True)
-    with open(YOUTH_CLASS_REGISTRATION_FILE, "w", encoding="utf-8") as file:
-        json.dump(entries, file, ensure_ascii=False, indent=2)
+    original_status = entry.status
+    entry.sync_status_from_payment()
+    return entry.status != original_status
 
 
 def submit_youth_class_registration(payload):
@@ -1174,29 +1176,62 @@ def submit_youth_class_registration(payload):
     if not eligible:
         return jsonify({"status": "error", "message": f"年龄 {age} 岁，不符合青少年/青年佛学班报名资格"}), 400
 
-    entry = {
-        "id": secrets.token_urlsafe(8),
-        "submitted_at": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
-        "chinese_name": chinese_name,
-        "english_name": english_name,
-        "nric": nric,
-        "age": age,
-        "category": category,
-        "address": address,
-        "gender": gender,
-        "phone": phone,
-        "emergency_contact_name": emergency_contact_name,
-        "emergency_contact_phone": emergency_contact_phone,
-        "emergency_contact_relation": emergency_contact_relation,
-    }
-    entries = _load_youth_class_registrations()
-    entries.insert(0, entry)
-    _save_youth_class_registrations(entries)
-    return jsonify({"status": "success", "entry": entry})
+    try:
+        entry = YouthClassRegistration(
+            chinese_name=chinese_name,
+            english_name=english_name,
+            nric=nric,
+            age=age,
+            category=category,
+            address=address,
+            gender=gender,
+            phone=phone,
+            emergency_contact_name=emergency_contact_name,
+            emergency_contact_phone=emergency_contact_phone,
+            emergency_contact_relation=emergency_contact_relation,
+            status="process",
+        )
+        _sync_youth_registration_status(entry)
+        db.session.add(entry)
+        db.session.commit()
+        return jsonify({"status": "success", "entry": entry.to_dict()})
+    except Exception as exc:
+        db.session.rollback()
+        return jsonify({"status": "error", "message": str(exc)}), 500
 
 
 def get_youth_class_registrations():
-    return jsonify({"status": "success", "entries": _load_youth_class_registrations()})
+    try:
+        entries = (
+            YouthClassRegistration.query.order_by(YouthClassRegistration.submitted_at.desc(), YouthClassRegistration.id.desc())
+            .all()
+        )
+        changed = False
+        for entry in entries:
+            changed = _sync_youth_registration_status(entry) or changed
+        if changed:
+            db.session.commit()
+        return jsonify({"status": "success", "entries": [entry.to_dict() for entry in entries]})
+    except Exception as exc:
+        db.session.rollback()
+        return jsonify({"status": "error", "message": str(exc)}), 500
+
+
+def update_youth_class_registration_status(entry_id, data):
+    entry = YouthClassRegistration.query.get_or_404(entry_id)
+    status = str(data.get("status") or "").strip()
+    allowed_statuses = {"paid", "process", "reject"}
+
+    if status not in allowed_statuses:
+        return jsonify({"status": "error", "message": "报名状态无效"}), 400
+
+    try:
+        entry.status = status
+        db.session.commit()
+        return jsonify({"status": "success", "message": "报名状态已更新", "entry": entry.to_dict()})
+    except Exception as exc:
+        db.session.rollback()
+        return jsonify({"status": "error", "message": str(exc)}), 500
 
 
 def _youth_class_category_from_age(age):

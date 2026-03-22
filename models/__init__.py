@@ -15,6 +15,7 @@ MODEL_MODULES = (
     "models.lampRegistration",
     "models.songbook",
     "models.songbook_user_edit",
+    "models.youth_class_registration",
 )
 
 
