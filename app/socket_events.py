@@ -32,15 +32,12 @@ def handle_ping_test(data):
 @socketio.on("join_room")
 def handle_join_room(data):
     print("🛰 join_room received:", data)
-    print(f"request.sid = {request.sid}, IP = {request.remote_addr}")
     room = data.get("room")
     user_id = getattr(current_user, "id", None) or data.get("user_id") or "guest"
     if not room:
-        print("⚠️ 无效的 room，忽略请求")
         return
     join_room(room)
     redis_client.hset(REDIS_ONLINE_KEY, user_id, request.sid)
-    print(f"✅ User {user_id} joined room {room}")
 
 
 @socketio.on("parental_sign_sync")
@@ -48,15 +45,23 @@ def handle_parental_sign_sync(data):
     room = (data or {}).get("room")
     sign_json_data = (data or {}).get("sign_json_data")
     if not room:
-        print("⚠️ parental_sign_sync 缺少 room")
         return
+    emit("parental_sign_data", {"room": room, "sign_json_data": sign_json_data}, to=room, skip_sid=request.sid)
 
-    emit(
-        "parental_sign_data",
-        {
-            "room": room,
-            "sign_json_data": sign_json_data,
-        },
-        to=room,
-        skip_sid=request.sid,
-    )
+
+@socketio.on("changyou_join_room")
+def handle_changyou_join_room(data):
+    room_id = (data or {}).get("room_id")
+    if not room_id:
+        return
+    join_room(f"changyou:{room_id}")
+    emit("changyou_room_joined", {"room_id": room_id}, to=request.sid)
+
+
+@socketio.on("changyou_push_song")
+def handle_changyou_push_song(data):
+    room_id = (data or {}).get("room_id")
+    payload = (data or {}).get("payload") or {}
+    if not room_id:
+        return
+    emit("changyou_room_update", payload, to=f"changyou:{room_id}", skip_sid=request.sid)
