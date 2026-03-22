@@ -13,6 +13,7 @@ MODEL_MODULES = (
     "models.music",
     "models.finance",
     "models.lampRegistration",
+    "models.songbook",
 )
 
 

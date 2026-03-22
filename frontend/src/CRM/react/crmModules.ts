@@ -4,6 +4,7 @@ import { FahuiPage } from "../fahui/FahuiPage";
 import { FormWorkspacePage } from "../form/react/FormWorkspacePage";
 import { UserControlPage } from "../user_control/react/UserControlPage";
 import { FinancePage } from "../Account/react/FinancePage";
+import { SongbookAdminPage } from "../changyou/react/SongbookAdminPage";
 import { FileSystemPage } from "../file_system/react/FileSystemPage";
 import { createElement } from "react";
 import type { ComponentType } from "react";
@@ -15,7 +16,8 @@ export type CRMModuleKey =
   | "finance"
   | "register"
   | "cctv"
-  | "files";
+  | "files"
+  | "songbook";
 
 export type CRMModuleSpec = {
   key: CRMModuleKey;
@@ -81,6 +83,14 @@ export const CRM_MODULES: CRMModuleSpec[] = [
     description: "直播监控与 PTZ 控制入口。",
     panelType: "react",
     Component: CCTVPage,
+  },
+  {
+    key: "songbook",
+    title: "唱游歌簿",
+    icon: "fas fa-guitar",
+    description: "管理唱游使用的歌词与 chord 歌簿。",
+    panelType: "react",
+    Component: SongbookAdminPage,
   },
   {
     key: "files",
