@@ -76,6 +76,9 @@ export function ChangyouRoomPage() {
     socket.on('changyou_room_update', (payload) => {
       setRoom((current) => current ? { ...current, ...payload.room } : current);
       setEntry(payload.entry || null);
+      setSelectedSongId(payload.room?.song_entry_id || payload.entry?.id || null);
+      setSelectedVersionKind((payload.room?.version_kind as 'base' | 'user') || 'base');
+      setSelectedVersionUserId(payload.room?.editor_user_id || null);
     });
     return () => {
       socket.disconnect();
@@ -125,12 +128,8 @@ export function ChangyouRoomPage() {
         version_kind: selectedVersionKind,
         editor_user_id: selectedVersionKind === 'user' ? selectedVersionUserId : null,
       });
-      const currentPayload = await fetchChangyouRoomCurrent(roomId);
       setRoom(current.room);
-      setEntry(currentPayload.entry || null);
-      const socket = connectChangyouRoom(roomId);
-      socket.emit('changyou_push_song', { room_id: roomId, payload: currentPayload });
-      socket.disconnect();
+      setEntry(current.entry || null);
     } catch (err) {
       setError(err instanceof Error ? err.message : '投放失败');
     } finally {

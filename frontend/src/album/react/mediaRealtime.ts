@@ -1,5 +1,7 @@
 import { io, type Socket } from "socket.io-client";
 
+const SOCKET_ORIGIN = "https://utbabuddha.com";
+
 export type MediaNotification = {
   event?: string;
   room?: string;
@@ -25,16 +27,7 @@ export type MediaNotification = {
 };
 
 function getSocketOrigin() {
-  if (typeof window === "undefined") {
-    return "https://utbabuddha.com";
-  }
-
-  const { hostname, origin } = window.location;
-  if (hostname === "localhost" || hostname === "127.0.0.1") {
-    return "https://utbabuddha.com";
-  }
-
-  return origin;
+  return SOCKET_ORIGIN;
 }
 
 export async function connectEventMediaRoom(eventCode: string) {

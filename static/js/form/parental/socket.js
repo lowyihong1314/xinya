@@ -1,8 +1,7 @@
+const SOCKET_ORIGIN = "https://utbabuddha.com";
+
 function getSocketOrigin() {
-  if (typeof window === "undefined") {
-    return "https://utbabuddha.com";
-  }
-  return window.location.origin;
+  return SOCKET_ORIGIN;
 }
 
 function loadSocketIoScript() {

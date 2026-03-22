@@ -5,7 +5,14 @@ from flask_cors import CORS
 
 from app.blueprints import register_blueprints
 from app.cli import register_cli
-from app.extensions import login_manager, migrate, socketio
+from app.extensions import (
+    REDIS_URL,
+    SOCKET_ALLOWED_ORIGINS,
+    SOCKET_CHANNEL,
+    login_manager,
+    migrate,
+    socketio,
+)
 from app.paths import STATIC_ROOT, TEMPLATE_ROOT
 from app.settings import DefaultConfig
 from app.web import register_web_routes
@@ -29,7 +36,14 @@ def create_app(socket=False):
     register_cli(app)
 
     if socket:
-        socketio.init_app(app)
+        socketio.init_app(
+            app,
+            cors_allowed_origins=SOCKET_ALLOWED_ORIGINS,
+            message_queue=REDIS_URL,
+            channel=SOCKET_CHANNEL,
+            async_mode="eventlet",
+            manage_session=True,
+        )
         import_module("app.socket_events")
 
     register_blueprints(app)

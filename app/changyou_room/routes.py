@@ -6,6 +6,7 @@ from urllib.parse import quote
 from flask import Blueprint, jsonify, request
 from flask_login import current_user, login_required
 
+from app.extensions import socket_broker
 from app.redis_client import redis_client
 from models.songbook import SongbookEntry
 from models.songbook_user_edit import SongbookUserEdit
@@ -19,6 +20,10 @@ ROOM_TTL_SECONDS = 24 * 60 * 60
 
 def _room_key(room_id: str):
     return f"{ROOM_PREFIX}{room_id}"
+
+
+def _socket_room(room_id: str):
+    return f"changyou:{room_id}"
 
 
 def _now_ts():
@@ -61,6 +66,52 @@ def _cleanup_rooms():
     for room_id in room_ids:
         if not redis_client.exists(_room_key(room_id)):
             redis_client.zrem(ROOM_LIST_KEY, room_id)
+
+
+def _build_room_current_payload(room: dict):
+    song_entry_id = room.get("song_entry_id")
+    if not song_entry_id:
+        return {"room": room, "entry": None}
+
+    entry = SongbookEntry.query.get(song_entry_id)
+    if not entry:
+        return {"room": room, "entry": None}
+
+    content = entry.content
+    active_version_label = "原版"
+    active_editor_user_id = None
+    active_editor_name = None
+    if room.get("version_kind") == "user" and room.get("editor_user_id"):
+        override = SongbookUserEdit.query.filter_by(
+            base_entry_id=entry.id,
+            user_id=room["editor_user_id"],
+        ).first()
+        if override:
+            content = override.content
+            user = User.query.get(room["editor_user_id"])
+            active_editor_name = (
+                getattr(user, "display_name", None)
+                or getattr(user, "username", None)
+                or f"用户 {room['editor_user_id']}"
+            )
+            active_editor_user_id = room["editor_user_id"]
+            active_version_label = f"{active_editor_name} 的编辑版"
+
+    entry_data = entry.to_dict(include_content=True)
+    entry_data["content"] = content
+    entry_data["active_version"] = room.get("version_kind") or "base"
+    entry_data["active_version_label"] = active_version_label
+    entry_data["active_editor_user_id"] = active_editor_user_id
+    entry_data["active_editor_name"] = active_editor_name
+    return {"room": room, "entry": entry_data}
+
+
+def _emit_room_update(payload: dict):
+    room = payload.get("room") or {}
+    room_id = room.get("room_id")
+    if not room_id:
+        return
+    socket_broker.emit("changyou_room_update", payload, room=_socket_room(room_id))
 
 
 @changyou_room_bp.get("/list")
@@ -136,7 +187,9 @@ def push_room_song(room_id):
     })
     redis_client.expire(_room_key(room_id), ROOM_TTL_SECONDS)
     room = _fetch_room(room_id)
-    return jsonify({"success": True, "room": room})
+    payload = _build_room_current_payload(room)
+    _emit_room_update(payload)
+    return jsonify({"success": True, **payload})
 
 
 @changyou_room_bp.get("/room/<room_id>/current")
@@ -144,30 +197,4 @@ def get_room_current(room_id):
     room = _fetch_room(room_id)
     if not room:
         return jsonify({"error": "房间不存在或已过期"}), 404
-    song_entry_id = room.get("song_entry_id")
-    if not song_entry_id:
-        return jsonify({"room": room, "entry": None})
-    entry = SongbookEntry.query.get(song_entry_id)
-    if not entry:
-        return jsonify({"room": room, "entry": None})
-
-    content = entry.content
-    active_version_label = "原版"
-    active_editor_user_id = None
-    active_editor_name = None
-    if room.get("version_kind") == "user" and room.get("editor_user_id"):
-        override = SongbookUserEdit.query.filter_by(base_entry_id=entry.id, user_id=room["editor_user_id"]).first()
-        if override:
-            content = override.content
-            user = User.query.get(room["editor_user_id"])
-            active_editor_name = getattr(user, "display_name", None) or getattr(user, "username", None) or f"用户 {room['editor_user_id']}"
-            active_editor_user_id = room["editor_user_id"]
-            active_version_label = f"{active_editor_name} 的编辑版"
-
-    entry_data = entry.to_dict(include_content=True)
-    entry_data["content"] = content
-    entry_data["active_version"] = room.get("version_kind") or "base"
-    entry_data["active_version_label"] = active_version_label
-    entry_data["active_editor_user_id"] = active_editor_user_id
-    entry_data["active_editor_name"] = active_editor_name
-    return jsonify({"room": room, "entry": entry_data})
+    return jsonify(_build_room_current_payload(room))

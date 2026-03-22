@@ -50,5 +50,5 @@ export async function pushChangyouRoomSong(roomId: string, payload: { song_entry
     credentials: 'include',
     body: JSON.stringify(payload),
   });
-  return parseJson<{ success: boolean; room: ChangyouRoom }>(response);
+  return parseJson<{ success: boolean; room: ChangyouRoom; entry: any }>(response);
 }

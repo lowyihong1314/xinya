@@ -1,4 +1,4 @@
-from app.extensions import socketio
+from app.extensions import socket_broker
 
 
 def emit_form_event(form_id, event, payload=None):
@@ -6,4 +6,4 @@ def emit_form_event(form_id, event, payload=None):
     message = {"event": event, "room": room, "form_id": form_id}
     if payload:
         message.update(payload)
-    socketio.emit("new_register", message, room=room)
+    socket_broker.emit("new_register", message, room=room)

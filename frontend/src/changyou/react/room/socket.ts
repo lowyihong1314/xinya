@@ -1,10 +1,13 @@
 import { io, type Socket } from 'socket.io-client';
 
+const SOCKET_ORIGIN = 'https://utbabuddha.com';
+
+function getChangyouSocketRoom(roomId: string) {
+  return `changyou:${roomId}`;
+}
+
 function getSocketOrigin() {
-  if (typeof window === 'undefined') return 'https://utbabuddha.com';
-  const { hostname, origin } = window.location;
-  if (hostname === 'localhost' || hostname === '127.0.0.1') return 'https://utbabuddha.com';
-  return origin;
+  return SOCKET_ORIGIN;
 }
 
 export function connectChangyouRoom(roomId: string) {
@@ -12,7 +15,7 @@ export function connectChangyouRoom(roomId: string) {
     withCredentials: true,
     transports: ['websocket', 'polling'],
   });
-  const join = () => socket.emit('changyou_join_room', { room_id: roomId });
+  const join = () => socket.emit('join_room', { room: getChangyouSocketRoom(roomId) });
   socket.on('connect', join);
   if (socket.connected) join();
   return socket;
