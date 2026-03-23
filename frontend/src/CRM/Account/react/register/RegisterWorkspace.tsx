@@ -92,6 +92,16 @@ export function RegisterWorkspace() {
     [filteredPayments, formPayments, selectedPaymentId],
   );
 
+  const selectedPaymentProofUrl = useMemo(() => {
+    if (!selectedPayment) {
+      return "";
+    }
+    if (typeof selectedPayment.proof_image_url === "string" && selectedPayment.proof_image_url) {
+      return selectedPayment.proof_image_url;
+    }
+    return typeof selectedPayment.proof_image_path === "string" ? selectedPayment.proof_image_path : "";
+  }, [selectedPayment]);
+
   async function handleStatusChange(status: Exclude<RegisterPaymentStatus, "all">) {
     if (!selectedPayment || updating || selectedPayment.status === status) {
       return;
@@ -277,14 +287,14 @@ export function RegisterWorkspace() {
                   </div>
                 </div>
 
-                {selectedPayment.proof_image_path ? (
+                {selectedPaymentProofUrl ? (
                   <div style={proofWrapStyle}>
                     <div style={detailSectionTitleStyle}>付款截图</div>
-                    <a href={selectedPayment.proof_image_path} target="_blank" rel="noreferrer" style={proofLinkStyle}>
+                    <a href={selectedPaymentProofUrl} target="_blank" rel="noreferrer" style={proofLinkStyle}>
                       查看原图
                     </a>
                     <img
-                      src={selectedPayment.proof_image_path}
+                      src={selectedPaymentProofUrl}
                       alt={`payment-proof-${selectedPayment.id}`}
                       style={proofImageStyle}
                     />

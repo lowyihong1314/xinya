@@ -47,6 +47,7 @@ export type FormPayment = {
   status?: string | null;
   counter?: string | null;
   proof_image_path?: string | null;
+  proof_image_url?: string | null;
 };
 
 export type FormFieldSwitches = {

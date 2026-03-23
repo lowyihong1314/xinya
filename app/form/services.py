@@ -1,4 +1,6 @@
 import base64
+import json
+import mimetypes
 import os
 import secrets
 from datetime import datetime
@@ -42,7 +44,8 @@ FIELD_SWITCH_KEYS = [
 
 ALLOWED_FEE_IMAGE_EXTENSIONS = {".png", ".jpg", ".jpeg", ".heic", ".heif"}
 REGISTER_FEE_IMAGE_DIR = STATIC_ROOT / "images" / "register_fee_image"
-REGISTER_PAYMENT_PROOF_DIR = STATIC_ROOT / "images" / "register_payment_proof"
+REGISTER_PAYMENT_PROOF_DIR = DATA_ROOT / "register_payment_images"
+LEGACY_REGISTER_PAYMENT_PROOF_DIR = STATIC_ROOT / "images" / "register_payment_proof"
 
 
 def form_index_response(form_id):
@@ -261,16 +264,51 @@ def _save_register_payment_proof(file_storage):
     if not file_storage or not getattr(file_storage, "filename", ""):
         raise ValueError("请上传付款截图")
 
-    original_name = secure_filename(file_storage.filename or "")
+    original_name = (file_storage.filename or "").strip()
     extension = os.path.splitext(original_name)[1].lower()
     if extension not in ALLOWED_FEE_IMAGE_EXTENSIONS:
-        raise ValueError("付款截图仅支持 PNG、JPG、JPEG、HEIC 图片")
+        raise ValueError("付款截图仅支持 PNG、JPG、JPEG、HEIC、HEIF 图片")
 
     REGISTER_PAYMENT_PROOF_DIR.mkdir(parents=True, exist_ok=True)
     filename = f"{datetime.utcnow().strftime('%Y%m%d%H%M%S')}_{secrets.token_hex(8)}{extension}"
     target_path = REGISTER_PAYMENT_PROOF_DIR / filename
     file_storage.save(target_path)
-    return f"/static/images/register_payment_proof/{filename}"
+    return f"database/register_payment_images/{filename}"
+
+
+def _resolve_register_payment_proof(image_path):
+    normalized = str(image_path or "").strip()
+    if not normalized:
+        return None
+
+    normalized = normalized.replace("\\", "/")
+
+    current_prefixes = (
+        "database/register_payment_images/",
+        "/database/register_payment_images/",
+    )
+    for prefix in current_prefixes:
+        if normalized.startswith(prefix):
+            filename = secure_filename(os.path.basename(normalized))
+            if not filename:
+                return None
+            target_path = REGISTER_PAYMENT_PROOF_DIR / filename
+            if target_path.exists():
+                return target_path
+            return None
+
+    legacy_prefix = "/static/images/register_payment_proof/"
+    if not normalized.startswith(legacy_prefix):
+        return None
+
+    filename = secure_filename(os.path.basename(normalized.removeprefix(legacy_prefix)))
+    if not filename:
+        return None
+
+    target_path = LEGACY_REGISTER_PAYMENT_PROOF_DIR / filename
+    if target_path.exists():
+        return target_path
+    return None
 
 
 def _normalize_extra_field_label(value):
@@ -644,6 +682,22 @@ def create_payment(form_id, data, proof_image):
     except Exception as exc:
         db.session.rollback()
         return jsonify({"status": "error", "message": str(exc)}), 500
+
+
+def get_payment_proof_image(payment_id):
+    payment = RegisPayment.query.get_or_404(payment_id)
+
+    image_path = _resolve_register_payment_proof(payment.proof_image_path)
+    if image_path:
+        mime_type = mimetypes.guess_type(str(image_path))[0] or "application/octet-stream"
+        return send_file(
+            image_path,
+            mimetype=mime_type,
+            download_name=image_path.name,
+            conditional=True,
+        )
+
+    abort(404, "找不到付款截图")
 
 
 def update_payment_status(payment_id, data):

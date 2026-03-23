@@ -153,7 +153,12 @@ function EditRow({
 }
 
 function PaymentCard({ payment }: { payment: FormPayment }) {
-  const proofPath = typeof payment.proof_image_path === "string" ? payment.proof_image_path : "";
+  const proofPath =
+    typeof payment.proof_image_url === "string" && payment.proof_image_url
+      ? payment.proof_image_url
+      : typeof payment.proof_image_path === "string"
+        ? payment.proof_image_path
+        : "";
   const statusMeta = getPaymentStatusMeta(payment.status);
   return (
     <article style={paymentCardStyle}>

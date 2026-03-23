@@ -531,7 +531,16 @@ class RegisPayment(db.Model):
     counter = db.Column(db.String(50), nullable=True)
     proof_image_path = db.Column(db.String(255), nullable=True)
 
+    def proof_image_url(self):
+        if not self.id:
+            return None
+        has_legacy_path = bool(str(self.proof_image_path or "").strip())
+        if has_legacy_path:
+            return f"/api/form/payment/proof_image/{self.id}"
+        return None
+
     def to_dict(self):
+        proof_image_url = self.proof_image_url()
         return {
             "id": self.id,
             "regis_form_id": self.regis_form_id,
@@ -544,5 +553,6 @@ class RegisPayment(db.Model):
             "time": self.time.isoformat() if self.time else None,
             "status": self.status,
             "counter": self.counter,
-            "proof_image_path": self.proof_image_path,
+            "proof_image_path": proof_image_url,
+            "proof_image_url": proof_image_url,
         }

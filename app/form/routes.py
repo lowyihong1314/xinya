@@ -65,6 +65,11 @@ def create_payment(form_id):
     return services.create_payment(form_id, request.form, request.files.get("proof_image"))
 
 
+@form_bp.route("/payment/proof_image/<int:payment_id>", methods=["GET"])
+def get_payment_proof_image(payment_id):
+    return services.get_payment_proof_image(payment_id)
+
+
 @form_bp.route("/payment/update_status/<int:payment_id>", methods=["POST"])
 @permission_required("member_edit")
 def update_payment_status(payment_id):
