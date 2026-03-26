@@ -37,7 +37,10 @@ export type FormMemberExtraField = {
 export type FormPayment = {
   id: number;
   regis_form_id: number;
+  nric_asset_id?: number;
+  regis_member_id?: number;
   nric: string;
+  nric_snapshot?: string | null;
   name: string;
   phone: string;
   payment_mode: string;

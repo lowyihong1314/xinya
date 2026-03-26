@@ -13,7 +13,11 @@ import { EditEventModal } from "./EditEventModal";
 import { EventFlowModal } from "./EventFlowModal";
 import { UploadMediaModal } from "./UploadMediaModal";
 import { useUserState } from "../../app/UserState";
-import { connectEventMediaRoom, type MediaNotification } from "./mediaRealtime";
+import {
+  connectEventMediaRoom,
+  MEDIA_ROOM_UPDATE_EVENT,
+  type MediaNotification,
+} from "./mediaRealtime";
 import { openBrochurePreviewModal } from "../../event/shared/brochurePreview";
 
 export function EventDetailPage() {
@@ -130,7 +134,7 @@ export function EventDetailPage() {
           return;
         }
         socketRef = socket;
-        socket.on("media_notification", handleNotification);
+        socket.on(MEDIA_ROOM_UPDATE_EVENT, handleNotification);
       })
       .catch((error) => {
         console.warn("[album-realtime] socket unavailable", error);
@@ -143,7 +147,7 @@ export function EventDetailPage() {
         refreshTimerRef.current = null;
       }
       if (socketRef) {
-        socketRef.off("media_notification", handleNotification);
+        socketRef.off(MEDIA_ROOM_UPDATE_EVENT, handleNotification);
         socketRef.disconnect();
       }
     };

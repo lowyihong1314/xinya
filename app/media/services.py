@@ -9,7 +9,7 @@ from flask import abort
 from flask_login import current_user
 from werkzeug.utils import safe_join, secure_filename
 
-from app.extensions import socket_broker
+from app.extensions import socket_broker, socketio
 from app.media.constants import IMAGE_EXTS, VIDEO_EXTS
 from app.media.paths import (
     BROKEN_IMAGE_PATH,
@@ -68,18 +68,24 @@ def get_event_type_payload(file_id):
 
 def _safe_emit(event, data):
     try:
-        socket_broker.emit(event, data, namespace="/")
+        emitter = socketio if getattr(socketio, "server", None) is not None else socket_broker
+        emitter.emit(event, data, namespace="/")
     except Exception as exc:
         print(f"[WS-DISCONNECTED] Emit skipped: {exc}")
+
+
+def _media_socket_room(event_code):
+    return f"media:{event_code}"
 
 
 def _emit_event_room(event_code, action, payload=None):
     if not event_code:
         return
 
+    room = _media_socket_room(event_code)
     message = {
         "event": action,
-        "room": event_code,
+        "room": room,
         "event_code": event_code,
         "timestamp": datetime.now(timezone.utc).isoformat(),
     }
@@ -87,7 +93,8 @@ def _emit_event_room(event_code, action, payload=None):
         message.update(payload)
 
     try:
-        socket_broker.emit("media_notification", message, room=event_code)
+        emitter = socketio if getattr(socketio, "server", None) is not None else socket_broker
+        emitter.emit("media_room_update", message, namespace="/", to=room)
     except Exception as exc:
         print(f"[WS-DISCONNECTED] Room emit skipped: {exc}")
 

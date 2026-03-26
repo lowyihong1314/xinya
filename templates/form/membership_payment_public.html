@@ -1,0 +1,270 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>会员付款</title>
+  <style>
+    :root{--bg:#f4f6fb;--panel:#fff;--line:#d8e1ee;--text:#172b4d;--muted:#52606d;--accent:#0f766e;--accent-2:#1d4ed8;--ok:#027a48;--bad:#b42318;--warn:#b54708}
+    *{box-sizing:border-box}body{margin:0;font-family:Inter,Arial,"PingFang SC","Microsoft Yahei",sans-serif;background:linear-gradient(180deg,#eef6ff,var(--bg));color:var(--text)}
+    .wrap{max-width:920px;margin:0 auto;padding:28px 18px 48px}.hero,.panel{background:var(--panel);border:1px solid var(--line);border-radius:24px;box-shadow:0 16px 40px rgba(15,23,42,.08)}
+    .hero{padding:28px;margin-bottom:18px}.eyebrow{font-size:12px;letter-spacing:.14em;text-transform:uppercase;color:var(--muted)}h1{margin:8px 0 12px;font-size:34px}p{margin:0;line-height:1.75;color:var(--muted)}
+    .panel{padding:24px;display:grid;gap:18px}.grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:14px}
+    .fact{padding:14px 16px;border:1px solid var(--line);border-radius:16px;background:#fbfdff}.fact .label{font-size:11px;letter-spacing:.08em;text-transform:uppercase;color:var(--muted)}.fact .value{margin-top:6px;font-size:15px;font-weight:700;line-height:1.5;word-break:break-word}
+    .amount{font-size:32px;font-weight:900;color:var(--accent)}.notice{padding:14px 16px;border-radius:14px;border:1px solid;display:none}.ok{background:#ecfdf3;color:var(--ok);border-color:#abefc6}.bad{background:#fff1f2;color:var(--bad);border-color:#fecdd3}.warn{background:#fff7ed;color:var(--warn);border-color:#fed7aa}
+    .status{display:inline-flex;align-items:center;padding:8px 12px;border-radius:999px;font-size:12px;font-weight:800}
+    .status.process{background:#eff6ff;color:#1d4ed8}.status.checked{background:#ecfdf3;color:#027a48}.status.fail{background:#fff1f2;color:#b42318}
+    label{display:grid;gap:8px;font-size:14px;font-weight:600}input[type="file"]{width:100%;border:1px solid var(--line);border-radius:14px;padding:12px 13px;font-size:14px;background:#fff}
+    .btn{border:none;border-radius:999px;padding:13px 20px;font-size:14px;font-weight:700;cursor:pointer}.btn-primary{color:#fff;background:linear-gradient(135deg,var(--accent),var(--accent-2))}.btn-secondary{background:#eef2ff;color:var(--text)}
+    .qr{width:100%;max-width:320px;border-radius:18px;border:1px solid var(--line);background:#fff;display:block}.qr-wrap{display:grid;justify-items:center;gap:12px}
+    .muted{font-size:13px;color:var(--muted)}.hidden{display:none!important}
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <section class="hero">
+      <div class="eyebrow">UTBA / Member Payment</div>
+      <h1>会员付款</h1>
+      <p>请核对当前申请资料后完成付款，并上传付款截图。管理员审核后会更新会员申请或续费状态。</p>
+    </section>
+
+    <div id="notice" class="notice"></div>
+
+    <section id="loading-panel" class="panel">
+      <div class="muted">正在读取会员付款资料…</div>
+    </section>
+
+    <section id="content-panel" class="panel hidden">
+      <div class="grid">
+        <div class="fact">
+          <div class="label">申请人</div>
+          <div id="name-value" class="value">-</div>
+        </div>
+        <div class="fact">
+          <div class="label">申请类型</div>
+          <div id="type-value" class="value">-</div>
+        </div>
+        <div class="fact">
+          <div class="label">当前状态</div>
+          <div id="entry-status" class="value">-</div>
+        </div>
+      </div>
+
+      <div class="grid">
+        <div class="fact">
+          <div class="label">NRIC</div>
+          <div id="nric-value" class="value">-</div>
+        </div>
+        <div class="fact">
+          <div class="label">加入身份</div>
+          <div id="role-value" class="value">-</div>
+        </div>
+        <div class="fact">
+          <div class="label">续费后有效期</div>
+          <div id="expiry-value" class="value">-</div>
+        </div>
+      </div>
+
+      <div class="fact">
+        <div class="label">本次适用会员费用</div>
+        <div id="amount-value" class="amount">RM 0.00</div>
+        <div id="fee-option-label" class="muted"></div>
+        <div id="description-value" class="muted"></div>
+      </div>
+
+      <div id="latest-payment-box" class="fact hidden">
+        <div class="label">最近一次付款</div>
+        <div class="value">
+          <span id="payment-status-badge" class="status process">处理中</span>
+        </div>
+        <div id="payment-meta" class="muted"></div>
+      </div>
+
+      <div id="qr-section" class="qr-wrap hidden">
+        <img id="qr-image" class="qr" alt="付款二维码" />
+        <div class="muted">请完成付款后，再上传截图。</div>
+      </div>
+
+      <form id="payment-form" class="panel" style="padding:0;border:none;box-shadow:none;background:transparent">
+        <label>付款截图 *
+          <input id="proof-input" type="file" accept="image/png,image/jpeg,.png,.jpg,.jpeg,.heic,.heif" required />
+        </label>
+        <div style="display:flex;gap:12px;flex-wrap:wrap">
+          <button id="submit-button" class="btn btn-primary" type="submit">提交付款截图</button>
+          <button id="refresh-button" class="btn btn-secondary" type="button">刷新状态</button>
+        </div>
+      </form>
+    </section>
+  </div>
+
+  <script>
+    const token = new URLSearchParams(window.location.search).get("t") || "";
+    const notice = document.getElementById("notice");
+    const loadingPanel = document.getElementById("loading-panel");
+    const contentPanel = document.getElementById("content-panel");
+    const paymentForm = document.getElementById("payment-form");
+    const proofInput = document.getElementById("proof-input");
+    const submitButton = document.getElementById("submit-button");
+    const refreshButton = document.getElementById("refresh-button");
+    const latestPaymentBox = document.getElementById("latest-payment-box");
+    const paymentStatusBadge = document.getElementById("payment-status-badge");
+    const paymentMeta = document.getElementById("payment-meta");
+    const qrSection = document.getElementById("qr-section");
+    const qrImage = document.getElementById("qr-image");
+
+    function showNotice(message, cls) {
+      notice.className = `notice ${cls}`;
+      notice.style.display = "block";
+      notice.textContent = message;
+    }
+
+    function hideNotice() {
+      notice.style.display = "none";
+    }
+
+    function formatAmount(amount) {
+      return `RM ${Number(amount || 0).toFixed(2)}`;
+    }
+
+    function paymentStatusLabel(status) {
+      if (status === "checked") return "已确认";
+      if (status === "fail") return "已拒绝";
+      return "审核中";
+    }
+
+    function registrationStatusLabel(status) {
+      if (status === "paid") return "已提交付款";
+      if (status === "reject") return "已退回";
+      return "处理中";
+    }
+
+    function registrationTypeLabel(type) {
+      if (type === "renew") return "会员续费";
+      return "报名升级会员";
+    }
+
+    async function loadContext() {
+      if (!token) {
+        loadingPanel.classList.add("hidden");
+        contentPanel.classList.add("hidden");
+        showNotice("付款链接缺少 token。", "bad");
+        return;
+      }
+
+      hideNotice();
+      loadingPanel.classList.remove("hidden");
+      contentPanel.classList.add("hidden");
+
+      try {
+        const response = await fetch(`/api/user_control/membership/payment/${encodeURIComponent(token)}`, {
+          credentials: "include",
+        });
+        const payload = await response.json().catch(() => ({}));
+        if (!response.ok || payload.status !== "success") {
+          const message = response.status === 401 ? "请先登录后再打开会员付款页。" : (payload.message || "读取付款资料失败");
+          throw new Error(message);
+        }
+
+        const registration = payload.registration || {};
+        const settings = payload.settings || {};
+        const selectedFee = settings.selected_fee || null;
+        const feeList = Array.isArray(settings.fees) ? settings.fees : (Array.isArray(settings.fee_options) ? settings.fee_options : []);
+        const latestPayment = payload.latest_payment || null;
+        const canSubmit = !!payload.can_submit;
+
+        document.getElementById("name-value").textContent = registration.user_name || registration.username || "-";
+        document.getElementById("type-value").textContent = registrationTypeLabel(registration.registration_type);
+        document.getElementById("entry-status").textContent = registrationStatusLabel(registration.status);
+        document.getElementById("nric-value").textContent = registration.nric || "未绑定";
+        document.getElementById("role-value").textContent = registration.membership_role || "未选择";
+        document.getElementById("expiry-value").textContent = registration.target_expiry_date || "本次不是续费";
+        document.getElementById("amount-value").textContent = formatAmount(settings.amount);
+        document.getElementById("fee-option-label").textContent = selectedFee?.category
+          ? `适用项目：${selectedFee.category}`
+          : (selectedFee?.label ? `适用年龄：${selectedFee.label}` : "");
+        document.getElementById("description-value").textContent =
+          selectedFee?.description || settings.description || "请按照当前适用会员费用完成付款。";
+
+        if (latestPayment) {
+          latestPaymentBox.classList.remove("hidden");
+          paymentStatusBadge.className = `status ${latestPayment.status || "process"}`;
+          paymentStatusBadge.textContent = paymentStatusLabel(latestPayment.status);
+          paymentMeta.textContent = `${formatAmount(latestPayment.amount)} · ${latestPayment.created_at || latestPayment.date || "-"}`;
+        } else {
+          latestPaymentBox.classList.add("hidden");
+          paymentMeta.textContent = "";
+        }
+
+        const feeImagePath = selectedFee?.image_path || settings.image_path;
+        if (feeImagePath) {
+          qrSection.classList.remove("hidden");
+          qrImage.src = feeImagePath;
+        } else {
+          qrSection.classList.add("hidden");
+          showNotice("管理员暂未上传会员付款二维码，请联系管理员。", "warn");
+        }
+
+        paymentForm.classList.toggle("hidden", !canSubmit);
+        if (!selectedFee && feeList.length) {
+          showNotice("当前没有适合你年龄的会员费用选项，请联系管理员。", "warn");
+        } else if (!settings || Number(settings.amount || 0) <= 0) {
+          showNotice("当前会员费用未启用，请联系管理员。", "warn");
+        } else if (!canSubmit && latestPayment && latestPayment.status === "checked") {
+          showNotice("系统显示你已完成付款，无需重复提交。", "ok");
+        }
+
+        loadingPanel.classList.add("hidden");
+        contentPanel.classList.remove("hidden");
+      } catch (error) {
+        loadingPanel.classList.add("hidden");
+        contentPanel.classList.add("hidden");
+        showNotice(error instanceof Error ? error.message : "读取付款资料失败", "bad");
+      }
+    }
+
+    paymentForm.addEventListener("submit", async (event) => {
+      event.preventDefault();
+      hideNotice();
+
+      const file = proofInput.files && proofInput.files[0];
+      if (!file) {
+        showNotice("请先选择付款截图。", "bad");
+        return;
+      }
+
+      const formData = new FormData();
+      formData.append("payment_mode", "QR");
+      formData.append("proof_image", file);
+
+      submitButton.disabled = true;
+      submitButton.textContent = "提交中…";
+      try {
+        const response = await fetch(`/api/user_control/membership/payment/${encodeURIComponent(token)}/submit`, {
+          method: "POST",
+          credentials: "include",
+          body: formData,
+        });
+        const payload = await response.json().catch(() => ({}));
+        if (!response.ok || payload.status !== "success") {
+          throw new Error(payload.message || "提交失败");
+        }
+
+        proofInput.value = "";
+        showNotice(payload.message || "付款资料已提交，请等待审核。", "ok");
+        await loadContext();
+      } catch (error) {
+        showNotice(error instanceof Error ? error.message : "提交失败", "bad");
+      } finally {
+        submitButton.disabled = false;
+        submitButton.textContent = "提交付款截图";
+      }
+    });
+
+    refreshButton.addEventListener("click", () => {
+      void loadContext();
+    });
+
+    void loadContext();
+  </script>
+</body>
+</html>

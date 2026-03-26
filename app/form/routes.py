@@ -76,6 +76,18 @@ def update_payment_status(payment_id):
     return services.update_payment_status(payment_id, request.get_json(silent=True) or {})
 
 
+@form_bp.route("/payment/proof_image/<int:payment_id>/replace", methods=["POST"])
+@permission_required("member_edit")
+def replace_payment_proof_image(payment_id):
+    return services.replace_payment_proof_image(payment_id, request.files.get("proof_image"))
+
+
+@form_bp.route("/payment/<int:payment_id>", methods=["DELETE"])
+@permission_required("member_edit")
+def delete_payment_record(payment_id):
+    return services.delete_payment_record(payment_id)
+
+
 @form_bp.route("/get_all_form", methods=["GET"])
 def get_all_form():
     return services.get_all_form()
@@ -157,6 +169,12 @@ def edit_member():
     return services.edit_member(request.get_json() or {})
 
 
+@form_bp.route("/preview_member_nric_change", methods=["POST"])
+@permission_required("member_edit")
+def preview_member_nric_change():
+    return services.preview_member_nric_change(request.get_json() or {})
+
+
 @form_bp.route("/get_nric_detail", methods=["GET"])
 @permission_required("member")
 def get_nric_detail():
@@ -184,6 +202,18 @@ def get_youth_class_registration_entries():
     return services.get_youth_class_registrations()
 
 
+@form_bp.route("/youth-class-registration/settings", methods=["GET"])
+@permission_required("member_edit")
+def get_youth_class_registration_settings():
+    return services.get_youth_class_payment_settings()
+
+
+@form_bp.route("/youth-class-registration/settings", methods=["PUT"])
+@permission_required("member_edit")
+def update_youth_class_registration_settings():
+    return services.update_youth_class_payment_settings(request.get_json(silent=True) or {})
+
+
 @form_bp.route("/youth-class-registration/entries/<int:entry_id>/status", methods=["POST"])
 @permission_required("member_edit")
 def update_youth_class_registration_status_route(entry_id):
@@ -193,3 +223,25 @@ def update_youth_class_registration_status_route(entry_id):
 @form_bp.route("/youth-class-registration/nric-check", methods=["GET"])
 def get_youth_class_nric_check_route():
     return services.get_youth_class_nric_check(request.args.get("nric"))
+
+
+@form_bp.route("/youth-class-registration/payment/<token>", methods=["GET"])
+def get_youth_class_payment_context_route(token):
+    return services.get_youth_class_payment_context(token)
+
+
+@form_bp.route("/youth-class-registration/payment/<token>/submit", methods=["POST"])
+def submit_youth_class_payment_route(token):
+    return services.submit_youth_class_payment(token, request.form, request.files.get("proof_image"))
+
+
+@form_bp.route("/youth-class-registration/payment/proof_image/<int:payment_id>", methods=["GET"])
+@permission_required("member_edit")
+def get_youth_class_payment_proof_image_route(payment_id):
+    return services.get_youth_class_payment_proof_image(payment_id)
+
+
+@form_bp.route("/youth-class-registration/payment/<int:payment_id>/status", methods=["POST"])
+@permission_required("member_edit")
+def update_youth_class_payment_status_route(payment_id):
+    return services.update_youth_class_payment_status(payment_id, request.get_json(silent=True) or {})

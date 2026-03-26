@@ -1,7 +1,8 @@
 from datetime import datetime
 from flask_sqlalchemy import SQLAlchemy
-from sqlalchemy import func
+from sqlalchemy import func, or_
 from sqlalchemy.dialects.mysql import JSON
+from sqlalchemy.orm import synonym
 import json
 
 from models import db
@@ -12,7 +13,7 @@ import mimetypes
 regis_form_member = db.Table(
     "regis_form_member",
     db.Column("form_id", db.Integer, db.ForeignKey("regis_form.id", ondelete="CASCADE"), primary_key=True),
-    db.Column("member_id", db.Integer, db.ForeignKey("regis_member.id", ondelete="CASCADE"), primary_key=True),
+    db.Column("member_id", db.Integer, db.ForeignKey("nric_asset.id", ondelete="CASCADE"), primary_key=True),
     db.Column("created_at", db.DateTime, default=datetime.utcnow)
 )
 
@@ -62,7 +63,7 @@ class RegisForm(db.Model):
 
     # ✅ 多对多：报名成员
     members = db.relationship(
-        "RegisMember",
+        "NRIC_Asset",
         secondary="regis_form_member",
         back_populates="forms"
     )
@@ -172,8 +173,9 @@ class RegistrationFee(db.Model):
     regis_form_id = db.Column(
         db.Integer,
         db.ForeignKey("regis_form.id", ondelete="CASCADE"),
-        nullable=False
+        nullable=True
     )
+    fee_scope = db.Column(db.String(32), nullable=False, default="form", index=True)
 
     # 收费类型，例如 “成人”、“儿童”、“学生”等
     category = db.Column(db.String(100), nullable=False)
@@ -197,6 +199,7 @@ class RegistrationFee(db.Model):
         return {
             "id": self.id,
             "regis_form_id": self.regis_form_id,
+            "fee_scope": self.fee_scope,
             "category": self.category,
             "age_range_from": self.age_range_from,
             "age_range_to": self.age_range_to,
@@ -207,11 +210,12 @@ class RegistrationFee(db.Model):
         }
 
 
-class RegisMember(db.Model):
-    __tablename__ = "regis_member"
+class NRIC_Asset(db.Model):
+    __tablename__ = "nric_asset"
 
     id = db.Column(db.Integer, primary_key=True, autoincrement=True)
-    nric = db.Column(db.String(20), nullable=False, unique=True)
+    nric = db.Column(db.String(20), nullable=True, unique=True)
+    name_nric = db.Column(db.String(100), nullable=True)
 
     # 一对多关系：数据版本
     datas = db.relationship(
@@ -228,6 +232,27 @@ class RegisMember(db.Model):
         back_populates="members"
     )
 
+    payments = db.relationship(
+        "RegisPayment",
+        back_populates="nric_asset",
+        lazy=True,
+        foreign_keys="RegisPayment.nric_asset_id",
+    )
+
+    linked_users = db.relationship(
+        "User",
+        back_populates="nric_asset",
+        lazy=True,
+        foreign_keys="User.nric_asset_id",
+    )
+
+    youth_class_registrations = db.relationship(
+        "YouthClassRegistration",
+        back_populates="nric_asset",
+        lazy=True,
+        foreign_keys="YouthClassRegistration.nric_asset_id",
+    )
+
     def latest_data(self):
         """获取最新资料版本"""
         if not self.datas:
@@ -235,25 +260,55 @@ class RegisMember(db.Model):
         # 按 edit_at 排序
         return sorted(self.datas, key=lambda d: d.edit_at or datetime.min)[-1]
 
+    def _fallback_payments_by_name(self, form_id, latest):
+        if form_id is None or latest is None:
+            return []
+
+        candidate_names = []
+        for raw_value in [getattr(latest, "name_cn", None), getattr(latest, "name", None)]:
+            value = str(raw_value or "").strip()
+            if value and value not in candidate_names:
+                candidate_names.append(value)
+
+        if not candidate_names:
+            return []
+
+        matched_rows = (
+            RegisPayment.query.filter_by(regis_form_id=form_id)
+            .filter(or_(*[RegisPayment.name == value for value in candidate_names]))
+            .order_by(RegisPayment.id.desc())
+            .all()
+        )
+        if not matched_rows:
+            return []
+
+        distinct_nric = {str(row.nric or "").strip() for row in matched_rows if str(row.nric or "").strip()}
+        if len(distinct_nric) > 1:
+            return []
+
+        return matched_rows
+
     def to_dict(self, form_id=None):
         """返回带最新资料的 dict"""
         latest = self.latest_data()
         data = {
             "id": self.id,
             "nric": self.nric,
+            "name_nric": self.name_nric,
         }
 
         if latest:
             data.update(latest.to_dict())
 
-        payment_query = RegisPayment.query.filter_by(nric=self.nric)
+        payment_query = RegisPayment.query.filter_by(nric_asset_id=self.id)
         if form_id is not None:
             payment_query = payment_query.filter_by(regis_form_id=form_id)
 
-        data["payments"] = [
-            payment.to_dict()
-            for payment in payment_query.order_by(RegisPayment.id.desc()).all()
-        ]
+        payments = payment_query.order_by(RegisPayment.id.desc()).all()
+        if not payments:
+            payments = self._fallback_payments_by_name(form_id, latest)
+
+        data["payments"] = [payment.to_dict() for payment in payments]
 
         return data
 
@@ -264,7 +319,7 @@ class RegisMemberData(db.Model):
     id = db.Column(db.Integer, primary_key=True, autoincrement=True)
     member_id = db.Column(
         db.Integer,
-        db.ForeignKey("regis_member.id", ondelete="CASCADE"),
+        db.ForeignKey("nric_asset.id", ondelete="CASCADE"),
         nullable=False
     )
 
@@ -290,7 +345,7 @@ class RegisMemberData(db.Model):
     edit_at = db.Column(db.DateTime, default=datetime.utcnow)
 
     # 关系
-    member = db.relationship("RegisMember", back_populates="datas")
+    member = db.relationship("NRIC_Asset", back_populates="datas")
     
     parental_data = db.relationship(
         "RegisParentalData",
@@ -518,9 +573,29 @@ class RegisPayment(db.Model):
     id = db.Column(db.Integer, primary_key=True, autoincrement=True)
     
     # ✅ 改用 regis_form_id 外键
-    regis_form_id = db.Column(db.Integer, db.ForeignKey("regis_form.id"), nullable=False)
-    
-    nric = db.Column(db.String(20), db.ForeignKey("regis_member.nric"), nullable=False)
+    regis_form_id = db.Column(db.Integer, db.ForeignKey("regis_form.id"), nullable=True)
+    payment_scope = db.Column(db.String(32), nullable=False, default="form", index=True)
+    membership_registration_id = db.Column(
+        db.Integer,
+        db.ForeignKey("membership_registration.id", ondelete="CASCADE", onupdate="CASCADE"),
+        nullable=True,
+        index=True,
+    )
+    youth_class_registration_id = db.Column(
+        db.Integer,
+        db.ForeignKey("youth_class_registration.id", ondelete="CASCADE", onupdate="CASCADE"),
+        nullable=True,
+        index=True,
+    )
+
+    nric_asset_id = db.Column(
+        db.Integer,
+        db.ForeignKey("nric_asset.id"),
+        nullable=False,
+        index=True,
+    )
+    # 保留旧欄位作为兼容快照，主关联改为 nric_asset_id
+    nric = db.Column(db.String(20), nullable=False)
     name = db.Column(db.String(100), nullable=False)
     phone = db.Column(db.String(20), nullable=False)
     payment_mode = db.Column(db.String(20), nullable=False)
@@ -530,25 +605,60 @@ class RegisPayment(db.Model):
     status = db.Column(db.Enum("fail", "process", "checked"), default="process", nullable=False)
     counter = db.Column(db.String(50), nullable=True)
     proof_image_path = db.Column(db.String(255), nullable=True)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow, nullable=False)
+
+    regis_member_id = synonym("nric_asset_id")
+
+    nric_asset = db.relationship(
+        "NRIC_Asset",
+        back_populates="payments",
+        lazy="joined",
+        foreign_keys=[nric_asset_id],
+    )
+    membership_registration = db.relationship(
+        "MembershipRegistration",
+        back_populates="payments",
+        foreign_keys=[membership_registration_id],
+    )
+    youth_class_registration = db.relationship(
+        "YouthClassRegistration",
+        back_populates="payments",
+        foreign_keys=[youth_class_registration_id],
+    )
+    member = synonym("nric_asset")
 
     def proof_image_url(self):
         if not self.id:
             return None
         has_legacy_path = bool(str(self.proof_image_path or "").strip())
         if has_legacy_path:
+            if self.payment_scope == "membership":
+                return f"/api/user_control/membership/payment/proof_image/{self.id}"
+            if self.payment_scope == "youth_class":
+                return f"/api/form/youth-class-registration/payment/proof_image/{self.id}"
             return f"/api/form/payment/proof_image/{self.id}"
         return None
 
     def to_dict(self):
         proof_image_url = self.proof_image_url()
+        live_nric = self.nric_asset.nric if self.nric_asset and self.nric_asset.nric else self.nric
+        amount = float(self.price or 0)
         return {
             "id": self.id,
             "regis_form_id": self.regis_form_id,
-            "nric": self.nric,
+            "payment_scope": self.payment_scope,
+            "membership_registration_id": self.membership_registration_id,
+            "youth_class_registration_id": self.youth_class_registration_id,
+            "nric_asset_id": self.nric_asset_id,
+            "regis_member_id": self.nric_asset_id,
+            "nric": live_nric,
+            "nric_snapshot": self.nric,
             "name": self.name,
             "phone": self.phone,
             "payment_mode": self.payment_mode,
-            "price": float(self.price),
+            "price": amount,
+            "amount": amount,
+            "created_at": self.created_at.isoformat() if self.created_at else None,
             "date": self.date.isoformat() if self.date else None,
             "time": self.time.isoformat() if self.time else None,
             "status": self.status,
@@ -556,3 +666,6 @@ class RegisPayment(db.Model):
             "proof_image_path": proof_image_url,
             "proof_image_url": proof_image_url,
         }
+
+
+RegisMember = NRIC_Asset

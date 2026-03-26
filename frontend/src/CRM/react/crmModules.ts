@@ -2,11 +2,11 @@ import { CCTVPage } from '../CCTV/CCTVPage';
 import { EventTablePage } from '../event/react/EventTablePage';
 import { FahuiPage } from '../fahui/FahuiPage';
 import { FormWorkspacePage } from '../form/react/FormWorkspacePage';
+import { PermanentRegistrationPage } from '../permanent_registration/react/PermanentRegistrationPage';
 import { UserControlPage } from '../user_control/react/UserControlPage';
 import { FinancePage } from '../Account/react/FinancePage';
 import { SongbookAdminPage } from '../changyou/react/SongbookAdminPage';
 import { FileSystemPage } from '../file_system/react/FileSystemPage';
-import { YouthClassRegistrationPage } from '../youth_class/react/YouthClassRegistrationPage';
 import { createElement } from 'react';
 import type { ComponentType } from 'react';
 
@@ -19,7 +19,7 @@ export type CRMModuleKey =
   | 'cctv'
   | 'files'
   | 'songbook'
-  | 'youth_class_registration';
+  | 'permanent_registration';
 
 export type CRMModuleSpec = {
   key: CRMModuleKey;
@@ -79,12 +79,12 @@ export const CRM_MODULES: CRMModuleSpec[] = [
     Component: FormWorkspacePage,
   },
   {
-    key: 'youth_class_registration',
-    title: '青年佛学班报名',
-    icon: 'fas fa-user-graduate',
-    description: '青少年 & 青年佛学班前端报名表（暂未接后台）。',
+    key: 'permanent_registration',
+    title: '长期开放表格',
+    icon: 'fas fa-id-card-clip',
+    description: '会员与青少年班等长期开放报名表格工作台。',
     panelType: 'react',
-    Component: YouthClassRegistrationPage,
+    Component: PermanentRegistrationPage,
   },
   {
     key: 'cctv',
@@ -114,10 +114,27 @@ export const CRM_MODULES: CRMModuleSpec[] = [
 
 export const DEFAULT_CRM_MODULE_KEY: CRMModuleKey = CRM_MODULES[0].key;
 
-export function getCRMModule(moduleKey?: string | null) {
-  return CRM_MODULES.find((item) => item.key === moduleKey) ?? CRM_MODULES[0];
+const CRM_MODULE_ALIASES: Record<string, CRMModuleKey> = {
+  membership_registration: 'permanent_registration',
+  youth_class_registration: 'permanent_registration',
+};
+
+export function resolveCRMModuleKey(moduleKey?: string | null): CRMModuleKey {
+  const normalized = moduleKey ? CRM_MODULE_ALIASES[moduleKey] ?? moduleKey : null;
+  return CRM_MODULES.find((item) => item.key === normalized)?.key ?? CRM_MODULES[0].key;
 }
 
-export function isCRMModuleKey(value: string | null): value is CRMModuleKey {
-  return CRM_MODULES.some((item) => item.key === value);
+export function getCRMModule(moduleKey?: string | null) {
+  const resolvedKey = resolveCRMModuleKey(moduleKey);
+  return CRM_MODULES.find((item) => item.key === resolvedKey) ?? CRM_MODULES[0];
+}
+
+export function getCRMModuleAliasSection(moduleKey?: string | null): string | null {
+  if (moduleKey === 'membership_registration') {
+    return 'membership';
+  }
+  if (moduleKey === 'youth_class_registration') {
+    return 'youth_class';
+  }
+  return null;
 }

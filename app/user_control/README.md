@@ -5,6 +5,7 @@ Handles authentication, current-user profile actions, user CRUD, department memb
 ## Files
 
 - `routes.py`: auth/user/department HTTP endpoints.
+- `membership.py`: self-service member upgrade / renewal / payment flow.
 - `utils.py`: profile image helpers and DNS/local-IP utilities.
 
 ## Main Routes
@@ -17,6 +18,15 @@ Handles authentication, current-user profile actions, user CRUD, department memb
 - `POST /api/user_control/edit_user_data`
 - `POST /api/user_control/register`
 - `POST /api/user_control/change_password`
+- `GET /api/user_control/membership/context`
+- `GET /api/user_control/membership/entries`
+- `POST /api/user_control/membership/upgrade`
+- `POST /api/user_control/membership/renew`
+- `GET /api/user_control/membership/payment/<token>`
+- `POST /api/user_control/membership/payment/<token>/submit`
+- `POST /api/user_control/membership/payment/<payment_id>/status`
+- `GET /api/user_control/membership/payment/proof_image/<payment_id>`
+- `GET|PUT /api/user_control/membership/settings`
 - `GET /api/user_control/reset_password/<user_id>`
 - `GET|POST /api/user_control/departments`
 - `DELETE /api/user_control/departments/<dept_id>`

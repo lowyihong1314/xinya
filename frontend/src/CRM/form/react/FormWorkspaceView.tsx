@@ -1,11 +1,10 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useState } from "react";
 import type { CSSProperties, ReactNode } from "react";
-import heic2any from "heic2any";
 import QRCode from "qrcode";
 
 import { ExtraFieldEditor } from "./ExtraFieldEditor";
+import { FeePanel } from "./FeePanel";
 import type { ExtraFieldDraft } from "./ExtraFieldEditor";
-import { uploadFeeImage } from "./api";
 import type { ExtraFieldConfig, FormCreatePayload, FormFee, FormMember, FormRecord } from "./types";
 
 type Toast = { type: "success" | "error"; text: string } | null;
@@ -18,22 +17,6 @@ type FeePayload = {
   description?: string;
   image_path?: string | null;
 };
-
-async function normalizeFeeImageFile(file: File) {
-  if (!/\.hei(c|f)$/i.test(file.name) && !/image\/hei(c|f)/i.test(file.type)) {
-    return file;
-  }
-
-  const converted = await heic2any({
-    blob: file,
-    toType: "image/jpeg",
-    quality: 0.9,
-  });
-  const normalizedBlob = Array.isArray(converted) ? converted[0] : converted;
-  return new File([normalizedBlob as BlobPart], file.name.replace(/\.(heic|heif)$/i, ".jpg"), {
-    type: "image/jpeg",
-  });
-}
 
 function normalizeExtraFieldDraft(draft: ExtraFieldDraft, index: number): ExtraFieldDraft {
   const label = draft.label.trim();
@@ -668,56 +651,6 @@ function CreateFormModal({
   );
 }
 
-function FeePanel({
-  formId,
-  fees,
-  onAdd,
-  onEdit,
-  onDelete,
-}: {
-  formId: number;
-  fees: FormFee[];
-  onAdd: (payload: FeePayload) => void;
-  onEdit: (feeId: number, payload: FeePayload) => void;
-  onDelete: (feeId: number) => void;
-}) {
-  return (
-    <div style={sectionBodyStyle}>
-      <div style={sectionInlineActionsStyle}>
-        <a href={`/api/form/pay_register/${formId}`} target="_blank" rel="noreferrer" style={smallLinkButtonStyle}>
-          付款入口
-        </a>
-      </div>
-      <FeeInlineEditor
-        buttonLabel="添加费用"
-        onSave={(payload) => onAdd(payload)}
-      />
-      <div style={stackStyle}>
-        {fees.length ? (
-          fees.map((fee) => (
-            <FeeInlineEditor
-              key={fee.id}
-              initialValue={{
-                category: fee.category,
-                amount: String(fee.amount ?? ""),
-                age_range_from: fee.age_range_from == null ? "" : String(fee.age_range_from),
-                age_range_to: fee.age_range_to == null ? "" : String(fee.age_range_to),
-                description: fee.description || "",
-                image_path: fee.image_path || "",
-              }}
-              buttonLabel="保存"
-              onSave={(payload) => onEdit(fee.id, payload)}
-              onDelete={() => onDelete(fee.id)}
-            />
-          ))
-        ) : (
-          <div style={placeholderStyle}>暂无费用配置</div>
-        )}
-      </div>
-    </div>
-  );
-}
-
 function ExtraFieldPanel({
   fields,
   onAdd,
@@ -774,174 +707,66 @@ function MemberPanel({
       {!members.length ? <div style={placeholderStyle}>暂无报名成员</div> : null}
       {members.length ? (
         <div style={memberListStyle}>
-          {members.map((member) => (
-            <article key={member.id} style={memberCardStyle}>
-              <div style={memberHeaderStyle}>
-                <div>
-                  <div style={memberNameStyle}>{member.name_cn || member.name || `成员 #${member.id}`}</div>
-                  <div style={memberMetaStyle}>
-                    {member.phone || "-"} · {member.email || "-"}
+          {members.map((member) => {
+            const paymentMeta = getMemberPaymentStatusMeta(member);
+            return (
+              <article key={member.id} style={memberCardStyle}>
+                <div style={memberPaymentTopRowStyle}>
+                  <span
+                    style={{
+                      ...memberPaymentBadgeStyle,
+                      color: paymentMeta.textColor,
+                      background: paymentMeta.background,
+                    }}
+                  >
+                    {paymentMeta.label}
+                  </span>
+                  <span style={memberPaymentHintStyle}>{paymentMeta.hint}</span>
+                </div>
+                <div style={memberHeaderStyle}>
+                  <div>
+                    <div style={memberNameStyle}>{member.name_cn || member.name || `成员 #${member.id}`}</div>
+                    <div style={memberMetaStyle}>
+                      {member.phone || "-"} · {member.email || "-"}
+                    </div>
+                  </div>
+                  <div style={headerActionsStyle}>
+                    <button type="button" style={secondaryButtonStyle} onClick={() => onShowDetail(member)}>
+                      详情 / 编辑
+                    </button>
+                    {member.parental_data ? (
+                      <button type="button" style={secondaryButtonStyle} onClick={() => onOpenParental(member)}>
+                        家长同意书
+                      </button>
+                    ) : null}
+                    <button type="button" style={ghostDangerStyle} onClick={() => onRemove(member.id)}>
+                      移除
+                    </button>
                   </div>
                 </div>
-                <div style={headerActionsStyle}>
-                  <button type="button" style={secondaryButtonStyle} onClick={() => onShowDetail(member)}>
-                    详情 / 编辑
-                  </button>
-                  {member.parental_data ? (
-                    <button type="button" style={secondaryButtonStyle} onClick={() => onOpenParental(member)}>
-                      家长同意书
-                    </button>
+                <div style={chipRowStyle}>
+                  <span style={chipStyle}>ID {member.id}</span>
+                  <span style={chipStyle}>性别 {String(member.gender || "-")}</span>
+                  <span style={chipStyle}>NRIC {String(member.nric || "-")}</span>
+                  <span style={chipStyle}>地址 {String(member.address || "-")}</span>
+                  {Array.isArray(member.available_time_slot_json) ? (
+                    <span style={chipStyle}>可用时段 {member.available_time_slot_json.length}</span>
                   ) : null}
-                  <button type="button" style={ghostDangerStyle} onClick={() => onRemove(member.id)}>
-                    移除
-                  </button>
+                  {extraFields.map((field) => {
+                    const values = member.extra_fields || member.field_values || [];
+                    const match = values.find((item) => item.field_config_id === field.id);
+                    return (
+                      <span key={field.id} style={chipStyle}>
+                        {field.label}: {formatExtraFieldValue(match?.field_value)}
+                      </span>
+                    );
+                  })}
                 </div>
-              </div>
-              <div style={chipRowStyle}>
-                <span style={chipStyle}>ID {member.id}</span>
-                <span style={chipStyle}>性别 {String(member.gender || "-")}</span>
-                <span style={chipStyle}>NRIC {String(member.nric || "-")}</span>
-                <span style={chipStyle}>地址 {String(member.address || "-")}</span>
-                {Array.isArray(member.available_time_slot_json) ? (
-                  <span style={chipStyle}>可用时段 {member.available_time_slot_json.length}</span>
-                ) : null}
-                {extraFields.map((field) => {
-                  const values = member.extra_fields || member.field_values || [];
-                  const match = values.find((item) => item.field_config_id === field.id);
-                  return (
-                    <span key={field.id} style={chipStyle}>
-                      {field.label}: {formatExtraFieldValue(match?.field_value)}
-                    </span>
-                  );
-                })}
-              </div>
-            </article>
-          ))}
+              </article>
+            );
+          })}
         </div>
       ) : null}
-    </div>
-  );
-}
-
-function FeeInlineEditor({
-  initialValue,
-  buttonLabel,
-  onSave,
-  onDelete,
-}: {
-  initialValue?: FeePayload;
-  buttonLabel: string;
-  onSave: (payload: FeePayload) => void;
-  onDelete?: () => void;
-}) {
-  const [draft, setDraft] = useState<FeePayload>(
-    initialValue || { category: "", amount: "", age_range_from: "", age_range_to: "", description: "", image_path: "" },
-  );
-  const [uploading, setUploading] = useState(false);
-  const [uploadError, setUploadError] = useState("");
-  const fileInputRef = useRef<HTMLInputElement | null>(null);
-
-  async function handleFeeImageChange(file: File | null) {
-    if (!file) return;
-    setUploading(true);
-    setUploadError("");
-    try {
-      const normalizedFile = await normalizeFeeImageFile(file);
-      const result = await uploadFeeImage(normalizedFile);
-      setDraft((prev) => ({ ...prev, image_path: result.image_path || "" }));
-    } catch (error) {
-      setUploadError(error instanceof Error ? error.message : "图片上传失败");
-    } finally {
-      setUploading(false);
-      if (fileInputRef.current) {
-        fileInputRef.current.value = "";
-      }
-    }
-  }
-
-  return (
-    <div style={feeEditorCardStyle}>
-      <div style={feeEditorGridStyle}>
-        <label style={fieldStyle}>
-          <span style={fieldLabelStyle}>类别</span>
-          <input
-            style={compactInputStyle}
-            value={draft.category}
-            placeholder="例如：儿童 / 成人"
-            onChange={(event) => setDraft((prev) => ({ ...prev, category: event.target.value }))}
-          />
-        </label>
-        <label style={fieldStyle}>
-          <span style={fieldLabelStyle}>金额</span>
-          <input
-            style={compactInputStyle}
-            value={draft.amount}
-            placeholder="金额"
-            onChange={(event) => setDraft((prev) => ({ ...prev, amount: event.target.value }))}
-          />
-        </label>
-        <label style={fieldStyle}>
-          <span style={fieldLabelStyle}>年龄起</span>
-          <input
-            style={compactInputStyle}
-            value={draft.age_range_from || ""}
-            placeholder="可空"
-            onChange={(event) => setDraft((prev) => ({ ...prev, age_range_from: event.target.value }))}
-          />
-        </label>
-        <label style={fieldStyle}>
-          <span style={fieldLabelStyle}>年龄止</span>
-          <input
-            style={compactInputStyle}
-            value={draft.age_range_to || ""}
-            placeholder="可空"
-            onChange={(event) => setDraft((prev) => ({ ...prev, age_range_to: event.target.value }))}
-          />
-        </label>
-      </div>
-
-      <label style={fieldStyle}>
-        <span style={fieldLabelStyle}>说明</span>
-        <textarea
-          rows={3}
-          style={feeTextareaStyle}
-          value={draft.description || ""}
-          placeholder="收费说明"
-          onChange={(event) => setDraft((prev) => ({ ...prev, description: event.target.value }))}
-        />
-      </label>
-
-      <div style={feeImageSectionStyle}>
-        {uploadError ? <div style={errorBannerStyle}>{uploadError}</div> : null}
-        <div style={feeImageControlStyle}>
-          <span style={fieldLabelStyle}>付款资料</span>
-          <input
-            ref={fileInputRef}
-            type="file"
-            accept="image/png,image/jpeg,image/heic,image/heif,.png,.jpg,.jpeg,.heic,.heif"
-            onChange={(event) => void handleFeeImageChange(event.target.files?.[0] || null)}
-          />
-          {uploading ? <span style={inlineNoteStyle}>上传中…</span> : null}
-        </div>
-        {draft.image_path ? (
-          <a href={draft.image_path} target="_blank" rel="noreferrer" style={feeImagePreviewStyle}>
-            <img src={draft.image_path} alt="付款资料" style={feeImageStyle} />
-          </a>
-        ) : (
-          <div style={feeImageEmptyStyle}>未上传图片</div>
-        )}
-      </div>
-
-      <div style={feeActionRowStyle}>
-        <button type="button" style={smallSecondaryButtonStyle} onClick={() => onSave(draft)}>
-          {buttonLabel}
-        </button>
-        {onDelete ? (
-          <button type="button" style={smallDangerButtonStyle} onClick={onDelete}>
-            删除
-          </button>
-        ) : null}
-      </div>
     </div>
   );
 }
@@ -1001,6 +826,45 @@ function formatExtraFieldValue(value: unknown) {
     return value.join(", ") || "-";
   }
   return String(value);
+}
+
+function getMemberPaymentStatusMeta(member: FormMember) {
+  const payments = Array.isArray(member.payments) ? member.payments : [];
+  const latestPayment = payments[0];
+
+  if (!latestPayment) {
+    return {
+      label: "未付款",
+      hint: "还没有付款记录",
+      textColor: "var(--x-color-ink-muted)",
+      background: "var(--x-color-panel)",
+    };
+  }
+
+  if (latestPayment.status === "checked") {
+    return {
+      label: "已付款",
+      hint: `${payments.length} 笔付款记录`,
+      textColor: "var(--x-color-success)",
+      background: "var(--x-color-success-soft)",
+    };
+  }
+
+  if (latestPayment.status === "fail") {
+    return {
+      label: "付款失败",
+      hint: `${payments.length} 笔付款记录`,
+      textColor: "var(--x-color-danger)",
+      background: "var(--x-color-danger-soft)",
+    };
+  }
+
+  return {
+    label: "付款处理中",
+    hint: `${payments.length} 笔付款记录`,
+    textColor: "var(--x-color-warning)",
+    background: "var(--x-color-warning-soft)",
+  };
 }
 
 const pageStyle: CSSProperties = { display: "grid", gap: "18px" };
@@ -1084,6 +948,9 @@ const feeImageEmptyStyle: CSSProperties = { padding: "18px", borderRadius: "14px
 const feeActionRowStyle: CSSProperties = { display: "flex", justifyContent: "flex-end", gap: "8px", flexWrap: "wrap" };
 const memberListStyle: CSSProperties = { display: "grid", gap: "12px" };
 const memberCardStyle: CSSProperties = { padding: "16px", borderRadius: "16px", border: "1px solid var(--x-color-line-soft)", background: "var(--x-color-panel-strong)" };
+const memberPaymentTopRowStyle: CSSProperties = { display: "flex", justifyContent: "space-between", gap: "10px", alignItems: "center", flexWrap: "wrap", marginBottom: "12px" };
+const memberPaymentBadgeStyle: CSSProperties = { display: "inline-flex", alignItems: "center", justifyContent: "center", width: "fit-content", padding: "6px 12px", borderRadius: "999px", fontSize: "12px", fontWeight: 800 };
+const memberPaymentHintStyle: CSSProperties = { fontSize: "12px", color: "var(--x-color-ink-muted)", fontWeight: 700 };
 const memberHeaderStyle: CSSProperties = { display: "flex", justifyContent: "space-between", gap: "10px", alignItems: "flex-start", flexWrap: "wrap" };
 const memberNameStyle: CSSProperties = { fontWeight: 800, color: "var(--x-color-ink)" };
 const memberMetaStyle: CSSProperties = { marginTop: "6px", color: "var(--x-color-ink-muted)", fontSize: "13px" };

@@ -1,6 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
 import type { CSSProperties } from "react";
-import QRCode from "qrcode";
 
 import { useUserState } from "../../../app/UserState";
 import { ensureDesignTokens } from "../../../theme/designTokens";
@@ -11,7 +10,7 @@ import {
   summarizeFee,
 } from "../../form/react/FeePanel";
 
-const PUBLIC_URL = `${window.location.origin}/template/youth-class-registration`;
+const APPLICATION_URL = `${window.location.origin}/template/membership-application`;
 
 type PaymentRecord = {
   id: number;
@@ -37,22 +36,31 @@ type FeeOptionRecord = {
 
 type Entry = {
   id: number;
-  submitted_at: string;
-  chinese_name: string;
-  english_name?: string;
+  submitted_at?: string | null;
+  registration_type?: "upgrade" | "renew" | string;
+  user_id?: number | null;
+  user_name?: string | null;
+  username?: string | null;
   nric_asset_id?: number | null;
   regis_member_id?: number | null;
-  nric?: string;
-  age?: number;
-  category?: string;
-  address?: string;
-  gender?: string;
-  phone?: string;
-  emergency_contact_name?: string;
-  emergency_contact_phone?: string;
-  emergency_contact_relation?: string;
-  selected_fee?: FeeOptionRecord | null;
+  nric?: string | null;
   status?: "process" | "paid" | "reject" | string;
+  target_expiry_date?: string | null;
+  facebook_profile_url?: string | null;
+  nric_address?: string | null;
+  ancestral_home?: string | null;
+  occupation?: string | null;
+  refuge_taken?: boolean | null;
+  refuge_year?: number | null;
+  refuge_master?: string | null;
+  dharma_name?: string | null;
+  emergency_contact_name?: string | null;
+  emergency_contact_phone?: string | null;
+  guardian_name?: string | null;
+  guardian_phone?: string | null;
+  recommender_name?: string | null;
+  membership_role?: string | null;
+  selected_fee?: FeeOptionRecord | null;
   payment_url?: string | null;
   latest_payment?: PaymentRecord | null;
   payments?: PaymentRecord[];
@@ -84,32 +92,34 @@ async function parseJson<T>(response: Response): Promise<T> {
 }
 
 async function fetchEntries() {
-  const response = await fetch("/api/form/youth-class-registration/entries", {
+  const response = await fetch("/api/user_control/membership/entries", {
     credentials: "include",
   });
   return parseJson<{ entries?: Entry[] }>(response);
 }
 
 async function fetchSettings() {
-  const response = await fetch("/api/form/youth-class-registration/settings", {
+  const response = await fetch("/api/user_control/membership/settings", {
     credentials: "include",
   });
   return parseJson<{ settings?: Settings }>(response);
 }
 
 async function saveSettings(payload: Settings) {
-  const response = await fetch("/api/form/youth-class-registration/settings", {
+  const response = await fetch("/api/user_control/membership/settings", {
     method: "PUT",
     headers: { "Content-Type": "application/json" },
+    credentials: "include",
     body: JSON.stringify(payload),
   });
   return parseJson<{ message?: string; settings?: Settings }>(response);
 }
 
 async function updatePaymentStatus(paymentId: number, status: string) {
-  const response = await fetch(`/api/form/youth-class-registration/payment/${paymentId}/status`, {
+  const response = await fetch(`/api/user_control/membership/payment/${paymentId}/status`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
+    credentials: "include",
     body: JSON.stringify({ status }),
   });
   return parseJson<{ message?: string }>(response);
@@ -142,12 +152,21 @@ function paymentStatusLabel(status: string | undefined) {
 }
 
 function registrationStatusLabel(status: string | undefined) {
-  if (status === "paid") return "已付款";
-  if (status === "reject") return "已拒绝";
+  if (status === "paid") return "已生效";
+  if (status === "reject") return "已退回";
   return "处理中";
 }
 
-export function YouthClassRegistrationPage() {
+function registrationTypeLabel(type: string | undefined) {
+  return type === "renew" ? "会员续费" : "升级会员";
+}
+
+function boolLabel(value: boolean | null | undefined) {
+  if (value == null) return "未填写";
+  return value ? "是" : "否";
+}
+
+export function MembershipRegistrationPage() {
   ensureDesignTokens();
 
   const { isMobile } = useUserState();
@@ -158,7 +177,6 @@ export function YouthClassRegistrationPage() {
   const [updatingPaymentId, setUpdatingPaymentId] = useState<number | null>(null);
   const [error, setError] = useState("");
   const [notice, setNotice] = useState<Notice | null>(null);
-  const [qrDataUrl, setQrDataUrl] = useState("");
 
   async function loadData() {
     setLoading(true);
@@ -182,31 +200,23 @@ export function YouthClassRegistrationPage() {
     void loadData();
   }, []);
 
-  useEffect(() => {
-    void QRCode.toDataURL(PUBLIC_URL, {
-      width: isMobile ? 220 : 320,
-      margin: 1,
-      color: { dark: "#111827", light: "#ffffff" },
-    }).then(setQrDataUrl);
-  }, [isMobile]);
-
   const stats = useMemo(() => {
-    const paid = entries.filter((entry) => entry.status === "paid").length;
-    const rejected = entries.filter((entry) => entry.status === "reject").length;
+    const upgrades = entries.filter((entry) => entry.registration_type !== "renew").length;
+    const renewals = entries.filter((entry) => entry.registration_type === "renew").length;
+    const approved = entries.filter((entry) => entry.status === "paid").length;
     const processing = entries.filter((entry) => entry.status === "process").length;
-    const noPayment = entries.filter((entry) => !(entry.payments || []).length).length;
-    return { paid, rejected, processing, noPayment };
+    return { upgrades, renewals, approved, processing };
   }, [entries]);
 
   async function handleCopyLink(url: string | null | undefined) {
     if (!url) {
-      setNotice({ tone: "error", text: "这位学员还没有付款链接。" });
+      setNotice({ tone: "error", text: "这位成员还没有付款链接。" });
       return;
     }
 
     try {
       await copyText(url);
-      setNotice({ tone: "success", text: "付款链接已复制，可以直接发给学员。" });
+      setNotice({ tone: "success", text: "付款链接已复制，可以重新发给对方。" });
     } catch (err) {
       setNotice({ tone: "error", text: err instanceof Error ? err.message : "复制失败" });
     }
@@ -222,7 +232,7 @@ export function YouthClassRegistrationPage() {
         id: nextSettings.id ?? null,
         fees: normalizeFeeDrafts(nextSettings.fees || nextSettings.fee_options),
       });
-      setNotice({ tone: "success", text: result.message || "报名费率已更新" });
+      setNotice({ tone: "success", text: result.message || "会员费率已更新" });
     } catch (err) {
       setNotice({ tone: "error", text: err instanceof Error ? err.message : "保存失败" });
     } finally {
@@ -235,7 +245,7 @@ export function YouthClassRegistrationPage() {
     setNotice(null);
     try {
       const result = await updatePaymentStatus(paymentId, status);
-      setNotice({ tone: "success", text: result.message || "付款状态已更新" });
+      setNotice({ tone: "success", text: result.message || "会员付款状态已更新" });
       await loadData();
     } catch (err) {
       setNotice({ tone: "error", text: err instanceof Error ? err.message : "更新失败" });
@@ -273,52 +283,46 @@ export function YouthClassRegistrationPage() {
     <div style={pageStyle}>
       <section style={heroStyle(isMobile)}>
         <div style={panelStyle(isMobile)}>
-          <div style={eyebrowStyle}>CRM / 报名管理</div>
-          <h1 style={titleStyle(isMobile)}>青少年 & 青年佛学班</h1>
-          <p style={descStyle}>这里可以维护按年龄分段的报名费率、查看每位学员的付款入口、追踪付款截图并完成审核。</p>
+          <div style={eyebrowStyle}>CRM / 会员</div>
+          <h1 style={titleStyle(isMobile)}>会员升级与续费</h1>
+          <p style={descStyle}>这里可以设置按年龄分段的会员费率、上传付款二维码、查看申请资料，并在付款截图提交后完成审核生效。</p>
           <div style={statsRowStyle(isMobile)}>
-            <MetricCard label="报名总数" value={String(entries.length)} />
-            <MetricCard label="已付款" value={String(stats.paid)} />
+            <MetricCard label="升级申请" value={String(stats.upgrades)} />
+            <MetricCard label="续费申请" value={String(stats.renewals)} />
+            <MetricCard label="已生效" value={String(stats.approved)} />
             <MetricCard label="处理中" value={String(stats.processing)} />
-            <MetricCard label="未提交付款" value={String(stats.noPayment)} />
           </div>
         </div>
 
         <div style={panelStyle(isMobile)}>
           <div style={sectionTitleRowStyle(isMobile)}>
-            <h2 style={sectionTitleStyle()}>公开报名页</h2>
-            <a href={PUBLIC_URL} target="_blank" rel="noreferrer" style={linkStyle}>打开公开报名页</a>
+            <h2 style={sectionTitleStyle()}>用户入口</h2>
+            <a href={APPLICATION_URL} target="_blank" rel="noreferrer" style={linkStyle}>打开会员申请页</a>
           </div>
-          <div style={qrWrapStyle(isMobile)}>
-            {qrDataUrl ? <img src={qrDataUrl} alt="报名二维码" style={qrImageStyle(isMobile)} /> : <div style={emptyStyle}>生成二维码中…</div>}
-          </div>
-          <div style={urlBoxStyle}>{PUBLIC_URL}</div>
+          <div style={emptyPreviewStyle}>会员申请入口来自 Profile 的 Actions 按钮；这里保留直达链接方便后台测试。</div>
+          <div style={urlBoxStyle}>{APPLICATION_URL}</div>
         </div>
       </section>
 
       <section style={panelStyle(isMobile)}>
         <div style={sectionTitleRowStyle(isMobile)}>
-          <h2 style={sectionTitleStyle()}>年龄报名费率</h2>
+          <h2 style={sectionTitleStyle()}>会员年龄费率</h2>
           <button type="button" style={refreshButtonStyle} onClick={() => void loadData()}>刷新</button>
         </div>
-        {notice ? (
-          <div style={notice.tone === "success" ? successStyle : errorStyle}>
-            {notice.text}
-          </div>
-        ) : null}
+        {notice ? <div style={notice.tone === "success" ? successStyle : errorStyle}>{notice.text}</div> : null}
         {error ? <div style={errorStyle}>{error}</div> : null}
         <FeePanel
-          fees={(settings.fees || []).map((fee, index) => ({ ...fee, id: fee.id ?? `youth-fee-${index}` }))}
+          fees={(settings.fees || []).map((fee, index) => ({ ...fee, id: fee.id ?? `membership-fee-${index}` }))}
           onAdd={handleAddFee}
           onEdit={handleEditFee}
           onDelete={handleDeleteFee}
           addButtonLabel="添加费率"
           saveButtonLabel="保存费率"
-          emptyText="还没有费率。可以先加一条所有年龄的通用费用，或直接拆成 13-18 / 18-25。"
+          emptyText="还没有费率。可以先加一条所有年龄的通用费用，或直接拆成不同年龄段。"
           showCategory={false}
           enableImageUpload
           imageLabel="该费率付款二维码 / 付款资料"
-          descriptionPlaceholder="例如：含教材 / 青年班报名费"
+          descriptionPlaceholder="例如：见习青芽年费 / 普通会员年费"
         />
         <div style={settingsFooterStyle}>
             <div style={amountHintStyle}>
@@ -327,27 +331,27 @@ export function YouthClassRegistrationPage() {
               : "尚未配置年龄费率"}
             </div>
           <button type="button" style={primaryButtonStyle} onClick={() => void handleSaveSettings()} disabled={savingSettings}>
-            {savingSettings ? "保存中…" : "保存报名费率"}
+            {savingSettings ? "保存中…" : "保存会员费率"}
           </button>
         </div>
       </section>
 
       <section style={panelStyle(isMobile)}>
         <div style={sectionTitleRowStyle(isMobile)}>
-          <h2 style={sectionTitleStyle()}>学员付款工作台</h2>
-          <div style={mutedStyle}>每位学员都可以打开或复制专属付款链接，必要时重新发给他付款。</div>
+          <h2 style={sectionTitleStyle()}>会员申请工作台</h2>
+          <div style={mutedStyle}>审核通过后会自动把用户标记为会员，并写入新的续费到期日。</div>
         </div>
         {loading ? <div style={emptyStyle}>加载中…</div> : null}
-        {!loading && !entries.length ? <div style={emptyStyle}>还没有人提交报名。</div> : null}
+        {!loading && !entries.length ? <div style={emptyStyle}>还没有会员申请或续费记录。</div> : null}
         {!loading && entries.length ? (
           <div style={entryListStyle}>
             {entries.map((entry) => (
               <article key={entry.id} style={entryCardStyle}>
                 <div style={entryHeaderStyle(isMobile)}>
                   <div style={entryTitleWrapStyle}>
-                    <div style={entryNameStyle}>{entry.chinese_name || "-"}</div>
+                    <div style={entryNameStyle}>{entry.user_name || entry.username || `用户 #${entry.user_id}`}</div>
                     <div style={entrySubStyle}>
-                      {entry.english_name || "-"} · {entry.submitted_at || "-"}
+                      {registrationTypeLabel(entry.registration_type)} · {entry.submitted_at || "-"}
                     </div>
                   </div>
                   <div style={headerActionWrapStyle(isMobile)}>
@@ -365,19 +369,41 @@ export function YouthClassRegistrationPage() {
 
                 <div style={entryInfoGridStyle(isMobile)}>
                   <Fact label="NRIC" value={entry.nric || "-"} />
-                  <Fact label="年龄 / 组别" value={`${entry.age ?? "-"} 岁 / ${entry.category || "-"}`} />
+                  <Fact label="加入身份" value={entry.membership_role || "-"} />
+                  <Fact label="下一次到期日" value={entry.target_expiry_date || "-"} />
                   <Fact label="适用费用" value={entry.selected_fee ? summarizeFee(entry.selected_fee) : "未匹配费率"} />
-                  <Fact label="手机号码" value={entry.phone || "-"} />
                 </div>
 
                 <div style={entryInfoGridStyle(isMobile)}>
-                  <Fact label="紧急联络人" value={`${entry.emergency_contact_name || "-"} / ${entry.emergency_contact_phone || "-"} / ${entry.emergency_contact_relation || "-"}`} />
+                  <Fact label="推荐人" value={entry.recommender_name || "未填写"} />
+                  <Fact label="籍贯 / 职业" value={`${entry.ancestral_home || "-"} / ${entry.occupation || "-"}`} />
+                  <Fact label="是否皈依" value={boolLabel(entry.refuge_taken)} />
+                  <Fact label="紧急联络人" value={`${entry.emergency_contact_name || "-"} / ${entry.emergency_contact_phone || "-"}`} />
+                  <Fact label="监护人" value={entry.guardian_name ? `${entry.guardian_name} / ${entry.guardian_phone || "-"}` : "不需要 / 未填写"} />
                 </div>
 
-                <div style={addressStyle}>
-                  <strong>住家地址：</strong>
-                  {entry.address || "-"}
+                <div style={detailGridStyle(isMobile)}>
+                  <div style={addressStyle}>
+                    <strong>Facebook：</strong>
+                    {entry.facebook_profile_url ? (
+                      <a href={entry.facebook_profile_url} target="_blank" rel="noreferrer" style={proofLinkStyle}>{entry.facebook_profile_url}</a>
+                    ) : (
+                      "未填写"
+                    )}
+                  </div>
+                  <div style={addressStyle}>
+                    <strong>NRIC_address：</strong>
+                    {entry.nric_address || "-"}
+                  </div>
                 </div>
+
+                {(entry.refuge_taken || entry.refuge_year || entry.refuge_master || entry.dharma_name) ? (
+                  <div style={detailGridStyle(isMobile)}>
+                    <Fact label="皈依年份" value={entry.refuge_year ? String(entry.refuge_year) : "未填写"} />
+                    <Fact label="皈依证明法师" value={entry.refuge_master || "未填写"} />
+                    <Fact label="法名" value={entry.dharma_name || "未填写"} />
+                  </div>
+                ) : null}
 
                 {(entry.payments || []).length ? (
                   <div style={paymentListStyle}>
@@ -405,7 +431,7 @@ export function YouthClassRegistrationPage() {
                                 标记处理中
                               </button>
                               <button type="button" style={miniSuccessButtonStyle} disabled={isUpdating} onClick={() => void handlePaymentStatus(payment.id, "checked")}>
-                                审核通过
+                                审核通过并生效
                               </button>
                               <button type="button" style={miniDangerButtonStyle} disabled={isUpdating} onClick={() => void handlePaymentStatus(payment.id, "fail")}>
                                 退回付款
@@ -417,7 +443,7 @@ export function YouthClassRegistrationPage() {
                     })}
                   </div>
                 ) : (
-                  <div style={emptyInlineStyle}>这位学员还没有提交付款截图，可以直接复制上方链接发给他。</div>
+                  <div style={emptyInlineStyle}>这条记录还没有提交付款截图，可以直接复制上方链接重新发给对方。</div>
                 )}
               </article>
             ))}
@@ -466,7 +492,7 @@ const miniDangerButtonStyle: CSSProperties = { ...miniButtonStyle, border: "1px 
 const mutedStyle: CSSProperties = { fontSize: "12px", color: "var(--x-color-ink-muted)" };
 const feeImagePreviewStyle: CSSProperties = { display: "inline-flex", alignItems: "center", justifyContent: "center", width: "100%", maxWidth: "280px", minHeight: "180px", borderRadius: "18px", border: "1px solid var(--x-color-line-soft)", background: "white", overflow: "hidden" };
 const feeImageStyle: CSSProperties = { width: "100%", height: "100%", objectFit: "cover" };
-const emptyPreviewStyle: CSSProperties = { minHeight: "180px", width: "100%", maxWidth: "280px", display: "grid", placeItems: "center", borderRadius: "18px", border: "1px dashed var(--x-color-line-soft)", color: "var(--x-color-ink-muted)" };
+const emptyPreviewStyle: CSSProperties = { minHeight: "180px", width: "100%", display: "grid", placeItems: "center", borderRadius: "18px", border: "1px dashed var(--x-color-line-soft)", color: "var(--x-color-ink-muted)", padding: "18px", textAlign: "center", lineHeight: 1.6 };
 const amountHintStyle: CSSProperties = { fontSize: "15px", fontWeight: 700, color: "var(--x-color-accent-strong)" };
 const settingsFooterStyle: CSSProperties = { display: "flex", justifyContent: "space-between", alignItems: "center", gap: "14px", flexWrap: "wrap" };
 const paymentListStyle: CSSProperties = { display: "grid", gap: "12px" };
@@ -478,8 +504,8 @@ const entryCardStyle: CSSProperties = { padding: "18px", borderRadius: "22px", b
 const entryTitleWrapStyle: CSSProperties = { display: "grid", gap: "6px" };
 const entryNameStyle: CSSProperties = { fontSize: "18px", fontWeight: 800, lineHeight: 1.35 };
 const entrySubStyle: CSSProperties = { fontSize: "13px", color: "var(--x-color-ink-muted)" };
-const addressStyle: CSSProperties = { padding: "14px 16px", borderRadius: "16px", background: "rgba(255,255,255,0.78)", border: "1px solid var(--x-color-line-soft)", lineHeight: 1.7 };
-const proofLinkStyle: CSSProperties = { color: "var(--x-color-accent-strong)", textDecoration: "none", fontWeight: 700 };
+const addressStyle: CSSProperties = { padding: "14px 16px", borderRadius: "16px", background: "rgba(255,255,255,0.78)", border: "1px solid var(--x-color-line-soft)", lineHeight: 1.7, wordBreak: "break-word" };
+const proofLinkStyle: CSSProperties = { color: "var(--x-color-accent-strong)", textDecoration: "none", fontWeight: 700, wordBreak: "break-all" };
 const emptyInlineStyle: CSSProperties = { padding: "14px 16px", borderRadius: "16px", border: "1px dashed var(--x-color-line-soft)", color: "var(--x-color-ink-muted)" };
 const metricCardStyle: CSSProperties = { padding: "16px", borderRadius: "18px", background: "var(--x-color-panel-strong)", border: "1px solid var(--x-color-line-soft)" };
 const metricLabelStyle: CSSProperties = { fontSize: "12px", color: "var(--x-color-ink-muted)", marginBottom: "8px" };
@@ -522,14 +548,6 @@ function sectionTitleStyle(): CSSProperties {
   return { margin: 0, fontSize: "22px" };
 }
 
-function qrWrapStyle(isMobile: boolean): CSSProperties {
-  return { display: "grid", placeItems: "center", minHeight: isMobile ? "220px" : "260px", borderRadius: "18px", background: "white", border: "1px solid var(--x-color-line-soft)", padding: isMobile ? "12px" : "16px" };
-}
-
-function qrImageStyle(isMobile: boolean): CSSProperties {
-  return { width: "100%", maxWidth: isMobile ? "220px" : "280px", height: "auto" };
-}
-
 function settingsGridStyle(isMobile: boolean): CSSProperties {
   return { display: "grid", gridTemplateColumns: isMobile ? "1fr" : "repeat(2, minmax(0, 1fr))", gap: "14px" };
 }
@@ -551,7 +569,11 @@ function headerActionWrapStyle(isMobile: boolean): CSSProperties {
 }
 
 function entryInfoGridStyle(isMobile: boolean): CSSProperties {
-  return { display: "grid", gridTemplateColumns: isMobile ? "1fr" : "repeat(4, minmax(0, 1fr))", gap: "10px" };
+  return { display: "grid", gridTemplateColumns: isMobile ? "repeat(2, minmax(0, 1fr))" : "repeat(4, minmax(0, 1fr))", gap: "10px" };
+}
+
+function detailGridStyle(isMobile: boolean): CSSProperties {
+  return { display: "grid", gridTemplateColumns: isMobile ? "1fr" : "repeat(2, minmax(0, 1fr))", gap: "10px" };
 }
 
 function paymentRowStyle(isMobile: boolean, latest: boolean): CSSProperties {

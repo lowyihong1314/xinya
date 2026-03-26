@@ -5,7 +5,13 @@ import { useSearchParams } from "react-router-dom";
 import { useUserState } from "../../app/UserState";
 import { ensureDesignTokens } from "../../theme/designTokens";
 import { LegacyCRMPanel } from "./LegacyCRMPanel";
-import { CRM_MODULES, DEFAULT_CRM_MODULE_KEY, getCRMModule, isCRMModuleKey } from "./crmModules";
+import {
+  CRM_MODULES,
+  DEFAULT_CRM_MODULE_KEY,
+  getCRMModule,
+  getCRMModuleAliasSection,
+  resolveCRMModuleKey,
+} from "./crmModules";
 
 export function CRMPage() {
   ensureDesignTokens();
@@ -15,21 +21,40 @@ export function CRMPage() {
 
   const activeKey = useMemo(() => {
     const nextKey = searchParams.get("crm") ?? searchParams.get("CRM");
-    return isCRMModuleKey(nextKey) ? nextKey : DEFAULT_CRM_MODULE_KEY;
+    return resolveCRMModuleKey(nextKey) ?? DEFAULT_CRM_MODULE_KEY;
   }, [searchParams]);
 
   const activeModule = getCRMModule(activeKey);
 
   useEffect(() => {
+    const rawKey = searchParams.get("crm") ?? searchParams.get("CRM");
     const legacyKey = searchParams.get("CRM");
     const lowerKey = searchParams.get("crm");
-    if (lowerKey === activeKey && !legacyKey) {
-      return;
+    const aliasSection = getCRMModuleAliasSection(rawKey);
+    const nextParams = new URLSearchParams(searchParams);
+    let changed = false;
+
+    if (lowerKey !== activeKey || legacyKey) {
+      nextParams.delete("CRM");
+      nextParams.set("crm", activeKey);
+      changed = true;
     }
 
-    const nextParams = new URLSearchParams(searchParams);
-    nextParams.delete("CRM");
-    nextParams.set("crm", activeKey);
+    if (activeKey === "permanent_registration") {
+      const currentSection = nextParams.get("registration");
+      const targetSection = aliasSection ?? currentSection ?? "membership";
+      if (currentSection !== targetSection) {
+        nextParams.set("registration", targetSection);
+        changed = true;
+      }
+    } else if (nextParams.has("registration")) {
+      nextParams.delete("registration");
+      changed = true;
+    }
+
+    if (!changed) {
+      return;
+    }
     setSearchParams(nextParams, { replace: true });
   }, [activeKey, searchParams, setSearchParams]);
 
@@ -64,6 +89,11 @@ export function CRMPage() {
                   const nextParams = new URLSearchParams(searchParams);
                   nextParams.delete("CRM");
                   nextParams.set("crm", module.key);
+                  if (module.key === "permanent_registration") {
+                    nextParams.set("registration", nextParams.get("registration") || "membership");
+                  } else {
+                    nextParams.delete("registration");
+                  }
                   setSearchParams(nextParams);
                 }}
                 style={moduleButtonStyle(active, isMobile)}

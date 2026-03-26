@@ -4,6 +4,7 @@ import type { CSSProperties } from "react";
 import type { FormPayment } from "../../../form/react/types";
 import { designTokens } from "../../../../theme/designTokens";
 import { fetchRegisterPaymentForms, updateRegisterPaymentStatus } from "./api";
+import { PaymentDetailPanel } from "./PaymentDetailPanel";
 import type { RegisterPaymentForm, RegisterPaymentStatus } from "./types";
 
 const STATUS_OPTIONS: Array<{ key: RegisterPaymentStatus; label: string }> = [
@@ -92,15 +93,33 @@ export function RegisterWorkspace() {
     [filteredPayments, formPayments, selectedPaymentId],
   );
 
-  const selectedPaymentProofUrl = useMemo(() => {
-    if (!selectedPayment) {
-      return "";
-    }
-    if (typeof selectedPayment.proof_image_url === "string" && selectedPayment.proof_image_url) {
-      return selectedPayment.proof_image_url;
-    }
-    return typeof selectedPayment.proof_image_path === "string" ? selectedPayment.proof_image_path : "";
-  }, [selectedPayment]);
+  function applyPaymentUpdate(nextPayment: FormPayment) {
+    setForms((current) =>
+      current.map((form) =>
+        form.id !== nextPayment.regis_form_id
+          ? form
+          : {
+              ...form,
+              payments: (form.payments || []).map((payment) => (payment.id === nextPayment.id ? nextPayment : payment)),
+            },
+      ),
+    );
+  }
+
+  function applyPaymentRemoval(paymentId: number) {
+    let nextForms: RegisterPaymentForm[] = [];
+    setForms((current) => {
+      nextForms = current
+        .map((form) => ({
+          ...form,
+          payments: (form.payments || []).filter((payment) => payment.id !== paymentId),
+        }))
+        .filter((form) => (form.payments || []).length > 0);
+      return nextForms;
+    });
+    setSelectedFormId((current) => pickDefaultFormId(nextForms, current));
+    setSelectedPaymentId((current) => (current === paymentId ? null : current));
+  }
 
   async function handleStatusChange(status: Exclude<RegisterPaymentStatus, "all">) {
     if (!selectedPayment || updating || selectedPayment.status === status) {
@@ -114,16 +133,7 @@ export function RegisterWorkspace() {
       if (!nextPayment) {
         throw new Error("更新付款状态失败");
       }
-      setForms((current) =>
-        current.map((form) =>
-          form.id !== nextPayment.regis_form_id
-            ? form
-            : {
-                ...form,
-                payments: (form.payments || []).map((payment) => (payment.id === nextPayment.id ? nextPayment : payment)),
-              },
-        ),
-      );
+      applyPaymentUpdate(nextPayment);
     } catch (nextError) {
       setError(nextError instanceof Error ? nextError.message : "更新付款状态失败");
     } finally {
@@ -243,69 +253,13 @@ export function RegisterWorkspace() {
           </div>
 
           <div style={detailPanelStyle}>
-            {selectedPayment ? (
-              <>
-                <div style={detailHeaderStyle}>
-                  <div>
-                    <div style={panelEyebrowStyle}>Payment Detail</div>
-                    <h4 style={detailTitleStyle}>{selectedPayment.name || selectedPayment.nric}</h4>
-                  </div>
-                  <div style={{ ...statusTagStyle, color: getStatusMeta(selectedPayment.status).text, background: getStatusMeta(selectedPayment.status).background }}>
-                    {getStatusMeta(selectedPayment.status).label}
-                  </div>
-                </div>
-
-                <div style={detailMetaGridStyle}>
-                  <MetaItem label="Payment ID" value={selectedPayment.id} />
-                  <MetaItem label="NRIC" value={selectedPayment.nric} />
-                  <MetaItem label="电话" value={selectedPayment.phone} />
-                  <MetaItem label="金额" value={`RM ${Number(selectedPayment.price || 0).toFixed(2)}`} />
-                  <MetaItem label="方式" value={selectedPayment.payment_mode} />
-                  <MetaItem label="日期" value={selectedPayment.date} />
-                  <MetaItem label="时间" value={selectedPayment.time} />
-                  <MetaItem label="柜台" value={selectedPayment.counter || "-"} />
-                </div>
-
-                <div style={statusActionWrapStyle}>
-                  <div style={detailSectionTitleStyle}>切换状态</div>
-                  <div style={statusActionRowStyle}>
-                    {(["process", "checked", "fail"] as const).map((status) => {
-                      const active = selectedPayment.status === status;
-                      const meta = getStatusMeta(status);
-                      return (
-                        <button
-                          key={status}
-                          type="button"
-                          style={statusActionButtonStyle(active, meta.background, meta.text)}
-                          disabled={updating}
-                          onClick={() => void handleStatusChange(status)}
-                        >
-                          {updating && active ? "更新中" : meta.label}
-                        </button>
-                      );
-                    })}
-                  </div>
-                </div>
-
-                {selectedPaymentProofUrl ? (
-                  <div style={proofWrapStyle}>
-                    <div style={detailSectionTitleStyle}>付款截图</div>
-                    <a href={selectedPaymentProofUrl} target="_blank" rel="noreferrer" style={proofLinkStyle}>
-                      查看原图
-                    </a>
-                    <img
-                      src={selectedPaymentProofUrl}
-                      alt={`payment-proof-${selectedPayment.id}`}
-                      style={proofImageStyle}
-                    />
-                  </div>
-                ) : (
-                  <div style={emptyStyle}>这个 payment 没有上传付款截图。</div>
-                )}
-              </>
-            ) : (
-              <div style={emptyStyle}>先从左边选一笔 payment。</div>
-            )}
+            <PaymentDetailPanel
+              payment={selectedPayment}
+              updatingStatus={updating}
+              onStatusChange={handleStatusChange}
+              onPaymentUpdated={applyPaymentUpdate}
+              onPaymentRemoved={applyPaymentRemoval}
+            />
           </div>
         </div>
       </section>
@@ -620,45 +574,6 @@ const paymentGridStyle: CSSProperties = {
   gap: "8px",
 };
 
-const detailPanelStyle: CSSProperties = {
-  display: "grid",
-  alignContent: "start",
-  gap: "14px",
-  padding: "16px",
-  borderRadius: radius.md,
-  background: colors.panelAlt,
-  border: `1px solid ${colors.lineSoft}`,
-};
-
-const detailHeaderStyle: CSSProperties = {
-  display: "flex",
-  justifyContent: "space-between",
-  gap: "12px",
-  alignItems: "start",
-};
-
-const detailTitleStyle: CSSProperties = {
-  margin: "4px 0 0",
-  fontSize: "22px",
-  color: colors.ink,
-};
-
-const statusTagStyle: CSSProperties = {
-  display: "inline-flex",
-  alignItems: "center",
-  justifyContent: "center",
-  padding: "5px 10px",
-  borderRadius: "999px",
-  fontSize: "12px",
-  fontWeight: 800,
-};
-
-const detailMetaGridStyle: CSSProperties = {
-  display: "grid",
-  gridTemplateColumns: "repeat(auto-fit, minmax(130px, 1fr))",
-  gap: "10px",
-};
-
 const metaItemStyle: CSSProperties = {
   padding: "10px 12px",
   borderRadius: radius.sm,
@@ -679,53 +594,24 @@ const metaValueStyle: CSSProperties = {
   wordBreak: "break-word",
 };
 
-const statusActionWrapStyle: CSSProperties = {
+const detailPanelStyle: CSSProperties = {
   display: "grid",
-  gap: "10px",
-};
-
-const detailSectionTitleStyle: CSSProperties = {
-  color: colors.ink,
-  fontSize: "14px",
-  fontWeight: 800,
-};
-
-const statusActionRowStyle: CSSProperties = {
-  display: "flex",
-  flexWrap: "wrap",
-  gap: "8px",
-};
-
-const statusActionButtonStyle = (active: boolean, background: string, color: string): CSSProperties => ({
-  padding: "8px 12px",
-  borderRadius: radius.sm,
-  border: active ? `1px solid ${color}` : `1px solid ${colors.line}`,
-  background: active ? background : colors.panel,
-  color,
-  cursor: "pointer",
-  fontWeight: 800,
-});
-
-const proofWrapStyle: CSSProperties = {
-  display: "grid",
-  gap: "8px",
-};
-
-const proofLinkStyle: CSSProperties = {
-  width: "fit-content",
-  color: colors.info,
-  fontSize: "12px",
-  fontWeight: 700,
-  textDecoration: "none",
-};
-
-const proofImageStyle: CSSProperties = {
-  width: "100%",
-  maxHeight: "440px",
-  objectFit: "contain",
+  alignContent: "start",
+  gap: "14px",
+  padding: "16px",
   borderRadius: radius.md,
-  border: `1px solid ${colors.line}`,
-  background: colors.panel,
+  background: colors.panelAlt,
+  border: `1px solid ${colors.lineSoft}`,
+};
+
+const statusTagStyle: CSSProperties = {
+  display: "inline-flex",
+  alignItems: "center",
+  justifyContent: "center",
+  padding: "5px 10px",
+  borderRadius: "999px",
+  fontSize: "12px",
+  fontWeight: 800,
 };
 
 const emptyStyle: CSSProperties = {

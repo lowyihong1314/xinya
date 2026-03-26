@@ -4,6 +4,7 @@ import { createRoot } from "react-dom/client";
 
 import { open_parental_form } from "../../../../../static/js/form/parental/modal.js";
 import { designTokens } from "../../../theme/designTokens";
+import { previewMemberNricChange } from "./api";
 import type {
   ExtraFieldConfig,
   FormMember,
@@ -210,6 +211,7 @@ function MemberDetailModal({
     () => [
       { key: "name_cn", label: "中文名", value: member.name_cn },
       { key: "name", label: "英文名", value: member.name },
+      { key: "nric", label: "NRIC", value: member.nric },
       { key: "phone", label: "电话", value: member.phone },
       { key: "email", label: "Email", value: member.email },
       { key: "gender", label: "性别", value: member.gender },
@@ -268,7 +270,24 @@ function MemberDetailModal({
     setSaving(true);
     setSaveError("");
     try {
-      for (const field of dirtyFields) {
+      const nricField = dirtyFields.find((field) => field.key === "nric");
+      if (nricField) {
+        const preview = await previewMemberNricChange({
+          member_id: member.id,
+          new_nric: draftValues[nricField.key] ?? "",
+        });
+        const shouldContinue = window.confirm(buildNricChangeConfirmMessage(preview));
+        if (!shouldContinue) {
+          return;
+        }
+      }
+
+      const fieldsToSave = [
+        ...dirtyFields.filter((field) => field.key !== "nric"),
+        ...dirtyFields.filter((field) => field.key === "nric"),
+      ];
+
+      for (const field of fieldsToSave) {
         await onSaveField(
           member,
           field.key.startsWith("extra-") ? Number(field.key.replace("extra-", "")) : field.key,
@@ -343,7 +362,6 @@ function MemberDetailModal({
             }
           >
             <ReadItem label="Email" value={member.email} />
-            <ReadItem label="NRIC" value={member.nric} />
             <ReadItem label="可用时段" value={availableSlots.length ? `${availableSlots.length} 个时段` : "-"} />
             {parental ? (
               <div style={compactGridStyle}>
@@ -471,6 +489,59 @@ function formatPrice(value: unknown) {
     return formatDisplayValue(value);
   }
   return `RM ${amount.toFixed(2)}`;
+}
+
+function buildNricChangeConfirmMessage(preview: {
+  old_nric?: string;
+  new_nric?: string;
+  mode?: "noop" | "update" | "merge";
+  impact?: {
+    registration_count?: number;
+    version_count?: number;
+    payment_count?: number;
+    youth_registration_count?: number;
+    parental_reference_count?: number;
+    duplicate_registration_count?: number;
+    merged_registration_count?: number;
+  };
+  message?: string;
+  merge_target?: {
+    id: number;
+    nric: string;
+    display_name: string;
+  } | null;
+}) {
+  const impact = preview.impact || {};
+  const registrationCount = impact.registration_count ?? 0;
+  const versionCount = impact.version_count ?? 0;
+  const paymentCount = impact.payment_count ?? 0;
+  const youthRegistrationCount = impact.youth_registration_count ?? 0;
+  const parentalReferenceCount = impact.parental_reference_count ?? 0;
+  const duplicateRegistrationCount = impact.duplicate_registration_count ?? 0;
+  const mergedRegistrationCount = impact.merged_registration_count ?? registrationCount;
+
+  const lines = [
+    `即将把 NRIC 从 ${preview.old_nric || "-"} 改成 ${preview.new_nric || "-"}`,
+    preview.message || `本次修改将影响 ${registrationCount} 条报名数据`,
+  ];
+
+  if (preview.mode === "merge" && preview.merge_target) {
+    lines.push(`将合并到成员 #${preview.merge_target.id} (${preview.merge_target.display_name})`);
+    lines.push(`合并后报名总数: ${mergedRegistrationCount} 条`);
+    if (duplicateRegistrationCount > 0) {
+      lines.push(`其中重复报名: ${duplicateRegistrationCount} 条`);
+    }
+  }
+
+  return [
+    ...lines,
+    `报名数据: ${registrationCount} 条`,
+    `资料版本: ${versionCount} 条`,
+    `付款记录: ${paymentCount} 笔`,
+    `青少年班报名: ${youthRegistrationCount} 条`,
+    `家长同意书引用: ${parentalReferenceCount} 条`,
+    "确认继续保存吗？",
+  ].join("\n");
 }
 
 function translatePaymentStatus(value: unknown) {

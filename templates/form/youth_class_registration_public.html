@@ -130,6 +130,13 @@
         const data = await res.json();
         if (!res.ok || data.status !== "success") throw new Error(data.message || "提交失败，请稍后再试");
         form.reset();
+        if (data.payment_required && data.payment_url) {
+          showBox(notice, "报名成功，3 秒后将前往付款页。", "ok");
+          setTimeout(() => {
+            window.location.href = data.payment_url;
+          }, 3000);
+          return;
+        }
         showBox(notice, "报名成功，3 秒后将返回主页。", "ok");
         setTimeout(() => {
           window.location.href = "/#/";

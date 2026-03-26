@@ -10,6 +10,7 @@ from sqlalchemy.ext.mutable import MutableList
 from flask_bcrypt import Bcrypt
 from sqlalchemy.inspection import inspect
 from sqlalchemy import desc
+from sqlalchemy.orm import synonym
 
 bcrypt = Bcrypt()
 
@@ -112,9 +113,13 @@ class User(db.Model, UserMixin):
     phone = db.Column(db.String(255), unique=True, nullable=True)
     email = db.Column(db.String(255), unique=True, nullable=True)
     created_by = db.Column(db.Integer, db.ForeignKey('user_data.id'))
-    name_NRIC = db.Column(db.String(100), nullable=True)
     display = db.Column(db.Boolean, nullable=True)
-    NRIC = db.Column(db.String(20), nullable=True)
+    nric_asset_id = db.Column(
+        db.Integer,
+        db.ForeignKey('nric_asset.id', ondelete='SET NULL', onupdate='CASCADE'),
+        nullable=True,
+        index=True,
+    )
     gender = db.Column(db.String(10), nullable=True)
     parent_1 = db.Column(db.String(100), nullable=True)
     parent_1_phone = db.Column(db.String(20), nullable=True)
@@ -136,6 +141,14 @@ class User(db.Model, UserMixin):
         secondary="user_department",
         back_populates="users"
     )
+    nric_data_id = synonym("nric_asset_id")
+    nric_asset = db.relationship(
+        "NRIC_Asset",
+        back_populates="linked_users",
+        foreign_keys=[nric_asset_id],
+        lazy="joined",
+    )
+    nric_data = synonym("nric_asset")
     member_renewals = db.relationship(
         "MemberRenewal",
         back_populates="user",
@@ -157,6 +170,8 @@ class User(db.Model, UserMixin):
     def to_dict(self):
         reject_local = self.reject_local
         reject_date = self.reject_date
+        member_name_nric = getattr(self.nric_asset, "name_nric", None)
+        member_nric = getattr(self.nric_asset, "nric", None)
 
         # 处理每日限制逻辑
         if reject_date:
@@ -172,9 +187,11 @@ class User(db.Model, UserMixin):
             "display_name": self.display_name,
             "email": self.email,
             "phone": self.phone,
-            "name_NRIC": self.name_NRIC,
+            "name_NRIC": member_name_nric,
             "display": self.display,
-            "NRIC": self.NRIC,
+            "NRIC": member_nric,
+            "nric_asset_id": self.nric_asset_id,
+            "nric_data_id": self.nric_asset_id,
             "gender": self.gender,
             "parent_1": self.parent_1,
             "parent_1_phone": self.parent_1_phone,

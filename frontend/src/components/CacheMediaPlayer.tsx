@@ -1,7 +1,11 @@
 import { useEffect, useState, type CSSProperties } from "react";
 
 import { clearSmartImageCache, smartMediaAsset, type SmartMediaAsset, type SmartMediaVariant } from "../js/get_img";
-import { connectEventMediaRoom, type MediaNotification } from "../album/react/mediaRealtime";
+import {
+  connectEventMediaRoom,
+  MEDIA_ROOM_UPDATE_EVENT,
+  type MediaNotification,
+} from "../album/react/mediaRealtime";
 
 export type CacheMediaPlayerProgress = {
   status: "started" | "progress" | "done" | "error";
@@ -209,7 +213,7 @@ export function CacheMediaPlayer({
           return;
         }
         socketRef = socket;
-        socket.on("media_notification", handleNotification);
+        socket.on(MEDIA_ROOM_UPDATE_EVENT, handleNotification);
       })
       .catch((error) => {
         console.warn("[cache-media-player] socket unavailable", error);
@@ -218,7 +222,7 @@ export function CacheMediaPlayer({
     return () => {
       active = false;
       if (socketRef) {
-        socketRef.off("media_notification", handleNotification);
+        socketRef.off(MEDIA_ROOM_UPDATE_EVENT, handleNotification);
         socketRef.disconnect();
       }
     };

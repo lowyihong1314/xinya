@@ -1,0 +1,319 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>会员升级申请</title>
+  <style>
+    :root{--bg:#f5f8fb;--panel:#fff;--line:#d8e1ee;--text:#172b4d;--muted:#52606d;--accent:#0f766e;--accent-2:#1d4ed8;--ok:#027a48;--bad:#b42318;--warn:#b54708}
+    *{box-sizing:border-box}body{margin:0;font-family:Inter,Arial,"PingFang SC","Microsoft Yahei",sans-serif;background:linear-gradient(180deg,#eef6ff,var(--bg));color:var(--text)}
+    .wrap{max-width:980px;margin:0 auto;padding:28px 18px 48px}.hero,.panel{background:var(--panel);border:1px solid var(--line);border-radius:24px;box-shadow:0 16px 40px rgba(15,23,42,.08)}
+    .hero{padding:28px;margin-bottom:18px}.eyebrow{font-size:12px;letter-spacing:.14em;text-transform:uppercase;color:var(--muted)}h1{margin:8px 0 12px;font-size:34px}p{margin:0;line-height:1.75;color:var(--muted)}
+    .panel{padding:24px;display:grid;gap:18px}.grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:14px}
+    .fact{padding:14px 16px;border:1px solid var(--line);border-radius:16px;background:#fbfdff}.fact .label{font-size:11px;letter-spacing:.08em;text-transform:uppercase;color:var(--muted)}.fact .value{margin-top:6px;font-size:15px;font-weight:700;line-height:1.5;word-break:break-word}
+    label{display:grid;gap:8px;font-size:14px;font-weight:600}input,select,textarea{width:100%;border:1px solid var(--line);border-radius:14px;padding:12px 13px;font-size:14px;background:#fff}textarea{min-height:108px;resize:vertical}
+    .row{display:flex;gap:12px;flex-wrap:wrap;align-items:center}.btn{border:none;border-radius:999px;padding:13px 20px;font-size:14px;font-weight:700;cursor:pointer}.btn-primary{color:#fff;background:linear-gradient(135deg,var(--accent),var(--accent-2))}.btn-secondary{background:#eef2ff;color:var(--text)}
+    .notice{padding:14px 16px;border-radius:14px;border:1px solid;display:none}.ok{background:#ecfdf3;color:var(--ok);border-color:#abefc6}.bad{background:#fff1f2;color:var(--bad);border-color:#fecdd3}.warn{background:#fff7ed;color:var(--warn);border-color:#fed7aa}.soft{background:#eef6ff;color:#1d4ed8;border-color:#bfdbfe}
+    .hidden{display:none!important}.muted{font-size:13px;color:var(--muted)}.section-title{font-size:13px;letter-spacing:.08em;text-transform:uppercase;color:var(--muted);font-weight:800}
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <section class="hero">
+      <div class="eyebrow">UTBA / Member</div>
+      <h1>报名升级会员</h1>
+      <p>请先确认你的 Profile 已绑定正确 NRIC。系统会根据当前登录账号关联的成员资料预填身份信息，提交后会进入会员付款页。</p>
+    </section>
+
+    <div id="notice" class="notice"></div>
+
+    <section class="panel">
+      <div class="section-title">当前身份</div>
+      <div class="grid">
+        <div class="fact">
+          <div class="label">姓名</div>
+          <div id="identity-name" class="value">-</div>
+        </div>
+        <div class="fact">
+          <div class="label">NRIC</div>
+          <div id="identity-nric" class="value">-</div>
+        </div>
+        <div class="fact">
+          <div class="label">年龄 / 成年状态</div>
+          <div id="identity-age" class="value">-</div>
+        </div>
+      </div>
+      <div id="existing-box" class="fact hidden">
+        <div class="label">最近一次会员申请</div>
+        <div id="existing-value" class="value">-</div>
+      </div>
+    </section>
+
+    <form id="membership-form" class="panel">
+      <div class="section-title">申请资料</div>
+      <div class="grid">
+        <label>Facebook 个人主页链接 *
+          <input name="facebook_profile_url" required placeholder="https://facebook.com/your.profile" />
+        </label>
+        <label>NRIC_address *
+          <input name="nric_address_short" placeholder="简短地址摘要（选填）" />
+        </label>
+        <label>籍贯 *
+          <input name="ancestral_home" required />
+        </label>
+        <label>职业 *
+          <input name="occupation" required />
+        </label>
+        <label>是否皈依 *
+          <select name="refuge_taken" required>
+            <option value="">请选择</option>
+            <option value="true">是</option>
+            <option value="false">否</option>
+          </select>
+        </label>
+        <label>加入身份 *
+          <select name="membership_role" required>
+            <option value="">请选择</option>
+          </select>
+        </label>
+      </div>
+
+      <label>NRIC_address 详细地址 *
+        <textarea name="nric_address" required></textarea>
+      </label>
+
+      <div id="refuge-grid" class="grid hidden">
+        <label>皈依年份 *
+          <input name="refuge_year" inputmode="numeric" />
+        </label>
+        <label>皈依证明法师 *
+          <input name="refuge_master" />
+        </label>
+        <label>法名
+          <input name="dharma_name" />
+        </label>
+      </div>
+
+      <div class="grid">
+        <label>紧急联络人姓名 *
+          <input name="emergency_contact_name" required />
+        </label>
+        <label>紧急联络人联络号码 *
+          <input name="emergency_contact_phone" required />
+        </label>
+        <label>推荐人
+          <select name="recommender_user_id">
+            <option value="">系统暂无可选会员推荐人</option>
+          </select>
+        </label>
+      </div>
+
+      <div id="guardian-grid" class="grid hidden">
+        <label>家长 / 监护人姓名 *
+          <input name="guardian_name" />
+        </label>
+        <label>家长 / 监护人联络号码 *
+          <input name="guardian_phone" />
+        </label>
+      </div>
+
+      <div class="row">
+        <button id="submit-button" class="btn btn-primary" type="submit">提交会员申请</button>
+        <button class="btn btn-secondary" type="reset">重置</button>
+      </div>
+      <div class="muted">如果你还没在 Profile 里绑定 NRIC，这个页面会阻止提交，并提醒你先回去补资料。</div>
+    </form>
+  </div>
+
+  <script>
+    const notice = document.getElementById("notice");
+    const form = document.getElementById("membership-form");
+    const submitButton = document.getElementById("submit-button");
+    const guardianGrid = document.getElementById("guardian-grid");
+    const refugeGrid = document.getElementById("refuge-grid");
+    const existingBox = document.getElementById("existing-box");
+    const existingValue = document.getElementById("existing-value");
+    const roleSelect = form.querySelector('select[name="membership_role"]');
+    const recommenderSelect = form.querySelector('select[name="recommender_user_id"]');
+    const refugeSelect = form.querySelector('select[name="refuge_taken"]');
+    const guardianName = form.querySelector('input[name="guardian_name"]');
+    const guardianPhone = form.querySelector('input[name="guardian_phone"]');
+    const refugeYear = form.querySelector('input[name="refuge_year"]');
+    const refugeMaster = form.querySelector('input[name="refuge_master"]');
+
+    let pageContext = null;
+
+    function showNotice(message, cls) {
+      notice.className = `notice ${cls}`;
+      notice.style.display = "block";
+      notice.textContent = message;
+    }
+
+    function hideNotice() {
+      notice.style.display = "none";
+    }
+
+    function registrationStatusLabel(status) {
+      if (status === "paid") return "已提交付款";
+      if (status === "reject") return "已退回";
+      return "处理中";
+    }
+
+    function toggleGuardianSection() {
+      const required = Boolean(pageContext?.is_minor);
+      guardianGrid.classList.toggle("hidden", !required);
+      guardianName.required = required;
+      guardianPhone.required = required;
+    }
+
+    function toggleRefugeSection() {
+      const enabled = refugeSelect.value === "true";
+      refugeGrid.classList.toggle("hidden", !enabled);
+      refugeYear.required = enabled;
+      refugeMaster.required = enabled;
+    }
+
+    function prefillFromExisting(existing) {
+      if (!existing) return;
+      form.elements.facebook_profile_url.value = existing.facebook_profile_url || "";
+      form.elements.nric_address.value = existing.nric_address || "";
+      form.elements.ancestral_home.value = existing.ancestral_home || "";
+      form.elements.occupation.value = existing.occupation || "";
+      form.elements.refuge_taken.value = String(Boolean(existing.refuge_taken));
+      form.elements.refuge_year.value = existing.refuge_year || "";
+      form.elements.refuge_master.value = existing.refuge_master || "";
+      form.elements.dharma_name.value = existing.dharma_name || "";
+      form.elements.emergency_contact_name.value = existing.emergency_contact_name || "";
+      form.elements.emergency_contact_phone.value = existing.emergency_contact_phone || "";
+      form.elements.guardian_name.value = existing.guardian_name || "";
+      form.elements.guardian_phone.value = existing.guardian_phone || "";
+      form.elements.membership_role.value = existing.membership_role || "";
+      form.elements.recommender_user_id.value = existing.recommender_user_id || "";
+      toggleRefugeSection();
+    }
+
+    async function loadContext() {
+      hideNotice();
+      try {
+        const response = await fetch("/api/user_control/membership/context", {
+          credentials: "include",
+        });
+        const payload = await response.json().catch(() => ({}));
+        if (!response.ok || payload.status !== "success") {
+          const message = response.status === 401 ? "请先登录后再使用会员申请入口。" : (payload.message || "读取资料失败");
+          throw new Error(message);
+        }
+
+        pageContext = payload.context || {};
+        const member = pageContext.member || {};
+        const user = pageContext.user || {};
+
+        document.getElementById("identity-name").textContent = member.name_nric || user.display_name || user.username || "-";
+        document.getElementById("identity-nric").textContent = member.nric || "未绑定";
+        document.getElementById("identity-age").textContent = pageContext.age != null
+          ? `${pageContext.age} 岁${pageContext.is_minor ? " / 未成年人" : " / 成年"}`
+          : "无法判断";
+
+        roleSelect.innerHTML = '<option value="">请选择</option>';
+        (pageContext.role_options || []).forEach((item) => {
+          const option = document.createElement("option");
+          option.value = item;
+          option.textContent = item;
+          roleSelect.appendChild(option);
+        });
+
+        recommenderSelect.innerHTML = "";
+        const recommenders = pageContext.recommenders || [];
+        const defaultOption = document.createElement("option");
+        defaultOption.value = "";
+        defaultOption.textContent = recommenders.length ? "请选择推荐人" : "系统暂无可选会员推荐人";
+        recommenderSelect.appendChild(defaultOption);
+        recommenders.forEach((item) => {
+          const option = document.createElement("option");
+          option.value = String(item.id);
+          option.textContent = item.label || item.username || `成员 #${item.id}`;
+          recommenderSelect.appendChild(option);
+        });
+
+        if (pageContext.latest_upgrade) {
+          existingBox.classList.remove("hidden");
+          existingValue.textContent = `${registrationStatusLabel(pageContext.latest_upgrade.status)} · ${pageContext.latest_upgrade.submitted_at || "-"}`;
+          prefillFromExisting(pageContext.latest_upgrade);
+        } else {
+          existingBox.classList.add("hidden");
+        }
+
+        toggleGuardianSection();
+        toggleRefugeSection();
+
+        if (pageContext.missing_nric) {
+          showNotice("当前账号还没有绑定 NRIC，请先回 Profile 资料页补上后再申请。", "warn");
+          submitButton.disabled = true;
+        } else {
+          submitButton.disabled = false;
+        }
+      } catch (error) {
+        showNotice(error instanceof Error ? error.message : "读取资料失败", "bad");
+        submitButton.disabled = true;
+      }
+    }
+
+    refugeSelect.addEventListener("change", toggleRefugeSection);
+
+    form.addEventListener("submit", async (event) => {
+      event.preventDefault();
+      hideNotice();
+
+      const formData = new FormData(form);
+      const addressText = String(formData.get("nric_address") || "").trim();
+      const addressShort = String(formData.get("nric_address_short") || "").trim();
+      const payload = {
+        facebook_profile_url: formData.get("facebook_profile_url"),
+        nric_address: addressShort ? `${addressShort}\n${addressText}` : addressText,
+        ancestral_home: formData.get("ancestral_home"),
+        occupation: formData.get("occupation"),
+        refuge_taken: formData.get("refuge_taken"),
+        refuge_year: formData.get("refuge_year"),
+        refuge_master: formData.get("refuge_master"),
+        dharma_name: formData.get("dharma_name"),
+        emergency_contact_name: formData.get("emergency_contact_name"),
+        emergency_contact_phone: formData.get("emergency_contact_phone"),
+        guardian_name: formData.get("guardian_name"),
+        guardian_phone: formData.get("guardian_phone"),
+        recommender_user_id: formData.get("recommender_user_id"),
+        membership_role: formData.get("membership_role"),
+      };
+
+      submitButton.disabled = true;
+      submitButton.textContent = "提交中…";
+      try {
+        const response = await fetch("/api/user_control/membership/upgrade", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          credentials: "include",
+          body: JSON.stringify(payload),
+        });
+        const data = await response.json().catch(() => ({}));
+        if (!response.ok || data.status !== "success") {
+          throw new Error(data.message || "提交失败");
+        }
+
+        showNotice(data.message || "会员申请已保存。", "ok");
+        if (data.payment_url) {
+          setTimeout(() => {
+            window.location.href = data.payment_url;
+          }, 1800);
+          return;
+        }
+      } catch (error) {
+        showNotice(error instanceof Error ? error.message : "提交失败", "bad");
+      } finally {
+        submitButton.disabled = false;
+        submitButton.textContent = "提交会员申请";
+      }
+    });
+
+    void loadContext();
+  </script>
+</body>
+</html>

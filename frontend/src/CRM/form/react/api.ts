@@ -201,3 +201,38 @@ export async function editMemberField(payload: {
   });
   return parseJson<{ status?: string; message?: string }>(response);
 }
+
+export type MemberNricChangePreviewResponse = {
+  status?: string;
+  message?: string;
+  member_id: number;
+  old_nric: string;
+  new_nric: string;
+  mode?: "noop" | "update" | "merge";
+  impact?: {
+    registration_count?: number;
+    form_ids?: number[];
+    version_count?: number;
+    payment_count?: number;
+    youth_registration_count?: number;
+    parental_reference_count?: number;
+    duplicate_registration_count?: number;
+    duplicate_form_ids?: number[];
+    merged_registration_count?: number;
+    merged_form_ids?: number[];
+  };
+  merge_target?: {
+    id: number;
+    nric: string;
+    display_name: string;
+  } | null;
+};
+
+export async function previewMemberNricChange(payload: { member_id: number; new_nric: string }) {
+  const response = await fetch("/api/form/preview_member_nric_change", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(payload),
+  });
+  return parseJson<MemberNricChangePreviewResponse>(response);
+}

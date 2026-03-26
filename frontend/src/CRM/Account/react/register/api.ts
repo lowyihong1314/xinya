@@ -29,4 +29,21 @@ export async function updateRegisterPaymentStatus(paymentId: number, status: For
   return parseJson<{ status?: string; message?: string; payment?: FormPayment }>(response);
 }
 
+export async function replaceRegisterPaymentProof(paymentId: number, file: File) {
+  const formData = new FormData();
+  formData.append("proof_image", file);
+  const response = await fetch(`/api/form/payment/proof_image/${paymentId}/replace`, {
+    method: "POST",
+    body: formData,
+  });
+  return parseJson<{ status?: string; message?: string; payment?: FormPayment }>(response);
+}
+
+export async function deleteRegisterPayment(paymentId: number) {
+  const response = await fetch(`/api/form/payment/${paymentId}`, {
+    method: "DELETE",
+  });
+  return parseJson<{ status?: string; message?: string; payment_id?: number; regis_form_id?: number }>(response);
+}
+
 export type RegisterPaymentForm = FormRecord;

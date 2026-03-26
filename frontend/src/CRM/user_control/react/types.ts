@@ -27,6 +27,8 @@ export type UserRecord = {
   id: number;
   username?: string | null;
   display_name?: string | null;
+  nric_asset_id?: number | null;
+  nric_data_id?: number | null;
   email?: string | null;
   phone?: string | null;
   name_NRIC?: string | null;
@@ -51,4 +53,3 @@ export type DepartmentUsersResponse = {
   status?: string;
   message?: string;
 };
-

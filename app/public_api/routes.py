@@ -6,7 +6,7 @@ from flask_login import current_user
 from app.auth import permission_required
 from app.paths import PROJECT_ROOT
 from models.event_data import AlbumFiles, EventData
-from models.form import RegisForm, RegisMember, RegisPayment
+from models.form import NRIC_Asset, RegisForm, RegisPayment
 
 UPLOAD_FOLDER = os.path.join(PROJECT_ROOT, "uploads")
 os.makedirs(UPLOAD_FOLDER, exist_ok=True)
@@ -53,7 +53,7 @@ def get_forms():
 
 @api_bp.get("/members")
 def get_members():
-    members = RegisMember.query.all()
+    members = NRIC_Asset.query.all()
     return jsonify([member.to_dict() for member in members])
 
 

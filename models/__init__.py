@@ -9,6 +9,7 @@ MODEL_MODULES = (
     "models.info",
     "models.event_data",
     "models.form",
+    "models.membership_registration",
     "models.file_manager_DB",
     "models.music",
     "models.finance",

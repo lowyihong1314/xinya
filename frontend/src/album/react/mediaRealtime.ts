@@ -1,6 +1,7 @@
 import { io, type Socket } from "socket.io-client";
 
 const SOCKET_ORIGIN = "https://utbabuddha.com";
+export const MEDIA_ROOM_UPDATE_EVENT = "media_room_update";
 
 export type MediaNotification = {
   event?: string;
@@ -30,6 +31,10 @@ function getSocketOrigin() {
   return SOCKET_ORIGIN;
 }
 
+function getEventMediaSocketRoom(eventCode: string) {
+  return `media:${eventCode}`;
+}
+
 export async function connectEventMediaRoom(eventCode: string) {
   const socket: Socket = io(getSocketOrigin(), {
     withCredentials: true,
@@ -37,7 +42,7 @@ export async function connectEventMediaRoom(eventCode: string) {
   });
 
   const joinRoom = () => {
-    socket.emit("join_room", { room: eventCode });
+    socket.emit("join_room", { room: getEventMediaSocketRoom(eventCode) });
   };
 
   socket.on("connect", joinRoom);
