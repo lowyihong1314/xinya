@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import type { CSSProperties } from "react";
 import { Outlet, useLocation, useNavigate } from "react-router-dom";
 
@@ -6,8 +6,24 @@ import { useUserState } from "../app/UserState";
 import { API_BASE, IS_APK } from "../js/apiBase";
 import { musicPlayerController } from "../music/music_player/MusicPlayerController";
 import { useMusicPlayback } from "../music/music_player/MusicPlaybackContext";
+import { CHANGYOU_PATH, MUSIC_PLAYER_PATH, MUSIC_ROOT_PATH } from "../music/router/paths";
 import { ensureDesignTokens } from "../theme/designTokens";
 import { NAV_ITEMS, legacyPageToPath, pageKeyFromPath } from "./routeConfig";
+
+const MUSIC_NAV_ITEMS = [
+  {
+    key: "music_player",
+    title: "音乐",
+    icon: "fas fa-music",
+    path: MUSIC_PLAYER_PATH,
+  },
+  {
+    key: "changyou",
+    title: "唱游",
+    icon: "fas fa-microphone-lines",
+    path: CHANGYOU_PATH,
+  },
+] as const;
 
 export function AppLayout() {
   ensureDesignTokens();
@@ -35,6 +51,8 @@ export function AppLayout() {
     setIsPlayingState,
   } = useMusicPlayback();
   const [floatingMinimized, setFloatingMinimized] = useState(true);
+  const lastPrimaryPathRef = useRef("/");
+  const isInsideMusicRouter = location.pathname.startsWith(MUSIC_ROOT_PATH);
 
   useEffect(() => {
     return () => {
@@ -78,25 +96,30 @@ export function AppLayout() {
     hasPlaybackSession,
     queue,
     shuffleEnabled,
-      repeatMode,
-      autoplayKey,
-      isMobile,
-      floatingMinimized,
-      toggleShuffle,
-      cycleRepeatMode,
-      playRelative,
-      playFromQueue,
-      removeFromQueue,
-      clearQueue,
-      dismissPlayer,
-      navigate,
-      handleTrackEnded,
-      setIsPlayingState,
-    ]);
+    repeatMode,
+    autoplayKey,
+    isMobile,
+    floatingMinimized,
+    toggleShuffle,
+    cycleRepeatMode,
+    playRelative,
+    playFromQueue,
+    removeFromQueue,
+    clearQueue,
+    dismissPlayer,
+    handleTrackEnded,
+    setIsPlayingState,
+  ]);
 
   useEffect(() => {
     window.base_navbar = document.getElementById("base_navbar");
   }, []);
+
+  useEffect(() => {
+    if (!isInsideMusicRouter) {
+      lastPrimaryPathRef.current = location.pathname + location.search + location.hash;
+    }
+  }, [isInsideMusicRouter, location.hash, location.pathname, location.search]);
 
   useEffect(() => {
     window.__xinyaNavigate = (nextPage, options = {}) => {
@@ -126,21 +149,53 @@ export function AppLayout() {
     (item) => (!item.auth || user) && !(user && item.key === "login"),
   );
   const activeKey = pageKeyFromPath(location.pathname);
+  const exitTarget = lastPrimaryPathRef.current || visibleItems[0]?.path || "/";
 
   return (
     <div style={shellStyle}>
       <nav id="base_navbar" style={navbarStyle}>
-        {visibleItems.map((item) => (
+        {isInsideMusicRouter
+          ? MUSIC_NAV_ITEMS.map((item) => {
+              const isActive =
+                item.key === "changyou"
+                  ? location.pathname.startsWith(CHANGYOU_PATH)
+                  : location.pathname.startsWith(MUSIC_PLAYER_PATH);
+
+              return (
+                <button
+                  key={item.key}
+                  title={item.title}
+                  type="button"
+                  onClick={() => navigate(item.path)}
+                  style={navButtonStyle(isActive)}
+                >
+                  <i className={item.icon} />
+                </button>
+              );
+            })
+          : visibleItems.map((item) => (
+              <button
+                key={item.key}
+                title={item.title}
+                type="button"
+                onClick={() => navigate(item.path)}
+                style={navButtonStyle(activeKey === item.key)}
+              >
+                <i className={item.icon} />
+              </button>
+            ))}
+
+        {isInsideMusicRouter ? (
           <button
-            key={item.key}
-            title={item.title}
+            key="music-exit"
+            title="返回主导航"
             type="button"
-            onClick={() => navigate(item.path)}
-            style={navButtonStyle(activeKey === item.key)}
+            onClick={() => navigate(exitTarget)}
+            style={navButtonStyle(false)}
           >
-            <i className={item.icon} />
+            <i className="fas fa-right-from-bracket" />
           </button>
-        ))}
+        ) : null}
       </nav>
 
       <Outlet />

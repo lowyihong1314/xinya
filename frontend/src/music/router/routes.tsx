@@ -7,21 +7,15 @@ import { ChangyouPage } from "../changyou/react/ChangyouPage";
 import { ChangyouRoomPage } from "../changyou/react/room/ChangyouRoomPage";
 import { MusicPage } from "../music_player/MusicPage";
 import { MusicPageApk } from "../music_player/MusicPageApk";
-import { MusicSectionLayout } from "./MusicSectionLayout";
 
 export const musicRoute: RouteObject = {
   path: "music",
   element: <Outlet />,
   children: [
     { index: true, element: <Navigate to="music_player" replace /> },
-    {
-      element: <MusicSectionLayout />,
-      children: [
-        { path: "music_player", element: IS_APK ? <MusicPageApk /> : <MusicPage /> },
-        { path: "changyou", element: <ChangyouPage /> },
-        { path: "changyou/:entryId", element: <ChangyouDetailPage /> },
-      ],
-    },
+    { path: "music_player", element: IS_APK ? <MusicPageApk /> : <MusicPage /> },
+    { path: "changyou", element: <ChangyouPage /> },
+    { path: "changyou/:entryId", element: <ChangyouDetailPage /> },
     { path: "changyou/room", element: <ChangyouRoomPage /> },
     { path: "changyou/room/:roomId", element: <ChangyouRoomPage /> },
   ],

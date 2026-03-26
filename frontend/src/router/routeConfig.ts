@@ -24,10 +24,10 @@ export const NAV_ITEMS: NavItem[] = [
   { key: "home", title: "首页", icon: "fa-solid fa-house", auth: false, path: "/" },
   { key: "info", title: "简介", icon: "fas fa-info-circle", auth: false, path: "/info" },
   { key: "CRM", title: "CRM 管理", icon: "fas fa-layer-group", auth: true, path: "/crm" },
-  { key: "profile", title: "用户资料", icon: "fas fa-user", auth: true, path: "/profile" },
   // { key: "fileSystem", title: "文件管理", icon: "fas fa-folder", auth: true, path: "/files" },
   { key: "music", title: "音乐", icon: "fas fa-music", auth: true, path: MUSIC_PLAYER_PATH },
   { key: "login", title: "登录", icon: "fas fa-right-to-bracket", auth: false, path: "/login" },
+  { key: "profile", title: "用户资料", icon: "fas fa-user", auth: true, path: "/profile" },
 ];
 
 export const legacyPageToPath: Record<string, string> = {

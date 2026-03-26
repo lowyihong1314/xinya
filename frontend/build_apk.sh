@@ -9,7 +9,7 @@ export PATH=$JAVA_HOME/bin:$PATH
 cd "$(dirname "$0")"
 
 VERSION=$(date +%Y%m%d_%H%M)
-OUTPUT="apk/UTBA_${VERSION}.apk"
+OUTPUT="apk/UTBA_BETA_${VERSION}.apk"
 
 echo "==> [1/4] Building React bundle (APK mode)..."
 npm run build:apk
