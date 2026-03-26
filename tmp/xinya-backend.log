@@ -1,0 +1,155 @@
+/home/yukang/flaskapp/xinya/run.py:3: DeprecationWarning: 
+Eventlet is deprecated. It is currently being maintained in bugfix mode, and
+we strongly recommend against using it for new projects.
+
+If you are already using Eventlet, we recommend migrating to a different
+framework.  For more detail see
+https://eventlet.readthedocs.io/en/latest/asyncio/migration.html
+
+  import eventlet
+ * Restarting with stat
+/home/yukang/flaskapp/xinya/run.py:3: DeprecationWarning: 
+Eventlet is deprecated. It is currently being maintained in bugfix mode, and
+we strongly recommend against using it for new projects.
+
+If you are already using Eventlet, we recommend migrating to a different
+framework.  For more detail see
+https://eventlet.readthedocs.io/en/latest/asyncio/migration.html
+
+  import eventlet
+ * Debugger is active!
+ * Debugger PIN: 103-153-293
+(708020) wsgi starting up on http://0.0.0.0:5102
+(708020) accepted ('127.0.0.1', 54518)
+127.0.0.1 - - [26/Mar/2026 09:20:18] "GET /api/music/albums HTTP/1.1" 200 7515 0.110960
+(708020) accepted ('127.0.0.1', 58882)
+127.0.0.1 - - [26/Mar/2026 09:22:30] "GET /api/user_control/get_user_data HTTP/1.1" 401 304 0.000625
+(708020) accepted ('127.0.0.1', 58896)
+127.0.0.1 - - [26/Mar/2026 09:22:30] "GET /media/get_event_image/17310/cache HTTP/1.1" 200 417 0.012007
+(708020) accepted ('127.0.0.1', 58902)
+(708020) accepted ('127.0.0.1', 58924)
+127.0.0.1 - - [26/Mar/2026 09:22:30] "GET /media/get_event_image/16531/cache HTTP/1.1" 200 395 0.006856
+127.0.0.1 - - [26/Mar/2026 09:22:30] "GET /media/get_event_image/6560/cache HTTP/1.1" 200 395 0.009467
+127.0.0.1 - - [26/Mar/2026 09:22:30] "GET /media/get_event_image/16794/cache HTTP/1.1" 200 394 0.111834
+127.0.0.1 - - [26/Mar/2026 09:22:30] "GET /media/get_event_image/10364/cache HTTP/1.1" 200 398 0.108640
+127.0.0.1 - - [26/Mar/2026 09:22:30] "GET /media/get_event_image/8116/cache HTTP/1.1" 200 387 0.127298
+127.0.0.1 - - [26/Mar/2026 09:22:30] "GET /api/api/get_event/160 HTTP/1.1" 200 1080 0.027682
+127.0.0.1 - - [26/Mar/2026 09:22:30] "GET /media_file/CACHE/UTBA/event_photo/EVT_20260205_004/20260301_091859.jpeg HTTP/1.1" 200 2072027 0.008616
+127.0.0.1 - - [26/Mar/2026 09:22:30] "GET /media_file/CACHE/UTBA/event_photo/EVT_20250302_014/20250302_074405.jpeg HTTP/1.1" 200 1680861 0.002433
+127.0.0.1 - - [26/Mar/2026 09:22:30] "GET /media/get_event_image/7041/cache HTTP/1.1" 200 389 0.158450
+127.0.0.1 - - [26/Mar/2026 09:22:30] "GET /media_file/CACHE/UTBA/event_photo/EVT_20251213_001/VID_20251214_233253_401.mp4 HTTP/1.1" 206 2366449 0.011583
+127.0.0.1 - - [26/Mar/2026 09:22:30] "GET /media_file/CACHE/UTBA/event_photo/EVT_20260125_001/20260308_155240.mp4 HTTP/1.1" 206 3449657 0.004555
+127.0.0.1 - - [26/Mar/2026 09:22:30] "GET /media_file/CACHE/UTBA/event_photo/EVT_20241124_012/1000066787.mp4 HTTP/1.1" 206 4855406 0.005061
+Traceback (most recent call last):
+  File "/home/yukang/flaskapp/xinya/venv/lib/python3.12/site-packages/eventlet/wsgi.py", line 647, in handle_one_response
+    write(b''.join(towrite))
+  File "/home/yukang/flaskapp/xinya/venv/lib/python3.12/site-packages/eventlet/wsgi.py", line 581, in write
+    wfile.flush()
+  File "/usr/lib/python3.12/socket.py", line 725, in write
+    return self._sock.send(b)
+           ^^^^^^^^^^^^^^^^^^
+  File "/home/yukang/flaskapp/xinya/venv/lib/python3.12/site-packages/eventlet/greenio/base.py", line 383, in send
+    return self._send_loop(self.fd.send, data, flags)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/yukang/flaskapp/xinya/venv/lib/python3.12/site-packages/eventlet/greenio/base.py", line 370, in _send_loop
+    return send_method(data, *args)
+           ^^^^^^^^^^^^^^^^^^^^^^^^
+ConnectionResetError: [Errno 104] Connection reset by peer
+
+127.0.0.1 - - [26/Mar/2026 09:22:30] "GET /media_file/CACHE/UTBA/event_photo/EVT_20240427_002/VID_20240427_205219.mp4 HTTP/1.1" 206 6463891 0.066909
+(708020) accepted ('127.0.0.1', 58940)
+127.0.0.1 - - [26/Mar/2026 09:22:30] "GET /media_file/CACHE/UTBA/event_photo/EVT_20240427_002/VID_20240427_205219.mp4 HTTP/1.1" 206 90463 0.001173
+127.0.0.1 - - [26/Mar/2026 09:22:30] "GET /media_file/CACHE/UTBA/event_photo/EVT_20240323_001/VID-20240330-WA0084.mp4 HTTP/1.1" 206 75870 0.000889
+127.0.0.1 - - [26/Mar/2026 09:22:30] "GET /media_file/CACHE/UTBA/event_photo/EVT_20240427_002/VID_20240427_205219.mp4 HTTP/1.1" 206 135169 0.000613
+(708020) accepted ('127.0.0.1', 58952)
+(708020) accepted ('127.0.0.1', 58980)
+127.0.0.1 - - [26/Mar/2026 09:22:50] "GET /media_file/CACHE/UTBA/event_photo/EVT_20240323_001/VID-20240330-WA0084.mp4 HTTP/1.1" 206 23079007 19.309763
+127.0.0.1 - - [26/Mar/2026 09:22:54] "GET /media_file/CACHE/UTBA/event_photo/EVT_20240427_002/VID_20240427_205219.mp4 HTTP/1.1" 206 40001888 23.375119
+127.0.0.1 - - [26/Mar/2026 09:23:15] "GET /api/music/albums HTTP/1.1" 200 7634 0.006837
+127.0.0.1 - - [26/Mar/2026 09:23:15] "GET /api/music/list?per_page=200&page=1 HTTP/1.1" 200 67719 0.007571
+127.0.0.1 - - [26/Mar/2026 09:23:15] "GET /api/music/list?per_page=200&page=2 HTTP/1.1" 200 67458 0.008385
+127.0.0.1 - - [26/Mar/2026 09:23:15] "GET /api/music/list?per_page=200&page=3 HTTP/1.1" 200 57200 0.007727
+127.0.0.1 - - [26/Mar/2026 09:23:15] "GET /static/album_image/42.jpg HTTP/1.1" 200 154251 0.000640
+127.0.0.1 - - [26/Mar/2026 09:23:15] "GET /static/album_image/18.jpg HTTP/1.1" 200 262997 0.000885
+127.0.0.1 - - [26/Mar/2026 09:23:15] "GET /static/album_image/9.jpg HTTP/1.1" 200 140663 0.000619
+127.0.0.1 - - [26/Mar/2026 09:23:15] "GET /static/album_image/10.jpg HTTP/1.1" 200 2000683 0.002373
+(708020) accepted ('127.0.0.1', 37862)
+127.0.0.1 - - [26/Mar/2026 09:23:56] "GET /api/music/albums/42 HTTP/1.1" 200 736 0.003810
+(708020) accepted ('127.0.0.1', 55312)
+127.0.0.1 - - [26/Mar/2026 09:24:09] "HEAD /api/music/download/614 HTTP/1.1" 200 315 0.003704
+(708020) accepted ('127.0.0.1', 44060)
+127.0.0.1 - - [26/Mar/2026 09:27:19] "GET /api/user_control/get_user_data HTTP/1.1" 401 304 0.000600
+(708020) accepted ('127.0.0.1', 44070)
+127.0.0.1 - - [26/Mar/2026 09:27:19] "GET /media_file/CACHE/UTBA/event_photo/EVT_20260313_001/WhatsApp_Image_2026-03-24_at_21.04.52.jpeg HTTP/1.1" 304 256 0.000663
+127.0.0.1 - - [26/Mar/2026 09:27:19] "GET /media_file/CACHE/UTBA/event_photo/EVT_20250413_002/1000118854.jpeg HTTP/1.1" 304 230 0.000669
+(708020) accepted ('127.0.0.1', 44100)
+127.0.0.1 - - [26/Mar/2026 09:27:19] "GET /media_file/CACHE/UTBA/event_photo/EVT_20251213_001/VID_20251214_233253_401.mp4 HTTP/1.1" 206 2097555 0.001962
+127.0.0.1 - - [26/Mar/2026 09:27:19] "GET /api/api/get_event/154 HTTP/1.1" 200 3318 0.010778
+127.0.0.1 - - [26/Mar/2026 09:27:19] "GET /media_file/CACHE/UTBA/event_photo/EVT_20241124_012/1000066787.mp4 HTTP/1.1" 206 4194695 0.010611
+Traceback (most recent call last):
+  File "/home/yukang/flaskapp/xinya/venv/lib/python3.12/site-packages/eventlet/wsgi.py", line 647, in handle_one_response
+    write(b''.join(towrite))
+  File "/home/yukang/flaskapp/xinya/venv/lib/python3.12/site-packages/eventlet/wsgi.py", line 581, in write
+    wfile.flush()
+  File "/usr/lib/python3.12/socket.py", line 725, in write
+    return self._sock.send(b)
+           ^^^^^^^^^^^^^^^^^^
+  File "/home/yukang/flaskapp/xinya/venv/lib/python3.12/site-packages/eventlet/greenio/base.py", line 383, in send
+    return self._send_loop(self.fd.send, data, flags)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/yukang/flaskapp/xinya/venv/lib/python3.12/site-packages/eventlet/greenio/base.py", line 370, in _send_loop
+    return send_method(data, *args)
+           ^^^^^^^^^^^^^^^^^^^^^^^^
+ConnectionResetError: [Errno 104] Connection reset by peer
+
+127.0.0.1 - - [26/Mar/2026 09:27:19] "GET /media_file/CACHE/UTBA/event_photo/EVT_20240427_002/VID_20240427_205219.mp4 HTTP/1.1" 206 7299475 0.120545
+(708020) accepted ('127.0.0.1', 44142)
+127.0.0.1 - - [26/Mar/2026 09:27:19] "GET /media_file/CACHE/UTBA/event_photo/EVT_20240323_001/VID-20240330-WA0084.mp4 HTTP/1.1" 206 75870 0.000616
+127.0.0.1 - - [26/Mar/2026 09:27:19] "GET /media_file/CACHE/UTBA/event_photo/EVT_20251213_001/VID_20251214_233253_401.mp4 HTTP/1.1" 206 269302 0.000859
+127.0.0.1 - - [26/Mar/2026 09:27:19] "GET /media_file/CACHE/UTBA/event_photo/EVT_20240427_002/VID_20240427_205219.mp4 HTTP/1.1" 206 27957 0.000672
+127.0.0.1 - - [26/Mar/2026 09:27:20] "GET /media_file/CACHE/UTBA/event_photo/EVT_20241124_012/1000066787.mp4 HTTP/1.1" 206 661107 0.000916
+127.0.0.1 - - [26/Mar/2026 09:27:23] "GET /media_file/CACHE/UTBA/event_photo/EVT_20240323_001/VID-20240330-WA0084.mp4 HTTP/1.1" 206 38101 0.000543
+127.0.0.1 - - [26/Mar/2026 09:27:42] "GET /media_file/CACHE/UTBA/event_photo/EVT_20240427_002/VID_20240427_205219.mp4 HTTP/1.1" 206 38855009 22.647928
+127.0.0.1 - - [26/Mar/2026 09:27:49] "GET /api/music/albums HTTP/1.1" 200 7634 0.001899
+127.0.0.1 - - [26/Mar/2026 09:27:49] "GET /api/music/list?per_page=200&page=3 HTTP/1.1" 200 57200 0.005919
+127.0.0.1 - - [26/Mar/2026 09:27:49] "GET /static/album_image/9.jpg HTTP/1.1" 304 219 0.000657
+(708020) accepted ('127.0.0.1', 60534)
+127.0.0.1 - - [26/Mar/2026 09:27:51] "GET /api/music/download/614 HTTP/1.1" 200 3808771 0.003548
+(708020) accepted ('127.0.0.1', 52094)
+42.190.118.6,127.0.0.1 - - [26/Mar/2026 09:33:09] "GET /api/user_control/get_user_data HTTP/1.1" 200 3384 0.024122
+(708020) accepted ('127.0.0.1', 52096)
+42.190.118.6,127.0.0.1 - - [26/Mar/2026 09:33:11] "GET / HTTP/1.1" 304 198 0.002298
+(708020) accepted ('127.0.0.1', 52116)
+(708020) accepted ('127.0.0.1', 52132)
+42.190.118.6,127.0.0.1 - - [26/Mar/2026 09:33:12] "GET /api/user_control/get_user_data HTTP/1.1" 200 3384 0.006871
+42.190.118.6,127.0.0.1 - - [26/Mar/2026 09:33:12] "GET /api/event_data/get_all_event_sort HTTP/1.1" 200 66007 0.068300
+(708020) accepted ('127.0.0.1', 52166)
+42.190.118.6,127.0.0.1 - - [26/Mar/2026 09:33:12] "GET /api/user_control/get_profile_image/lowyihong?t=1774517592644 HTTP/1.1" 200 51685 0.009001
+(708020) accepted ('127.0.0.1', 56000)
+42.190.118.6,127.0.0.1 - - [26/Mar/2026 09:33:30] "GET /static/vite/init.js HTTP/1.1" 304 307 0.002432
+(708020) accepted ('127.0.0.1', 56018)
+(708020) accepted ('127.0.0.1', 56028)
+42.190.118.6,127.0.0.1 - - [26/Mar/2026 09:33:31] "GET /favicon.ico HTTP/1.1" 304 197 0.000438
+42.190.118.6,127.0.0.1 - - [26/Mar/2026 09:33:31] "GET /api/event_data/get_all_event_sort HTTP/1.1" 200 66007 0.076122
+(708020) accepted ('127.0.0.1', 50086)
+42.190.118.6,127.0.0.1 - - [26/Mar/2026 09:34:04] "GET /api/app/releases HTTP/1.1" 200 870 0.002140
+(708020) accepted ('127.0.0.1', 52228)
+42.190.118.6,127.0.0.1 - - [26/Mar/2026 09:34:06] "GET /api/app/download/UTBA_20260326_0933.apk HTTP/1.1" 200 7160194 0.017258
+ * Detected change in '/home/yukang/flaskapp/xinya/app/settings.py', reloading
+[CHECK] ✅ MP4 时长正常: 10.7s
+[CHECK] ✅ MP4 时长正常: 43.05s
+[CHECK] ✅ MP4 时长正常: 12.0s
+[CHECK] ✅ MP4 时长正常: 15.012646s
+ * Restarting with stat
+/home/yukang/flaskapp/xinya/run.py:3: DeprecationWarning: 
+Eventlet is deprecated. It is currently being maintained in bugfix mode, and
+we strongly recommend against using it for new projects.
+
+If you are already using Eventlet, we recommend migrating to a different
+framework.  For more detail see
+https://eventlet.readthedocs.io/en/latest/asyncio/migration.html
+
+  import eventlet
+ * Debugger is active!
+ * Debugger PIN: 103-153-293
+(711910) wsgi starting up on http://0.0.0.0:5102

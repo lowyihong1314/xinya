@@ -1,15 +1,19 @@
 import type { CapacitorConfig } from "@capacitor/cli";
 
+const androidScheme = process.env.CAP_ANDROID_SCHEME ?? "https";
+const allowCleartext = process.env.CAP_CLEARTEXT === "true";
+
 const config: CapacitorConfig = {
   appId: "com.xinya.app",
   appName: "心芽",
   // Points to the APK build output (npm run build:apk)
   webDir: "apk_dist",
   server: {
-    // Allow cleartext traffic so WebSocket / HLS streams work without extra Android config
-    cleartext: false,
-    // Cookie-based sessions need credentials forwarded
-    androidScheme: "https",
+    // Local emulator builds can opt into http + cleartext so the WebView can reach
+    // the Flask dev server on 10.0.2.2 without mixed-content blocking.
+    cleartext: allowCleartext,
+    // Production APKs keep https://localhost for secure cookie-based sessions.
+    androidScheme,
   },
 };
 

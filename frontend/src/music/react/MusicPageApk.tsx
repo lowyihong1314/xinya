@@ -45,6 +45,7 @@ export function MusicPageApk() {
   const progressIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const lastNativeAutoplayKeyRef = useRef(0);
   const hasSeenPlaybackSessionRef = useRef(false);
+  const shouldInitNative = hasPlaybackSession || autoplayKey > 0;
 
   useEffect(() => {
     Promise.all([fetchAlbums(), fetchMusicList()])
@@ -57,12 +58,20 @@ export function MusicPageApk() {
   }, [setLibraryMusics]);
 
   useEffect(() => {
+    if (!shouldInitNative) {
+      return;
+    }
+
     void NativeMusic.ready().catch((error) => {
       console.error("NativeMusic.ready failed", error);
     });
-  }, []);
+  }, [shouldInitNative]);
 
   useEffect(() => {
+    if (!shouldInitNative) {
+      return;
+    }
+
     let active = true;
     const handles: Array<{ remove: () => Promise<void> | void }> = [];
 
@@ -92,7 +101,7 @@ export function MusicPageApk() {
       active = false;
       void Promise.all(handles.map((handle) => handle.remove()));
     };
-  }, [handleTrackEnded, playRelative, setIsPlayingState]);
+  }, [handleTrackEnded, playRelative, setIsPlayingState, shouldInitNative]);
 
   useEffect(() => {
     if (!currentMusic || autoplayKey <= 0 || autoplayKey === lastNativeAutoplayKeyRef.current) {
@@ -132,6 +141,12 @@ export function MusicPageApk() {
   }, [currentMusic, hasPlaybackSession]);
 
   useEffect(() => {
+    if (!shouldInitNative) {
+      setProgress(0);
+      setDuration(0);
+      return;
+    }
+
     async function syncProgress() {
       try {
         const { positionMs, durationMs, isPlaying: nativePlaying } = await NativeMusic.getProgress();
@@ -151,7 +166,7 @@ export function MusicPageApk() {
       void syncProgress();
     }, 500);
     return () => { if (progressIntervalRef.current) clearInterval(progressIntervalRef.current); };
-  }, [autoplayKey, currentMusic, isPlaying, setIsPlayingState]);
+  }, [autoplayKey, currentMusic, isPlaying, setIsPlayingState, shouldInitNative]);
 
   useEffect(() => { setProgress(0); setDuration(0); }, [autoplayKey]);
 
@@ -207,7 +222,7 @@ export function MusicPageApk() {
                 isActive={currentMusic?.id === track.id}
                 isPlaying={isPlaying && currentMusic?.id === track.id}
                 inQueue={queue.some((q) => q.id === track.id)}
-                onSelect={() => { setQueue(albumTracks); selectMusic(track.id); }}
+                onSelect={() => void handleSelectTrack(track, albumTracks, setQueue, selectMusic, setIsPlayingState, setDuration)}
                 onAddToQueue={() => appendToQueue(track.id)}
               />
             ))}
@@ -472,6 +487,17 @@ async function handleTogglePlay(
       return;
     }
 
+    const { durationMs } = await NativeMusic.getProgress().catch(() => ({
+      positionMs: 0,
+      durationMs: 0,
+      isPlaying: false,
+    }));
+
+    if (durationMs <= 0) {
+      await playTrackWithNative(currentMusic, setIsPlayingState, () => undefined);
+      return;
+    }
+
     await NativeMusic.resume();
     setIsPlayingState(true);
   } catch (error) {
@@ -485,6 +511,40 @@ async function handleSeek(nextTime: number, setProgress: (value: number) => void
     setProgress(nextTime);
   } catch (error) {
     console.error("NativeMusic.seekTo failed", error);
+  }
+}
+
+async function handleSelectTrack(
+  track: MusicRecord,
+  albumTracks: MusicRecord[],
+  setQueue: (musics: MusicRecord[]) => void,
+  selectMusic: (musicId: number) => void,
+  setIsPlayingState: (playing: boolean) => void,
+  setDuration: (value: number) => void,
+) {
+  setQueue(albumTracks);
+  selectMusic(track.id);
+  await playTrackWithNative(track, setIsPlayingState, setDuration);
+}
+
+async function playTrackWithNative(
+  track: MusicRecord,
+  setIsPlayingState: (playing: boolean) => void,
+  setDuration: (value: number) => void,
+) {
+  try {
+    await NativeMusic.ready();
+    await NativeMusic.play({
+      url: `${API_BASE}/api/music/download/${track.id}`,
+      title: track.title,
+      album: track.album?.name ?? "",
+      coverUrl: resolveAssetUrl(track.cover_url),
+    });
+    setIsPlayingState(true);
+    setDuration(track.duration ?? 0);
+  } catch (error) {
+    setIsPlayingState(false);
+    console.error("NativeMusic.play failed", error);
   }
 }
 

@@ -7,8 +7,11 @@
     "dev": "vite",
     "build": "vite build",
     "build:apk": "vite build --mode apk",
+    "build:apk:emulator": "VITE_API_BASE=http://10.0.2.2:5102 vite build --mode apk",
     "preview": "vite preview",
     "cap:sync": "npx cap sync android",
+    "cap:sync:emulator": "CAP_ANDROID_SCHEME=http CAP_CLEARTEXT=true npx cap sync android",
+    "apk:prepare:emulator": "npm run build:apk:emulator && npm run cap:sync:emulator",
     "cap:open": "npx cap open android"
   },
   "devDependencies": {

@@ -21,6 +21,7 @@ export interface NativeMusicPlugin {
 
 type CapacitorLike = {
   registerPlugin?: <T>(name: string) => T;
+  Plugins?: Record<string, unknown>;
 };
 
 function createUnavailableError() {
@@ -46,16 +47,45 @@ function createUnavailablePlugin(): NativeMusicPlugin {
   };
 }
 
-function resolveRegisterPlugin() {
-  const maybeCapacitor = (globalThis as typeof globalThis & { Capacitor?: CapacitorLike }).Capacitor;
-  if (typeof maybeCapacitor?.registerPlugin === "function") {
-    return maybeCapacitor.registerPlugin.bind(maybeCapacitor);
+function isNativeMusicPlugin(value: unknown): value is NativeMusicPlugin {
+  return Boolean(
+    value &&
+    typeof value === "object" &&
+    typeof (value as NativeMusicPlugin).ready === "function" &&
+    typeof (value as NativeMusicPlugin).play === "function" &&
+    typeof (value as NativeMusicPlugin).pause === "function" &&
+    typeof (value as NativeMusicPlugin).resume === "function" &&
+    typeof (value as NativeMusicPlugin).seekTo === "function" &&
+    typeof (value as NativeMusicPlugin).getProgress === "function" &&
+    typeof (value as NativeMusicPlugin).stop === "function" &&
+    typeof (value as NativeMusicPlugin).addListener === "function"
+  );
+}
+
+function resolveCapacitor() {
+  return (globalThis as typeof globalThis & { Capacitor?: CapacitorLike }).Capacitor ?? null;
+}
+
+function resolvePluginFromGlobal(capacitor: CapacitorLike | null) {
+  const plugin = capacitor?.Plugins?.NativeMusic;
+  return isNativeMusicPlugin(plugin) ? plugin : null;
+}
+
+function resolveRegisterPlugin(capacitor: CapacitorLike | null) {
+  if (typeof capacitor?.registerPlugin === "function") {
+    return capacitor.registerPlugin.bind(capacitor);
   }
   return null;
 }
 
 export const NativeMusic: NativeMusicPlugin = (() => {
-  const registerPlugin = resolveRegisterPlugin();
+  const capacitor = resolveCapacitor();
+  const plugin = resolvePluginFromGlobal(capacitor);
+  if (plugin) {
+    return plugin;
+  }
+
+  const registerPlugin = resolveRegisterPlugin(capacitor);
   if (!registerPlugin) {
     return createUnavailablePlugin();
   }

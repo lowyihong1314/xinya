@@ -8,7 +8,10 @@ import android.app.Service;
 import android.content.Intent;
 import android.os.Binder;
 import android.os.Build;
+import android.os.Handler;
 import android.os.IBinder;
+import android.os.Looper;
+import android.util.Log;
 import android.webkit.CookieManager;
 
 import androidx.core.app.NotificationCompat;
@@ -28,11 +31,13 @@ import android.support.v4.media.session.PlaybackStateCompat;
 
 import java.util.HashMap;
 import java.util.Map;
+import java.util.concurrent.FutureTask;
 
 public class MusicService extends Service {
 
     private static final String CHANNEL_ID = "xinya_music";
     private static final int NOTIFICATION_ID = 1042;
+    private static final String TAG = "MusicService";
 
     public interface EventCallback {
         void emit(String event, JSObject data);
@@ -53,6 +58,7 @@ public class MusicService extends Service {
     private String currentAlbum = "";
     private String currentCoverUrl = "";
     private boolean isForeground = false;
+    private final Handler mainHandler = new Handler(Looper.getMainLooper());
 
     @Override
     public void onCreate() {
@@ -123,6 +129,7 @@ public class MusicService extends Service {
 
     @Override
     public int onStartCommand(Intent intent, int flags, int startId) {
+        ensureForegroundService();
         return START_STICKY;
     }
 
@@ -149,89 +156,104 @@ public class MusicService extends Service {
     }
 
     public void play(String url, String title, String album, String coverUrl) {
-        currentTitle = title != null ? title : "";
-        currentAlbum = album != null ? album : "";
-        currentCoverUrl = coverUrl != null ? coverUrl : "";
+        runOnPlayerThread(() -> {
+            currentTitle = title != null ? title : "";
+            currentAlbum = album != null ? album : "";
+            currentCoverUrl = coverUrl != null ? coverUrl : "";
+            ensureForegroundService();
 
-        DefaultHttpDataSource.Factory dataSourceFactory = new DefaultHttpDataSource.Factory()
-            .setAllowCrossProtocolRedirects(true);
+            DefaultHttpDataSource.Factory dataSourceFactory = new DefaultHttpDataSource.Factory()
+                .setAllowCrossProtocolRedirects(true);
 
-        String cookieHeader = CookieManager.getInstance().getCookie(url);
-        if (cookieHeader != null && !cookieHeader.isEmpty()) {
-            Map<String, String> requestHeaders = new HashMap<>();
-            requestHeaders.put("Cookie", cookieHeader);
-            dataSourceFactory.setDefaultRequestProperties(requestHeaders);
-        }
+            String cookieHeader = CookieManager.getInstance().getCookie(url);
+            if (cookieHeader != null && !cookieHeader.isEmpty()) {
+                Map<String, String> requestHeaders = new HashMap<>();
+                requestHeaders.put("Cookie", cookieHeader);
+                dataSourceFactory.setDefaultRequestProperties(requestHeaders);
+            }
 
-        MediaItem mediaItem = MediaItem.fromUri(url);
-        ProgressiveMediaSource mediaSource = new ProgressiveMediaSource.Factory(dataSourceFactory)
-            .createMediaSource(mediaItem);
+            MediaItem mediaItem = MediaItem.fromUri(url);
+            ProgressiveMediaSource mediaSource = new ProgressiveMediaSource.Factory(dataSourceFactory)
+                .createMediaSource(mediaItem);
 
-        player.setMediaSource(mediaSource);
-        player.prepare();
-        player.play();
-        updatePlaybackState();
-        updateNotification();
+            player.setMediaSource(mediaSource);
+            player.prepare();
+            player.play();
+            updatePlaybackState();
+            updateNotification();
+        });
     }
 
     public void pause() {
-        if (player != null) {
-            player.pause();
-        }
-        updatePlaybackState();
-        updateNotification();
+        runOnPlayerThread(() -> {
+            if (player != null) {
+                player.pause();
+            }
+            updatePlaybackState();
+            updateNotification();
+        });
     }
 
     public void resume() {
-        if (player != null) {
-            player.play();
-        }
-        updatePlaybackState();
-        updateNotification();
+        runOnPlayerThread(() -> {
+            if (player != null) {
+                player.play();
+            }
+            updatePlaybackState();
+            updateNotification();
+        });
     }
 
     public void stop() {
-        if (player != null) {
-            player.stop();
-        }
-        currentTitle = "";
-        currentAlbum = "";
-        currentCoverUrl = "";
-        updatePlaybackState();
-        emitPlayStateChanged(false);
-        if (isForeground) {
-            stopForeground(true);
-            isForeground = false;
-        }
-        if (notificationManager != null) {
-            notificationManager.cancel(NOTIFICATION_ID);
-        }
+        runOnPlayerThread(() -> {
+            if (player != null) {
+                player.stop();
+            }
+            currentTitle = "";
+            currentAlbum = "";
+            currentCoverUrl = "";
+            updatePlaybackState();
+            emitPlayStateChanged(false);
+            if (isForeground) {
+                stopForeground(true);
+                isForeground = false;
+            }
+            if (notificationManager != null) {
+                notificationManager.cancel(NOTIFICATION_ID);
+            }
+        });
     }
 
     public void seekTo(long positionMs) {
-        if (player != null) {
-            player.seekTo(Math.max(positionMs, 0L));
-        }
-        updatePlaybackState();
+        runOnPlayerThread(() -> {
+            if (player != null) {
+                player.seekTo(Math.max(positionMs, 0L));
+            }
+            updatePlaybackState();
+        });
     }
 
     public long getPositionMs() {
-        if (player == null) {
-            return 0L;
-        }
-        return Math.max(player.getCurrentPosition(), 0L);
+        return callOnPlayerThread(() -> {
+            if (player == null) {
+                return 0L;
+            }
+            return Math.max(player.getCurrentPosition(), 0L);
+        }, 0L);
     }
 
     public long getDurationMs() {
-        if (player == null) {
-            return 0L;
-        }
-        long duration = player.getDuration();
-        return duration > 0 ? duration : 0L;
+        return callOnPlayerThread(() -> {
+            if (player == null) {
+                return 0L;
+            }
+            long duration = player.getDuration();
+            return duration > 0 ? duration : 0L;
+        }, 0L);
     }
 
     public boolean isPlaying() {
-        return player != null && player.isPlaying();
+        return callOnPlayerThread(() -> player != null && player.isPlaying(), false);
     }
 
     private void emitPlayStateChanged(boolean isPlaying) {
@@ -277,6 +299,16 @@ public class MusicService extends Service {
             return;
         }
 
+        try {
+            Notification notification = buildPlaybackNotification();
+            promoteNotification(notification);
+        } catch (Exception error) {
+            Log.e(TAG, "Failed to build playback notification, falling back", error);
+            promoteNotification(buildFallbackNotification());
+        }
+    }
+
+    private Notification buildPlaybackNotification() {
         String title = currentTitle.isEmpty() ? "心芽音乐" : currentTitle;
         String album = currentAlbum.isEmpty() ? "后台播放中" : currentAlbum;
 
@@ -289,10 +321,10 @@ public class MusicService extends Service {
             PendingIntent.FLAG_UPDATE_CURRENT | PendingIntent.FLAG_IMMUTABLE
         );
 
-        Notification notification = new NotificationCompat.Builder(this, CHANNEL_ID)
+        return new NotificationCompat.Builder(this, CHANNEL_ID)
             .setContentTitle(title)
             .setContentText(album)
-            .setSmallIcon(R.drawable.ic_music_notification)
+            .setSmallIcon(R.mipmap.ic_launcher)
             .setContentIntent(contentIntent)
             .setVisibility(NotificationCompat.VISIBILITY_PUBLIC)
             .setOngoing(player.isPlaying())
@@ -322,14 +354,48 @@ public class MusicService extends Service {
                     .setShowActionsInCompactView(0, 1, 2)
             )
             .build();
+    }
 
-        if (!isForeground) {
-            startForeground(NOTIFICATION_ID, notification);
-            isForeground = true;
-            return;
+    private Notification buildFallbackNotification() {
+        Intent launchIntent = new Intent(this, MainActivity.class);
+        launchIntent.setFlags(Intent.FLAG_ACTIVITY_SINGLE_TOP | Intent.FLAG_ACTIVITY_CLEAR_TOP);
+        PendingIntent contentIntent = PendingIntent.getActivity(
+            this,
+            0,
+            launchIntent,
+            PendingIntent.FLAG_UPDATE_CURRENT | PendingIntent.FLAG_IMMUTABLE
+        );
+
+        String title = currentTitle.isEmpty() ? "心芽音乐" : currentTitle;
+        String album = currentAlbum.isEmpty() ? "准备播放" : currentAlbum;
+
+        return new NotificationCompat.Builder(this, CHANNEL_ID)
+            .setContentTitle(title)
+            .setContentText(album)
+            .setSmallIcon(R.mipmap.ic_launcher)
+            .setContentIntent(contentIntent)
+            .setVisibility(NotificationCompat.VISIBILITY_PUBLIC)
+            .setOnlyAlertOnce(true)
+            .setShowWhen(false)
+            .build();
+    }
+
+    private void ensureForegroundService() {
+        promoteNotification(buildFallbackNotification());
+    }
+
+    private void promoteNotification(Notification notification) {
+        try {
+            if (!isForeground) {
+                startForeground(NOTIFICATION_ID, notification);
+                isForeground = true;
+                return;
+            }
+
+            notificationManager.notify(NOTIFICATION_ID, notification);
+        } catch (Exception error) {
+            Log.e(TAG, "Failed to promote music notification", error);
         }
-
-        notificationManager.notify(NOTIFICATION_ID, notification);
     }
 
     private void createNotificationChannel() {
@@ -344,5 +410,41 @@ public class MusicService extends Service {
         );
         channel.setDescription("Xinya music playback controls");
         notificationManager.createNotificationChannel(channel);
+    }
+
+    private void runOnPlayerThread(Runnable action) {
+        if (Looper.myLooper() == Looper.getMainLooper()) {
+            action.run();
+            return;
+        }
+        mainHandler.post(action);
+    }
+
+    private <T> T callOnPlayerThread(java.util.concurrent.Callable<T> action, T fallback) {
+        if (Looper.myLooper() == Looper.getMainLooper()) {
+            try {
+                return action.call();
+            } catch (Exception error) {
+                Log.e(TAG, "Player action failed on main thread", error);
+                return fallback;
+            }
+        }
+
+        FutureTask<T> task = new FutureTask<>(() -> {
+            try {
+                return action.call();
+            } catch (Exception error) {
+                Log.e(TAG, "Player action failed on main thread", error);
+                return fallback;
+            }
+        });
+        mainHandler.post(task);
+
+        try {
+            return task.get();
+        } catch (Exception error) {
+            Log.e(TAG, "Failed waiting for player action", error);
+            return fallback;
+        }
     }
 }

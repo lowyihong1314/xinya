@@ -460,6 +460,7 @@ def login():
 
     user = User.query.filter_by(username=username).first()
     if user and user.check_password(password):
+        session.permanent = True
         login_user(user, remember=True, duration=timedelta(days=7))
         session["login_version"] = user.login_version
         return jsonify({"success": True})

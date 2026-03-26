@@ -37,6 +37,30 @@ npx cap sync android
 
 把 `apk_dist/` 的内容复制进 `android/app/src/main/assets/public/`。
 
+### 本地模拟器联调
+
+如果要在这台 server 的 headless Android emulator 上联调，请不要直接用生产 APK 配置。
+
+原因：
+
+- 正式 APK 使用 `https://utbabuddha.com`
+- 模拟器内置页源是 `https://localhost`
+- 如果你临时把 API 改成 `http://10.0.2.2:5102`，默认会被 WebView 当成 mixed content 挡掉
+
+请改用这条本地联调链路：
+
+```bash
+cd /home/yukang/flaskapp/xinya/frontend
+npm run apk:prepare:emulator
+```
+
+它会做两件事：
+
+- `VITE_API_BASE=http://10.0.2.2:5102`
+- `CAP_ANDROID_SCHEME=http CAP_CLEARTEXT=true`
+
+这样 Android 模拟器里的 WebView 就能访问宿主机 Flask 服务。
+
 ---
 
 ### 第三步：打包 APK
