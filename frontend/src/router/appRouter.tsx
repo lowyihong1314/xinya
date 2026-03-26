@@ -12,6 +12,7 @@ import { PaymentVoucherSignPage } from "../CRM/Account/react/claim/PaymentVouche
 import { ChangyouPage } from "../changyou/react/ChangyouPage";
 import { ChangyouDetailPage } from "../changyou/react/ChangyouDetailPage";
 import { ChangyouRoomPage } from "../changyou/react/room/ChangyouRoomPage";
+import { LoginPage } from "../app/LoginPage";
 import { AppLayout } from "./AppLayout";
 
 function ErrorPage({ message }: { message: string }) {
@@ -20,11 +21,6 @@ function ErrorPage({ message }: { message: string }) {
       {message}
     </div>
   );
-}
-
-function LoginPage() {
-  window.__xinyaOpenLogin?.();
-  return <Navigate to="/" replace />;
 }
 
 export const appRouter = createHashRouter([

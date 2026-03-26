@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import type { ChangeEvent, CSSProperties, FormEvent } from "react";
 
 import { useUserState } from "../../app/UserState";
@@ -199,6 +199,7 @@ export function ProfilePage() {
   const [footprintsError, setFootprintsError] = useState<string | null>(null);
   const [appReleases, setAppReleases] = useState<AppRelease[]>([]);
   const [appReleasesLoading, setAppReleasesLoading] = useState(false);
+  const appReleasesFetched = useRef(false);
 
   async function loadFootprints() {
     if (!isAuthenticated || !profileUser?.id) {
@@ -252,7 +253,8 @@ export function ProfilePage() {
   }, [isAuthenticated, profileUser?.id, profileUser?.nric_asset_id, profileUser?.NRIC, profileUser?.name_NRIC]);
 
   useEffect(() => {
-    if (activeSection !== "account" || appReleases.length > 0) return;
+    if (activeSection !== "account" || appReleasesFetched.current) return;
+    appReleasesFetched.current = true;
     setAppReleasesLoading(true);
     fetchAppReleases()
       .then(setAppReleases)
@@ -901,7 +903,7 @@ function AppDownloadCard({ releases, loading }: { releases: AppRelease[]; loadin
           ))}
         </div>
       )}
-      <div style={footprintNoteStyle}>Android APK 安装包，下载后在手机上打开即可安装。</div>
+      {!loading && <div style={footprintNoteStyle}>Android APK 安装包，下载后在手机上打开即可安装。</div>}
     </article>
   );
 }

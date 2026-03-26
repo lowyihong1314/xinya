@@ -63,7 +63,6 @@ export function AppLayout() {
       onDismiss: dismissPlayer,
       onExpand: () => setFloatingMinimized(false),
       onMinimize: () => setFloatingMinimized(true),
-      onGoMusic: () => navigate("/music"),
       onPlayFromQueue: playFromQueue,
       onRemoveFromQueue: removeFromQueue,
       onClearQueue: clearQueue,
@@ -134,13 +133,7 @@ export function AppLayout() {
             key={item.key}
             title={item.title}
             type="button"
-            onClick={() => {
-              if (item.modal) {
-                window.__xinyaOpenLogin?.();
-                return;
-              }
-              navigate(item.path);
-            }}
+            onClick={() => navigate(item.path)}
             style={navButtonStyle(activeKey === item.key)}
           >
             <i className={item.icon} />

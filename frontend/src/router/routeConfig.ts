@@ -16,7 +16,6 @@ export type NavItem = {
   title: string;
   icon: string;
   auth: boolean;
-  modal?: boolean;
   path: string;
 };
 
@@ -28,7 +27,7 @@ export const NAV_ITEMS: NavItem[] = [
   // { key: "fileSystem", title: "文件管理", icon: "fas fa-folder", auth: true, path: "/files" },
   { key: "music", title: "音乐播放器", icon: "fas fa-music", auth: true, path: "/music" },
   { key: "changyou", title: "唱游", icon: "fas fa-microphone-lines", auth: true, path: "/changyou" },
-  { key: "login", title: "登录", icon: "fas fa-right-to-bracket", auth: false, modal: true, path: "/login" },
+  { key: "login", title: "登录", icon: "fas fa-right-to-bracket", auth: false, path: "/login" },
 ];
 
 export const legacyPageToPath: Record<string, string> = {

@@ -1,5 +1,3 @@
-import os
-
 from flask import Blueprint, jsonify, send_from_directory
 
 from pathlib import Path
@@ -24,12 +22,13 @@ def list_releases():
         return jsonify({"releases": []})
 
     releases = []
-    for entry in sorted(APK_DIR.iterdir()):
+    for entry in APK_DIR.iterdir():
         if entry.suffix.lower() != ".apk":
             continue
         stat = entry.stat()
         releases.append(
             {
+                "_mtime": stat.st_mtime,
                 "filename": entry.name,
                 "size_bytes": stat.st_size,
                 "size_label": _human_size(stat.st_size),
@@ -37,8 +36,7 @@ def list_releases():
             }
         )
 
-    # Newest first (by mtime)
-    releases.sort(key=lambda r: APK_DIR.joinpath(r["filename"]).stat().st_mtime, reverse=True)
+    releases.sort(key=lambda r: r.pop("_mtime"), reverse=True)
     return jsonify({"releases": releases})
 
 
