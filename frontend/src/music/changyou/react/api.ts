@@ -1,5 +1,5 @@
 import type { SongbookEntry } from "./types";
-import { apiFetch } from "../../js/apiFetch";
+import { apiFetch } from "../../../js/apiFetch";
 
 async function parseJson<T>(response: Response): Promise<T> {
   const data = (await response.json().catch(() => ({}))) as T & { error?: string; message?: string };

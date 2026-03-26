@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
+import type { CSSProperties } from "react";
 
 import { useUserState } from "../../../app/UserState";
 import { ensureDesignTokens } from "../../../theme/designTokens";
@@ -8,8 +9,8 @@ import {
   fetchSongbookEntry,
   importSongbookDocx,
   saveSongbookEntry,
-} from "../../../changyou/react/api";
-import type { SongbookEntry } from "../../../changyou/react/types";
+} from "../../../music/changyou/react/api";
+import type { SongbookEntry } from "../../../music/changyou/react/types";
 
 const DEFAULT_IMPORT_PATH = "/home/yukang/flaskapp/xinya/tmp/songbook_import/songbook.docx";
 const PAGE_SIZE = 12;
@@ -256,12 +257,12 @@ export function SongbookAdminPage() {
 
 const pageStyle = { display: "grid", gap: "16px" } as const;
 const pageInnerStyle = { width: "100%", maxWidth: "1480px", margin: "0 auto", display: "grid", gap: "16px" } as const;
-const heroStyle = (isMobile: boolean) => ({ display: "flex", justifyContent: "space-between", gap: "16px", alignItems: "flex-start", flexDirection: isMobile ? "column" : "row", padding: "20px", borderRadius: "24px", background: "linear-gradient(135deg, var(--x-color-nav-start), var(--x-color-accent))", color: "white" });
+const heroStyle = (isMobile: boolean): CSSProperties => ({ display: "flex", justifyContent: "space-between", gap: "16px", alignItems: "flex-start", flexDirection: isMobile ? "column" : "row", padding: "20px", borderRadius: "24px", background: "linear-gradient(135deg, var(--x-color-nav-start), var(--x-color-accent))", color: "white" });
 const eyebrowStyle = { fontSize: "12px", letterSpacing: "0.18em", textTransform: "uppercase", opacity: 0.82 } as const;
 const titleStyle = { margin: "8px 0 0", fontSize: "28px", fontWeight: 900 } as const;
 const subtitleStyle = { margin: "8px 0 0", fontSize: "14px", opacity: 0.88 } as const;
 const heroActionsStyle = { display: "flex", gap: "10px", flexWrap: "wrap" } as const;
-const toolbarStyle = (isMobile: boolean) => ({ display: "flex", gap: "12px", flexWrap: "wrap" as const, flexDirection: isMobile ? "column" : "row" as const });
+const toolbarStyle = (isMobile: boolean): CSSProperties => ({ display: "flex", gap: "12px", flexWrap: "wrap", flexDirection: isMobile ? "column" : "row" });
 const summaryStyle = { padding: "12px 14px", borderRadius: "14px", background: "var(--x-color-panel-glass)", border: "1px solid var(--x-color-line-soft)", color: "var(--x-color-ink-muted)", fontSize: "13px", whiteSpace: "nowrap" as const } as const;
 const layoutStyle = (isMobile: boolean) => ({ display: "grid", gridTemplateColumns: isMobile ? "1fr" : "minmax(420px, 42vw) minmax(0,1fr)", gap: "16px", alignItems: "start" as const });
 const listPanelStyle = { padding: "18px", borderRadius: "20px", background: "var(--x-color-panel-strongest)", border: "1px solid var(--x-color-line-soft)", display: "grid", gap: "14px", alignContent: "start" } as const;

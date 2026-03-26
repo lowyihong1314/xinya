@@ -71,9 +71,9 @@ function resolvePluginFromGlobal(capacitor: CapacitorLike | null) {
   return isNativeMusicPlugin(plugin) ? plugin : null;
 }
 
-function resolveRegisterPlugin(capacitor: CapacitorLike | null) {
+function resolveRegisterPlugin(capacitor: CapacitorLike | null): CapacitorLike["registerPlugin"] | null {
   if (typeof capacitor?.registerPlugin === "function") {
-    return capacitor.registerPlugin.bind(capacitor);
+    return capacitor.registerPlugin;
   }
   return null;
 }

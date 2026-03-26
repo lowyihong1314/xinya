@@ -1,3 +1,5 @@
+import { CHANGYOU_PATH, MUSIC_PLAYER_PATH, MUSIC_ROOT_PATH } from "../music/router/paths";
+
 export type RouteKey =
   | "home"
   | "info"
@@ -5,7 +7,6 @@ export type RouteKey =
   | "profile"
   | "fileSystem"
   | "music"
-  | "changyou"
   | "login"
   | "lamp_registration"
   | "event_detail"
@@ -25,8 +26,7 @@ export const NAV_ITEMS: NavItem[] = [
   { key: "CRM", title: "CRM 管理", icon: "fas fa-layer-group", auth: true, path: "/crm" },
   { key: "profile", title: "用户资料", icon: "fas fa-user", auth: true, path: "/profile" },
   // { key: "fileSystem", title: "文件管理", icon: "fas fa-folder", auth: true, path: "/files" },
-  { key: "music", title: "音乐播放器", icon: "fas fa-music", auth: true, path: "/music" },
-  { key: "changyou", title: "唱游", icon: "fas fa-microphone-lines", auth: true, path: "/changyou" },
+  { key: "music", title: "音乐", icon: "fas fa-music", auth: true, path: MUSIC_PLAYER_PATH },
   { key: "login", title: "登录", icon: "fas fa-right-to-bracket", auth: false, path: "/login" },
 ];
 
@@ -36,8 +36,8 @@ export const legacyPageToPath: Record<string, string> = {
   CRM: "/crm",
   profile: "/profile",
   fileSystem: "/files",
-  music: "/music",
-  changyou: "/changyou",
+  music: MUSIC_PLAYER_PATH,
+  changyou: CHANGYOU_PATH,
   login: "/login",
   lamp_registration: "/lamp-registration",
 };
@@ -48,8 +48,7 @@ export function pageKeyFromPath(pathname: string) {
   if (pathname.startsWith("/crm")) return "CRM";
   if (pathname.startsWith("/profile")) return "profile";
   if (pathname.startsWith("/files")) return "fileSystem";
-  if (pathname.startsWith("/music")) return "music";
-  if (pathname.startsWith("/changyou")) return "changyou";
+  if (pathname.startsWith(MUSIC_ROOT_PATH)) return "music";
   if (pathname.startsWith("/lamp-registration")) return "lamp_registration";
   if (pathname.startsWith("/event/")) return "event_detail";
   if (pathname.startsWith("/image/")) return "image_detail";

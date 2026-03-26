@@ -1,6 +1,4 @@
-import { createHashRouter, Navigate } from "react-router-dom";
-
-import { IS_APK } from "../js/apiBase";
+import { createHashRouter, Navigate, useParams } from "react-router-dom";
 
 import { CRMPage } from "../CRM/react/CRMPage";
 import { HomeAlbumPage } from "../album/react/HomeAlbumPage";
@@ -8,13 +6,15 @@ import { EventDetailPage } from "../album/react/EventDetailPage";
 import { ImageDetailPage } from "../album/react/ImageDetailPage";
 import { InfoPage } from "../info/react/InfoPage";
 import { LampPage } from "../lamp/react/LampPage";
-import { MusicPage } from "../music/react/MusicPage";
-import { MusicPageApk } from "../music/react/MusicPageApk";
+import {
+  CHANGYOU_PATH,
+  CHANGYOU_ROOM_PATH,
+  getChangyouDetailPath,
+  getChangyouRoomPath,
+} from "../music/router/paths";
+import { musicRoute } from "../music/router/routes";
 import { ProfilePage } from "../profile/react/ProfilePage";
 import { PaymentVoucherSignPage } from "../CRM/Account/react/claim/PaymentVoucherSignPage";
-import { ChangyouPage } from "../changyou/react/ChangyouPage";
-import { ChangyouDetailPage } from "../changyou/react/ChangyouDetailPage";
-import { ChangyouRoomPage } from "../changyou/react/room/ChangyouRoomPage";
 import { LoginPage } from "../app/LoginPage";
 import { AppLayout } from "./AppLayout";
 
@@ -26,6 +26,16 @@ function ErrorPage({ message }: { message: string }) {
   );
 }
 
+function LegacyChangyouDetailRedirect() {
+  const { entryId } = useParams();
+  return <Navigate to={entryId ? getChangyouDetailPath(entryId) : CHANGYOU_PATH} replace />;
+}
+
+function LegacyChangyouRoomRedirect() {
+  const { roomId } = useParams();
+  return <Navigate to={roomId ? getChangyouRoomPath(roomId) : CHANGYOU_ROOM_PATH} replace />;
+}
+
 export const appRouter = createHashRouter([
   {
     path: "/",
@@ -35,9 +45,7 @@ export const appRouter = createHashRouter([
       { path: "info", element: <InfoPage /> },
       { path: "crm", element: <CRMPage /> },
       { path: "profile", element: <ProfilePage /> },
-      { path: "music", element: IS_APK ? <MusicPageApk /> : <MusicPage /> },
-      { path: "changyou", element: <ChangyouPage /> },
-      { path: "changyou/:entryId", element: <ChangyouDetailPage /> },
+      musicRoute,
       { path: "lamp-registration", element: <LampPage /> },
       { path: "event/:eventId", element: <EventDetailPage /> },
       { path: "image/:imageId", element: <ImageDetailPage /> },
@@ -46,8 +54,10 @@ export const appRouter = createHashRouter([
       { path: "*", element: <ErrorPage message="页面不存在" /> },
     ],
   },
-  { path: "/changyou-room", element: <ChangyouRoomPage /> },
-  { path: "/changyou-room/:roomId", element: <ChangyouRoomPage /> },
+  { path: "/changyou", element: <Navigate to={CHANGYOU_PATH} replace /> },
+  { path: "/changyou/:entryId", element: <LegacyChangyouDetailRedirect /> },
+  { path: "/changyou-room", element: <Navigate to={CHANGYOU_ROOM_PATH} replace /> },
+  { path: "/changyou-room/:roomId", element: <LegacyChangyouRoomRedirect /> },
   { path: "/payment-voucher-sign/:token", element: <PaymentVoucherSignPage /> },
   { path: "*", element: <Navigate to="/" replace /> },
 ]);

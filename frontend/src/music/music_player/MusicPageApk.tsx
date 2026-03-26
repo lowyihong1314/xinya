@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import type { CSSProperties } from "react";
 
 import { API_BASE } from "../../js/apiBase";
-import { fetchAlbums, fetchMusicList } from "./api";
+import { fetchAlbums } from "./api";
 import { useMusicPlayback } from "./MusicPlaybackContext";
 import { NativeMusic } from "./nativeMusicPlugin";
 import type { AlbumRecord, MusicRecord } from "./types";
@@ -13,6 +13,7 @@ type ApkScreen = "albums" | "tracks";
 
 export function MusicPageApk() {
   const {
+    libraryMusics,
     currentMusic,
     isPlaying,
     hasPlaybackSession,
@@ -22,9 +23,7 @@ export function MusicPageApk() {
     queue,
     selectMusic,
     setQueue,
-    setLibraryMusics,
     playRelative,
-    handleTrackEnded,
     toggleShuffle,
     cycleRepeatMode,
     appendToQueue,
@@ -36,112 +35,33 @@ export function MusicPageApk() {
 
   const [screen, setScreen] = useState<ApkScreen>("albums");
   const [albums, setAlbums] = useState<AlbumRecord[]>([]);
-  const [allMusics, setAllMusics] = useState<MusicRecord[]>([]);
   const [selectedAlbum, setSelectedAlbum] = useState<AlbumRecord | null>(null);
   const [loading, setLoading] = useState(true);
   const [showFullPlayer, setShowFullPlayer] = useState(false);
   const [progress, setProgress] = useState(0);
   const [duration, setDuration] = useState(0);
   const progressIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
-  const lastNativeAutoplayKeyRef = useRef(0);
-  const hasSeenPlaybackSessionRef = useRef(false);
-  const shouldInitNative = hasPlaybackSession || autoplayKey > 0;
+  const shouldInspectNative = hasPlaybackSession || autoplayKey > 0 || Boolean(currentMusic);
 
   useEffect(() => {
-    Promise.all([fetchAlbums(), fetchMusicList()])
-      .then(([albumList, { musics }]) => {
+    fetchAlbums()
+      .then((albumList) => {
         setAlbums(albumList);
-        setAllMusics(musics);
-        setLibraryMusics(musics);
       })
       .finally(() => setLoading(false));
-  }, [setLibraryMusics]);
+  }, []);
 
   useEffect(() => {
-    if (!shouldInitNative) {
+    if (currentMusic) {
+      setDuration(currentMusic.duration ?? 0);
       return;
     }
-
-    void NativeMusic.ready().catch((error) => {
-      console.error("NativeMusic.ready failed", error);
-    });
-  }, [shouldInitNative]);
-
-  useEffect(() => {
-    if (!shouldInitNative) {
-      return;
-    }
-
-    let active = true;
-    const handles: Array<{ remove: () => Promise<void> | void }> = [];
-
-    void (async () => {
-      try {
-        const nextHandles = await Promise.all([
-          NativeMusic.addListener("trackEnded", () => handleTrackEnded()),
-          NativeMusic.addListener("next", () => playRelative(1)),
-          NativeMusic.addListener("prev", () => playRelative(-1)),
-          NativeMusic.addListener("playStateChanged", ({ isPlaying: nextPlaying }) => {
-            setIsPlayingState(nextPlaying);
-          }),
-        ]);
-
-        if (!active) {
-          await Promise.all(nextHandles.map((handle) => handle.remove()));
-          return;
-        }
-
-        handles.push(...nextHandles);
-      } catch (error) {
-        console.error("NativeMusic listener setup failed", error);
-      }
-    })();
-
-    return () => {
-      active = false;
-      void Promise.all(handles.map((handle) => handle.remove()));
-    };
-  }, [handleTrackEnded, playRelative, setIsPlayingState, shouldInitNative]);
-
-  useEffect(() => {
-    if (!currentMusic || autoplayKey <= 0 || autoplayKey === lastNativeAutoplayKeyRef.current) {
-      return;
-    }
-
-    lastNativeAutoplayKeyRef.current = autoplayKey;
-
-    void NativeMusic.play({
-      url: `${API_BASE}/api/music/download/${currentMusic.id}`,
-      title: currentMusic.title,
-      album: currentMusic.album?.name ?? "",
-      coverUrl: resolveAssetUrl(currentMusic.cover_url),
-    })
-      .then(() => {
-        setIsPlayingState(true);
-        setDuration(currentMusic.duration ?? 0);
-      })
-      .catch((error) => {
-        console.error("NativeMusic.play failed", error);
-      });
-  }, [autoplayKey, currentMusic, setIsPlayingState]);
-
-  useEffect(() => {
-    if (hasPlaybackSession && currentMusic) {
-      hasSeenPlaybackSessionRef.current = true;
-      return;
-    }
-
-    if (!hasSeenPlaybackSessionRef.current) {
-      return;
-    }
-
     setProgress(0);
     setDuration(0);
-    void NativeMusic.stop().catch(() => undefined);
-  }, [currentMusic, hasPlaybackSession]);
+  }, [currentMusic]);
 
   useEffect(() => {
-    if (!shouldInitNative) {
+    if (!shouldInspectNative) {
       setProgress(0);
       setDuration(0);
       return;
@@ -151,7 +71,7 @@ export function MusicPageApk() {
       try {
         const { positionMs, durationMs, isPlaying: nativePlaying } = await NativeMusic.getProgress();
         setProgress(positionMs / 1000);
-        setDuration(durationMs > 0 ? durationMs / 1000 : 0);
+        setDuration(durationMs > 0 ? durationMs / 1000 : currentMusic?.duration ?? 0);
         setIsPlayingState(nativePlaying);
       } catch (error) {
         console.error("NativeMusic.getProgress failed", error);
@@ -166,10 +86,11 @@ export function MusicPageApk() {
       void syncProgress();
     }, 500);
     return () => { if (progressIntervalRef.current) clearInterval(progressIntervalRef.current); };
-  }, [autoplayKey, currentMusic, isPlaying, setIsPlayingState, shouldInitNative]);
+  }, [autoplayKey, currentMusic, isPlaying, setIsPlayingState, shouldInspectNative]);
 
   useEffect(() => { setProgress(0); setDuration(0); }, [autoplayKey]);
 
+  const allMusics = libraryMusics;
   const albumTracks = selectedAlbum
     ? allMusics.filter((m) => m.album_id === selectedAlbum.id)
     : [];
@@ -222,7 +143,7 @@ export function MusicPageApk() {
                 isActive={currentMusic?.id === track.id}
                 isPlaying={isPlaying && currentMusic?.id === track.id}
                 inQueue={queue.some((q) => q.id === track.id)}
-                onSelect={() => void handleSelectTrack(track, albumTracks, setQueue, selectMusic, setIsPlayingState, setDuration)}
+                onSelect={() => handleSelectTrack(track, albumTracks, setQueue, selectMusic, setDuration)}
                 onAddToQueue={() => appendToQueue(track.id)}
               />
             ))}
@@ -276,7 +197,7 @@ export function MusicPageApk() {
           onToggleShuffle={toggleShuffle}
           onCycleRepeat={cycleRepeatMode}
           onSeek={(t) => void handleSeek(t, setProgress)}
-          onEnded={handleTrackEnded}
+          onEnded={() => undefined}
           onPlayFromQueue={playFromQueue}
           onRemoveFromQueue={removeFromQueue}
           onClearQueue={clearQueue}
@@ -514,17 +435,16 @@ async function handleSeek(nextTime: number, setProgress: (value: number) => void
   }
 }
 
-async function handleSelectTrack(
+function handleSelectTrack(
   track: MusicRecord,
   albumTracks: MusicRecord[],
   setQueue: (musics: MusicRecord[]) => void,
   selectMusic: (musicId: number) => void,
-  setIsPlayingState: (playing: boolean) => void,
   setDuration: (value: number) => void,
 ) {
   setQueue(albumTracks);
   selectMusic(track.id);
-  await playTrackWithNative(track, setIsPlayingState, setDuration);
+  setDuration(track.duration ?? 0);
 }
 
 async function playTrackWithNative(

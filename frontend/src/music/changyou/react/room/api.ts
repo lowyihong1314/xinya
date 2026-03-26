@@ -1,4 +1,4 @@
-import { apiFetch } from "../../../js/apiFetch";
+import { apiFetch } from "../../../../js/apiFetch";
 
 export type ChangyouRoom = {
   room_id: string;

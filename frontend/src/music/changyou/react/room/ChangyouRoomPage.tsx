@@ -2,10 +2,11 @@ import { useEffect, useMemo, useState } from 'react';
 import QRCode from 'qrcode';
 import { useNavigate, useParams } from 'react-router-dom';
 
-import { useUserState } from '../../../app/UserState';
-import { ensureDesignTokens } from '../../../theme/designTokens';
+import { useUserState } from '../../../../app/UserState';
+import { ensureDesignTokens } from '../../../../theme/designTokens';
+import { CHANGYOU_PATH, CHANGYOU_ROOM_PATH, getChangyouRoomPath } from '../../../router/paths';
 import { fetchSongbookEntries, fetchSongbookEntry } from '../api';
-import type { SongbookEntry } from '../types';
+import type { SongbookEntry, SongbookVersionOption } from '../types';
 import { connectChangyouRoom } from './socket';
 import { createChangyouRoom, fetchChangyouRoom, fetchChangyouRoomCurrent, fetchChangyouRooms, pushChangyouRoomSong, type ChangyouRoom } from './api';
 
@@ -87,7 +88,7 @@ export function ChangyouRoomPage() {
 
   useEffect(() => {
     if (!roomId || !room) return;
-    const absolute = `${window.location.origin}/#${`/changyou-room/${roomId}`}`;
+    const absolute = `${window.location.origin}/#${getChangyouRoomPath(roomId)}`;
     QRCode.toDataURL(absolute).then(setQrDataUrl).catch(() => setQrDataUrl(''));
   }, [roomId, room]);
 
@@ -110,7 +111,7 @@ export function ChangyouRoomPage() {
     setError('');
     try {
       const response = await createChangyouRoom(topic.trim());
-      navigate(`/changyou-room/${response.room.room_id}`);
+      navigate(getChangyouRoomPath(response.room.room_id));
     } catch (err) {
       setError(err instanceof Error ? err.message : '创建房间失败');
     } finally {
@@ -144,7 +145,7 @@ export function ChangyouRoomPage() {
     return (
       <div style={pageStyle}>
         <div style={topBarStyle}>
-          <button type="button" onClick={() => navigate('/changyou')} style={backButtonStyle}>← 返回唱游歌簿</button>
+          <button type="button" onClick={() => navigate(CHANGYOU_PATH)} style={backButtonStyle}>← 返回唱游歌簿</button>
         </div>
         <div style={heroStyle}>
           <h1 style={titleStyle}>唱游房间</h1>
@@ -160,7 +161,7 @@ export function ChangyouRoomPage() {
           {loading ? <div style={stateStyle}>加载房间中…</div> : null}
           {!loading && rooms.length === 0 ? <div style={emptyCardStyle}>还没有房间。</div> : null}
           {rooms.map((item) => (
-            <button key={item.room_id} type="button" onClick={() => navigate(`/changyou-room/${item.room_id}`)} style={roomItemStyle}>
+            <button key={item.room_id} type="button" onClick={() => navigate(getChangyouRoomPath(item.room_id))} style={roomItemStyle}>
               <div style={roomTitleStyle}>{item.topic}</div>
               <div style={roomMetaStyle}>创建者：{item.creator_name || '-'} · 房间码：{item.room_id}</div>
             </button>
@@ -177,7 +178,7 @@ export function ChangyouRoomPage() {
     return (
       <div style={pageStyle}>
         <div style={topBarStyle}>
-          <button type="button" onClick={() => navigate('/changyou-room')} style={backButtonStyle}>← 返回房间列表</button>
+          <button type="button" onClick={() => navigate(CHANGYOU_ROOM_PATH)} style={backButtonStyle}>← 返回房间列表</button>
         </div>
         <div style={heroStyle}>
           <h1 style={titleStyle}>{room.topic}</h1>
@@ -201,7 +202,7 @@ export function ChangyouRoomPage() {
           <div style={panelStyle}>
             <div style={sectionTitleStyle}>播放入口</div>
             {qrDataUrl ? <img src={qrDataUrl} alt="room qr" style={qrStyle} /> : <div style={emptyCardStyle}>正在生成 QR...</div>}
-            <div style={roomMetaStyle}>{window.location.origin}/#/changyou-room/{room.room_id}</div>
+            <div style={roomMetaStyle}>{window.location.origin}/#{getChangyouRoomPath(room.room_id)}</div>
           </div>
         </div>
         <div style={panelStyle}>
@@ -215,7 +216,7 @@ export function ChangyouRoomPage() {
   return (
     <div style={playerPageStyle}>
       <div style={playerTopBarStyle}>
-        <button type="button" onClick={() => navigate('/changyou-room')} style={backButtonStyle}>← 返回</button>
+        <button type="button" onClick={() => navigate(CHANGYOU_ROOM_PATH)} style={backButtonStyle}>← 返回</button>
       </div>
       <div style={playerTitleStyle}>{room.topic}</div>
       {!entry ? <div style={stateStyle}>等待控制端投放歌词…</div> : (

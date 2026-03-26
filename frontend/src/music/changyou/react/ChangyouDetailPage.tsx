@@ -1,8 +1,10 @@
 import { useEffect, useMemo, useRef, useState } from "react";
+import type { CSSProperties } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 
-import { useUserState } from "../../app/UserState";
-import { ensureDesignTokens } from "../../theme/designTokens";
+import { useUserState } from "../../../app/UserState";
+import { ensureDesignTokens } from "../../../theme/designTokens";
+import { CHANGYOU_PATH } from "../../router/paths";
 import { deleteMySongbookEdit, fetchSongbookEntry, saveMySongbookEdit } from "./api";
 import type { SongbookEntry, SongbookVersionOption } from "./types";
 
@@ -222,7 +224,7 @@ export function ChangyouDetailPage() {
   return (
     <div style={pageStyle(hideNav)}>
       <div style={topBarStyle(isMobile)}>
-        <button type="button" onClick={() => navigate("/changyou")} style={backButtonStyle}>← 返回歌单</button>
+        <button type="button" onClick={() => navigate(CHANGYOU_PATH)} style={backButtonStyle}>← 返回歌单</button>
         <div style={topRightStyle}>
           <div style={versionPickerWrapStyle} ref={versionPickerRef}>
             <button type="button" onClick={() => setVersionPickerOpen((open) => !open)} style={versionButtonStyle}>
@@ -309,7 +311,7 @@ export function ChangyouDetailPage() {
 }
 
 const pageStyle = (hideNav: boolean) => ({ minHeight: hideNav ? "100vh" : "calc(100vh - 60px)", padding: "20px", background: "linear-gradient(180deg, var(--x-color-canvas), var(--x-color-canvas-alt))", boxSizing: "border-box" as const, overflowX: "hidden" as const });
-const topBarStyle = (isMobile: boolean) => ({ display: "flex", justifyContent: "space-between", alignItems: isMobile ? "stretch" : "center", flexDirection: isMobile ? "column" : "row", gap: "12px", marginBottom: "16px" });
+const topBarStyle = (isMobile: boolean): CSSProperties => ({ display: "flex", justifyContent: "space-between", alignItems: isMobile ? "stretch" : "center", flexDirection: isMobile ? "column" : "row", gap: "12px", marginBottom: "16px" });
 const topRightStyle = { display: "flex", alignItems: "center", gap: "10px", flexWrap: "wrap" as const };
 const backButtonStyle = { alignSelf: "flex-start", padding: "12px 16px", borderRadius: "999px", border: "1px solid var(--x-color-line)", background: "var(--x-color-panel)", color: "var(--x-color-ink)", fontWeight: 800, cursor: "pointer" } as const;
 const settingsButtonStyle = { padding: "10px 14px", borderRadius: "999px", border: "1px solid var(--x-color-line)", background: "var(--x-color-panel)", color: "var(--x-color-ink)", fontWeight: 800, cursor: "pointer" } as const;

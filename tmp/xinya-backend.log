@@ -153,3 +153,176 @@ https://eventlet.readthedocs.io/en/latest/asyncio/migration.html
  * Debugger is active!
  * Debugger PIN: 103-153-293
 (711910) wsgi starting up on http://0.0.0.0:5102
+(711910) accepted ('127.0.0.1', 59922)
+42.190.118.6,127.0.0.1 - - [26/Mar/2026 09:54:58] "GET / HTTP/1.1" 304 311 0.012406
+(711910) accepted ('127.0.0.1', 59972)
+(711910) accepted ('127.0.0.1', 59992)
+42.190.118.6,127.0.0.1 - - [26/Mar/2026 09:54:58] "GET /api/user_control/get_profile_image/lowyihong?t=1774518898580 HTTP/1.1" 200 52064 0.000869
+42.190.118.6,127.0.0.1 - - [26/Mar/2026 09:54:58] "GET /api/event_data/get_all_event_sort HTTP/1.1" 200 66386 0.162279
+(711910) accepted ('127.0.0.1', 60008)
+42.190.118.6,127.0.0.1 - - [26/Mar/2026 09:54:59] "GET /api/user_control/get_user_data HTTP/1.1" 200 3763 0.024029
+(711910) accepted ('127.0.0.1', 52142)
+182.62.43.88,127.0.0.1 - - [26/Mar/2026 10:34:44] "GET /api/user_control/get_user_data HTTP/1.1" 200 3763 0.028179
+(711910) accepted ('127.0.0.1', 48244)
+127.0.0.1 - - [26/Mar/2026 14:46:30] "GET / HTTP/1.1" 304 335 0.002828
+127.0.0.1 - - [26/Mar/2026 14:46:30] "GET /static/vite/init.js HTTP/1.1" 200 2829802 0.007230
+127.0.0.1 - - [26/Mar/2026 14:46:31] "GET /static/vite/assets/all.min-C_ymPD02.css HTTP/1.1" 200 77782 0.002609
+127.0.0.1 - - [26/Mar/2026 14:46:31] "GET /static/vite/assets/fa-solid-900-DRAAbZTg.woff2 HTTP/1.1" 200 115179 0.003382
+(711910) accepted ('127.0.0.1', 48258)
+(711910) accepted ('127.0.0.1', 48274)
+127.0.0.1 - - [26/Mar/2026 14:46:31] "GET /api/user_control/get_user_data HTTP/1.1" 200 3787 0.020749
+127.0.0.1 - - [26/Mar/2026 14:46:31] "GET /api/event_data/get_all_event_sort HTTP/1.1" 200 66410 0.067063
+127.0.0.1 - - [26/Mar/2026 14:46:31] "GET /favicon.ico HTTP/1.1" 304 600 0.002670
+127.0.0.1 - - [26/Mar/2026 14:46:31] "GET /static/img/placeholder.png HTTP/1.1" 404 748 0.002687
+127.0.0.1 - - [26/Mar/2026 14:46:31] "GET /media_file/CACHE/UTBA/event_photo/EVT_20260205_004/20260301_091859.jpeg HTTP/1.1" 304 615 0.001801
+127.0.0.1 - - [26/Mar/2026 14:46:31] "GET /api/api/get_event/154 HTTP/1.1" 200 3601 0.025444
+127.0.0.1 - - [26/Mar/2026 14:46:31] "GET /api/api/get_event/160 HTTP/1.1" 200 1363 0.011509
+127.0.0.1 - - [26/Mar/2026 14:46:31] "GET /media_file/CACHE/UTBA/event_photo/EVT_20260125_001/20260308_155240.mp4 HTTP/1.1" 206 3450036 0.002571
+127.0.0.1 - - [26/Mar/2026 14:46:32] "GET /media_file/CACHE/UTBA/event_photo/EVT_20240427_002/VID_20240427_205219.mp4 HTTP/1.1" 206 90842 0.001458
+127.0.0.1 - - [26/Mar/2026 14:46:36] "GET /media_file/CACHE/UTBA/event_photo/EVT_20240323_001/VID-20240330-WA0084.mp4 HTTP/1.1" 206 23734741 4.663845
+(711910) accepted ('127.0.0.1', 48158)
+127.0.0.1 - - [26/Mar/2026 14:46:38] "GET /api/api/get_event/141 HTTP/1.1" 200 233030 0.097262
+(711910) accepted ('127.0.0.1', 48160)
+127.0.0.1 - - [26/Mar/2026 14:46:39] "GET /media/get_event_image/17315/cache HTTP/1.1" 200 679 0.022562
+127.0.0.1 - - [26/Mar/2026 14:46:43] "GET /media_file/CACHE/UTBA/event_photo/EVT_20260322_001/20260322_114239.jpeg HTTP/1.1" 200 2116551 0.006443
+(711910) accepted ('127.0.0.1', 55560)
+127.0.0.1 - - [26/Mar/2026 14:46:48] "GET /api/api/get_event/161 HTTP/1.1" 200 9543 0.034974
+(711910) accepted ('127.0.0.1', 55572)
+127.0.0.1 - - [26/Mar/2026 14:46:50] "GET /api/api/get_event/141 HTTP/1.1" 200 233030 0.107250
+127.0.0.1 - - [26/Mar/2026 14:46:51] "GET /media_file/CACHE/UTBA/event_photo/EVT_20260125_001/20260308_101139.jpeg HTTP/1.1" 304 615 0.003045
+127.0.0.1 - - [26/Mar/2026 14:46:51] "GET /media_file/CACHE/UTBA/event_photo/EVT_20260125_001/20260308_101034.jpeg HTTP/1.1" 304 615 0.002208
+127.0.0.1 - - [26/Mar/2026 14:46:54] "GET /media_file/CACHE/UTBA/event_photo/EVT_20240323_001/VID-20240330-WA0084.mp4 HTTP/1.1" 206 23701977 16.154528
+127.0.0.1 - - [26/Mar/2026 14:46:55] "GET /media_file/CACHE/UTBA/event_photo/EVT_20240427_002/VID_20240427_205219.mp4 HTTP/1.1" 206 40657622 23.891347
+127.0.0.1 - - [26/Mar/2026 14:46:58] "GET /media_file/CACHE/UTBA/event_photo/EVT_20240427_002/VID_20240427_205219.mp4 HTTP/1.1" 206 40428251 25.986702
+127.0.0.1 - - [26/Mar/2026 14:47:00] "GET /static/img/placeholder.png HTTP/1.1" 404 748 0.002744
+127.0.0.1 - - [26/Mar/2026 14:47:16] "GET /media_file/CACHE/UTBA/event_photo/EVT_20260316_001/20260315_121811.jpeg HTTP/1.1" 200 1844319 0.006043
+127.0.0.1 - - [26/Mar/2026 14:47:20] "GET /api/api/get_event/154 HTTP/1.1" 200 3601 0.029188
+127.0.0.1 - - [26/Mar/2026 14:47:21] "GET /api/api/get_event/151 HTTP/1.1" 200 106154 0.205128
+127.0.0.1 - - [26/Mar/2026 14:48:09] "GET /api/music/list?per_page=200&page=1 HTTP/1.1" 200 68003 0.024648
+127.0.0.1 - - [26/Mar/2026 14:48:09] "GET /api/music/list?per_page=200&page=3 HTTP/1.1" 200 57484 0.017779
+127.0.0.1 - - [26/Mar/2026 14:48:09] "GET /static/album_image/12.jpg HTTP/1.1" 200 216459 0.002639
+127.0.0.1 - - [26/Mar/2026 14:48:09] "GET /static/album_image/9.jpg HTTP/1.1" 200 141042 0.001593
+(711910) accepted ('127.0.0.1', 47008)
+127.0.0.1 - - [26/Mar/2026 14:48:09] "GET /api/music/download/614 HTTP/1.1" 206 3809225 0.014868
+127.0.0.1 - - [26/Mar/2026 14:48:11] "GET /api/songbook/list? HTTP/1.1" 200 90499 0.069668
+127.0.0.1 - - [26/Mar/2026 14:48:13] "GET /api/music/albums HTTP/1.1" 200 7918 0.005795
+127.0.0.1 - - [26/Mar/2026 14:48:13] "GET /api/music/list?per_page=200&page=2 HTTP/1.1" 200 67742 0.023180
+127.0.0.1 - - [26/Mar/2026 14:48:14] "GET /api/songbook/list? HTTP/1.1" 200 90499 0.050310
+127.0.0.1 - - [26/Mar/2026 14:48:14] "GET /api/music/albums HTTP/1.1" 200 7918 0.007630
+127.0.0.1 - - [26/Mar/2026 14:48:14] "GET /api/music/list?per_page=200&page=2 HTTP/1.1" 200 67742 0.025609
+127.0.0.1 - - [26/Mar/2026 14:48:17] "GET /api/user_control/departments HTTP/1.1" 200 3877 0.016001
+127.0.0.1 - - [26/Mar/2026 14:48:17] "GET /api/user_control/get_profile_image/1 HTTP/1.1" 304 618 0.009624
+127.0.0.1 - - [26/Mar/2026 14:48:17] "GET /api/user_control/get_profile_image/4 HTTP/1.1" 304 620 0.008534
+127.0.0.1 - - [26/Mar/2026 14:48:17] "GET /api/user_control/get_profile_image/5 HTTP/1.1" 304 616 0.008763
+127.0.0.1 - - [26/Mar/2026 14:48:17] "GET /api/user_control/get_profile_image/12 HTTP/1.1" 304 601 0.015872
+127.0.0.1 - - [26/Mar/2026 14:48:17] "GET /api/user_control/get_profile_image/8 HTTP/1.1" 304 615 0.013206
+127.0.0.1 - - [26/Mar/2026 14:48:17] "GET /api/user_control/get_profile_image/9 HTTP/1.1" 304 613 0.010890
+127.0.0.1 - - [26/Mar/2026 14:48:18] "GET /api/user_control/get_profile_image/15 HTTP/1.1" 304 617 0.004722
+127.0.0.1 - - [26/Mar/2026 14:48:18] "GET /api/user_control/get_profile_image/16 HTTP/1.1" 304 623 0.003932
+127.0.0.1 - - [26/Mar/2026 14:48:18] "GET /api/user_control/get_profile_image/18 HTTP/1.1" 304 601 0.003399
+127.0.0.1 - - [26/Mar/2026 14:48:18] "GET /api/user_control/get_profile_image/22 HTTP/1.1" 304 618 0.010300
+127.0.0.1 - - [26/Mar/2026 14:48:18] "GET /api/user_control/get_profile_image/24 HTTP/1.1" 304 601 0.013098
+127.0.0.1 - - [26/Mar/2026 14:48:18] "GET /api/user_control/get_profile_image/23 HTTP/1.1" 304 617 0.016230
+127.0.0.1 - - [26/Mar/2026 14:48:18] "GET /api/user_control/get_profile_image/10010 HTTP/1.1" 200 18522 0.020052
+127.0.0.1 - - [26/Mar/2026 14:48:18] "GET /api/user_control/get_profile_image/10007 HTTP/1.1" 304 601 0.014436
+127.0.0.1 - - [26/Mar/2026 14:48:18] "GET /api/user_control/departments/6/users HTTP/1.1" 200 4496 0.021607
+127.0.0.1 - - [26/Mar/2026 14:48:19] "GET /api/music/albums HTTP/1.1" 200 7918 0.005635
+127.0.0.1 - - [26/Mar/2026 14:48:19] "GET /api/music/list?per_page=200&page=2 HTTP/1.1" 200 67742 0.018565
+127.0.0.1 - - [26/Mar/2026 14:48:33] "GET /api/user_control/get_user_data HTTP/1.1" 200 3787 0.025805
+127.0.0.1 - - [26/Mar/2026 14:48:34] "GET /api/songbook/list? HTTP/1.1" 200 90499 0.060809
+127.0.0.1 - - [26/Mar/2026 14:48:34] "GET /api/music/albums HTTP/1.1" 200 7918 0.007962
+127.0.0.1 - - [26/Mar/2026 14:48:34] "GET /api/music/list?per_page=200&page=2 HTTP/1.1" 200 67742 0.021091
+127.0.0.1 - - [26/Mar/2026 14:48:36] "GET /api/songbook/list? HTTP/1.1" 200 90499 0.054913
+127.0.0.1 - - [26/Mar/2026 14:49:50] "GET /api/user_control/get_user_data HTTP/1.1" 200 3787 0.023695
+127.0.0.1 - - [26/Mar/2026 14:49:50] "GET /static/img/placeholder.png HTTP/1.1" 404 748 0.003256
+127.0.0.1 - - [26/Mar/2026 14:49:50] "GET /media_file/CACHE/UTBA/event_photo/EVT_20250413_002/1000118854.jpeg HTTP/1.1" 304 609 0.002688
+127.0.0.1 - - [26/Mar/2026 14:49:50] "GET /media_file/CACHE/UTBA/event_photo/EVT_20260205_004/20260301_091859.jpeg HTTP/1.1" 304 615 0.002385
+127.0.0.1 - - [26/Mar/2026 14:49:50] "GET /api/api/get_event/154 HTTP/1.1" 200 3601 0.036009
+127.0.0.1 - - [26/Mar/2026 14:49:50] "GET /media_file/CACHE/UTBA/event_photo/EVT_20241124_012/1000066787.mp4 HTTP/1.1" 206 4855785 0.083180
+127.0.0.1 - - [26/Mar/2026 14:49:53] "GET /api/music/list?per_page=200&page=2 HTTP/1.1" 200 67742 0.022351
+(711910) accepted ('127.0.0.1', 50120)
+127.0.0.1 - - [26/Mar/2026 14:49:54] "GET /media_file/CACHE/UTBA/event_photo/EVT_20240323_001/VID-20240330-WA0084.mp4 HTTP/1.1" 206 76249 0.003165
+127.0.0.1 - - [26/Mar/2026 14:49:55] "GET /static/album_image/42.jpg HTTP/1.1" 304 599 0.003010
+127.0.0.1 - - [26/Mar/2026 14:49:55] "GET /static/album_image/12.jpg HTTP/1.1" 304 599 0.002797
+127.0.0.1 - - [26/Mar/2026 14:49:58] "GET /media_file/CACHE/UTBA/event_photo/EVT_20240323_001/VID-20240330-WA0084.mp4 HTTP/1.1" 206 23734741 7.828251
+127.0.0.1 - - [26/Mar/2026 14:50:07] "GET /api/user_control/get_user_data HTTP/1.1" 200 3787 0.005280
+127.0.0.1 - - [26/Mar/2026 14:50:07] "GET /media_file/CACHE/UTBA/event_photo/EVT_20240323_001/VID-20240330-WA0084.mp4 HTTP/1.1" 206 23701977 9.574651
+127.0.0.1 - - [26/Mar/2026 14:50:07] "GET /media_file/CACHE/UTBA/event_photo/EVT_20240427_002/VID_20240427_205219.mp4 HTTP/1.1" 206 40657622 17.371178
+(711910) accepted ('127.0.0.1', 38288)
+127.0.0.1 - - [26/Mar/2026 14:50:14] "GET /media_file/CACHE/UTBA/event_photo/EVT_20240427_002/VID_20240427_205219.mp4 HTTP/1.1" 206 30532317 5.624820
+127.0.0.1 - - [26/Mar/2026 14:50:14] "GET /media_file/CACHE/UTBA/event_photo/EVT_20240323_001/VID-20240330-WA0084.mp4 HTTP/1.1" 206 8137179 0.319737
+(711910) accepted ('127.0.0.1', 56376)
+127.0.0.1 - - [26/Mar/2026 14:50:17] "GET / HTTP/1.1" 304 601 0.003020
+127.0.0.1 - - [26/Mar/2026 14:50:17] "GET /static/vite/init.js HTTP/1.1" 200 2830112 0.005907
+127.0.0.1 - - [26/Mar/2026 14:50:18] "GET /static/vite/assets/all.min-C_ymPD02.css HTTP/1.1" 200 78049 0.004157
+(711910) accepted ('127.0.0.1', 56390)
+127.0.0.1 - - [26/Mar/2026 14:50:18] "GET /api/user_control/get_user_data HTTP/1.1" 200 3787 0.006851
+(711910) accepted ('127.0.0.1', 56396)
+127.0.0.1 - - [26/Mar/2026 14:50:18] "GET /static/images/logo/logo.png HTTP/1.1" 304 600 0.001036
+127.0.0.1 - - [26/Mar/2026 14:50:18] "GET /static/img/placeholder.png HTTP/1.1" 404 748 0.002380
+127.0.0.1 - - [26/Mar/2026 14:50:18] "GET /media_file/CACHE/UTBA/event_photo/EVT_20260313_001/WhatsApp_Image_2026-03-24_at_21.04.52.jpeg HTTP/1.1" 304 635 0.002591
+127.0.0.1 - - [26/Mar/2026 14:50:18] "GET /media_file/CACHE/UTBA/event_photo/EVT_20260205_004/20260301_091859.jpeg HTTP/1.1" 304 615 0.000471
+127.0.0.1 - - [26/Mar/2026 14:50:18] "GET /media_file/CACHE/UTBA/event_photo/EVT_20240323_001/VID-20240330-WA0084.mp4 HTTP/1.1" 206 8114704 0.012022
+127.0.0.1 - - [26/Mar/2026 14:50:18] "GET /api/api/get_event/160 HTTP/1.1" 200 1363 0.007832
+127.0.0.1 - - [26/Mar/2026 14:50:20] "GET /media_file/CACHE/UTBA/event_photo/EVT_20240427_002/VID_20240427_205219.mp4 HTTP/1.1" 206 29860702 2.220006
+127.0.0.1 - - [26/Mar/2026 14:50:21] "GET /api/api/get_event/151 HTTP/1.1" 200 106154 0.240237
+127.0.0.1 - - [26/Mar/2026 14:50:22] "GET /static/img/placeholder.png HTTP/1.1" 404 748 0.002679
+127.0.0.1 - - [26/Mar/2026 14:50:22] "GET /media_file/CACHE/UTBA/event_photo/EVT_20260316_001/20260315_121811.jpeg HTTP/1.1" 304 614 0.001930
+127.0.0.1 - - [26/Mar/2026 14:50:26] "GET /api/api/get_event/147 HTTP/1.1" 200 1357 0.027355
+127.0.0.1 - - [26/Mar/2026 14:50:26] "GET /media_file/CACHE/UTBA/event_photo/EVT_20260125_001/20260308_101139.jpeg HTTP/1.1" 304 615 0.002885
+127.0.0.1 - - [26/Mar/2026 14:50:29] "GET /api/api/get_event/154 HTTP/1.1" 200 3601 0.013134
+127.0.0.1 - - [26/Mar/2026 14:50:30] "GET /api/api/get_event/161 HTTP/1.1" 200 9543 0.054655
+127.0.0.1 - - [26/Mar/2026 14:50:30] "GET /media_file/CACHE/UTBA/event_photo/EVT_20260322_001/20260322_120423.jpeg HTTP/1.1" 304 615 0.002856
+127.0.0.1 - - [26/Mar/2026 14:50:32] "GET /api/api/get_event/151 HTTP/1.1" 200 106154 0.153018
+127.0.0.1 - - [26/Mar/2026 14:50:32] "GET /api/api/get_event/141 HTTP/1.1" 200 233030 0.105032
+127.0.0.1 - - [26/Mar/2026 14:50:33] "GET /api/api/get_event/146 HTTP/1.1" 200 115142 0.171714
+127.0.0.1 - - [26/Mar/2026 14:50:33] "GET /media_file/CACHE/UTBA/event_photo/EVT_20260205_004/20260301_195455.jpeg HTTP/1.1" 304 615 0.002926
+(711910) accepted ('127.0.0.1', 40188)
+127.0.0.1 - - [26/Mar/2026 14:50:33] "GET /media_file/CACHE/UTBA/event_photo/EVT_20260205_004/20260301_194701.jpeg HTTP/1.1" 304 615 0.003620
+127.0.0.1 - - [26/Mar/2026 14:52:18] "GET / HTTP/1.1" 304 601 0.002794
+127.0.0.1 - - [26/Mar/2026 14:52:19] "GET /api/user_control/get_user_data HTTP/1.1" 200 3787 0.021013
+127.0.0.1 - - [26/Mar/2026 14:52:19] "GET /api/event_data/get_all_event_sort HTTP/1.1" 200 66410 0.078527
+127.0.0.1 - - [26/Mar/2026 14:52:19] "GET /static/img/placeholder.png HTTP/1.1" 404 748 0.002581
+127.0.0.1 - - [26/Mar/2026 14:52:19] "GET /media_file/CACHE/UTBA/event_photo/EVT_20260205_004/20260301_091859.jpeg HTTP/1.1" 304 615 0.002289
+(711910) accepted ('127.0.0.1', 53538)
+127.0.0.1 - - [26/Mar/2026 14:52:19] "GET /media_file/CACHE/UTBA/event_photo/EVT_20260313_001/WhatsApp_Image_2026-03-24_at_21.04.52.jpeg HTTP/1.1" 304 635 0.002611
+127.0.0.1 - - [26/Mar/2026 14:52:19] "GET /api/api/get_event/154 HTTP/1.1" 200 3601 0.017626
+127.0.0.1 - - [26/Mar/2026 14:52:19] "GET /api/api/get_event/160 HTTP/1.1" 200 1363 0.014373
+127.0.0.1 - - [26/Mar/2026 14:52:19] "GET /media_file/CACHE/UTBA/event_photo/EVT_20241124_012/1000066787.mp4 HTTP/1.1" 206 4855785 0.003582
+127.0.0.1 - - [26/Mar/2026 14:52:19] "GET /media_file/CACHE/UTBA/event_photo/EVT_20240526_001/MVI_6106.mp4 HTTP/1.1" 206 4012276 0.010636
+127.0.0.1 - - [26/Mar/2026 14:52:20] "GET /api/music/albums HTTP/1.1" 200 7918 0.008088
+127.0.0.1 - - [26/Mar/2026 14:52:21] "GET /api/songbook/list? HTTP/1.1" 200 90499 0.050813
+127.0.0.1 - - [26/Mar/2026 14:52:21] "GET /api/music/albums HTTP/1.1" 200 7918 0.008298
+(711910) accepted ('127.0.0.1', 53562)
+127.0.0.1 - - [26/Mar/2026 14:52:23] "GET /media_file/CACHE/UTBA/event_photo/EVT_20240427_002/VID_20240427_205219.mp4 HTTP/1.1" 206 90842 0.003491
+127.0.0.1 - - [26/Mar/2026 14:52:23] "GET /api/songbook/list? HTTP/1.1" 200 90499 0.045855
+(711910) accepted ('127.0.0.1', 53572)
+127.0.0.1 - - [26/Mar/2026 14:52:24] "GET /api/music/list?per_page=200&page=1 HTTP/1.1" 200 68003 0.021376
+127.0.0.1 - - [26/Mar/2026 14:52:25] "GET /api/music/list?per_page=200&page=1 HTTP/1.1" 200 68003 0.012341
+127.0.0.1 - - [26/Mar/2026 14:52:25] "GET /api/music/list?per_page=200&page=1 HTTP/1.1" 200 68003 0.009505
+127.0.0.1 - - [26/Mar/2026 14:52:27] "GET /api/music/list?per_page=200&page=3 HTTP/1.1" 200 57484 0.008689
+(711910) accepted ('127.0.0.1', 43962)
+127.0.0.1 - - [26/Mar/2026 14:52:28] "GET /api/music/list?per_page=200&page=2 HTTP/1.1" 200 67742 0.020757
+127.0.0.1 - - [26/Mar/2026 14:52:28] "GET /api/music/list?per_page=200&page=3 HTTP/1.1" 200 57484 0.021674
+127.0.0.1 - - [26/Mar/2026 14:52:29] "GET /api/music/list?per_page=200&page=2 HTTP/1.1" 200 67742 0.011065
+127.0.0.1 - - [26/Mar/2026 14:52:29] "GET /api/music/download/614 HTTP/1.1" 206 3809225 0.006395
+127.0.0.1 - - [26/Mar/2026 14:52:31] "GET /static/album_image/42.jpg HTTP/1.1" 304 599 0.003671
+127.0.0.1 - - [26/Mar/2026 14:52:31] "GET /api/music/list?per_page=200&page=2 HTTP/1.1" 200 67742 0.016220
+127.0.0.1 - - [26/Mar/2026 14:52:32] "GET /static/album_image/10.jpg HTTP/1.1" 304 600 0.002965
+127.0.0.1 - - [26/Mar/2026 14:52:35] "GET /media_file/CACHE/UTBA/event_photo/EVT_20240323_001/VID-20240330-WA0084.mp4 HTTP/1.1" 206 23701977 12.741493
+127.0.0.1 - - [26/Mar/2026 14:52:36] "GET /media_file/CACHE/UTBA/event_photo/EVT_20240427_002/VID_20240427_205219.mp4 HTTP/1.1" 206 40657622 16.832847
+127.0.0.1 - - [26/Mar/2026 14:52:45] "GET /media_file/CACHE/UTBA/event_photo/EVT_20240427_002/VID_20240427_205219.mp4 HTTP/1.1" 206 40428251 21.086118
+127.0.0.1 - - [26/Mar/2026 14:53:13] "GET /api/user_control/my_footprints HTTP/1.1" 200 4359 0.073615
+127.0.0.1 - - [26/Mar/2026 14:53:14] "GET /api/music/list?per_page=200&page=1 HTTP/1.1" 200 68003 0.021363
+127.0.0.1 - - [26/Mar/2026 14:53:14] "GET /api/music/list?per_page=200&page=3 HTTP/1.1" 200 57484 0.013986
+127.0.0.1 - - [26/Mar/2026 14:53:15] "GET /media_file/CACHE/UTBA/event_photo/EVT_20260125_001/20260308_155240.mp4 HTTP/1.1" 206 3450036 0.010486
+127.0.0.1 - - [26/Mar/2026 14:53:15] "GET /api/api/get_event/154 HTTP/1.1" 200 3601 0.012369
+127.0.0.1 - - [26/Mar/2026 14:53:15] "GET /api/api/get_event/160 HTTP/1.1" 200 1363 0.026468
+127.0.0.1 - - [26/Mar/2026 14:53:15] "GET /api/music/list?per_page=200&page=1 HTTP/1.1" 200 68003 0.016793
+127.0.0.1 - - [26/Mar/2026 14:53:16] "GET /api/music/list?per_page=200&page=3 HTTP/1.1" 200 57484 0.021747
+(711910) accepted ('127.0.0.1', 43374)
+127.0.0.1 - - [26/Mar/2026 14:55:18] "GET /api/music/list?per_page=200&page=1 HTTP/1.1" 200 68003 0.015997
+127.0.0.1 - - [26/Mar/2026 14:55:18] "GET /api/music/list?per_page=200&page=3 HTTP/1.1" 200 57484 0.008553
+(711910) accepted ('127.0.0.1', 43390)
+(711910) accepted ('127.0.0.1', 34700)
+127.0.0.1 - - [26/Mar/2026 15:07:18] "GET /api/user_control/get_user_data HTTP/1.1" 200 3787 0.015770

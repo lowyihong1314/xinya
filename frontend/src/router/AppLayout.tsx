@@ -4,10 +4,10 @@ import { Outlet, useLocation, useNavigate } from "react-router-dom";
 
 import { useUserState } from "../app/UserState";
 import { API_BASE, IS_APK } from "../js/apiBase";
-import { musicPlayerController } from "../music/react/MusicPlayerController";
-import { useMusicPlayback } from "../music/react/MusicPlaybackContext";
+import { musicPlayerController } from "../music/music_player/MusicPlayerController";
+import { useMusicPlayback } from "../music/music_player/MusicPlaybackContext";
 import { ensureDesignTokens } from "../theme/designTokens";
-import { NAV_ITEMS, pageKeyFromPath } from "./routeConfig";
+import { NAV_ITEMS, legacyPageToPath, pageKeyFromPath } from "./routeConfig";
 
 export function AppLayout() {
   ensureDesignTokens();
@@ -160,10 +160,7 @@ export function resolveLegacyPath(page: string, url = new URL(window.location.hr
   if (page === "lamp_registration") {
     return "/lamp-registration";
   }
-  return (
-    NAV_ITEMS.find((item) => item.key === page)?.path ??
-    (page === "login" ? "/login" : "/not-found")
-  );
+  return legacyPageToPath[page] ?? "/not-found";
 }
 
 const shellStyle: CSSProperties = {

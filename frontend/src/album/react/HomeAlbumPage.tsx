@@ -182,6 +182,7 @@ function EventPreviewCard({ event, isMobile }: { event: SharedEventRecord; isMob
               fileId={coverMedia.id}
               fileType={coverMedia.fileType}
               style={eventCardHeroImageStyle}
+              containerStyle={eventCardHeroContainerStyle}
               retryAttempts={6}
               retryDelayMs={1500}
             />
@@ -622,9 +623,14 @@ function eventCardMediaWrapStyle(isMobile: boolean): CSSProperties {
   };
 }
 
+const eventCardHeroContainerStyle: CSSProperties = {
+  position: "absolute",
+  inset: 0,
+};
+
 const eventCardHeroStyle: CSSProperties = {
   position: "relative",
-  minHeight: "156px",
+  aspectRatio: "1 / 1",
   borderRadius: "16px",
   overflow: "hidden",
   background: "linear-gradient(135deg, var(--x-color-nav-start), var(--x-color-nav-end))",

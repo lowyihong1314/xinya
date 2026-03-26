@@ -1,8 +1,9 @@
 import { useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
 
-import { useUserState } from "../../app/UserState";
-import { ensureDesignTokens } from "../../theme/designTokens";
+import { useUserState } from "../../../app/UserState";
+import { ensureDesignTokens } from "../../../theme/designTokens";
+import { CHANGYOU_ROOM_PATH, getChangyouDetailPath } from "../../router/paths";
 import { fetchSongbookEntries } from "./api";
 import type { SongbookEntry } from "./types";
 
@@ -76,7 +77,7 @@ export function ChangyouPage() {
         </div>
 
         <div style={{ ...toolbarStyle, flexDirection: isMobile ? "column" : "row" }}>
-          <button type="button" onClick={() => navigate("/changyou-room")} style={roomButtonStyle}>房间</button>
+          <button type="button" onClick={() => navigate(CHANGYOU_ROOM_PATH)} style={roomButtonStyle}>房间</button>
           <input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="搜索歌名 / 歌词 / chord" style={inputStyle} />
           <select value={variant} onChange={(event) => setVariant(event.target.value as "" | "C" | "G")} style={selectStyle}>
             <option value="">全部版本</option>
@@ -105,7 +106,7 @@ export function ChangyouPage() {
           {loading ? <div style={fullWidthStateStyle}>加载歌曲中…</div> : null}
           {!loading && entries.length === 0 ? <div style={fullWidthStateStyle}>没有找到歌曲。</div> : null}
           {!loading && pagedEntries.map((entry) => (
-            <button key={entry.id} type="button" onClick={() => navigate(`/changyou/${entry.id}`)} style={listItemStyle(isMobile)}>
+            <button key={entry.id} type="button" onClick={() => navigate(getChangyouDetailPath(entry.id))} style={listItemStyle(isMobile)}>
               <div style={listItemTopStyle}>
                 <div style={songBadgeStyle}>{entry.variant}</div>
                 <div style={listItemTitleStyle}>{entry.song_number ? `${entry.song_number}. ` : ""}{entry.title}</div>
