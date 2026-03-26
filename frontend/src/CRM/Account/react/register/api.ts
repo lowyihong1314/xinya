@@ -1,4 +1,5 @@
 import type { FormListResponse, FormPayment, FormRecord } from "../../../form/react/types";
+import { apiFetch } from "../../../../js/apiFetch";
 
 async function parseJson<T>(response: Response): Promise<T> {
   const data = (await response.json().catch(() => ({}))) as T & {
@@ -13,7 +14,7 @@ async function parseJson<T>(response: Response): Promise<T> {
 }
 
 export async function fetchRegisterPaymentForms() {
-  const response = await fetch("/api/form/get_all_form", {
+  const response = await apiFetch("/api/form/get_all_form", {
     credentials: "include",
   });
   const payload = await parseJson<FormListResponse>(response);
@@ -21,7 +22,7 @@ export async function fetchRegisterPaymentForms() {
 }
 
 export async function updateRegisterPaymentStatus(paymentId: number, status: FormPayment["status"]) {
-  const response = await fetch(`/api/form/payment/update_status/${paymentId}`, {
+  const response = await apiFetch(`/api/form/payment/update_status/${paymentId}`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ status }),
@@ -32,7 +33,7 @@ export async function updateRegisterPaymentStatus(paymentId: number, status: For
 export async function replaceRegisterPaymentProof(paymentId: number, file: File) {
   const formData = new FormData();
   formData.append("proof_image", file);
-  const response = await fetch(`/api/form/payment/proof_image/${paymentId}/replace`, {
+  const response = await apiFetch(`/api/form/payment/proof_image/${paymentId}/replace`, {
     method: "POST",
     body: formData,
   });
@@ -40,7 +41,7 @@ export async function replaceRegisterPaymentProof(paymentId: number, file: File)
 }
 
 export async function deleteRegisterPayment(paymentId: number) {
-  const response = await fetch(`/api/form/payment/${paymentId}`, {
+  const response = await apiFetch(`/api/form/payment/${paymentId}`, {
     method: "DELETE",
   });
   return parseJson<{ status?: string; message?: string; payment_id?: number; regis_form_id?: number }>(response);

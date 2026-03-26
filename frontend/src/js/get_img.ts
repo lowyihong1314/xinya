@@ -1,4 +1,6 @@
 import heic2any from "heic2any";
+import { API_BASE } from "./apiBase";
+import { apiFetch } from "./apiFetch";
 
 type ImageLookupResponse = {
   status?: string;
@@ -14,7 +16,7 @@ export type SmartMediaAsset = {
 
 export type SmartMediaVariant = "auto" | "cache" | "base";
 
-const FALLBACK_IMAGE_URL = "/static/images/file_icon/broken-image.png";
+const FALLBACK_IMAGE_URL = `${API_BASE}/static/images/file_icon/broken-image.png`;
 const smartImageCache = new Map<string, Promise<string>>();
 const smartMediaCache = new Map<string, Promise<SmartMediaAsset>>();
 const convertedHeicUrls = new Map<string, string>();
@@ -27,7 +29,7 @@ async function fetchImageInfo(id: number | string, variant: string): Promise<Ima
     return cached;
   }
 
-  const response = await fetch(`/media/get_event_image/${id}/${variant}`, {
+  const response = await apiFetch(`/media/get_event_image/${id}/${variant}`, {
     credentials: "include",
   });
 
@@ -72,7 +74,7 @@ async function convertHeicUrlToObjectUrl(url: string) {
     return cached;
   }
 
-  const response = await fetch(url, { credentials: "include" });
+  const response = await apiFetch(url, { credentials: "include" });
   if (!response.ok) {
     throw new Error("HEIC 文件读取失败");
   }
@@ -106,7 +108,7 @@ async function resolveMediaUrl(id: number | string, type: string) {
       continue;
     }
 
-    const url = `/media_file/${info.path}`;
+    const url = `${API_BASE}/media_file/${info.path}`;
     if (isHeicPath(url)) {
       return convertHeicUrlToObjectUrl(url);
     }
@@ -131,7 +133,7 @@ async function resolveMediaAsset(
       continue;
     }
 
-    const url = `/media_file/${info.path}`;
+    const url = `${API_BASE}/media_file/${info.path}`;
     if ((info.kind === "video" || isBaseVideoType(normalizedType) || isVideoPath(url)) && /\.mp4$/i.test(url)) {
       return { kind: "video", url };
     }

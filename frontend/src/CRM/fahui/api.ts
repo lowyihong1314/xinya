@@ -1,4 +1,5 @@
 import type { PaymentListResponse } from "./types";
+import { apiFetch } from "../../js/apiFetch";
 
 async function parseJson<T>(response: Response): Promise<T> {
   const data = (await response.json().catch(() => ({}))) as T & {
@@ -14,7 +15,7 @@ async function parseJson<T>(response: Response): Promise<T> {
 }
 
 export async function fetchPayments() {
-  const response = await fetch("/api/lampRegistration_API/get_all_register_by_payment", {
+  const response = await apiFetch("/api/lampRegistration_API/get_all_register_by_payment", {
     credentials: "include",
   });
 
@@ -22,7 +23,7 @@ export async function fetchPayments() {
 }
 
 export async function approvePayment(paymentId: number) {
-  const response = await fetch("/api/lampRegistration_API/approve_payment", {
+  const response = await apiFetch("/api/lampRegistration_API/approve_payment", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ id: paymentId }),
@@ -32,7 +33,7 @@ export async function approvePayment(paymentId: number) {
 }
 
 export async function removePayment(paymentId: number) {
-  const response = await fetch("/api/lampRegistration_API/remove_payment", {
+  const response = await apiFetch("/api/lampRegistration_API/remove_payment", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ id: paymentId }),

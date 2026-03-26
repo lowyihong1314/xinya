@@ -1,5 +1,6 @@
 import { useEffect, useState, type CSSProperties } from "react";
 
+import { API_BASE } from "../js/apiBase";
 import { clearSmartImageCache, smartMediaAsset, type SmartMediaAsset, type SmartMediaVariant } from "../js/get_img";
 import {
   connectEventMediaRoom,
@@ -36,7 +37,7 @@ type CacheMediaPlayerProps = {
   onAssetChange?: (asset: SmartMediaAsset | null) => void;
 };
 
-const FALLBACK_IMAGE_URL = "/static/img/placeholder.png";
+const FALLBACK_IMAGE_URL = `${API_BASE}/static/img/placeholder.png`;
 
 export function CacheMediaPlayer({
   fileId,

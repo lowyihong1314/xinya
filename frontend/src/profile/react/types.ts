@@ -112,3 +112,10 @@ export type ProfileFormValues = {
   medical: string;
   allergy: string;
 };
+
+export type AppRelease = {
+  filename: string;
+  size_bytes: number;
+  size_label: string;
+  download_url: string;
+};

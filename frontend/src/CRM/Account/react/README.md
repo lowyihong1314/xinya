@@ -1,32 +1,31 @@
 # Finance React Module
 
-This directory contains the React migration shell for the CRM finance workspace.
+## Entry points
 
-## Structure
+- `FinancePage.tsx` is the live finance workspace and is mounted as CRM module `finance`.
+- `LegacyAccountPanel.tsx` is only a bridge for older entry paths that still expect the legacy panel bootstrap.
+- `ClaimWorkspace.tsx`, `api.ts`, and `types.ts` are compatibility re-exports that forward to `claim/`.
 
-- `FinancePage.tsx`: finance tabs and route state.
-- `claim/`: claim list, create form, detail, API, types, shared styles.
-- `income/`: income workspace boundary for later feature growth.
-- `register/`: register payment workspace grouped by form, with status review and updates.
-- `summarize_expense/`: expense charts grouped by event, with unassigned claims folded into one bucket.
-- `ClaimWorkspace.tsx`: compatibility re-export to `claim/ClaimWorkspace`.
-- `api.ts`: compatibility re-export to `claim/api`.
-- `types.ts`: compatibility re-export to `claim/types`.
-- `LegacyAccountPanel.tsx`: legacy bridge kept only for compatibility while older entrypoints still exist.
+## Tabs
 
-## Current scope
+- `claim_req`: claim list, create form, detail view, approval, and voucher workflow.
+- `register`: payment review grouped by registration form, with `process / checked / fail / all` filters.
+- `income_req`: read-only income analytics built from checked registration payments.
+- `summarize_expense`: read-only claim analytics grouped by event and month.
 
-- `claim_req` now has search, pagination, and an internal max-height workspace.
-- `income_req` is still a lightweight placeholder, but now lives in its own directory instead of staying inside `FinancePage.tsx`.
-- `register` now focuses on `RegisPayment` review, grouped by form, with status switching for `process / checked / fail`.
-- `summarize_expense` shows claim spending grouped by activity; claims without an event are grouped into `未关联活动`.
+## State and routing
 
-## URL state
+- `FinancePage.tsx` stores the active tab in the `account_router` search param.
+- The finance workspace is designed to sit under `?crm=finance`, so tab changes should preserve the parent CRM query state.
 
-- Active tab is stored in `account_router`.
-- This keeps the current finance subpage stable while the rest of CRM uses `?crm=finance`.
+## Shared dependencies
 
-## Theme rule
+- All screens use `frontend/src/theme/designTokens.ts` for styling tokens.
+- Claim flows depend on `frontend/src/CRM/shared/showEventPicker` and `static/js/sign_tools.js`.
+- Register and income flows depend on `frontend/src/CRM/form/react/types.ts` and the `/api/form/get_all_form` payload shape.
 
-- Finance React components must use color variables from `frontend/src/theme/designTokens.ts`.
-- If a translucent, border, or state color is missing, extend the token set first and then consume the new CSS variable.
+## Upgrade notes
+
+- If you rename a tab key, update any deep links and the defaulting logic in `isFinanceTabKey`.
+- The register and income tabs both assume payment data is embedded in the form list response; a backend split into separate payment endpoints would require both screens to change together.
+- Public voucher signing is not mounted inside the CRM shell; that route lives in `frontend/src/router/appRouter.tsx`.

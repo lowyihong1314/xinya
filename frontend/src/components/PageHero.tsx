@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState, type CSSProperties } from "react";
 
 import { useUserState } from "../app/UserState";
 import { useEventData } from "../event/shared/EventDataContext";
+import { API_BASE } from "../js/apiBase";
 import { CacheMediaPlayer } from "./CacheMediaPlayer";
 
 type PageHeroProps = {
@@ -84,7 +85,7 @@ export function PageHero({ title, subtitle }: PageHeroProps) {
       <div style={heroMaskStyle(pressed)} />
       <div style={heroContentStyle(isMobile)}>
         <div style={logoCircleStyle(isMobile)}>
-          <img src="/static/images/logo/logo.png" alt="logo" style={logoStyle(isMobile)} />
+          <img src={`${API_BASE}/static/images/logo/logo.png`} alt="logo" style={logoStyle(isMobile)} />
         </div>
         <h1 style={heroTitleStyle(isMobile)}>{title}</h1>
         <p style={heroSubtitleStyle(isMobile)}>{subtitle}</p>

@@ -12,10 +12,27 @@ Move CRM routing and module switching into React first, while keeping existing C
 - `LegacyCRMPanel.tsx`: mounts one legacy CRM module into a React-managed container.
 - `crmModules.ts`: shared CRM module registry and key helpers.
 
+## Current registry status
+
+The current `CRM_MODULES` registry is already React-first:
+
+- user control
+- event table
+- dharma event
+- finance
+- register
+- permanent registration
+- CCTV
+- songbook
+- embedded file system
+
+`LegacyCRMPanel.tsx` is still useful as a migration utility, but the active module list is no longer relying on legacy renderers today.
+
 ## URL state
 
 - Active module is stored in `?crm=<module_key>`.
 - The legacy `?CRM=` query is normalized to `?crm=` automatically.
+- Alias sections such as `membership_registration` and `youth_class_registration` are normalized to `permanent_registration` plus a `registration` section query.
 
 ## Migration rule
 

@@ -17,6 +17,27 @@ React rewrite for the CRM event table workspace.
 - Search is React-driven.
 - Event detail editing is React-driven.
 - Organizer adding still reuses the legacy `select_users_modal.js` selector.
+- Brochure and event-file management are React-driven.
+- Event creation and deletion are React-driven.
+
+## Backend endpoints
+
+- `/api/event_data/get_all_event_sort`
+- `/api/event_data/new_event`
+- `/api/event_data/delete_event/:eventId`
+- `/api/event_data/upload_brochure/:eventId`
+- `/api/event_data/event_file/upload/:eventId`
+- `/api/event_data/event_file/delete/:fileId`
+
+## Shared state model
+
+- `useEventTableController.ts` reads the base event list from `useEventData()`.
+- Mutations refresh the shared provider instead of keeping a CRM-only event cache.
+- Selected event poster preview is resolved through `smartImageURL()`.
+
+## Realtime note
+
+`useEventTableRealtime.ts` is currently only a reserved hook and debug channel placeholder. There is no real event-table live update stream yet.
 
 ## Theme rule
 

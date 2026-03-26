@@ -6,6 +6,7 @@ import type {
   FormListResponse,
   FormRecord,
 } from "./types";
+import { apiFetch } from "../../../js/apiFetch";
 
 async function parseJson<T>(response: Response): Promise<T> {
   const data = (await response.json().catch(() => ({}))) as T & {
@@ -20,21 +21,21 @@ async function parseJson<T>(response: Response): Promise<T> {
 }
 
 export async function fetchForms() {
-  const response = await fetch("/api/form/get_all_form", {
+  const response = await apiFetch("/api/form/get_all_form", {
     credentials: "include",
   });
   return parseJson<FormListResponse>(response);
 }
 
 export async function fetchFormDetail(formId: number) {
-  const response = await fetch(`/api/form/get_form/${formId}`, {
+  const response = await apiFetch(`/api/form/get_form/${formId}`, {
     credentials: "include",
   });
   return parseJson<FormDetailResponse | FormRecord>(response);
 }
 
 export async function createForm(payload: FormCreatePayload) {
-  const response = await fetch("/api/form/create", {
+  const response = await apiFetch("/api/form/create", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(payload),
@@ -43,7 +44,7 @@ export async function createForm(payload: FormCreatePayload) {
 }
 
 export async function editForm(formId: number, payload: Partial<FormRecord>) {
-  const response = await fetch(`/api/form/edit_form/${formId}`, {
+  const response = await apiFetch(`/api/form/edit_form/${formId}`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(payload),
@@ -52,7 +53,7 @@ export async function editForm(formId: number, payload: Partial<FormRecord>) {
 }
 
 export async function removeForm(formId: number) {
-  const response = await fetch("/api/form/remove_form", {
+  const response = await apiFetch("/api/form/remove_form", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ form_id: formId }),
@@ -61,7 +62,7 @@ export async function removeForm(formId: number) {
 }
 
 export async function listFees(formId: number) {
-  const response = await fetch(`/api/form/fee/list/${formId}`, {
+  const response = await apiFetch(`/api/form/fee/list/${formId}`, {
     credentials: "include",
   });
   return parseJson<FormFee[] | { fees?: FormFee[] }>(response);
@@ -78,7 +79,7 @@ export async function addFee(
     image_path?: string | null;
   },
 ) {
-  const response = await fetch(`/api/form/fee/add/${formId}`, {
+  const response = await apiFetch(`/api/form/fee/add/${formId}`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(payload),
@@ -97,7 +98,7 @@ export async function editFee(
     image_path?: string | null;
   },
 ) {
-  const response = await fetch(`/api/form/fee/edit/${feeId}`, {
+  const response = await apiFetch(`/api/form/fee/edit/${feeId}`, {
     method: "PUT",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(payload),
@@ -106,7 +107,7 @@ export async function editFee(
 }
 
 export async function deleteFee(feeId: number) {
-  const response = await fetch(`/api/form/fee/delete/${feeId}`, {
+  const response = await apiFetch(`/api/form/fee/delete/${feeId}`, {
     method: "DELETE",
   });
   return parseJson<{ status?: string; message?: string }>(response);
@@ -116,7 +117,7 @@ export async function uploadFeeImage(file: File) {
   const formData = new FormData();
   formData.append("image", file);
 
-  const response = await fetch("/api/form/fee/upload_image", {
+  const response = await apiFetch("/api/form/fee/upload_image", {
     method: "POST",
     body: formData,
   });
@@ -124,7 +125,7 @@ export async function uploadFeeImage(file: File) {
 }
 
 export async function listExtraFields(formId: number) {
-  const response = await fetch(`/api/form/extra_field/list/${formId}`, {
+  const response = await apiFetch(`/api/form/extra_field/list/${formId}`, {
     credentials: "include",
   });
   return parseJson<ExtraFieldConfig[] | { fields?: ExtraFieldConfig[] }>(response);
@@ -134,7 +135,7 @@ export async function addExtraField(
   formId: number,
   payload: { label: string; field_type: string; options?: string[] | null; order?: number | null },
 ) {
-  const response = await fetch(`/api/form/extra_field/add/${formId}`, {
+  const response = await apiFetch(`/api/form/extra_field/add/${formId}`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(payload),
@@ -146,7 +147,7 @@ export async function editExtraField(
   fieldId: number,
   payload: { label: string; field_type: string; options?: string[] | null; order?: number | null },
 ) {
-  const response = await fetch(`/api/form/extra_field/edit/${fieldId}`, {
+  const response = await apiFetch(`/api/form/extra_field/edit/${fieldId}`, {
     method: "PUT",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(payload),
@@ -155,14 +156,14 @@ export async function editExtraField(
 }
 
 export async function deleteExtraField(fieldId: number) {
-  const response = await fetch(`/api/form/extra_field/delete/${fieldId}`, {
+  const response = await apiFetch(`/api/form/extra_field/delete/${fieldId}`, {
     method: "DELETE",
   });
   return parseJson<{ status?: string; message?: string }>(response);
 }
 
 export async function addEventToForm(formId: number, eventId: number) {
-  const response = await fetch(`/api/form/add_event/${formId}`, {
+  const response = await apiFetch(`/api/form/add_event/${formId}`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ event_id: eventId }),
@@ -171,7 +172,7 @@ export async function addEventToForm(formId: number, eventId: number) {
 }
 
 export async function removeEventFromForm(formId: number, eventId: number) {
-  const response = await fetch(`/api/form/remove_event/${formId}`, {
+  const response = await apiFetch(`/api/form/remove_event/${formId}`, {
     method: "DELETE",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ event_id: eventId }),
@@ -180,7 +181,7 @@ export async function removeEventFromForm(formId: number, eventId: number) {
 }
 
 export async function removeMemberFromForm(formId: number, memberId: number) {
-  const response = await fetch("/api/form/remove_regis_form_member", {
+  const response = await apiFetch("/api/form/remove_regis_form_member", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ form_id: formId, member_id: memberId }),
@@ -194,7 +195,7 @@ export async function editMemberField(payload: {
   field: string | number;
   value: unknown;
 }) {
-  const response = await fetch("/api/form/edit_member", {
+  const response = await apiFetch("/api/form/edit_member", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(payload),
@@ -229,7 +230,7 @@ export type MemberNricChangePreviewResponse = {
 };
 
 export async function previewMemberNricChange(payload: { member_id: number; new_nric: string }) {
-  const response = await fetch("/api/form/preview_member_nric_change", {
+  const response = await apiFetch("/api/form/preview_member_nric_change", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(payload),

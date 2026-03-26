@@ -1,4 +1,5 @@
 import type { DepartmentRecord, DepartmentUsersResponse, MemberRenewalRecord, PermissionRecord, UserRecord } from "./types";
+import { apiFetch } from "../../../js/apiFetch";
 
 async function parseJson<T>(response: Response): Promise<T> {
   const data = (await response.json().catch(() => ({}))) as T & {
@@ -13,24 +14,24 @@ async function parseJson<T>(response: Response): Promise<T> {
 }
 
 export async function fetchDepartments() {
-  const response = await fetch("/api/user_control/departments", { credentials: "include" });
+  const response = await apiFetch("/api/user_control/departments", { credentials: "include" });
   return parseJson<DepartmentRecord[]>(response);
 }
 
 export async function fetchDepartmentUsers(departmentId: number) {
-  const response = await fetch(`/api/user_control/departments/${departmentId}/users`, {
+  const response = await apiFetch(`/api/user_control/departments/${departmentId}/users`, {
     credentials: "include",
   });
   return parseJson<DepartmentUsersResponse>(response);
 }
 
 export async function fetchAllUsers() {
-  const response = await fetch("/api/user_control/get_all_user_data", { credentials: "include" });
+  const response = await apiFetch("/api/user_control/get_all_user_data", { credentials: "include" });
   return parseJson<{ login?: boolean; data?: UserRecord[] }>(response);
 }
 
 export async function fetchUserDetail(userId: number) {
-  const response = await fetch(`/api/user_control/get_user_detail/${userId}`, {
+  const response = await apiFetch(`/api/user_control/get_user_detail/${userId}`, {
     credentials: "include",
   });
   return parseJson<UserRecord>(response);
@@ -42,7 +43,7 @@ export async function registerUser(payload: {
   phone?: string;
   password: string;
 }) {
-  const response = await fetch("/api/user_control/register", {
+  const response = await apiFetch("/api/user_control/register", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     credentials: "include",
@@ -52,7 +53,7 @@ export async function registerUser(payload: {
 }
 
 export async function createDepartment(name: string) {
-  const response = await fetch("/api/user_control/departments", {
+  const response = await apiFetch("/api/user_control/departments", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     credentials: "include",
@@ -62,7 +63,7 @@ export async function createDepartment(name: string) {
 }
 
 export async function deleteDepartment(departmentId: number) {
-  const response = await fetch(`/api/user_control/departments/${departmentId}`, {
+  const response = await apiFetch(`/api/user_control/departments/${departmentId}`, {
     method: "DELETE",
     credentials: "include",
   });
@@ -70,7 +71,7 @@ export async function deleteDepartment(departmentId: number) {
 }
 
 export async function addUserToDepartment(departmentId: number, userId: number) {
-  const response = await fetch(`/api/user_control/departments/${departmentId}/add_user`, {
+  const response = await apiFetch(`/api/user_control/departments/${departmentId}/add_user`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     credentials: "include",
@@ -80,7 +81,7 @@ export async function addUserToDepartment(departmentId: number, userId: number) 
 }
 
 export async function removeUserFromDepartment(departmentId: number, userId: number) {
-  const response = await fetch(`/api/user_control/departments/${departmentId}/remove_user`, {
+  const response = await apiFetch(`/api/user_control/departments/${departmentId}/remove_user`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     credentials: "include",
@@ -90,12 +91,12 @@ export async function removeUserFromDepartment(departmentId: number, userId: num
 }
 
 export async function fetchAllPermissions() {
-  const response = await fetch("/api/permission/get_all_permission", { credentials: "include" });
+  const response = await apiFetch("/api/permission/get_all_permission", { credentials: "include" });
   return parseJson<{ permissions?: PermissionRecord[] }>(response);
 }
 
 export async function addPermissionToDepartment(departmentId: number, permissionId: number) {
-  const response = await fetch("/api/permission/add_permission_to_department", {
+  const response = await apiFetch("/api/permission/add_permission_to_department", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     credentials: "include",
@@ -105,7 +106,7 @@ export async function addPermissionToDepartment(departmentId: number, permission
 }
 
 export async function removePermissionFromDepartment(departmentId: number, permissionId: number) {
-  const response = await fetch("/api/permission/remove_permission_from_department", {
+  const response = await apiFetch("/api/permission/remove_permission_from_department", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     credentials: "include",
@@ -115,7 +116,7 @@ export async function removePermissionFromDepartment(departmentId: number, permi
 }
 
 export async function editUserData(payload: Record<string, unknown>) {
-  const response = await fetch("/api/user_control/edit_user_data", {
+  const response = await apiFetch("/api/user_control/edit_user_data", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     credentials: "include",
@@ -125,7 +126,7 @@ export async function editUserData(payload: Record<string, unknown>) {
 }
 
 export async function deleteUser(userId: number) {
-  const response = await fetch(`/api/user_control/delete_user/${userId}`, {
+  const response = await apiFetch(`/api/user_control/delete_user/${userId}`, {
     method: "DELETE",
     credentials: "include",
   });
@@ -142,7 +143,7 @@ export async function createMemberRenewal(userId: number, payload: { renewal_dat
     formData.append("proof", payload.proof);
   }
 
-  const response = await fetch(`/api/user_control/member_renewal/${userId}`, {
+  const response = await apiFetch(`/api/user_control/member_renewal/${userId}`, {
     method: "POST",
     credentials: "include",
     body: formData,
@@ -151,7 +152,7 @@ export async function createMemberRenewal(userId: number, payload: { renewal_dat
 }
 
 export async function deleteMemberRenewal(renewalId: number) {
-  const response = await fetch(`/api/user_control/member_renewal/${renewalId}`, {
+  const response = await apiFetch(`/api/user_control/member_renewal/${renewalId}`, {
     method: "DELETE",
     credentials: "include",
   });
@@ -159,7 +160,7 @@ export async function deleteMemberRenewal(renewalId: number) {
 }
 
 export async function resetUserPassword(userId: number) {
-  const response = await fetch(`/api/user_control/reset_password/${userId}`, {
+  const response = await apiFetch(`/api/user_control/reset_password/${userId}`, {
     credentials: "include",
   });
   return parseJson<{ status?: string; message?: string }>(response);

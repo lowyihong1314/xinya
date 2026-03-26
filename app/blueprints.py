@@ -2,6 +2,7 @@ from importlib import import_module
 
 
 BLUEPRINT_SPECS = [
+    ("app.app_release", "app_release_bp", "/app", "api"),
     ("app.account", "account_bp", "/account", "api"),
     ("app.account", "payment_voucher_bp", "/account/print_payment_voucher", "api"),
     ("app.public_api", "api_bp", "/api", "api"),

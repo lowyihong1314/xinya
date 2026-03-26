@@ -8,6 +8,7 @@ import type {
   EventSortResponse,
   SharedEventRecord,
 } from "./types";
+import { apiFetch } from "../../js/apiFetch";
 
 async function parseJson<T>(response: Response): Promise<T> {
   const data = (await response.json().catch(() => ({}))) as T & {
@@ -21,14 +22,14 @@ async function parseJson<T>(response: Response): Promise<T> {
 }
 
 export async function fetchAllEventsSorted() {
-  const response = await fetch("/api/event_data/get_all_event_sort", {
+  const response = await apiFetch("/api/event_data/get_all_event_sort", {
     credentials: "include",
   });
   return parseJson<EventSortResponse>(response);
 }
 
 export async function fetchEventDetail(eventId: number | string) {
-  const response = await fetch(`/api/api/get_event/${eventId}`, {
+  const response = await apiFetch(`/api/api/get_event/${eventId}`, {
     credentials: "include",
   });
   return parseJson<EventDetailResponse>(response);
@@ -37,7 +38,7 @@ export async function fetchEventDetail(eventId: number | string) {
 export async function saveEvent(
   payload: Partial<SharedEventRecord> & { event_id: number; end_datetime?: string | null },
 ) {
-  const response = await fetch("/api/event_data/new_event", {
+  const response = await apiFetch("/api/event_data/new_event", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     credentials: "include",
@@ -47,7 +48,7 @@ export async function saveEvent(
 }
 
 export async function setEventPoster(eventId: number, fileId: number) {
-  const response = await fetch(`/api/event_data/set_poster/${eventId}/${fileId}`, {
+  const response = await apiFetch(`/api/event_data/set_poster/${eventId}/${fileId}`, {
     method: "POST",
     credentials: "include",
   });
@@ -55,14 +56,14 @@ export async function setEventPoster(eventId: number, fileId: number) {
 }
 
 export async function fetchEventFlows(eventId: number | string) {
-  const response = await fetch(`/api/event_data/event_flow/list/${eventId}`, {
+  const response = await apiFetch(`/api/event_data/event_flow/list/${eventId}`, {
     credentials: "include",
   });
   return parseJson<EventFlowListResponse>(response);
 }
 
 export async function createEventFlow(payload: Record<string, unknown>) {
-  const response = await fetch("/api/event_data/event_flow/new", {
+  const response = await apiFetch("/api/event_data/event_flow/new", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     credentials: "include",
@@ -72,7 +73,7 @@ export async function createEventFlow(payload: Record<string, unknown>) {
 }
 
 export async function updateEventFlow(flowId: number, payload: Record<string, unknown>) {
-  const response = await fetch(`/api/event_data/event_flow/update/${flowId}`, {
+  const response = await apiFetch(`/api/event_data/event_flow/update/${flowId}`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     credentials: "include",
@@ -82,7 +83,7 @@ export async function updateEventFlow(flowId: number, payload: Record<string, un
 }
 
 export async function deleteEventFlow(flowId: number) {
-  const response = await fetch(`/api/event_data/event_flow/delete/${flowId}`, {
+  const response = await apiFetch(`/api/event_data/event_flow/delete/${flowId}`, {
     method: "POST",
     credentials: "include",
   });
@@ -90,7 +91,7 @@ export async function deleteEventFlow(flowId: number) {
 }
 
 export async function reorderEventFlows(eventId: number, flowIds: number[]) {
-  const response = await fetch("/api/event_data/event_flow/reorder", {
+  const response = await apiFetch("/api/event_data/event_flow/reorder", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     credentials: "include",
@@ -104,7 +105,7 @@ export async function uploadEventMedia(eventId: number, file: File) {
   formData.append("event_id", String(eventId));
   formData.append("file", file);
 
-  const response = await fetch("/media/upload_media", {
+  const response = await apiFetch("/media/upload_media", {
     method: "POST",
     credentials: "include",
     body: formData,
@@ -115,7 +116,7 @@ export async function uploadEventMedia(eventId: number, file: File) {
   const videoTypes = new Set(["mp4", "mov", "avi", "mkv", "webm"]);
   if (uploadRecord.file_id && uploadRecord.file_type && videoTypes.has(uploadRecord.file_type)) {
     window.setTimeout(() => {
-      void fetch(`/media/get_event_image/${uploadRecord.file_id}/cache`, {
+      void apiFetch(`/media/get_event_image/${uploadRecord.file_id}/cache`, {
         credentials: "include",
       });
     }, 200);
@@ -128,7 +129,7 @@ export async function uploadEventBrochure(eventId: number, file: File) {
   const formData = new FormData();
   formData.append("file", file);
 
-  const response = await fetch(`/api/event_data/upload_brochure/${eventId}`, {
+  const response = await apiFetch(`/api/event_data/upload_brochure/${eventId}`, {
     method: "POST",
     credentials: "include",
     body: formData,
@@ -144,7 +145,7 @@ export async function saveEventCheckIn(payload: {
   check_in_time?: string;
   valid_user_id?: number | null;
 }) {
-  const response = await fetch("/api/event_data/check_in/save", {
+  const response = await apiFetch("/api/event_data/check_in/save", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     credentials: "include",
@@ -154,7 +155,7 @@ export async function saveEventCheckIn(payload: {
 }
 
 export async function deleteEventCheckIn(checkInId: number) {
-  const response = await fetch(`/api/event_data/check_in/delete/${checkInId}`, {
+  const response = await apiFetch(`/api/event_data/check_in/delete/${checkInId}`, {
     method: "POST",
     credentials: "include",
   });

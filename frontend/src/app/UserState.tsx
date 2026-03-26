@@ -8,6 +8,7 @@ import {
 import type { ReactNode } from "react";
 
 import { ensureDesignTokens } from "../theme/designTokens";
+import { apiFetch } from "../js/apiFetch";
 
 type UserData = {
   username?: string;
@@ -31,7 +32,7 @@ const UserStateContext = createContext<UserStateContextValue | null>(null);
 
 async function fetchCurrentUser(): Promise<UserData | null> {
   try {
-    const response = await fetch("/api/user_control/get_user_data", {
+    const response = await apiFetch("/api/user_control/get_user_data", {
       credentials: "include",
     });
     if (!response.ok) {
@@ -97,9 +98,10 @@ export function UserStateProvider({
   }
 
   async function login(username: string, password: string) {
-    const response = await fetch("/api/user_control/login", {
+    const response = await apiFetch("/api/user_control/login", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
+      credentials: "include",
       body: JSON.stringify({ username, password }),
     });
     const data = await response.json();
@@ -111,7 +113,7 @@ export function UserStateProvider({
   }
 
   async function logout() {
-    const response = await fetch("/api/user_control/logout");
+    const response = await apiFetch("/api/user_control/logout", { credentials: "include" });
     const data = await response.json();
     if (!response.ok) {
       throw new Error(data.error || "退出失败");
@@ -241,7 +243,9 @@ const overlayStyle = {
   inset: 0,
   background: "rgba(8,15,25,0.58)",
   display: "grid",
-  placeItems: "center",
+  alignContent: "center",
+  justifyItems: "center",
+  overflowY: "auto",
   padding: "24px",
   zIndex: 9999,
 } as const;

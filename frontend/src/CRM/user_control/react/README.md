@@ -2,6 +2,14 @@
 
 React migration target for the CRM user control workspace.
 
+## Files
+
+- `UserControlPage.tsx`: page entry that binds controller state to the view.
+- `UserControlView.tsx`: presentational workspace, user editor, permission modal, and reusable `UserCard`.
+- `useUserControlController.ts`: data loading, mutation orchestration, and local workspace state.
+- `api.ts`: department, user, permission, and renewal requests.
+- `types.ts`: department, permission, user, and member-renewal types.
+
 ## Scope
 
 - Department list and selection
@@ -13,9 +21,30 @@ React migration target for the CRM user control workspace.
 - Reset password
 - Delete user
 - Department permission editing
+- Membership renewal record CRUD
 
 ## State rule
 
 - Keep data loading and mutations in `useUserControlController.ts`.
 - UI components should stay in `UserControlView.tsx`.
 - New colors must come from `frontend/src/theme/designTokens.ts`.
+
+## Backend endpoints
+
+- `/api/user_control/departments`
+- `/api/user_control/departments/:departmentId/users`
+- `/api/user_control/get_all_user_data`
+- `/api/user_control/get_user_detail/:userId`
+- `/api/user_control/register`
+- `/api/user_control/edit_user_data`
+- `/api/user_control/delete_user/:userId`
+- `/api/user_control/reset_password/:userId`
+- `/api/user_control/member_renewal/:userId`
+- `/api/user_control/member_renewal/:renewalId`
+- `/api/permission/get_all_permission`
+- `/api/permission/add_permission_to_department`
+- `/api/permission/remove_permission_from_department`
+
+## Important cross-module note
+
+`UserCard` is reused outside CRM by the public `info` page. Visual or prop changes here can therefore affect both admin and public experiences.

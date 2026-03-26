@@ -1,3 +1,5 @@
+import { apiFetch } from "../../js/apiFetch";
+
 async function parseJson(response) {
   const data = await response.json().catch(() => ({}));
   if (!response.ok) {
@@ -7,7 +9,7 @@ async function parseJson(response) {
 }
 
 export async function postLampPayment(formData) {
-  const response = await fetch("/api/lampRegistration_API/make_payment", {
+  const response = await apiFetch("/api/lampRegistration_API/make_payment", {
     method: "POST",
     body: formData,
   });
@@ -15,7 +17,7 @@ export async function postLampPayment(formData) {
 }
 
 export async function registerLamp(payload) {
-  const response = await fetch("/api/lampRegistration_API/register", {
+  const response = await apiFetch("/api/lampRegistration_API/register", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(payload),
@@ -24,7 +26,7 @@ export async function registerLamp(payload) {
 }
 
 export async function fetchLampByIds(ids) {
-  const response = await fetch("/api/lampRegistration_API/get_by_ids", {
+  const response = await apiFetch("/api/lampRegistration_API/get_by_ids", {
     method: "POST",
     credentials: "include",
     headers: { "Content-Type": "application/json" },
@@ -34,7 +36,7 @@ export async function fetchLampByIds(ids) {
 }
 
 export async function deleteLampRegistration(id) {
-  const response = await fetch("/api/lampRegistration_API/delete", {
+  const response = await apiFetch("/api/lampRegistration_API/delete", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ id }),
@@ -43,7 +45,7 @@ export async function deleteLampRegistration(id) {
 }
 
 export async function fetchAllRegistrations() {
-  const response = await fetch("/api/lampRegistration_API/get_all_register", {
+  const response = await apiFetch("/api/lampRegistration_API/get_all_register", {
     credentials: "include",
   });
   return parseJson(response);

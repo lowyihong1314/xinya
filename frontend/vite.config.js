@@ -2,12 +2,13 @@ import { defineConfig } from "vite";
 import react from "@vitejs/plugin-react";
 import path from "path";
 
-export default defineConfig(({ command }) => {
+export default defineConfig(({ command, mode }) => {
   const isBuild = command === "build";
+  const isApk = mode === "apk";
 
   return {
     plugins: [react()],
-    base: isBuild ? "/static/vite/" : "/",
+    base: isApk ? "./" : isBuild ? "/static/vite/" : "/",
 
     server: {
       port: 5173,
@@ -37,16 +38,23 @@ export default defineConfig(({ command }) => {
       },
     },
 
-    build: {
-      outDir: "../static/vite",
-      emptyOutDir: true,
-      rollupOptions: {
-        input: path.resolve(__dirname, "./main.tsx"),
-        output: {
-          entryFileNames: "init.js",
-          assetFileNames: "assets/[name]-[hash][extname]",
+    build: isApk
+      ? {
+          // APK build: standard Vite output with index.html for Capacitor
+          outDir: "apk_dist",
+          emptyOutDir: true,
+        }
+      : {
+          // Web build: single init.js entry loaded by Flask template
+          outDir: "../static/vite",
+          emptyOutDir: true,
+          rollupOptions: {
+            input: path.resolve(__dirname, "./main.tsx"),
+            output: {
+              entryFileNames: "init.js",
+              assetFileNames: "assets/[name]-[hash][extname]",
+            },
+          },
         },
-      },
-    },
   };
 });

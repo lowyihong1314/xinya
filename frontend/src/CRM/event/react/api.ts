@@ -5,6 +5,7 @@ import type {
   EventMutationPayload,
   EventRecord,
 } from "./types";
+import { apiFetch } from "../../../js/apiFetch";
 
 async function parseJson<T>(response: Response): Promise<T> {
   const data = (await response.json().catch(() => ({}))) as T & {
@@ -19,14 +20,14 @@ async function parseJson<T>(response: Response): Promise<T> {
 }
 
 export async function fetchAllEvents() {
-  const response = await fetch("/api/event_data/get_all_event_sort", {
+  const response = await apiFetch("/api/event_data/get_all_event_sort", {
     credentials: "include",
   });
   return parseJson<EventListResponse>(response);
 }
 
 export async function saveEvent(payload: EventMutationPayload & { event_id: number }) {
-  const response = await fetch("/api/event_data/new_event", {
+  const response = await apiFetch("/api/event_data/new_event", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     credentials: "include",
@@ -36,7 +37,7 @@ export async function saveEvent(payload: EventMutationPayload & { event_id: numb
 }
 
 export async function createEvent(payload: EventCreatePayload) {
-  const response = await fetch("/api/event_data/new_event", {
+  const response = await apiFetch("/api/event_data/new_event", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     credentials: "include",
@@ -46,7 +47,7 @@ export async function createEvent(payload: EventCreatePayload) {
 }
 
 export async function deleteEvent(eventId: number) {
-  const response = await fetch(`/api/event_data/delete_event/${eventId}`, {
+  const response = await apiFetch(`/api/event_data/delete_event/${eventId}`, {
     method: "DELETE",
     credentials: "include",
   });
@@ -57,7 +58,7 @@ export async function uploadEventBrochure(eventId: number, file: File) {
   const formData = new FormData();
   formData.append("file", file);
 
-  const response = await fetch(`/api/event_data/upload_brochure/${eventId}`, {
+  const response = await apiFetch(`/api/event_data/upload_brochure/${eventId}`, {
     method: "POST",
     credentials: "include",
     body: formData,
@@ -70,7 +71,7 @@ export async function uploadEventFile(eventId: number, file: File) {
   const formData = new FormData();
   formData.append("file", file);
 
-  const response = await fetch(`/api/event_data/event_file/upload/${eventId}`, {
+  const response = await apiFetch(`/api/event_data/event_file/upload/${eventId}`, {
     method: "POST",
     credentials: "include",
     body: formData,
@@ -80,7 +81,7 @@ export async function uploadEventFile(eventId: number, file: File) {
 }
 
 export async function deleteEventFile(fileId: number) {
-  const response = await fetch(`/api/event_data/event_file/delete/${fileId}`, {
+  const response = await apiFetch(`/api/event_data/event_file/delete/${fileId}`, {
     method: "POST",
     credentials: "include",
   });

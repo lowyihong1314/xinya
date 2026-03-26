@@ -1,9 +1,12 @@
+import { API_BASE } from "./js/apiBase";
+import { apiFetch } from "./js/apiFetch";
+
 export function mediaUrl(path) {
-  return `/media_file/${path}`;
+  return `${API_BASE}/media_file/${path}`;
 }
 
 export async function fetchMediaPath(id, type = "cache") {
-  const res = await fetch(`/media/get_event_image/${id}/${type}`);
+  const res = await apiFetch(`/media/get_event_image/${id}/${type}`);
   const info = await res.json();
 
   if (info.status === "success" && info.ready) {

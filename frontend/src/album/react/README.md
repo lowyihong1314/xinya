@@ -2,17 +2,36 @@
 
 React implementation for the album/home experience.
 
+## Files
+
+- `HomeAlbumPage.tsx`: monthly calendar view and selected-date event panel.
+- `EventDetailPage.tsx`: full event detail route, hero, tabs, admin actions, and media room subscription.
+- `ImageDetailPage.tsx`: single file viewer for images and videos.
+- `PhotoGrid.tsx`: paginated event media wall with selection state.
+- `PhotoGridBatchActions.tsx`: multi-select toolbar for download and delete actions.
+- `EditEventModal.tsx`: event metadata editor, poster chooser, and brochure upload/remove flow.
+- `EventCheckInPanel.tsx`: user search and check-in rollback UI for a selected event day.
+- `EventFlowModal.tsx`: event flow editor with timing calculation and drag-reorder.
+- `UploadMediaModal.tsx`: upload queue UI for images and videos.
+- `mediaRealtime.ts`: socket.io helper for event media room notifications.
+
 ## Current scope
 
 - `HomeAlbumPage.tsx` replaces the old home calendar entry from `init_event_data.js`.
-- `EventDetailPage.tsx` is the new React shell for single-event pages.
+- `EventDetailPage.tsx` is the React shell for single-event pages.
 - `ImageDetailPage.tsx` is the React image/video viewer route for `/image/:imageId`.
-- Home event data now comes from the shared event provider in `frontend/src/event/shared`.
-- `PhotoGrid.tsx` now owns the main photo grid in React.
-- `EditEventModal.tsx` now owns event info editing in React.
-- `UploadMediaModal.tsx` now owns media upload in React.
-- `EventFlowModal.tsx` now owns event flow management in React.
+- Home event data comes from the shared event provider in `frontend/src/event/shared`.
+- Upload and photo grid actions now live completely inside React.
 - Legacy redirect helpers have been removed from `frontend/src/album`.
+
+## Backend integrations
+
+- shared event endpoints from `frontend/src/event/shared/api.ts`
+- `/api/api/get_file_data/:imageId` for the image detail route
+- `/media/rotate_file/:fileId/:angle`
+- `/media/download_files`
+- `/media/delete_files`
+- realtime media updates over socket rooms joined through `mediaRealtime.ts`
 
 ## State rule
 

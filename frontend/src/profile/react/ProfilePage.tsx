@@ -3,9 +3,11 @@ import type { ChangeEvent, CSSProperties, FormEvent } from "react";
 
 import { useUserState } from "../../app/UserState";
 import { ensureDesignTokens } from "../../theme/designTokens";
-import { fetchMyFootprints, startMembershipRenewal, updateProfile, uploadProfileImage } from "./api";
+import { API_BASE } from "../../js/apiBase";
+import { fetchAppReleases, fetchMyFootprints, startMembershipRenewal, updateProfile, uploadProfileImage } from "./api";
 import { MembershipActionCard } from "./MembershipActionCard";
 import type {
+  AppRelease,
   ProfileFootprintPayload,
   ProfileFootprintSummary,
   ProfileFormFootprint,
@@ -195,6 +197,8 @@ export function ProfilePage() {
   const [footprints, setFootprints] = useState<ProfileFootprintPayload>(emptyFootprintPayload);
   const [footprintsLoading, setFootprintsLoading] = useState(false);
   const [footprintsError, setFootprintsError] = useState<string | null>(null);
+  const [appReleases, setAppReleases] = useState<AppRelease[]>([]);
+  const [appReleasesLoading, setAppReleasesLoading] = useState(false);
 
   async function loadFootprints() {
     if (!isAuthenticated || !profileUser?.id) {
@@ -247,11 +251,20 @@ export function ProfilePage() {
     void loadFootprints();
   }, [isAuthenticated, profileUser?.id, profileUser?.nric_asset_id, profileUser?.NRIC, profileUser?.name_NRIC]);
 
+  useEffect(() => {
+    if (activeSection !== "account" || appReleases.length > 0) return;
+    setAppReleasesLoading(true);
+    fetchAppReleases()
+      .then(setAppReleases)
+      .catch(() => setAppReleases([]))
+      .finally(() => setAppReleasesLoading(false));
+  }, [activeSection]);
+
   const avatarSrc = useMemo(() => {
     if (!profileUser?.username) {
-      return "/static/images/logo/logo.png";
+      return `${API_BASE}/static/images/logo/logo.png`;
     }
-    return `/api/user_control/get_profile_image/${profileUser.username}?t=${avatarVersion}`;
+    return `${API_BASE}/api/user_control/get_profile_image/${profileUser.username}?t=${avatarVersion}`;
   }, [avatarVersion, profileUser?.username]);
 
   const footprintSummary = footprints.summary ?? emptyFootprintSummary();
@@ -667,6 +680,8 @@ export function ProfilePage() {
                 头像上传仍然保留在页首；这里保留纯账号操作，避免功能混在同一个区域里。
               </div>
             </article>
+
+            <AppDownloadCard releases={appReleases} loading={appReleasesLoading} />
           </div>
         </section>
       ) : null}
@@ -861,6 +876,83 @@ function YouthFootprintCard({ item }: { item: ProfileYouthFootprint }) {
     </article>
   );
 }
+
+function AppDownloadCard({ releases, loading }: { releases: AppRelease[]; loading: boolean }) {
+  return (
+    <article style={featureCardStyle}>
+      <div style={featureCardEyebrowStyle}>App Download</div>
+      <h3 style={featureCardTitleStyle}>下载 App</h3>
+      {loading ? (
+        <div style={footprintNoteStyle}>正在加载版本列表…</div>
+      ) : releases.length === 0 ? (
+        <div style={footprintNoteStyle}>暂无可下载的 App 版本。</div>
+      ) : (
+        <div style={apkListStyle}>
+          {releases.map((r) => (
+            <div key={r.filename} style={apkRowStyle}>
+              <div style={apkInfoStyle}>
+                <span style={apkNameStyle}>{r.filename}</span>
+                <span style={apkSizeStyle}>{r.size_label}</span>
+              </div>
+              <a href={r.download_url} download={r.filename} style={apkDownloadButtonStyle}>
+                下载
+              </a>
+            </div>
+          ))}
+        </div>
+      )}
+      <div style={footprintNoteStyle}>Android APK 安装包，下载后在手机上打开即可安装。</div>
+    </article>
+  );
+}
+
+const apkListStyle: CSSProperties = {
+  display: "grid",
+  gap: "10px",
+};
+
+const apkRowStyle: CSSProperties = {
+  display: "flex",
+  alignItems: "center",
+  justifyContent: "space-between",
+  gap: "12px",
+  padding: "12px 14px",
+  borderRadius: "14px",
+  background: "rgba(15,118,110,0.06)",
+  border: "1px solid rgba(15,118,110,0.12)",
+};
+
+const apkInfoStyle: CSSProperties = {
+  display: "flex",
+  flexDirection: "column",
+  gap: "4px",
+  minWidth: 0,
+};
+
+const apkNameStyle: CSSProperties = {
+  fontWeight: 700,
+  fontSize: "14px",
+  color: "var(--x-color-ink)",
+  overflow: "hidden",
+  textOverflow: "ellipsis",
+  whiteSpace: "nowrap",
+};
+
+const apkSizeStyle: CSSProperties = {
+  fontSize: "12px",
+  color: "var(--x-color-ink-muted)",
+};
+
+const apkDownloadButtonStyle: CSSProperties = {
+  flexShrink: 0,
+  padding: "8px 16px",
+  borderRadius: "999px",
+  background: "linear-gradient(135deg, #0f766e, #1d4ed8)",
+  color: "white",
+  fontWeight: 700,
+  fontSize: "13px",
+  textDecoration: "none",
+};
 
 const pageShellStyle: CSSProperties = {
   minHeight: "calc(100vh - 60px)",

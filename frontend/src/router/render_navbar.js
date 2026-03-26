@@ -1,3 +1,5 @@
+import { apiFetch } from "../js/apiFetch";
+
 export function navigateTo(page, { replace = false } = {}) {
   window.__xinyaNavigate?.(page, { replace });
 }
@@ -12,7 +14,7 @@ export async function fetchUserAuth() {
   }
 
   try {
-    const res = await fetch("/api/user_control/get_user_data", {
+    const res = await apiFetch("/api/user_control/get_user_data", {
       credentials: "include",
     });
     if (!res.ok) throw new Error("Unauthenticated");

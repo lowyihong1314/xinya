@@ -3,6 +3,7 @@ import type {
   PaymentVoucherPublicPayload,
   PaymentVoucherSharePayload,
 } from "./types";
+import { apiFetch } from "../../../../js/apiFetch";
 
 async function parseJson<T>(response: Response): Promise<T> {
   const data = (await response.json().catch(() => ({}))) as T & { error?: string; message?: string };
@@ -13,14 +14,14 @@ async function parseJson<T>(response: Response): Promise<T> {
 }
 
 export async function fetchClaims() {
-  const response = await fetch("/api/account/get_all_claim", {
+  const response = await apiFetch("/api/account/get_all_claim", {
     credentials: "include",
   });
   return parseJson<ClaimListResponse>(response);
 }
 
 export async function submitClaim(formData: FormData) {
-  const response = await fetch("/api/account/submit_new_claim", {
+  const response = await apiFetch("/api/account/submit_new_claim", {
     method: "POST",
     body: formData,
     credentials: "include",
@@ -32,7 +33,7 @@ export async function decideClaim(
   requestId: number,
   payload: { action: "approve" | "reject"; comment: string; sign_json_data?: unknown },
 ) {
-  const response = await fetch(`/api/account/claim_decision/${requestId}`, {
+  const response = await apiFetch(`/api/account/claim_decision/${requestId}`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     credentials: "include",
@@ -42,7 +43,7 @@ export async function decideClaim(
 }
 
 export async function fetchPaymentVoucherShare(requestId: number) {
-  const response = await fetch(`/api/account/print_payment_voucher/share_payment_voucher/${requestId}`, {
+  const response = await apiFetch(`/api/account/print_payment_voucher/share_payment_voucher/${requestId}`, {
     credentials: "include",
   });
   const payload = await parseJson<{ data?: PaymentVoucherSharePayload }>(response);
@@ -53,7 +54,7 @@ export async function fetchPaymentVoucherShare(requestId: number) {
 }
 
 export async function fetchPublicPaymentVoucher(token: string) {
-  const response = await fetch(`/api/account/print_payment_voucher/public/${token}`, {
+  const response = await apiFetch(`/api/account/print_payment_voucher/public/${token}`, {
     credentials: "include",
   });
   const payload = await parseJson<{ data?: PaymentVoucherPublicPayload }>(response);
@@ -67,7 +68,7 @@ export async function submitPublicPaymentVoucherSign(
   token: string,
   payload: { full_name: string; sign_json_data: unknown },
 ) {
-  const response = await fetch(`/api/account/print_payment_voucher/public/${token}/sign`, {
+  const response = await apiFetch(`/api/account/print_payment_voucher/public/${token}/sign`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     credentials: "include",
