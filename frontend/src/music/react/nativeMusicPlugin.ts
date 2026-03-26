@@ -1,5 +1,3 @@
-import { registerPlugin } from "@capacitor/core";
-
 type NativeMusicListenerHandle = {
   remove: () => Promise<void> | void;
 };
@@ -21,4 +19,45 @@ export interface NativeMusicPlugin {
   addListener(event: "prev", listener: () => void): Promise<NativeMusicListenerHandle>;
 }
 
-export const NativeMusic = registerPlugin<NativeMusicPlugin>("NativeMusic");
+type CapacitorLike = {
+  registerPlugin?: <T>(name: string) => T;
+};
+
+function createUnavailableError() {
+  return new Error("NativeMusic plugin is unavailable in this runtime");
+}
+
+function createUnavailablePlugin(): NativeMusicPlugin {
+  const rejectUnavailable = async () => {
+    throw createUnavailableError();
+  };
+
+  return {
+    ready: async () => undefined,
+    play: rejectUnavailable,
+    pause: rejectUnavailable,
+    resume: rejectUnavailable,
+    seekTo: rejectUnavailable,
+    getProgress: rejectUnavailable,
+    stop: rejectUnavailable,
+    addListener: async () => ({
+      remove: async () => undefined,
+    }),
+  };
+}
+
+function resolveRegisterPlugin() {
+  const maybeCapacitor = (globalThis as typeof globalThis & { Capacitor?: CapacitorLike }).Capacitor;
+  if (typeof maybeCapacitor?.registerPlugin === "function") {
+    return maybeCapacitor.registerPlugin.bind(maybeCapacitor);
+  }
+  return null;
+}
+
+export const NativeMusic: NativeMusicPlugin = (() => {
+  const registerPlugin = resolveRegisterPlugin();
+  if (!registerPlugin) {
+    return createUnavailablePlugin();
+  }
+  return registerPlugin<NativeMusicPlugin>("NativeMusic");
+})();
