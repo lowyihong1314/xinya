@@ -34,3 +34,9 @@
 - `normalizeFieldSwitches()` in `useFormWorkspace.ts` keeps older boolean fields and the newer `field_switches` object in sync; changing this shape has wide impact.
 - Finance pages read `FormRecord` and `FormPayment` directly, so type changes here ripple into `frontend/src/CRM/Account/react`.
 - If you add new extra-field types, update both `ExtraFieldEditor.tsx` and any consumer that formats member field values.
+
+## React Router Migration Track
+
+- The admin page is React-driven, but this folder still depends on imperative helpers such as `open_parental_form()` and body-mounted modal roots like `showRegisterDetail()` and `showEventPicker()`.
+- The target design is one shared React portal/modal layer plus route-aware screens for public form registration, payment, parental consent, and any large detail flows.
+- Do not add new UI imports from `static/js/form/*`; existing ones should be migrated into React components, hooks, and router-driven pages over time.

@@ -59,9 +59,26 @@ Top-level Vite frontend for the React migration of the Xinya site.
 - `AppLayout` also converts legacy `?page=...` URLs into router paths.
 - Some modules still ship compatibility render functions for legacy callers, especially under `src/lamp`.
 
+## Android APK
+
+See **[Apk.md](./Apk.md)** for the complete APK implementation guide, including:
+
+- Dual-build setup (web vs APK mode, `IS_APK`, `API_BASE`)
+- One-command build script (`build_apk.sh`) and signing
+- Cross-origin cookie fix for Capacitor WebView
+- Music player split — how Web and APK share state but use different UIs
+- `MusicPlayerController` hidden mode and public audio control API
+- App download endpoint and profile page integration
+
 ## Upgrade notes
 
 - Routing is hash-based, so links and redirects should use router navigation, not hardcoded server paths.
 - Global styling tokens are injected at runtime by `ensureDesignTokens()`. New shared colors should be added there first.
 - Music playback is global and outlives the visible `/music` page because the playback provider sits above the router.
 - Shared event data is also global; React event-related pages should reuse `useEventData()` instead of fetching their own sorted event list.
+
+## React Router Migration Track
+
+- Current audit result: the app shell is on React Router, but frontend is not yet fully route-driven because CRM modules still switch through `?crm=`, permanent registration still switches through `?registration=`, finance still switches through `?account_router=`, and the shell still carries `?page=` plus `window.__xinyaNavigate` compatibility.
+- The full migration plan now lives in `frontend/Agent_todo.md` and should be treated as the source of truth for path design and legacy removal sequencing.
+- End-state for this repo is path-based React Router navigation, React portals for overlay UI, and zero runtime dependence on `window.app`, `reset_style()`, `Legacy*` mount helpers, `render_*_init.js`, `static/js/form/*`, or `static/js/sign_tools.js`.

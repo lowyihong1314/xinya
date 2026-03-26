@@ -35,3 +35,9 @@ This page intentionally reuses the public changyou domain layer:
 
 - The default import path is hardcoded in `SongbookAdminPage.tsx`, so deployment path changes require code changes unless this becomes configurable.
 - Because this page shares types with the reader experience, adding new song fields should be coordinated across both CRM and non-CRM changyou modules.
+
+## React Router Migration Track
+
+- Follow the phased migration plan in `frontend/Agent_todo.md`; that file is the source of truth for the full React + React Router upgrade and legacy-removal sequence.
+- End-state for this directory is React components, route params or nested routes, shared hooks/context, and React portals instead of query-string routers, `window` bridges, `window.app`, or DOM-built overlays.
+- Do not add new legacy mounts, `createRoot(document.body)` helpers, or new UI imports from `static/js/*`; when this area is touched, migrate existing legacy control flow out instead of extending it.

@@ -32,3 +32,9 @@
 - Keep `account_router` stable when adding or renaming tabs; the current tab is deep-linkable.
 - `frontend/src/CRM/Account/react/ClaimWorkspace.tsx`, `api.ts`, and `types.ts` are compatibility re-export shims and should not grow new logic.
 - The voucher signing flow depends on the separate router entry `/payment-voucher-sign/:token`; changes here usually require checking both CRM and public-entry behavior.
+
+## React Router Migration Track
+
+- Follow the phased migration plan in `frontend/Agent_todo.md`; that file is the source of truth for the full React + React Router upgrade and legacy-removal sequence.
+- End-state for this directory is React components, route params or nested routes, shared hooks/context, and React portals instead of query-string routers, `window` bridges, `window.app`, or DOM-built overlays.
+- Do not add new legacy mounts, `createRoot(document.body)` helpers, or new UI imports from `static/js/*`; when this area is touched, migrate existing legacy control flow out instead of extending it.

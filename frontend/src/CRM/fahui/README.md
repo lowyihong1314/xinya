@@ -32,3 +32,9 @@ This module currently focuses on lamp-registration payments that need CRM-side r
 
 - This module depends on lamp-domain metadata from outside CRM, so changes to lamp type constants should be reviewed here too.
 - Approval state is inferred partly from `submitter_id` and `paid_at`, so backend response shape changes can affect card rendering.
+
+## React Router Migration Track
+
+- Follow the phased migration plan in `frontend/Agent_todo.md`; that file is the source of truth for the full React + React Router upgrade and legacy-removal sequence.
+- End-state for this directory is React components, route params or nested routes, shared hooks/context, and React portals instead of query-string routers, `window` bridges, `window.app`, or DOM-built overlays.
+- Do not add new legacy mounts, `createRoot(document.body)` helpers, or new UI imports from `static/js/*`; when this area is touched, migrate existing legacy control flow out instead of extending it.

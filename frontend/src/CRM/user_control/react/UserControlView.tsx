@@ -1,6 +1,7 @@
 import { useMemo, useState } from "react";
 import type { CSSProperties } from "react";
 
+import { API_BASE } from "../../../js/apiBase";
 import type { DepartmentRecord, MemberRenewalRecord, PermissionRecord, UserRecord } from "./types";
 
 type Toast = { type: "success" | "error"; text: string } | null;
@@ -232,7 +233,7 @@ export function UserCard({
   const body = (
     <>
       <img
-        src={`/api/user_control/get_profile_image/${user.id}`}
+        src={`${API_BASE}/api/user_control/get_profile_image/${user.id}`}
         alt={user.display_name || user.username || String(user.id)}
         style={avatarStyle}
       />

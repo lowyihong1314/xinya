@@ -1,5 +1,7 @@
 import { createHashRouter, Navigate } from "react-router-dom";
 
+import { IS_APK } from "../js/apiBase";
+
 import { CRMPage } from "../CRM/react/CRMPage";
 import { HomeAlbumPage } from "../album/react/HomeAlbumPage";
 import { EventDetailPage } from "../album/react/EventDetailPage";
@@ -7,6 +9,7 @@ import { ImageDetailPage } from "../album/react/ImageDetailPage";
 import { InfoPage } from "../info/react/InfoPage";
 import { LampPage } from "../lamp/react/LampPage";
 import { MusicPage } from "../music/react/MusicPage";
+import { MusicPageApk } from "../music/react/MusicPageApk";
 import { ProfilePage } from "../profile/react/ProfilePage";
 import { PaymentVoucherSignPage } from "../CRM/Account/react/claim/PaymentVoucherSignPage";
 import { ChangyouPage } from "../changyou/react/ChangyouPage";
@@ -32,7 +35,7 @@ export const appRouter = createHashRouter([
       { path: "info", element: <InfoPage /> },
       { path: "crm", element: <CRMPage /> },
       { path: "profile", element: <ProfilePage /> },
-      { path: "music", element: <MusicPage /> },
+      { path: "music", element: IS_APK ? <MusicPageApk /> : <MusicPage /> },
       { path: "changyou", element: <ChangyouPage /> },
       { path: "changyou/:entryId", element: <ChangyouDetailPage /> },
       { path: "lamp-registration", element: <LampPage /> },

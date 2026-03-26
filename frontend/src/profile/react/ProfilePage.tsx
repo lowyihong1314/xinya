@@ -959,6 +959,7 @@ const apkDownloadButtonStyle: CSSProperties = {
 const pageShellStyle: CSSProperties = {
   minHeight: "calc(100vh - 60px)",
   padding: "28px clamp(18px, 4vw, 40px) 48px",
+  overflowX: "hidden",
   background:
     "radial-gradient(circle at top left, rgba(15,118,110,0.18), transparent 32%), linear-gradient(180deg, #eef5f4, #e5edf4 42%, #f6f8fb)",
   color: "var(--x-color-ink)",
@@ -1155,6 +1156,7 @@ function sectionNavHintStyle(active: boolean): CSSProperties {
 const sectionPanelStyle: CSSProperties = {
   padding: "24px",
   borderRadius: "28px",
+  overflow: "hidden",
   background: "rgba(255,255,255,0.92)",
   border: "1px solid rgba(216,223,235,0.9)",
   boxShadow: "0 24px 50px rgba(15,23,42,0.08)",
@@ -1295,6 +1297,10 @@ const infoRowLabelStyle: CSSProperties = {
 const infoRowValueStyle: CSSProperties = {
   fontWeight: 700,
   textAlign: "right",
+  minWidth: 0,
+  overflow: "hidden",
+  textOverflow: "ellipsis",
+  whiteSpace: "nowrap",
 };
 
 const profileFormStackStyle: CSSProperties = {

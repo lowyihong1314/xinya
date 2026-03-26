@@ -37,3 +37,9 @@
 - `ClaimWorkspace.tsx` uses its own view-state machine instead of route segments, so adding a new subflow usually means touching the central component.
 - The public voucher page is part of the app router, not the CRM page, so regression checks must include direct-link access.
 - If backend status names or approver payloads change, verify `ClaimList.tsx` and `ClaimDetail.tsx` together because both render status-dependent UI.
+
+## React Router Migration Track
+
+- This flow should move from local view-state switching to real child routes under finance, especially for list, create, and detail states.
+- The signature workflow still depends on `static/js/sign_tools.js`; the target design is a React signature component plus React portal/modal presentation.
+- Payment-voucher signing can stay as a dedicated route, but it should share the same React signature primitives instead of importing DOM-built modal utilities.

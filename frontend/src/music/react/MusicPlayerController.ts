@@ -9,6 +9,7 @@ type SyncOptions = {
   currentMusicId: number | null;
   queue: MusicRecord[];
   audioSrc: string | null;
+  audioDisabled?: boolean;
   isPlaying: boolean;
   hasPlaybackSession: boolean;
   hasQueue: boolean;
@@ -29,6 +30,8 @@ type SyncOptions = {
   onClearQueue: () => void;
   onEnded: () => void;
   onPlayStateChange: (playing: boolean) => void;
+  /** APK mode: keep audio alive but hide all floating UI */
+  hidden?: boolean;
 };
 
 class MusicPlayerController {
@@ -437,8 +440,36 @@ class MusicPlayerController {
     this.queueView.appendChild(this.queueList);
   }
 
+  togglePlay() {
+    if (!this.audio) return;
+    if (this.audio.paused) {
+      this.audio.play().catch(() => undefined);
+    } else {
+      this.audio.pause();
+    }
+  }
+
+  seekTo(time: number) {
+    if (this.audio) {
+      this.audio.currentTime = time;
+    }
+  }
+
+  getProgress(): number {
+    return this.audio?.currentTime ?? 0;
+  }
+
+  getDuration(): number {
+    return this.audio?.duration ?? 0;
+  }
+
   private render(options: SyncOptions) {
     if (!this.root || !this.panel || !this.mini || !this.audio || !this.playerView || !this.queueView || !this.queueList || !this.queueEmpty || !this.queueHeaderTitle) {
+      return;
+    }
+
+    if (options.hidden) {
+      this.root.style.display = "none";
       return;
     }
 
@@ -628,6 +659,16 @@ class MusicPlayerController {
     if (!this.audio) {
       return;
     }
+    if (options.audioDisabled) {
+      if (this.lastSource) {
+        this.persistProgress();
+        this.audio.pause();
+        this.audio.removeAttribute("src");
+        this.audio.load();
+      }
+      this.lastSource = null;
+      return;
+    }
     const nextSource = options.audioSrc;
     if (!nextSource) {
       if (this.lastSource) {
@@ -658,6 +699,12 @@ class MusicPlayerController {
 
   private syncMediaSession(options: SyncOptions) {
     if (!this.supportsMediaSession()) {
+      return;
+    }
+
+    if (options.audioDisabled) {
+      navigator.mediaSession.metadata = null;
+      navigator.mediaSession.playbackState = "none";
       return;
     }
 

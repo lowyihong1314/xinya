@@ -99,6 +99,7 @@ const pageStyle: CSSProperties = {
   alignItems: "center",
   justifyContent: "center",
   padding: "24px",
+  overflowX: "hidden",
   background: "var(--x-color-canvas)",
 };
 
@@ -113,9 +114,10 @@ const cardStyle: CSSProperties = {
 
 const brandSideStyle: CSSProperties = {
   flex: "1 1 260px",
+  minWidth: 0,
   background: "linear-gradient(145deg, var(--x-color-nav-start), var(--x-color-nav-end))",
   color: "white",
-  padding: "40px 32px",
+  padding: "32px 24px",
   display: "flex",
   flexDirection: "column",
   gap: "12px",
@@ -152,8 +154,9 @@ const brandCopyStyle: CSSProperties = {
 
 const formSideStyle: CSSProperties = {
   flex: "1 1 280px",
+  minWidth: 0,
   background: "var(--x-color-surface)",
-  padding: "40px 32px",
+  padding: "32px 24px",
   display: "flex",
   flexDirection: "column",
   gap: "8px",

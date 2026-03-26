@@ -41,3 +41,9 @@ This directory mixes three kinds of code:
 - The same backend API surface is currently consumed by both legacy code and React rewrites.
 - Some folders contain compatibility entrypoints for old callers even after the route moved into React.
 - When documenting a feature, inspect both the route component and any shared provider, API helper, or utility it imports from sibling directories.
+
+## React Router Migration Track
+
+- This source tree is still hybrid. Top-level routing is React Router-based, but some sub-features still emulate routing with search params, global bridges, or imperative mount points.
+- New work in `src/` should default to React components, typed hooks/context, and route params or nested routes instead of `window.location.hash`, `window.__xinyaNavigate`, `window.app`, or search-param tab routers.
+- UI helpers that currently mount directly on `document.body` should migrate toward one shared portal/modal layer. UI code should not add new imports from `static/js/form/*` or `static/js/sign_tools.js`.

@@ -39,3 +39,9 @@ React migration entry for the lamp registration flow.
 - Colors in `LampPage.tsx` should come from `frontend/src/theme/designTokens.ts`.
 - `render_payment_init.js` now only acts as a compatibility mount for old callers.
 - The admin list currently lives inside the same page component rather than a separate route or module.
+
+## React Router Migration Track
+
+- Follow the phased migration plan in `frontend/Agent_todo.md`; that file is the source of truth for the full React + React Router upgrade and legacy-removal sequence.
+- End-state for this directory is React components, route params or nested routes, shared hooks/context, and React portals instead of query-string routers, `window` bridges, `window.app`, or DOM-built overlays.
+- Do not add new legacy mounts, `createRoot(document.body)` helpers, or new UI imports from `static/js/*`; when this area is touched, migrate existing legacy control flow out instead of extending it.

@@ -59,3 +59,9 @@ React migration target for the music player workspace.
 - `workspaceTypes.ts` holds shared workspace drafts and screen/editor enums.
 - `types.ts` now includes a `PlaylistRecord` model stub so personal playlists can be added without reworking the music domain types again.
 - Local storage keys include the queue, current track id, floating player position, and progress restore data.
+
+## React Router Migration Track
+
+- Route navigation for music is already inside React Router, but playback UI is still not fully declarative because `MusicPlayerController.ts` builds and owns a floating DOM tree outside React.
+- The target design is a provider-backed React portal or layout-level component that renders the floating player inside the React tree while preserving global playback state.
+- When refactoring this module, remove imperative DOM construction first and keep playback state in context/hooks rather than controller-owned DOM instances.

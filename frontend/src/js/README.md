@@ -32,3 +32,9 @@ These helpers are shared across both the React migration and legacy compatibilit
 - `reset_style.ts` still matters for old mount paths that reuse the same `#app` node.
 - `get_img.ts` caches media metadata aggressively; if media freshness bugs appear, inspect both in-memory maps and localStorage keys.
 - `show_alert.tsx` and `attachment_preview.tsx` create React roots directly on `document.body`, so cleanup must stay reliable.
+
+## React Router Migration Track
+
+- This folder currently mixes healthy shared utilities with migration debt helpers. `reset_style.ts` exists only for legacy mount flows and should disappear once `window.app` and `Legacy*` mount helpers are removed.
+- UI helpers that create ad-hoc roots on `document.body` should be moved into a shared React portal/modal system owned by the app shell, not left as one-off factories.
+- End-state for `src/js` is pure reusable browser utilities and hook-friendly helpers. It should no longer be the place where feature UI or navigation bridges live.

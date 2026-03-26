@@ -43,3 +43,9 @@ These are still used by compatibility code outside the React tree.
 - The login modal is rendered inside the provider, not by the router.
 - Pages should use `useUserState()` instead of refetching auth independently.
 - If the auth response shape changes, update both the context types here and any feature modules that cast `user` to local domain types.
+
+## React Router Migration Track
+
+- `UserState.tsx` still writes `window.location.hash` for login navigation and still exposes auth bridges on `window`. Those are compatibility layers, not the target design.
+- The end-state here is context-only auth access plus router-native navigation, so login redirects should use React Router navigation utilities and the `Window` bridge definitions in `src/types/global.d.ts` should shrink over time.
+- When touching auth flow code, prefer moving more behavior into routed pages and hooks instead of expanding global browser APIs.

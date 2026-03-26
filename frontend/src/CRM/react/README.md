@@ -39,3 +39,9 @@ The current `CRM_MODULES` registry is already React-first:
 - New CRM modules should be implemented as React pages when practical.
 - Existing modules can stay in the registry as legacy renderers until they are rewritten.
 - All new colors must come from `frontend/src/theme/designTokens.ts`. If a needed tone does not exist, add a token there first instead of hardcoding colors inside CRM components.
+
+## React Router Migration Track
+
+- `CRMPage.tsx` is still acting as both layout and a query-string router. The end-state should turn it into a CRM layout route with `<Outlet />` and path-based children instead of `useSearchParams()`-driven panel switching.
+- `crmModules.ts` should gradually evolve from a panel registry into route metadata used by nested router definitions and CRM nav rendering.
+- `LegacyCRMPanel.tsx` should be treated as removal debt. Do not route new work through it.

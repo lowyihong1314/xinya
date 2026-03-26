@@ -35,3 +35,9 @@
 - This module is the source of shared form and payment types used again in finance and long-term registration flows.
 - Keep fee-shape compatibility in mind when changing `FeePanel`, because membership and youth-class reuse it directly.
 - If field-switch behavior changes, verify both the admin form editor and the public registration pages that consume those flags.
+
+## React Router Migration Track
+
+- The admin workspace is React-based, but this domain still depends on legacy UI flows outside `frontend/src`, especially under `static/js/form/*`.
+- The long-term target is a fully React form ecosystem: admin, public registration, payment, parental consent, poster/brochure flow, and signature flow all using shared route-aware components.
+- When touching this domain, prefer work that reduces imports from `static/js/form/*` and converges behaviors into React components and router-managed screens.

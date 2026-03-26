@@ -27,3 +27,9 @@
 - The page currently uses whatever `fetchClaims()` returns; it does not apply an extra status filter. If the backend starts returning drafts or rejected items, analytics will change immediately.
 - Activity labels are derived from claim event data, so event schema changes should be validated against both expense charts and the claim detail page.
 - This is intentionally a derived dashboard. Keep mutation and approval logic in `claim/`.
+
+## React Router Migration Track
+
+- Follow the phased migration plan in `frontend/Agent_todo.md`; that file is the source of truth for the full React + React Router upgrade and legacy-removal sequence.
+- End-state for this directory is React components, route params or nested routes, shared hooks/context, and React portals instead of query-string routers, `window` bridges, `window.app`, or DOM-built overlays.
+- Do not add new legacy mounts, `createRoot(document.body)` helpers, or new UI imports from `static/js/*`; when this area is touched, migrate existing legacy control flow out instead of extending it.

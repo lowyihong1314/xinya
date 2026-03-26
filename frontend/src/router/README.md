@@ -55,3 +55,9 @@ Standalone routes outside `AppLayout`:
 - The app uses hash routing, so route changes should go through React Router helpers, not direct location pathname assumptions.
 - If a new feature needs a navbar item, update both `NAV_ITEMS` and `pageKeyFromPath()`.
 - If a route must be reachable from legacy `?page=` links, add it to `resolveLegacyPath()` or `legacyPageToPath`.
+
+## React Router Migration Track
+
+- This folder already owns the top-level router, but it is not yet the only navigation authority because `AppLayout.tsx` still exposes `window.__xinyaNavigate`, still translates `?page=` links, and CRM still uses query params for internal module selection.
+- Target route shape should move to nested paths such as `/crm/:module`, `/crm/finance/:tab`, and `/crm/permanent-registration/:section` so that `useSearchParams()` is no longer acting as an internal router.
+- After all callers are moved to path-based navigation, delete `LegacyQueryRedirect`, `resolveLegacyPath()` fallback handling, and the compatibility helpers in `render_navbar.js`.

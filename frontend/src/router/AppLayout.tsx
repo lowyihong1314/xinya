@@ -3,7 +3,7 @@ import type { CSSProperties } from "react";
 import { Outlet, useLocation, useNavigate } from "react-router-dom";
 
 import { useUserState } from "../app/UserState";
-import { API_BASE } from "../js/apiBase";
+import { API_BASE, IS_APK } from "../js/apiBase";
 import { musicPlayerController } from "../music/react/MusicPlayerController";
 import { useMusicPlayback } from "../music/react/MusicPlaybackContext";
 import { ensureDesignTokens } from "../theme/designTokens";
@@ -68,6 +68,8 @@ export function AppLayout() {
       onClearQueue: clearQueue,
       onEnded: handleTrackEnded,
       onPlayStateChange: setIsPlayingState,
+      audioDisabled: IS_APK,
+      hidden: IS_APK,
     });
   }, [
     currentMusic,

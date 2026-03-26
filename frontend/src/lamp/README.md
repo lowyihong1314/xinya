@@ -31,3 +31,9 @@ Lamp registration and payment feature.
 
 - This module still supports both direct router rendering and older imperative render functions.
 - Payment is tightly coupled to the same host element because the legacy compatibility layer swaps between page components in place.
+
+## React Router Migration Track
+
+- Lamp is not fully migrated while `render_lamp_init.js` and `render_payment_init.js` still swap React screens inside an arbitrary host node.
+- The target shape is route-native lamp flow, for example `/lamp-registration` plus a payment child route such as `/lamp-registration/payment`, with React Router carrying state instead of `hostElement` swapping.
+- Once all callers use the routed entry, remove the legacy render shims and the host-node assumptions inside the feature.

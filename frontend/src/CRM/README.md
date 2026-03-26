@@ -49,3 +49,9 @@ CRM workspace area for admin-only features.
 
 - CRM URLs now store the active module in `?crm=<module_key>`, while old `?CRM=` links are normalized automatically.
 - Some domain folders still carry compatibility structure from the migration, so check both a folder README and the module registry before moving files around.
+
+## React Router Migration Track
+
+- CRM is React-rendered, but it is not yet fully path-routed because module switching still lives in `?crm=` instead of nested routes.
+- Recommended target route tree is `/crm/:module`, with deeper children such as `/crm/finance/:tab` and `/crm/permanent-registration/:section`.
+- Once all modules are reachable by path, the alias/query normalization layer can be removed and `LegacyCRMPanel` should disappear completely.
