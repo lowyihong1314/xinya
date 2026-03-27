@@ -65,7 +65,7 @@ The APK build produces a normal `apk_dist/index.html` + assets. The web build pr
 ```ts
 {
   appId: "com.xinya.app",
-  appName: "心芽",
+  appName: "UTBA",
   webDir: "apk_dist",          // Capacitor reads from here
   server: {
     cleartext: false,

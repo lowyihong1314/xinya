@@ -1,5 +1,6 @@
 import type { CSSProperties, RefObject } from "react";
 
+import { resolveAlbumCoverUrl } from "./musicCoverUtils";
 import type { MusicRecord } from "./types";
 
 type RepeatMode = "off" | "all" | "one";
@@ -41,11 +42,15 @@ export function MusicPlayerPanel({
     <section style={playerPanelStyle(isMobile, compact)}>
       <div style={playerHeroStyle(compact)}>
         <div style={coverShellStyle}>
-          {currentMusic?.cover_url ? (
-            <img src={currentMusic.cover_url} alt={currentMusic.title} style={coverImageStyle} />
+          {currentMusic ? (
+            <img
+              src={resolveAlbumCoverUrl(currentMusic.cover_url)}
+              alt={currentMusic.title}
+              style={coverImageStyle}
+            />
           ) : (
             <div style={coverPlaceholderStyle}>
-              <div style={discStyle(isPlaying && Boolean(currentMusic))}>
+              <div style={discStyle(false)}>
                 <div style={discCenterStyle}>
                   <span style={coverPlaceholderGlyphStyle}>♪</span>
                 </div>

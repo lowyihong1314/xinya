@@ -19,7 +19,7 @@ node -e "
 const sharp = require('sharp');
 const path = require('path');
 const fs = require('fs');
-const SRC = '../static/images/logo/logo.png';
+const SRC = '../static/images/logo/log222o.png';
 const RES = 'android/app/src/main/res';
 const densities = [
   { dir: 'mipmap-mdpi',    size: 48  },

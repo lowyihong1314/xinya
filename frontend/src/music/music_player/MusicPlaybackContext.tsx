@@ -8,6 +8,8 @@ type RepeatMode = "off" | "all" | "one";
 type MusicPlaybackContextValue = {
   libraryMusics: MusicRecord[];
   queue: MusicRecord[];
+  /** Queue in playback order — respects shuffle. Use this for native playlist sync. */
+  orderedQueue: MusicRecord[];
   currentMusic: MusicRecord | null;
   currentMusicId: number | null;
   isPlaying: boolean;
@@ -55,6 +57,15 @@ export function MusicPlaybackProvider({ children }: { children: ReactNode }) {
     [queueIds, musicMap],
   );
   const currentMusic = (currentMusicId ? musicMap.get(currentMusicId) : null) || null;
+
+  // Ordered queue respecting shuffle — used by ApkMusicRuntime to sync native playlist.
+  const orderedQueue = useMemo(() => {
+    if (!shuffleEnabled || !shuffleQueueIds.length) return queue;
+    return shuffleQueueIds
+      .filter((id) => queueIds.includes(id))
+      .map((id) => musicMap.get(id))
+      .filter((m): m is MusicRecord => m != null);
+  }, [queue, queueIds, shuffleEnabled, shuffleQueueIds, musicMap]);
 
   useEffect(() => {
     try {
@@ -250,6 +261,7 @@ export function MusicPlaybackProvider({ children }: { children: ReactNode }) {
     () => ({
       libraryMusics,
       queue,
+      orderedQueue,
       currentMusic,
       currentMusicId,
       isPlaying,
@@ -287,7 +299,7 @@ export function MusicPlaybackProvider({ children }: { children: ReactNode }) {
         }
       },
     }),
-    [libraryMusics, queue, currentMusic, currentMusicId, isPlaying, hasPlaybackSession, shuffleEnabled, repeatMode, autoplayKey, musicMap],
+    [libraryMusics, queue, orderedQueue, currentMusic, currentMusicId, isPlaying, hasPlaybackSession, shuffleEnabled, repeatMode, autoplayKey, musicMap],
   );
 
   return <MusicPlaybackContext.Provider value={value}>{children}</MusicPlaybackContext.Provider>;

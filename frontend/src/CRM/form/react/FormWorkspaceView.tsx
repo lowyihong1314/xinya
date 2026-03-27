@@ -108,8 +108,8 @@ export function FormWorkspaceView(props: {
   const isMobile = props.isMobile ?? false;
   const selectedForm = props.selectedForm;
   const linkedEvents = selectedForm?.events || [];
-  const [shareOpen, setShareOpen] = useState(false);
-  const [sharePaymentOpen, setSharePaymentOpen] = useState(false);
+  const [shareView, setShareView] = useState<null | "share" | "share_payment">(null);
+  const [iframeUrl, setIframeUrl] = useState<string | null>(null);
   const [collapsedSections, setCollapsedSections] = useState({
     event: true,
     fees: true,
@@ -124,6 +124,8 @@ export function FormWorkspaceView(props: {
       extraFields: true,
       members: true,
     });
+    setShareView(null);
+    setIframeUrl(null);
   }, [selectedForm?.id]);
 
   function toggleSection(section: keyof typeof collapsedSections) {
@@ -176,11 +178,32 @@ export function FormWorkspaceView(props: {
           })}
         </aside>
 
-        <section style={contentStyle}>
+        <section className="form_detail_section" style={contentStyle}>
           {!selectedForm ? <div style={placeholderStyle}>选择一个报名表开始编辑</div> : null}
           {selectedForm && props.detailLoading ? <div style={placeholderStyle}>正在加载详细资料…</div> : null}
 
-          {selectedForm && !props.detailLoading ? (
+          {selectedForm && !props.detailLoading && iframeUrl !== null ? (
+            <IframeView url={iframeUrl} onBack={() => setIframeUrl(null)} />
+          ) : null}
+
+          {selectedForm && !props.detailLoading && shareView !== null && iframeUrl === null ? (
+            <ShareFormView
+              formId={selectedForm.id}
+              title={selectedForm.title}
+              {...(shareView === "share_payment"
+                ? {
+                    urlPath: `/api/form/pay_register/${selectedForm.id}`,
+                    heading: "分享支付页面",
+                    urlLabel: "支付页 URL",
+                    downloadName: `form-${selectedForm.id}-pay-qrcode.png`,
+                  }
+                : {})}
+              onBack={() => setShareView(null)}
+              onOpenIframe={(url) => setIframeUrl(url)}
+            />
+          ) : null}
+
+          {selectedForm && !props.detailLoading && shareView === null && iframeUrl === null ? (
             <>
               <section style={panelStyle}>
                 <div style={panelHeaderStyle}>
@@ -189,10 +212,10 @@ export function FormWorkspaceView(props: {
                     <h4 style={sectionTitleStyle}>{selectedForm.title}</h4>
                   </div>
                   <div style={headerActionsStyle}>
-                    <button type="button" style={secondaryButtonStyle} onClick={() => setSharePaymentOpen(true)}>
+                    <button type="button" style={secondaryButtonStyle} onClick={() => setShareView("share_payment")}>
                       分享支付页面
                     </button>
-                    <button type="button" style={secondaryButtonStyle} onClick={() => setShareOpen(true)}>
+                    <button type="button" style={secondaryButtonStyle} onClick={() => setShareView("share")}>
                       分享报名表格
                     </button>
                     <button type="button" style={dangerButtonStyle} onClick={() => props.onDeleteForm(selectedForm.id)}>
@@ -356,18 +379,6 @@ export function FormWorkspaceView(props: {
       </div>
 
       {props.createOpen ? <CreateFormModal onClose={props.onCloseCreate} onSubmit={props.onCreateForm} /> : null}
-      {shareOpen && selectedForm ? <ShareFormModal formId={selectedForm.id} title={selectedForm.title} onClose={() => setShareOpen(false)} /> : null}
-      {sharePaymentOpen && selectedForm ? (
-        <ShareFormModal
-          formId={selectedForm.id}
-          title={selectedForm.title}
-          urlPath={`/api/form/pay_register/${selectedForm.id}`}
-          heading="分享支付页面"
-          urlLabel="支付页 URL"
-          downloadName={`form-${selectedForm.id}-pay-qrcode.png`}
-          onClose={() => setSharePaymentOpen(false)}
-        />
-      ) : null}
     </div>
   );
 }
@@ -404,14 +415,15 @@ function CollapsibleSection({
   );
 }
 
-function ShareFormModal({
+function ShareFormView({
   formId,
   title,
   urlPath,
   heading = "分享报名表格",
   urlLabel = "报名页 URL",
   downloadName,
-  onClose,
+  onBack,
+  onOpenIframe,
 }: {
   formId: number;
   title: string;
@@ -419,7 +431,8 @@ function ShareFormModal({
   heading?: string;
   urlLabel?: string;
   downloadName?: string;
-  onClose: () => void;
+  onBack: () => void;
+  onOpenIframe: (url: string) => void;
 }) {
   const [qrCodeUrl, setQrCodeUrl] = useState("");
   const [status, setStatus] = useState<{ type: "success" | "error"; text: string } | null>(null);
@@ -479,55 +492,70 @@ function ShareFormModal({
   }
 
   return (
-    <div style={modalOverlayStyle} onClick={onClose}>
-      <div style={shareModalStyle} onClick={(event) => event.stopPropagation()}>
-        <div style={panelHeaderStyle}>
-          <div>
-            <div style={sectionEyebrowStyle}>Share</div>
-            <h4 style={sectionTitleStyle}>{heading}</h4>
+    <section style={panelStyle}>
+      <div style={panelHeaderStyle}>
+        <div>
+          <div style={sectionEyebrowStyle}>Share</div>
+          <h4 style={sectionTitleStyle}>{heading}</h4>
+        </div>
+        <button type="button" style={secondaryButtonStyle} onClick={onBack}>
+          ← 返回
+        </button>
+      </div>
+
+      <div style={shareInfoCardStyle}>
+        <div style={fieldLabelStyle}>表格名称</div>
+        <div style={shareTitleStyle}>{title}</div>
+      </div>
+
+      {status ? (
+        <div style={status.type === "success" ? successBannerStyle : errorBannerStyle}>{status.text}</div>
+      ) : null}
+
+      <div style={shareGridStyle}>
+        <div style={sectionStyle}>
+          <div style={fieldLabelStyle}>{urlLabel}</div>
+          <div style={urlBoxStyle}>{formUrl}</div>
+          <div style={footerActionsStyle}>
+            <button type="button" style={primaryButtonStyle} onClick={handleCopy}>
+              Copy
+            </button>
+            <button type="button" style={secondaryButtonStyle} onClick={() => onOpenIframe(formUrl)}>
+              打开页面
+            </button>
           </div>
-          <button type="button" style={secondaryButtonStyle} onClick={onClose}>
-            关闭
-          </button>
         </div>
 
-        <div style={shareInfoCardStyle}>
-          <div style={fieldLabelStyle}>表格名称</div>
-          <div style={shareTitleStyle}>{title}</div>
-        </div>
-
-        {status ? (
-          <div style={status.type === "success" ? successBannerStyle : errorBannerStyle}>{status.text}</div>
-        ) : null}
-
-        <div style={shareGridStyle}>
-          <div style={sectionStyle}>
-            <div style={fieldLabelStyle}>{urlLabel}</div>
-            <div style={urlBoxStyle}>{formUrl}</div>
-            <div style={footerActionsStyle}>
-              <button type="button" style={primaryButtonStyle} onClick={handleCopy}>
-                Copy
-              </button>
-              <a href={formUrl} target="_blank" rel="noreferrer" style={linkButtonStyle}>
-                打开页面
-              </a>
-            </div>
+        <div style={sectionStyle}>
+          <div style={fieldLabelStyle}>QR Code</div>
+          <div style={qrPreviewStyle}>
+            {qrCodeUrl ? <img src={qrCodeUrl} alt={`报名表 ${title} 的二维码`} style={qrImageStyle} /> : <div style={inlineNoteStyle}>二维码生成中…</div>}
           </div>
-
-          <div style={sectionStyle}>
-            <div style={fieldLabelStyle}>QR Code</div>
-            <div style={qrPreviewStyle}>
-              {qrCodeUrl ? <img src={qrCodeUrl} alt={`报名表 ${title} 的二维码`} style={qrImageStyle} /> : <div style={inlineNoteStyle}>二维码生成中…</div>}
-            </div>
-            <div style={footerActionsStyle}>
-              <button type="button" style={secondaryButtonStyle} onClick={handleDownload}>
-                下载 QR Code
-              </button>
-            </div>
+          <div style={footerActionsStyle}>
+            <button type="button" style={secondaryButtonStyle} onClick={handleDownload}>
+              下载 QR Code
+            </button>
           </div>
         </div>
       </div>
-    </div>
+    </section>
+  );
+}
+
+function IframeView({ url, onBack }: { url: string; onBack: () => void }) {
+  return (
+    <section style={panelStyle}>
+      <div style={panelHeaderStyle}>
+        <div>
+          <div style={sectionEyebrowStyle}>Preview</div>
+          <h4 style={sectionTitleStyle}>{url}</h4>
+        </div>
+        <button type="button" style={secondaryButtonStyle} onClick={onBack}>
+          ← 返回
+        </button>
+      </div>
+      <iframe src={url} style={iframeStyle} title="页面预览" />
+    </section>
   );
 }
 
@@ -932,9 +960,8 @@ const sectionStyle: CSSProperties = { marginTop: "14px", display: "grid", gap: "
 const stackStyle: CSSProperties = { display: "grid", gap: "10px" };
 const footerActionsStyle: CSSProperties = { display: "flex", justifyContent: "flex-end", gap: "10px", marginTop: "18px", flexWrap: "wrap" };
 const modalOverlayStyle: CSSProperties = { position: "fixed", inset: 0, zIndex: 1000, display: "flex", alignItems: "center", justifyContent: "center", padding: "22px", background: "rgba(15, 23, 42, 0.5)" };
-const modalStyle: CSSProperties = { width: "min(980px, 100%)", maxHeight: "90vh", overflowY: "auto", padding: "20px", borderRadius: "var(--x-radius-lg)", background: "var(--x-color-panel)", border: "1px solid var(--x-color-line-soft)", boxShadow: "0 28px 56px var(--x-color-shadow-medium)" };
-const shareModalStyle: CSSProperties = { ...modalStyle, width: "min(720px, 100%)", display: "grid", gap: "16px" };
-const inlineEditorRowStyle: CSSProperties = { display: "flex", gap: "10px", alignItems: "center", flexWrap: "wrap" };
+const iframeStyle: CSSProperties = { width: "100%", height: "70vh", border: "none", borderRadius: "var(--x-radius-md)", background: "var(--x-color-panel)" };
+const modalStyle: CSSProperties = { width: "min(980px, 100%)", maxHeight: "90vh", overflowY: "auto", padding: "20px", borderRadius: "var(--x-radius-lg)", background: "var(--x-color-panel)", border: "1px solid var(--x-color-line-soft)", boxShadow: "0 28px 56px var(--x-color-shadow-medium)" };const inlineEditorRowStyle: CSSProperties = { display: "flex", gap: "10px", alignItems: "center", flexWrap: "wrap" };
 const feeEditorStyle: CSSProperties = { ...inlineEditorRowStyle, alignItems: "stretch" };
 const feeImageControlStyle: CSSProperties = { display: "flex", alignItems: "center", gap: "10px", flexWrap: "wrap" };
 const compactInputStyle: CSSProperties = { minWidth: "120px", padding: "10px 12px", borderRadius: "12px", border: "1px solid var(--x-color-line-soft)", background: "var(--x-color-panel-strong)", color: "var(--x-color-ink)" };

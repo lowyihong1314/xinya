@@ -7,6 +7,7 @@ import android.content.ServiceConnection;
 import android.os.IBinder;
 import android.util.Log;
 
+import com.getcapacitor.JSArray;
 import com.getcapacitor.JSObject;
 import com.getcapacitor.Plugin;
 import com.getcapacitor.PluginCall;
@@ -14,6 +15,8 @@ import com.getcapacitor.PluginMethod;
 import com.getcapacitor.annotation.CapacitorPlugin;
 
 import androidx.core.content.ContextCompat;
+
+import com.google.android.exoplayer2.Player;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -36,12 +39,9 @@ public class NativeMusicPlugin extends Plugin {
             musicService = binder.getService();
             bound = true;
             binding = false;
-            musicService.setEventCallback(new MusicService.EventCallback() {
-                @Override
-                public void emit(String event, JSObject data) {
-                    runOnMainThread(() -> notifyListeners(event, data));
-                }
-            });
+            musicService.setEventCallback((event, data) ->
+                runOnMainThread(() -> notifyListeners(event, data))
+            );
             flushPendingActions();
         }
 
@@ -54,94 +54,131 @@ public class NativeMusicPlugin extends Plugin {
     };
 
     @Override
-    public void load() {
-        ensureServiceBinding(false);
-    }
+    public void load() { ensureServiceBinding(false); }
 
     @Override
     protected void handleOnDestroy() {
-        if (musicService != null) {
-            musicService.setEventCallback(null);
-        }
+        if (musicService != null) musicService.setEventCallback(null);
         if (bound) {
-            try {
-                getContext().unbindService(connection);
-            } catch (IllegalArgumentException ignored) {
-                // Service may already be unbound during teardown.
-            }
+            try { getContext().unbindService(connection); }
+            catch (IllegalArgumentException ignored) {}
         }
-        bound = false;
-        binding = false;
-        startedForPlayback = false;
+        bound = false; binding = false; startedForPlayback = false;
         musicService = null;
         pendingActions.clear();
     }
 
+    // ── Plugin methods ───────────────────────────────────────────────────────
+
     @PluginMethod
     public void ready(PluginCall call) {
-        if (!runWhenServiceReady(false, () -> resolve(call))) {
+        if (!runWhenServiceReady(false, () -> resolve(call)))
+            call.reject("Native music service is unavailable");
+    }
+
+    /**
+     * Load and play a full ordered playlist.
+     * tracks: [{ id, url, title, album, coverUrl }]
+     * startIndex: int
+     * repeatMode: "off" | "all" | "one"
+     */
+    @PluginMethod
+    public void setPlaylist(PluginCall call) {
+        JSArray tracks = call.getArray("tracks");
+        int startIndex = call.getInt("startIndex", 0);
+        String repeatMode = call.getString("repeatMode", "off");
+
+        if (tracks == null || tracks.length() == 0) {
+            call.reject("tracks array is required");
+            return;
+        }
+
+        List<MusicService.PlaylistItem> items = new ArrayList<>();
+        try {
+            for (int i = 0; i < tracks.length(); i++) {
+                org.json.JSONObject t = tracks.getJSONObject(i);
+                String url = t.optString("url", "");
+                if (url.isEmpty()) continue;
+                int id = t.optInt("id", -1);
+                String title = t.optString("title", "");
+                String album = t.optString("album", "");
+                String coverUrl = t.optString("coverUrl", "");
+                items.add(new MusicService.PlaylistItem(id, url, title, album, coverUrl));
+            }
+        } catch (Exception e) {
+            call.reject("Failed to parse tracks: " + e.getMessage());
+            return;
+        }
+
+        if (items.isEmpty()) {
+            call.reject("No valid tracks in playlist");
+            return;
+        }
+
+        int exoRepeat = toExoRepeat(repeatMode);
+        final List<MusicService.PlaylistItem> finalItems = items;
+
+        if (!runWhenServiceReady(true, () -> {
+            try {
+                musicService.setPlaylist(finalItems, startIndex, exoRepeat);
+                resolve(call);
+            } catch (Exception e) { reject(call, e); }
+        })) {
+            call.reject("Native music service is unavailable");
+        }
+    }
+
+    /** Backward-compat single track play. */
+    @PluginMethod
+    public void play(PluginCall call) {
+        String url = call.getString("url");
+        if (url == null || url.isEmpty()) { call.reject("url is required"); return; }
+        String title = call.getString("title", "");
+        String album = call.getString("album", "");
+        String coverUrl = call.getString("coverUrl", "");
+
+        if (!runWhenServiceReady(true, () -> {
+            try { musicService.play(url, title, album, coverUrl); resolve(call); }
+            catch (Exception e) { reject(call, e); }
+        })) {
             call.reject("Native music service is unavailable");
         }
     }
 
     @PluginMethod
-    public void play(PluginCall call) {
-        final String url = call.getString("url");
-        final String title = call.getString("title", "");
-        final String album = call.getString("album", "");
-        final String coverUrl = call.getString("coverUrl", "");
-
-        if (url == null || url.trim().isEmpty()) {
-            call.reject("Music URL is required");
-            return;
-        }
-
-        if (!runWhenServiceReady(true, () -> {
-            try {
-                musicService.play(url, title, album, coverUrl);
-                resolve(call);
-            } catch (Exception error) {
-                reject(call, error);
-            }
-        })) {
+    public void skipToIndex(PluginCall call) {
+        Integer index = call.getInt("index");
+        if (index == null) { call.reject("index is required"); return; }
+        if (!runWhenServiceReady(false, () -> { musicService.skipToIndex(index); resolve(call); }))
             call.reject("Native music service is unavailable");
-        }
+    }
+
+    @PluginMethod
+    public void setRepeat(PluginCall call) {
+        String mode = call.getString("mode", "off");
+        int exoRepeat = toExoRepeat(mode);
+        if (!runWhenServiceReady(false, () -> { musicService.setRepeatMode(exoRepeat); resolve(call); }))
+            call.reject("Native music service is unavailable");
     }
 
     @PluginMethod
     public void pause(PluginCall call) {
-        if (!runWhenServiceReady(false, () -> {
-            musicService.pause();
-            resolve(call);
-        })) {
+        if (!runWhenServiceReady(false, () -> { musicService.pause(); resolve(call); }))
             call.reject("Native music service is unavailable");
-        }
     }
 
     @PluginMethod
     public void resume(PluginCall call) {
-        if (!runWhenServiceReady(false, () -> {
-            musicService.resume();
-            resolve(call);
-        })) {
+        if (!runWhenServiceReady(false, () -> { musicService.resume(); resolve(call); }))
             call.reject("Native music service is unavailable");
-        }
     }
 
     @PluginMethod
     public void seekTo(PluginCall call) {
-        final Double positionMs = call.getDouble("positionMs");
-        if (positionMs == null) {
-            call.reject("positionMs is required");
-            return;
-        }
-
-        if (!runWhenServiceReady(false, () -> {
-            musicService.seekTo(Math.round(positionMs));
-            resolve(call);
-        })) {
+        Double posMs = call.getDouble("positionMs");
+        if (posMs == null) { call.reject("positionMs is required"); return; }
+        if (!runWhenServiceReady(false, () -> { musicService.seekTo(Math.round(posMs)); resolve(call); }))
             call.reject("Native music service is unavailable");
-        }
     }
 
     @PluginMethod
@@ -151,6 +188,7 @@ public class NativeMusicPlugin extends Plugin {
             result.put("positionMs", musicService.getPositionMs());
             result.put("durationMs", musicService.getDurationMs());
             result.put("isPlaying", musicService.isPlaying());
+            result.put("currentTrackId", musicService.getCurrentTrackId());
             resolve(call, result);
         })) {
             call.reject("Native music service is unavailable");
@@ -159,101 +197,70 @@ public class NativeMusicPlugin extends Plugin {
 
     @PluginMethod
     public void stop(PluginCall call) {
-        if (!runWhenServiceReady(false, () -> {
-            musicService.stop();
-            resolve(call);
-        })) {
+        if (!runWhenServiceReady(false, () -> { musicService.stop(); resolve(call); }))
             call.reject("Native music service is unavailable");
-        }
+    }
+
+    // ── Helpers ──────────────────────────────────────────────────────────────
+
+    private int toExoRepeat(String mode) {
+        if ("one".equals(mode)) return Player.REPEAT_MODE_ONE;
+        if ("all".equals(mode)) return Player.REPEAT_MODE_ALL;
+        return Player.REPEAT_MODE_OFF;
     }
 
     private boolean ensureServiceBinding(boolean startForPlayback) {
-        Context context = getContext();
-        if (context == null) {
-            Log.e(TAG, "Context is unavailable while binding music service");
-            return false;
-        }
+        Context ctx = getContext();
+        if (ctx == null) { Log.e(TAG, "Context unavailable"); return false; }
 
-        Intent intent = new Intent(context, MusicService.class);
-        if (startForPlayback && !ensureServiceStarted(context, intent)) {
-            return false;
-        }
-
-        if (bound || binding) {
-            return true;
-        }
+        Intent intent = new Intent(ctx, MusicService.class);
+        if (startForPlayback && !ensureServiceStarted(ctx, intent)) return false;
+        if (bound || binding) return true;
 
         try {
-            binding = context.bindService(intent, connection, Context.BIND_AUTO_CREATE);
-        } catch (Exception error) {
+            binding = ctx.bindService(intent, connection, Context.BIND_AUTO_CREATE);
+        } catch (Exception e) {
             binding = false;
-            Log.e(TAG, "Failed to bind music service", error);
+            Log.e(TAG, "bindService failed", e);
             return false;
         }
-
-        if (!binding) {
-            Log.e(TAG, "bindService returned false for music service");
-            return false;
-        }
-
+        if (!binding) { Log.e(TAG, "bindService returned false"); return false; }
         return true;
     }
 
-    private boolean ensureServiceStarted(Context context, Intent intent) {
-        if (startedForPlayback) {
-            return true;
-        }
-
+    private boolean ensureServiceStarted(Context ctx, Intent intent) {
+        if (startedForPlayback) return true;
         try {
-            ContextCompat.startForegroundService(context, intent);
+            ContextCompat.startForegroundService(ctx, intent);
             startedForPlayback = true;
             return true;
-        } catch (Exception error) {
-            Log.e(TAG, "Failed to start foreground music service", error);
+        } catch (Exception e) {
+            Log.e(TAG, "startForegroundService failed", e);
             return false;
         }
     }
 
     private boolean runWhenServiceReady(boolean startForPlayback, Runnable action) {
-        if (!ensureServiceBinding(startForPlayback)) {
-            return false;
-        }
-
-        if (bound && musicService != null) {
-            action.run();
-            return true;
-        }
-
+        if (!ensureServiceBinding(startForPlayback)) return false;
+        if (bound && musicService != null) { action.run(); return true; }
         pendingActions.add(action);
         return true;
     }
 
     private void flushPendingActions() {
-        List<Runnable> actions = new ArrayList<>(pendingActions);
+        List<Runnable> copy = new ArrayList<>(pendingActions);
         pendingActions.clear();
-        for (Runnable action : actions) {
-            action.run();
-        }
+        for (Runnable a : copy) a.run();
     }
 
-    private void resolve(PluginCall call) {
-        runOnMainThread(call::resolve);
+    private void resolve(PluginCall call) { runOnMainThread(call::resolve); }
+    private void resolve(PluginCall call, JSObject result) { runOnMainThread(() -> call.resolve(result)); }
+    private void reject(PluginCall call, Exception e) {
+        String msg = e.getMessage() != null ? e.getMessage() : "Native music action failed";
+        runOnMainThread(() -> call.reject(msg));
     }
-
-    private void resolve(PluginCall call, JSObject result) {
-        runOnMainThread(() -> call.resolve(result));
-    }
-
-    private void reject(PluginCall call, Exception error) {
-        final String message = error.getMessage() != null ? error.getMessage() : "Native music action failed";
-        runOnMainThread(() -> call.reject(message));
-    }
-
     private void runOnMainThread(Runnable action) {
-        if (getActivity() != null) {
-            getActivity().runOnUiThread(action);
-            return;
-        }
+        if (getActivity() != null) { getActivity().runOnUiThread(action); return; }
         action.run();
     }
 }

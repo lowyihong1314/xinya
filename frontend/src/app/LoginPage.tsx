@@ -43,7 +43,7 @@ export function LoginPage() {
             alt="logo"
             style={logoStyle}
           />
-          <div style={brandEyebrowStyle}>心芽 · UTBA</div>
+          <div style={brandEyebrowStyle}> UTBA</div>
           <h1 style={brandTitleStyle}>欢迎回来</h1>
           <p style={brandCopyStyle}>登录后，导航栏和页面编辑模式会立即同步切换。</p>
         </div>

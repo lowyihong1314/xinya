@@ -1,5 +1,6 @@
 import type { CSSProperties, RefObject } from "react";
 
+import { resolveAlbumCoverUrl } from "./musicCoverUtils";
 import type { AlbumRecord, MusicRecord } from "./types";
 import type { AlbumDraft, EditorMode, Toast, TrackDraft, WorkspaceScreen } from "./workspaceTypes";
 
@@ -276,11 +277,7 @@ function AlbumsScreen({
             {pagedAlbums.map((album) => (
               <article key={album.id} style={albumCardStyle}>
                 <button type="button" style={albumOpenButtonStyle} onClick={() => void onOpenAlbumTracks(album.id)}>
-                  {album.cover_url ? (
-                    <img src={album.cover_url} alt={album.name} style={albumArtStyle} />
-                  ) : (
-                    <div style={albumArtPlaceholderStyle}>专辑</div>
-                  )}
+                  <img src={resolveAlbumCoverUrl(album.cover_url)} alt={album.name} style={albumArtStyle} />
                 </button>
                 <div style={albumCardBodyStyle}>
                   <div>
@@ -525,11 +522,7 @@ function EditorScreen({
         {canManage && editorMode === "album" ? (
           <div style={editorGridStyle(isMobile)}>
             <div style={previewCardStyle}>
-              {selectedAlbumDetail?.cover_url ? (
-                <img src={selectedAlbumDetail.cover_url} alt={selectedAlbumDetail.name} style={albumArtStyle} />
-              ) : (
-                <div style={albumArtPlaceholderStyle}>专辑封面</div>
-              )}
+              <img src={resolveAlbumCoverUrl(selectedAlbumDetail?.cover_url)} alt={selectedAlbumDetail?.name ?? ""} style={albumArtStyle} />
               <input
                 ref={coverInputRef}
                 type="file"
@@ -575,11 +568,7 @@ function EditorScreen({
         {canManage && editorMode === "track" ? (
           <div style={editorGridStyle(isMobile)}>
             <div style={previewCardStyle}>
-              {editingMusicDetail?.cover_url ? (
-                <img src={editingMusicDetail.cover_url} alt={editingMusicDetail.title} style={albumArtStyle} />
-              ) : (
-                <div style={albumArtPlaceholderStyle}>歌曲文件</div>
-              )}
+              <img src={resolveAlbumCoverUrl(editingMusicDetail?.cover_url)} alt={editingMusicDetail?.title ?? ""} style={albumArtStyle} />
               <input
                 ref={replaceInputRef}
                 type="file"

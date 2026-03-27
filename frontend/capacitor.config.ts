@@ -5,7 +5,7 @@ const allowCleartext = process.env.CAP_CLEARTEXT === "true";
 
 const config: CapacitorConfig = {
   appId: "com.xinya.app",
-  appName: "心芽",
+  appName: "UTBA",
   // Points to the APK build output (npm run build:apk)
   webDir: "apk_dist",
   server: {
