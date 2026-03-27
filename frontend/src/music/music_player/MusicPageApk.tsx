@@ -1,11 +1,11 @@
-import { useEffect, useLayoutEffect, useRef, useState } from "react";
+import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import type { CSSProperties } from "react";
 
 import { fetchAlbums, fetchMusicList } from "./api";
 import { AlbumCard, AlbumHero, AlbumListRow, TrackRow } from "./ApkAlbumComponents";
 import { FullPlayer } from "./ApkFullPlayer";
 import { useMusicPlayback } from "./MusicPlaybackContext";
-import { resolveAlbumCoverUrl } from "./musicCoverUtils";
+import { resolveTrackAlbumName, resolveTrackCoverUrl } from "./musicCoverUtils";
 import { NativeMusic } from "./nativeMusicPlugin";
 import type { AlbumRecord, MusicRecord } from "./types";
 
@@ -15,6 +15,7 @@ type ApkScreen = "albums" | "tracks";
 
 export function MusicPageApk() {
   const {
+    albums,
     libraryMusics,
     currentMusic,
     isPlaying,
@@ -32,12 +33,12 @@ export function MusicPageApk() {
     removeFromQueue,
     clearQueue,
     playFromQueue,
+    setAlbums,
     setIsPlayingState,
     setLibraryMusics,
   } = useMusicPlayback();
 
   const [screen, setScreen] = useState<ApkScreen>("albums");
-  const [albums, setAlbums] = useState<AlbumRecord[]>([]);
   const [selectedAlbum, setSelectedAlbum] = useState<AlbumRecord | null>(null);
   const [loading, setLoading] = useState(true);
   const [showFullPlayer, setShowFullPlayer] = useState(false);
@@ -57,7 +58,7 @@ export function MusicPageApk() {
         setLibraryMusics(musics);
       })
       .finally(() => setLoading(false));
-  }, [setLibraryMusics]);
+  }, [setAlbums, setLibraryMusics]);
 
   useEffect(() => {
     if (currentMusic) { setDuration(currentMusic.duration ?? 0); return; }
@@ -106,12 +107,21 @@ export function MusicPageApk() {
 
   const allMusics = libraryMusics;
   const albumTracks = selectedAlbum ? allMusics.filter((m) => m.album_id === selectedAlbum.id) : [];
+  const albumNameByMusicId = useMemo(() => {
+    const albumById = new Map(albums.map((album) => [album.id, album.name]));
+    return new Map(
+      allMusics.map((music) => [music.id, music.album_id != null ? (albumById.get(music.album_id) ?? "") : ""]),
+    );
+  }, [allMusics, albums]);
 
   const lq = searchQuery.trim().toLowerCase();
   const hasSearch = lq.length > 0;
   const searchAlbums = hasSearch ? albums.filter((a) => a.name.toLowerCase().includes(lq)) : [];
   const searchTracks = hasSearch
-    ? allMusics.filter((m) => m.title.toLowerCase().includes(lq) || (m.album?.name ?? "").toLowerCase().includes(lq))
+    ? allMusics.filter((m) => {
+        const albumName = albumNameByMusicId.get(m.id)?.toLowerCase() ?? "";
+        return m.title.toLowerCase().includes(lq) || albumName.includes(lq);
+      })
     : [];
 
   return (
@@ -213,11 +223,12 @@ export function MusicPageApk() {
                       index={index + 1}
                       isActive={currentMusic?.id === track.id}
                       isPlaying={isPlaying && currentMusic?.id === track.id}
-                      inQueue={queue.some((q) => q.id === track.id)}
-                      showAlbum
-                      onSelect={() => handleSelectTrack(track, searchTracks, setQueue, selectMusic, setDuration)}
-                      onAddToQueue={() => appendToQueue(track.id)}
-                    />
+                    inQueue={queue.some((q) => q.id === track.id)}
+                    showAlbum
+                    albumName={albumNameByMusicId.get(track.id) ?? ""}
+                    onSelect={() => handleSelectTrack(track, searchTracks, setQueue, selectMusic, setDuration)}
+                    onAddToQueue={() => appendToQueue(track.id)}
+                  />
                   ))}
                 </>
               )}
@@ -248,14 +259,14 @@ export function MusicPageApk() {
         <button style={miniBarStyle} onClick={() => setShowFullPlayer(true)}>
           <div style={miniArtStyle}>
             <img
-              src={resolveAlbumCoverUrl(currentMusic.cover_url)}
+              src={resolveTrackCoverUrl(currentMusic.id, allMusics, albums)}
               alt={currentMusic.title}
               style={miniArtImgStyle}
             />
           </div>
           <div style={miniInfoStyle}>
             <span style={miniTitleStyle}>{currentMusic.title}</span>
-            <span style={miniSubStyle}>{currentMusic.album?.name ?? ""}</span>
+            <span style={miniSubStyle}>{resolveTrackAlbumName(currentMusic.id, allMusics, albums)}</span>
           </div>
           <div style={miniControlsStyle} onClick={(e) => e.stopPropagation()}>
             <button style={miniIconBtnStyle} onClick={() => playRelative(-1)}>

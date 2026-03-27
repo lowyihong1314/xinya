@@ -1,6 +1,7 @@
 import type { CSSProperties, RefObject } from "react";
 
-import { resolveAlbumCoverUrl } from "./musicCoverUtils";
+import { useMusicPlayback } from "./MusicPlaybackContext";
+import { resolveTrackAlbumName, resolveTrackCoverUrl } from "./musicCoverUtils";
 import type { MusicRecord } from "./types";
 
 type RepeatMode = "off" | "all" | "one";
@@ -38,13 +39,15 @@ export function MusicPlayerPanel({
   onPlayNext,
   onTrackEnded,
 }: MusicPlayerPanelProps) {
+  const { albums, libraryMusics } = useMusicPlayback();
+
   return (
     <section style={playerPanelStyle(isMobile, compact)}>
       <div style={playerHeroStyle(compact)}>
         <div style={coverShellStyle}>
           {currentMusic ? (
             <img
-              src={resolveAlbumCoverUrl(currentMusic.cover_url)}
+              src={resolveTrackCoverUrl(currentMusic.id, libraryMusics, albums)}
               alt={currentMusic.title}
               style={coverImageStyle}
             />
@@ -61,7 +64,9 @@ export function MusicPlayerPanel({
         <div style={playerMetaStyle}>
           <div style={eyebrowStyle}>Now Playing</div>
           <h2 style={playerTitleStyle(compact)}>{currentMusic?.title || "选择一首歌曲开始播放"}</h2>
-          <p style={playerSubtitleStyle(compact)}>{currentMusic?.album?.name || "从右侧专辑进入歌曲列表"}</p>
+          <p style={playerSubtitleStyle(compact)}>
+            {currentMusic ? resolveTrackAlbumName(currentMusic.id, libraryMusics, albums) || "从右侧专辑进入歌曲列表" : "从右侧专辑进入歌曲列表"}
+          </p>
         </div>
       </div>
 

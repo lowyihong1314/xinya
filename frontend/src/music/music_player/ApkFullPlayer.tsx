@@ -1,7 +1,8 @@
 import type { CSSProperties } from "react";
 import { useState } from "react";
 
-import { resolveAlbumCoverUrl } from "./musicCoverUtils";
+import { useMusicPlayback } from "./MusicPlaybackContext";
+import { resolveTrackAlbumName, resolveTrackCoverUrl } from "./musicCoverUtils";
 import { formatTime } from "./ApkAlbumComponents";
 import type { MusicRecord } from "./types";
 
@@ -35,6 +36,7 @@ export function FullPlayer({
   onPlayFromQueue, onRemoveFromQueue, onClearQueue,
 }: FullPlayerProps) {
   const [showQueue, setShowQueue] = useState(false);
+  const { albums, libraryMusics } = useMusicPlayback();
   const repeatLabel = repeatMode === "off" ? "不循环" : repeatMode === "all" ? "列表循环" : "单曲循环";
 
   return (
@@ -83,14 +85,14 @@ export function FullPlayer({
         <div style={playerPanelStyle}>
           <div style={fullCoverStyle}>
             <img
-              src={resolveAlbumCoverUrl(music.cover_url)}
+              src={resolveTrackCoverUrl(music.id, libraryMusics, albums)}
               alt={music.title}
               style={fullCoverImgStyle}
             />
           </div>
           <div style={fullMetaStyle}>
             <div style={fullTitleStyle}>{music.title}</div>
-            <div style={fullAlbumStyle}>{music.album?.name ?? ""}</div>
+            <div style={fullAlbumStyle}>{resolveTrackAlbumName(music.id, libraryMusics, albums)}</div>
           </div>
           <div style={fullProgressWrapStyle}>
             <input

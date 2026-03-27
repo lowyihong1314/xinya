@@ -12,6 +12,8 @@ from werkzeug.utils import secure_filename
 
 from app.media.constants import ALLOWED_EXTENSIONS, IMAGE_EXTS, VIDEO_EXTS
 
+JPEG_CACHE_SOURCE_EXTS = IMAGE_EXTS | {".heic", ".heif"}
+
 
 def allowed_file(filename):
     return "." in filename and os.path.splitext(filename)[1].lower() in ALLOWED_EXTENSIONS
@@ -92,7 +94,7 @@ def is_video_valid(mp4_path, original_path=None, max_duration=None):
     return True
 
 
-def compress_new_cache_file(img_path, cache_root=None):
+def jpeg_cache_path_for_source(img_path, cache_root=None):
     if not os.path.exists(img_path):
         raise FileNotFoundError(f"文件不存在: {img_path}")
 
@@ -100,32 +102,65 @@ def compress_new_cache_file(img_path, cache_root=None):
     name, ext = os.path.splitext(filename)
     ext = ext.lower()
 
+    if ext not in JPEG_CACHE_SOURCE_EXTS:
+        raise ValueError(f"不支持的文件类型: {ext}")
+
     if cache_root is None:
         cache_root = os.path.join(os.path.dirname(base_dir), "CACHE")
     os.makedirs(cache_root, exist_ok=True)
+    return os.path.join(cache_root, f"{name}.jpeg")
 
-    if ext in IMAGE_EXTS:
-        out_path = os.path.join(cache_root, f"{name}.jpeg")
-        img = Image.open(img_path)
-        if img.mode in ("RGBA", "P"):
-            img = img.convert("RGB")
-        img.save(out_path, "JPEG", quality=85)
-    elif ext in [".heic", ".heif"]:
-        out_path = os.path.join(cache_root, f"{name}.jpeg")
-        heif_file = pillow_heif.read_heif(img_path)
-        img = Image.frombytes(
-            heif_file.mode,
-            heif_file.size,
-            heif_file.data,
-            "raw",
-            heif_file.mode,
-            heif_file.stride,
-        )
-        img.save(out_path, "JPEG", quality=85)
-    else:
-        raise ValueError(f"不支持的文件类型: {ext}")
+
+def is_cache_stale(source_path, cache_path):
+    if not os.path.exists(cache_path):
+        return True
+    try:
+        return os.path.getmtime(cache_path) < os.path.getmtime(source_path)
+    except OSError:
+        return True
+
+
+def compress_new_cache_file(img_path, cache_root=None):
+    out_path = jpeg_cache_path_for_source(img_path, cache_root)
+    _, filename = os.path.split(img_path)
+    _, ext = os.path.splitext(filename)
+    ext = ext.lower()
+    tmp_path = f"{out_path}.tmp.{os.getpid()}"
+
+    try:
+        if ext in IMAGE_EXTS:
+            with Image.open(img_path) as img:
+                if img.mode != "RGB":
+                    img = img.convert("RGB")
+                img.save(tmp_path, "JPEG", quality=85)
+        elif ext in [".heic", ".heif"]:
+            heif_file = pillow_heif.read_heif(img_path)
+            img = Image.frombytes(
+                heif_file.mode,
+                heif_file.size,
+                heif_file.data,
+                "raw",
+                heif_file.mode,
+                heif_file.stride,
+            )
+            if img.mode != "RGB":
+                img = img.convert("RGB")
+            img.save(tmp_path, "JPEG", quality=85)
+        else:
+            raise ValueError(f"不支持的文件类型: {ext}")
+        os.replace(tmp_path, out_path)
+    finally:
+        if os.path.exists(tmp_path):
+            os.remove(tmp_path)
 
     return out_path
+
+
+def ensure_jpeg_cache_file(img_path, cache_root=None):
+    out_path = jpeg_cache_path_for_source(img_path, cache_root)
+    if not is_cache_stale(img_path, out_path):
+        return out_path
+    return compress_new_cache_file(img_path, os.path.dirname(out_path))
 
 
 def build_zip_from_files(files):

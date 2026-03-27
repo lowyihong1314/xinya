@@ -20,7 +20,7 @@ from app.media.paths import (
     event_photo_mp4_dir,
     to_short_data_path,
 )
-from app.media.utils import compress_new_cache_file, get_duration, is_video_valid
+from app.media.utils import ensure_jpeg_cache_file, get_duration, is_video_valid
 from app.media.video_tasks import current_video_tasks
 from models import db
 from models.event_data import AlbumFiles, EventData
@@ -421,14 +421,12 @@ def _get_cache_image_payload(file, filename, ext, event_code):
     else:
         base, _ = os.path.splitext(filename)
         full_path = os.path.join(event_photo_cache_dir(event_code), f"{base}.jpeg")
-        if not os.path.exists(full_path):
-            src = os.path.join(event_photo_base_dir(event_code), filename)
-            if not os.path.exists(src):
-                db.session.delete(file)
-                db.session.commit()
-                abort(404, "Source missing, record removed")
-            os.makedirs(os.path.dirname(full_path), exist_ok=True)
-            full_path = compress_new_cache_file(src, os.path.dirname(full_path))
+        src = os.path.join(event_photo_base_dir(event_code), filename)
+        if not os.path.exists(src):
+            db.session.delete(file)
+            db.session.commit()
+            abort(404, "Source missing, record removed")
+        full_path = ensure_jpeg_cache_file(src, os.path.dirname(full_path))
 
     if not os.path.exists(full_path):
         return {
@@ -502,6 +500,16 @@ def _get_base_image_payload(file, filename, ext, event_code, force):
             "ready": False,
             "kind": "image",
             "path": "/static/images/file_icon/broken-image.png",
+        }
+
+    if ext in {".heic", ".heif"}:
+        jpeg_path = ensure_jpeg_cache_file(base_path, event_photo_cache_dir(event_code))
+        return {
+            "status": "success",
+            "ready": True,
+            "kind": "image",
+            "cache": True,
+            "path": to_short_data_path(jpeg_path),
         }
 
     return {

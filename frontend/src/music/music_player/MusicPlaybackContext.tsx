@@ -1,11 +1,12 @@
 import { createContext, useContext, useEffect, useMemo, useState } from "react";
 import type { ReactNode } from "react";
 
-import type { MusicRecord } from "./types";
+import type { AlbumRecord, MusicRecord } from "./types";
 
 type RepeatMode = "off" | "all" | "one";
 
 type MusicPlaybackContextValue = {
+  albums: AlbumRecord[];
   libraryMusics: MusicRecord[];
   queue: MusicRecord[];
   /** Queue in playback order — respects shuffle. Use this for native playlist sync. */
@@ -17,6 +18,7 @@ type MusicPlaybackContextValue = {
   shuffleEnabled: boolean;
   repeatMode: RepeatMode;
   autoplayKey: number;
+  setAlbums: (albums: AlbumRecord[]) => void;
   setLibraryMusics: (musics: MusicRecord[]) => void;
   setQueue: (musics: MusicRecord[]) => void;
   setCurrentMusicId: (musicId: number | null) => void;
@@ -40,6 +42,7 @@ const CURRENT_STORAGE_KEY = "xinya.music.current.id";
 const MusicPlaybackContext = createContext<MusicPlaybackContextValue | null>(null);
 
 export function MusicPlaybackProvider({ children }: { children: ReactNode }) {
+  const [albums, setAlbums] = useState<AlbumRecord[]>([]);
   const [libraryMusics, setLibraryMusics] = useState<MusicRecord[]>([]);
   const [queueIds, setQueueIds] = useState<number[]>([]);
   const [currentMusicId, setCurrentMusicIdState] = useState<number | null>(null);
@@ -259,6 +262,7 @@ export function MusicPlaybackProvider({ children }: { children: ReactNode }) {
 
   const value = useMemo<MusicPlaybackContextValue>(
     () => ({
+      albums,
       libraryMusics,
       queue,
       orderedQueue,
@@ -269,6 +273,7 @@ export function MusicPlaybackProvider({ children }: { children: ReactNode }) {
       shuffleEnabled,
       repeatMode,
       autoplayKey,
+      setAlbums,
       setLibraryMusics,
       setQueue: (musics) => setQueueIds(normalizeQueue(musics.map((music) => music.id))),
       setCurrentMusicId,
@@ -299,7 +304,7 @@ export function MusicPlaybackProvider({ children }: { children: ReactNode }) {
         }
       },
     }),
-    [libraryMusics, queue, orderedQueue, currentMusic, currentMusicId, isPlaying, hasPlaybackSession, shuffleEnabled, repeatMode, autoplayKey, musicMap],
+    [albums, libraryMusics, queue, orderedQueue, currentMusic, currentMusicId, isPlaying, hasPlaybackSession, shuffleEnabled, repeatMode, autoplayKey, musicMap],
   );
 
   return <MusicPlaybackContext.Provider value={value}>{children}</MusicPlaybackContext.Provider>;

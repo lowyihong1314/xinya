@@ -13,7 +13,7 @@ from app.media.services import (
     resolve_media_path,
     rotate_album_file,
 )
-from app.media.utils import allowed_file, build_zip_from_files, compress_new_cache_file, parse_file_ids
+from app.media.utils import allowed_file, build_zip_from_files, ensure_jpeg_cache_file, parse_file_ids
 from models import db
 
 media_bp = Blueprint("media", __name__)
@@ -141,9 +141,8 @@ def download_files():
                             event_photo_cache_dir(file.event.event_code),
                             f"{stem}.jpeg",
                         )
-                        if not os.path.exists(jpeg_path) and os.path.exists(original_path):
-                            os.makedirs(os.path.dirname(jpeg_path), exist_ok=True)
-                            jpeg_path = compress_new_cache_file(original_path, os.path.dirname(jpeg_path))
+                        if os.path.exists(original_path):
+                            jpeg_path = ensure_jpeg_cache_file(original_path, os.path.dirname(jpeg_path))
                         if os.path.exists(jpeg_path):
                             target_path = jpeg_path
                             target_name = f"{os.path.splitext(file.file_name)[0]}.jpeg"

@@ -130,7 +130,7 @@ def list_music(page, per_page):
     )
     return jsonify(
         {
-            "musics": [music.to_dict() for music in pagination.items],
+            "musics": [music.to_dict_full() for music in pagination.items],
             "page": page,
             "total_pages": pagination.pages,
             "total": pagination.total,

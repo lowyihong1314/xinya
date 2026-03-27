@@ -2,22 +2,26 @@ import { useEffect, useRef } from "react";
 
 import { useUserState } from "../../app/UserState";
 import { API_BASE, IS_APK } from "../../js/apiBase";
-import { fetchMusicList } from "./api";
+import { fetchAlbums, fetchMusicList } from "./api";
 import { useMusicPlayback } from "./MusicPlaybackContext";
+import { resolveTrackAlbumName, resolveTrackCoverUrl } from "./musicCoverUtils";
 import { NativeMusic } from "./nativeMusicPlugin";
 import type { MusicRecord } from "./types";
 
 export function ApkMusicRuntime() {
   const { isAuthenticated, loadingUser } = useUserState();
   const {
+    albums,
     currentMusic,
     currentMusicId,
     isPlaying,
+    libraryMusics,
     orderedQueue,
     hasPlaybackSession,
     repeatMode,
     autoplayKey,
     handleTrackEnded,
+    setAlbums,
     setCurrentMusicId,
     setIsPlayingState,
     setLibraryMusics,
@@ -46,8 +50,6 @@ export function ApkMusicRuntime() {
   const lastSentAutoplayKeyRef = useRef(0);
   const hasSeenPlaybackSessionRef = useRef(false);
   const loadedLibraryForSessionRef = useRef(false);
-  // Flag to suppress setPlaylist when native itself changed the track.
-  const nativeChangedTrackRef = useRef(false);
 
   // ── One-time: wire native event listeners ──────────────────────────────────
   useEffect(() => {
@@ -62,10 +64,10 @@ export function ApkMusicRuntime() {
       try {
         const registered = await Promise.all([
           // trackChanged: native auto-advanced or user pressed prev/next in notification.
-          // Update JS current music WITHOUT calling selectMusic (which would re-trigger setPlaylist).
+          // Update JS current music WITHOUT calling selectMusic, so autoplayKey
+          // does not change and we do not re-send the playlist back to native.
           NativeMusic.addListener("trackChanged", ({ id }) => {
             if (!active) return;
-            nativeChangedTrackRef.current = true;
             callbacksRef.current.setCurrentMusicId(id);
           }),
 
@@ -110,15 +112,6 @@ export function ApkMusicRuntime() {
     if (!IS_APK || !currentMusic || autoplayKey <= 0) return;
     if (autoplayKey === lastSentAutoplayKeyRef.current) return;
 
-    // If native itself triggered the track change (via trackChanged event), the
-    // nativeChangedTrackRef will be true.  Skip re-sending the playlist in that
-    // case to avoid interrupting playback.
-    if (nativeChangedTrackRef.current) {
-      nativeChangedTrackRef.current = false;
-      lastSentAutoplayKeyRef.current = autoplayKey;
-      return;
-    }
-
     lastSentAutoplayKeyRef.current = autoplayKey;
 
     const queue = orderedQueueRef.current;
@@ -133,8 +126,8 @@ export function ApkMusicRuntime() {
             id: m.id,
             url: `${API_BASE}/api/music/download/${m.id}`,
             title: m.title,
-            album: m.album?.name ?? "",
-            coverUrl: resolveAssetUrl(m.cover_url),
+            album: resolveTrackAlbumName(m.id, libraryMusics, albums),
+            coverUrl: resolveTrackCoverUrl(m.id, libraryMusics, albums),
           })),
           startIndex,
           repeatMode: repeatModeRef.current,
@@ -145,7 +138,7 @@ export function ApkMusicRuntime() {
         callbacksRef.current.setIsPlayingState(false);
         console.error("NativeMusic.setPlaylist failed", e);
       });
-  }, [autoplayKey, currentMusic]);
+  }, [albums, autoplayKey, currentMusic, libraryMusics]);
 
   // ── Sync repeat mode change to running native player ───────────────────────
   useEffect(() => {
@@ -186,13 +179,17 @@ export function ApkMusicRuntime() {
   useEffect(() => {
     if (!IS_APK || loadingUser || !isAuthenticated || loadedLibraryForSessionRef.current) return;
     let cancelled = false;
-    void fetchMusicList()
-      .then(({ musics }) => {
-        if (!cancelled) { setLibraryMusics(musics); loadedLibraryForSessionRef.current = true; }
+    void Promise.all([fetchMusicList(), fetchAlbums()])
+      .then(([{ musics }, albumList]) => {
+        if (!cancelled) {
+          setLibraryMusics(musics);
+          setAlbums(albumList);
+          loadedLibraryForSessionRef.current = true;
+        }
       })
       .catch((e) => { if (!cancelled) console.error("APK music library bootstrap failed", e); });
     return () => { cancelled = true; };
-  }, [isAuthenticated, loadingUser, setLibraryMusics]);
+  }, [isAuthenticated, loadingUser, setAlbums, setLibraryMusics]);
 
   useEffect(() => {
     if (!IS_APK || loadingUser) return;
@@ -200,10 +197,4 @@ export function ApkMusicRuntime() {
   }, [isAuthenticated, loadingUser]);
 
   return null;
-}
-
-function resolveAssetUrl(path?: string | null) {
-  if (!path) return "";
-  if (/^https?:\/\//i.test(path)) return path;
-  return `${API_BASE}${path}`;
 }

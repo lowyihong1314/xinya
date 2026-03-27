@@ -559,3 +559,457 @@ ConnectionResetError: [Errno 104] Connection reset by peer
 127.0.0.1 - - [27/Mar/2026 06:37:50] "GET /media_file/CACHE/UTBA/event_photo/EVT_20260125_001/20260308_155240.mp4 HTTP/1.1" 206 633039 0.001051
 127.0.0.1 - - [27/Mar/2026 06:37:50] "GET /media_file/CACHE/UTBA/event_photo/EVT_20240526_001/MVI_6106.mp4 HTTP/1.1" 206 1785712 0.001562
 127.0.0.1 - - [27/Mar/2026 06:38:14] "GET /media_file/CACHE/UTBA/event_photo/EVT_20240427_002/VID_20240427_205219.mp4 HTTP/1.1" 206 39117266 23.163366
+ * Detected change in '/home/yukang/flaskapp/xinya/app/music/services.py', reloading
+[CHECK] ✅ MP4 时长正常: 15.0s
+[CHECK] ✅ MP4 时长正常: 15.012646s
+[CHECK] ✅ MP4 时长正常: 10.7s
+[CHECK] ✅ MP4 时长正常: 15.0s
+[CHECK] ✅ MP4 时长正常: 15.012646s
+[CHECK] ✅ MP4 时长正常: 12.0s
+[CHECK] ✅ MP4 时长正常: 43.05s
+ * Restarting with stat
+/home/yukang/flaskapp/xinya/run.py:3: DeprecationWarning: 
+Eventlet is deprecated. It is currently being maintained in bugfix mode, and
+we strongly recommend against using it for new projects.
+
+If you are already using Eventlet, we recommend migrating to a different
+framework.  For more detail see
+https://eventlet.readthedocs.io/en/latest/asyncio/migration.html
+
+  import eventlet
+ * Debugger is active!
+ * Debugger PIN: 103-153-293
+(838439) wsgi starting up on http://0.0.0.0:5102
+(838439) accepted ('127.0.0.1', 60526)
+127.0.0.1 - - [27/Mar/2026 09:56:00] "GET /static/vite/assets/fa-solid-900-DRAAbZTg.woff2 HTTP/1.1" 200 115682 0.002858
+127.0.0.1 - - [27/Mar/2026 09:56:01] "GET /static/img/placeholder.png HTTP/1.1" 404 984 0.003730
+(838439) accepted ('127.0.0.1', 60546)
+127.0.0.1 - - [27/Mar/2026 09:56:01] "GET /media_file/CACHE/UTBA/event_photo/EVT_20250413_002/1000118854.jpeg HTTP/1.1" 304 845 0.003418
+127.0.0.1 - - [27/Mar/2026 09:56:01] "GET /media_file/CACHE/UTBA/event_photo/EVT_20240526_001/MVI_6106.mp4 HTTP/1.1" 206 4012512 0.002928
+127.0.0.1 - - [27/Mar/2026 09:56:01] "GET /api/api/get_event/154 HTTP/1.1" 200 3837 0.137536
+127.0.0.1 - - [27/Mar/2026 09:56:02] "GET /media_file/CACHE/UTBA/event_photo/EVT_20240427_002/VID_20240427_205219.mp4 HTTP/1.1" 206 91078 0.001426
+127.0.0.1 - - [27/Mar/2026 09:56:02] "GET /media_file/CACHE/UTBA/event_photo/EVT_20240323_001/VID-20240330-WA0084.mp4 HTTP/1.1" 206 76485 0.000832
+(838439) accepted ('127.0.0.1', 60558)
+127.0.0.1 - - [27/Mar/2026 09:56:05] "GET /api/music/list?per_page=200&page=1 HTTP/1.1" 200 118093 0.023833
+127.0.0.1 - - [27/Mar/2026 09:56:06] "GET /api/music/list?per_page=200&page=2 HTTP/1.1" 200 119395 0.019521
+127.0.0.1 - - [27/Mar/2026 09:56:08] "GET /static/album_image/defult.jpeg HTTP/1.1" 200 93188 0.003548
+127.0.0.1 - - [27/Mar/2026 09:56:09] "GET /static/album_image/12.jpg HTTP/1.1" 200 216695 0.001878
+127.0.0.1 - - [27/Mar/2026 09:56:14] "GET /media_file/CACHE/UTBA/event_photo/EVT_20240323_001/VID-20240330-WA0084.mp4 HTTP/1.1" 206 23636677 11.327846
+127.0.0.1 - - [27/Mar/2026 09:56:20] "GET /media_file/CACHE/UTBA/event_photo/EVT_20240427_002/VID_20240427_205219.mp4 HTTP/1.1" 206 40395719 17.737033
+127.0.0.1 - - [27/Mar/2026 09:56:28] "GET /api/user_control/get_user_data HTTP/1.1" 200 4023 0.025687
+(838439) accepted ('127.0.0.1', 56086)
+127.0.0.1 - - [27/Mar/2026 10:35:35] "GET /api/user_control/get_user_data HTTP/1.1" 200 4023 0.016277
+127.0.0.1 - - [27/Mar/2026 10:35:37] "GET /static/img/placeholder.png HTTP/1.1" 404 984 0.003088
+127.0.0.1 - - [27/Mar/2026 10:35:37] "GET /api/api/get_event/154 HTTP/1.1" 200 3837 0.037991
+(838439) accepted ('127.0.0.1', 46876)
+127.0.0.1 - - [27/Mar/2026 10:35:37] "GET /static/images/logo/logo.png HTTP/1.1" 304 836 0.002967
+(838439) accepted ('127.0.0.1', 46896)
+127.0.0.1 - - [27/Mar/2026 10:35:37] "GET /media_file/CACHE/UTBA/event_photo/EVT_20260205_004/20260301_091859.jpeg HTTP/1.1" 304 851 0.001226
+127.0.0.1 - - [27/Mar/2026 10:35:37] "GET /media_file/CACHE/UTBA/event_photo/EVT_20260125_001/20260308_155240.mp4 HTTP/1.1" 206 3450272 0.002943
+127.0.0.1 - - [27/Mar/2026 10:35:41] "GET /media_file/CACHE/UTBA/event_photo/EVT_20240323_001/VID-20240330-WA0084.mp4 HTTP/1.1" 206 23734977 3.617902
+127.0.0.1 - - [27/Mar/2026 10:35:45] "GET /media_file/CACHE/UTBA/event_photo/EVT_20240427_002/VID_20240427_205219.mp4 HTTP/1.1" 206 40657858 8.259144
+(838439) accepted ('127.0.0.1', 47334)
+127.0.0.1 - - [27/Mar/2026 10:35:48] "GET /api/user_control/get_user_data HTTP/1.1" 200 4023 0.007824
+(838439) accepted ('127.0.0.1', 47346)
+127.0.0.1 - - [27/Mar/2026 10:35:48] "GET /static/images/logo/logo.png HTTP/1.1" 304 836 0.000965
+127.0.0.1 - - [27/Mar/2026 10:35:48] "GET /media_file/CACHE/UTBA/event_photo/EVT_20260313_001/WhatsApp_Image_2026-03-24_at_21.04.52.jpeg HTTP/1.1" 304 871 0.003899
+127.0.0.1 - - [27/Mar/2026 10:35:48] "GET /media_file/CACHE/UTBA/event_photo/EVT_20250302_014/20250302_074405.jpeg HTTP/1.1" 304 850 0.003824
+127.0.0.1 - - [27/Mar/2026 10:35:48] "GET /media_file/CACHE/UTBA/event_photo/EVT_20251213_001/VID_20251214_233253_401.mp4 HTTP/1.1" 206 2367064 0.006899
+127.0.0.1 - - [27/Mar/2026 10:35:48] "GET /api/api/get_event/154 HTTP/1.1" 200 3837 0.028119
+127.0.0.1 - - [27/Mar/2026 10:35:49] "GET /media_file/CACHE/UTBA/event_photo/EVT_20240323_001/VID-20240330-WA0084.mp4 HTTP/1.1" 206 76485 0.002377
+(838439) accepted ('127.0.0.1', 47358)
+127.0.0.1 - - [27/Mar/2026 10:35:54] "GET /api/api/get_event/141 HTTP/1.1" 200 233266 0.117579
+127.0.0.1 - - [27/Mar/2026 10:35:56] "GET /media_file/CACHE/UTBA/event_photo/EVT_20240323_001/VID-20240330-WA0084.mp4 HTTP/1.1" 206 23669445 6.096299
+127.0.0.1 - - [27/Mar/2026 10:36:09] "GET /media_file/CACHE/UTBA/event_photo/EVT_20240427_002/VID_20240427_205219.mp4 HTTP/1.1" 206 40592326 19.143699
+127.0.0.1 - - [27/Mar/2026 10:36:13] "GET /media/get_event_image/17098/base HTTP/1.1" 200 896 0.023842
+127.0.0.1 - - [27/Mar/2026 10:36:13] "GET /media_file/NAS/UTBA/event_photo/EVT_20260125_001/20260308_101030.heic HTTP/1.1" 200 5834021 0.033664
+127.0.0.1 - - [27/Mar/2026 10:36:16] "GET /api/user_control/get_user_data HTTP/1.1" 200 4023 0.020578
+127.0.0.1 - - [27/Mar/2026 10:36:52] "GET /api/user_control/get_user_data HTTP/1.1" 200 4023 0.018250
+127.0.0.1 - - [27/Mar/2026 10:37:02] "GET /api/user_control/get_user_data HTTP/1.1" 200 4023 0.023615
+(838439) accepted ('127.0.0.1', 47994)
+127.0.0.1 - - [27/Mar/2026 10:48:17] "GET /api/user_control/get_user_data HTTP/1.1" 200 4023 0.015154
+127.0.0.1 - - [27/Mar/2026 10:48:17] "GET /static/images/logo/logo.png HTTP/1.1" 304 836 0.003110
+(838439) accepted ('127.0.0.1', 47996)
+127.0.0.1 - - [27/Mar/2026 10:48:17] "GET /static/img/placeholder.png HTTP/1.1" 404 984 0.002830
+127.0.0.1 - - [27/Mar/2026 10:48:17] "GET /media_file/CACHE/UTBA/event_photo/EVT_20260313_001/WhatsApp_Image_2026-03-24_at_21.04.52.jpeg HTTP/1.1" 304 871 0.003000
+127.0.0.1 - - [27/Mar/2026 10:48:17] "GET /media_file/CACHE/UTBA/event_photo/EVT_20260205_004/20260301_091859.jpeg HTTP/1.1" 304 851 0.002738
+127.0.0.1 - - [27/Mar/2026 10:48:17] "GET /api/api/get_event/154 HTTP/1.1" 200 3837 0.031359
+127.0.0.1 - - [27/Mar/2026 10:48:17] "GET /api/api/get_event/160 HTTP/1.1" 200 1599 0.022691
+127.0.0.1 - - [27/Mar/2026 10:48:17] "GET /media_file/CACHE/UTBA/event_photo/EVT_20260125_001/20260308_155240.mp4 HTTP/1.1" 206 3450272 0.010721
+127.0.0.1 - - [27/Mar/2026 10:48:17] "GET /media_file/CACHE/UTBA/event_photo/EVT_20251213_001/VID_20251214_233253_401.mp4 HTTP/1.1" 206 2367064 0.003980
+(838439) accepted ('127.0.0.1', 48000)
+(838439) accepted ('127.0.0.1', 48016)
+(838439) accepted ('127.0.0.1', 48018)
+(838439) accepted ('127.0.0.1', 48032)
+127.0.0.1 - - [27/Mar/2026 10:48:17] "GET /media_file/CACHE/UTBA/event_photo/EVT_20250413_002/1000118854.jpeg HTTP/1.1" 304 845 0.001116
+127.0.0.1 - - [27/Mar/2026 10:48:17] "GET /media_file/CACHE/UTBA/event_photo/EVT_20250302_014/20250302_074405.jpeg HTTP/1.1" 304 850 0.000501
+127.0.0.1 - - [27/Mar/2026 10:48:18] "GET /media_file/CACHE/UTBA/event_photo/EVT_20241124_012/1000066787.mp4 HTTP/1.1" 206 4856021 0.027272
+127.0.0.1 - - [27/Mar/2026 10:48:18] "GET /media_file/CACHE/UTBA/event_photo/EVT_20240427_002/VID_20240427_205219.mp4 HTTP/1.1" 206 91078 0.000752
+127.0.0.1 - - [27/Mar/2026 10:48:18] "GET /media_file/CACHE/UTBA/event_photo/EVT_20240323_001/VID-20240330-WA0084.mp4 HTTP/1.1" 206 76485 0.003484
+127.0.0.1 - - [27/Mar/2026 10:48:19] "GET /api/api/get_event/145 HTTP/1.1" 200 1569 0.030401
+127.0.0.1 - - [27/Mar/2026 10:48:20] "GET /api/api/get_event/159 HTTP/1.1" 200 1638 0.037896
+127.0.0.1 - - [27/Mar/2026 10:48:23] "GET /api/api/get_event/138 HTTP/1.1" 200 1565 0.011693
+(838439) accepted ('127.0.0.1', 48056)
+127.0.0.1 - - [27/Mar/2026 10:48:24] "GET /api/api/get_event/158 HTTP/1.1" 200 1600 0.035409
+127.0.0.1 - - [27/Mar/2026 10:48:24] "GET /api/api/get_event/142 HTTP/1.1" 200 20151 0.042883
+127.0.0.1 - - [27/Mar/2026 10:48:25] "GET /media/get_event_image/16503/cache HTTP/1.1" 200 915 0.009939
+127.0.0.1 - - [27/Mar/2026 10:48:26] "GET /media/get_event_image/16502/cache HTTP/1.1" 200 915 0.006760
+127.0.0.1 - - [27/Mar/2026 10:48:28] "GET /static/img/placeholder.png HTTP/1.1" 404 984 0.002925
+127.0.0.1 - - [27/Mar/2026 10:48:28] "GET /media/get_event_image/17072/cache HTTP/1.1" 200 907 0.078789
+127.0.0.1 - - [27/Mar/2026 10:48:29] "GET /media_file/CACHE/UTBA/event_photo/EVT_20240323_001/VID-20240330-WA0084.mp4 HTTP/1.1" 206 23734977 11.965638
+127.0.0.1 - - [27/Mar/2026 10:48:29] "GET /media/get_event_image/17068/cache HTTP/1.1" 200 907 0.073748
+127.0.0.1 - - [27/Mar/2026 10:48:29] "GET /media/get_event_image/17071/cache HTTP/1.1" 200 907 0.085524
+127.0.0.1 - - [27/Mar/2026 10:48:31] "GET /media/get_event_image/17065/cache HTTP/1.1" 200 907 0.088069
+127.0.0.1 - - [27/Mar/2026 10:48:31] "GET /media/get_event_image/17064/cache HTTP/1.1" 200 907 0.064549
+127.0.0.1 - - [27/Mar/2026 10:48:32] "GET /media_file/CACHE/UTBA/event_photo/EVT_20240323_001/VID-20240330-WA0084.mp4 HTTP/1.1" 206 23669445 13.207088
+127.0.0.1 - - [27/Mar/2026 10:48:32] "GET /media/get_event_image/17063/cache HTTP/1.1" 200 907 0.095001
+127.0.0.1 - - [27/Mar/2026 10:48:32] "GET /media/get_event_image/17061/cache HTTP/1.1" 200 907 0.086148
+127.0.0.1 - - [27/Mar/2026 10:48:34] "GET /media/get_event_image/17058/cache HTTP/1.1" 200 907 0.081275
+127.0.0.1 - - [27/Mar/2026 10:48:34] "GET /media/get_event_image/17059/cache HTTP/1.1" 200 907 0.093156
+127.0.0.1 - - [27/Mar/2026 10:48:34] "GET /media_file/CACHE/UTBA/event_photo/EVT_20240323_001/VID-20240330-WA0084.mp4 HTTP/1.1" 206 23702213 14.518889
+127.0.0.1 - - [27/Mar/2026 10:48:35] "GET /media/get_event_image/17053/cache HTTP/1.1" 200 907 0.091260
+127.0.0.1 - - [27/Mar/2026 10:48:35] "GET /media/get_event_image/17051/cache HTTP/1.1" 200 907 0.088874
+127.0.0.1 - - [27/Mar/2026 10:48:37] "GET /media_file/CACHE/UTBA/event_photo/EVT_20251213_001/MVI_4904.mp4 HTTP/1.1" 206 2365622 0.020725
+127.0.0.1 - - [27/Mar/2026 10:48:37] "GET /media/get_event_image/17052/cache HTTP/1.1" 200 907 0.104848
+127.0.0.1 - - [27/Mar/2026 10:48:38] "GET /api/api/get_event/139 HTTP/1.1" 200 152461 0.324856
+127.0.0.1 - - [27/Mar/2026 10:48:40] "GET /media/get_event_image/17070/base HTTP/1.1" 202 814 0.058705
+127.0.0.1 - - [27/Mar/2026 10:48:41] "GET /media_file/CACHE/UTBA/event_photo/EVT_20251213_001/MVI_4900.mp4 HTTP/1.1" 206 1078065 0.007191
+127.0.0.1 - - [27/Mar/2026 10:48:41] "GET /media_file/CACHE/UTBA/event_photo/EVT_20251213_001/MVI_4884.mp4 HTTP/1.1" 206 2093179 0.017419
+127.0.0.1 - - [27/Mar/2026 10:48:41] "GET /media_file/CACHE/UTBA/event_photo/EVT_20240427_002/VID_20240427_205219.mp4 HTTP/1.1" 206 40657858 24.119697
+127.0.0.1 - - [27/Mar/2026 10:48:43] "GET /media_file/CACHE/UTBA/event_photo/EVT_20251213_001/MVI_4865.mp4 HTTP/1.1" 206 756175 0.014379
+127.0.0.1 - - [27/Mar/2026 10:48:43] "GET /media_file/CACHE/UTBA/event_photo/EVT_20251213_001/MVI_4888.mp4 HTTP/1.1" 206 928320 0.016856
+127.0.0.1 - - [27/Mar/2026 10:48:44] "GET /media_file/CACHE/UTBA/event_photo/EVT_20251213_001/MVI_4863.mp4 HTTP/1.1" 206 457436 0.012143
+127.0.0.1 - - [27/Mar/2026 10:48:44] "GET /media_file/CACHE/UTBA/event_photo/EVT_20240427_002/VID_20240427_205219.mp4 HTTP/1.1" 206 40428487 25.397648
+127.0.0.1 - - [27/Mar/2026 10:48:45] "GET /media_file/CACHE/UTBA/event_photo/EVT_20251213_001/MVI_4862.mp4 HTTP/1.1" 206 3791238 0.022533
+127.0.0.1 - - [27/Mar/2026 10:48:45] "GET /media_file/CACHE/UTBA/event_photo/EVT_20251213_001/MVI_4847.mp4 HTTP/1.1" 206 1861205 0.009425
+127.0.0.1 - - [27/Mar/2026 10:48:46] "GET /media_file/CACHE/UTBA/event_photo/EVT_20251213_001/MVI_4844.mp4 HTTP/1.1" 206 1699573 0.016657
+127.0.0.1 - - [27/Mar/2026 10:48:49] "GET /media_file/CACHE/UTBA/event_photo/EVT_20251213_001/MVI_4848.mp4 HTTP/1.1" 206 1882899 0.002524
+127.0.0.1 - - [27/Mar/2026 10:48:49] "GET /media_file/CACHE/UTBA/event_photo/EVT_20251213_001/MVI_4820.mp4 HTTP/1.1" 206 1186776 0.015069
+127.0.0.1 - - [27/Mar/2026 10:48:50] "GET /media_file/CACHE/UTBA/event_photo/EVT_20251213_001/MVI_4818.mp4 HTTP/1.1" 206 1112102 0.008146
+127.0.0.1 - - [27/Mar/2026 10:48:51] "GET /media_file/CACHE/UTBA/event_photo/EVT_20251213_001/MVI_4819.mp4 HTTP/1.1" 206 844587 0.006279
+127.0.0.1 - - [27/Mar/2026 10:48:52] "GET /api/api/get_event/139 HTTP/1.1" 200 152461 0.279345
+127.0.0.1 - - [27/Mar/2026 10:48:52] "GET /media/get_event_image/17070/cache HTTP/1.1" 202 833 0.058476
+127.0.0.1 - - [27/Mar/2026 10:48:53] "GET /media/get_event_image/17070/cache HTTP/1.1" 202 833 0.061322
+127.0.0.1 - - [27/Mar/2026 10:48:53] "GET /api/api/get_event/139 HTTP/1.1" 200 152461 0.263000
+127.0.0.1 - - [27/Mar/2026 10:48:54] "GET /media/get_event_image/17070/base HTTP/1.1" 202 814 0.046475
+127.0.0.1 - - [27/Mar/2026 10:48:54] "GET /media/get_event_image/17070/base HTTP/1.1" 202 814 0.036520
+127.0.0.1 - - [27/Mar/2026 10:48:54] "GET /media/get_event_image/17070/base HTTP/1.1" 202 814 0.036240
+127.0.0.1 - - [27/Mar/2026 10:48:54] "GET /media/get_event_image/17070/base HTTP/1.1" 202 814 0.036005
+127.0.0.1 - - [27/Mar/2026 10:48:54] "GET /media/get_event_image/17070/base HTTP/1.1" 202 814 0.029016
+127.0.0.1 - - [27/Mar/2026 10:48:54] "GET /media/get_event_image/17070/base HTTP/1.1" 202 814 0.038285
+127.0.0.1 - - [27/Mar/2026 10:48:55] "GET /media/get_event_image/17070/base HTTP/1.1" 202 814 0.029988
+127.0.0.1 - - [27/Mar/2026 10:48:55] "GET /media/get_event_image/17070/base HTTP/1.1" 202 814 0.029704
+127.0.0.1 - - [27/Mar/2026 10:48:55] "GET /media/get_event_image/17070/cache HTTP/1.1" 202 833 0.046401
+127.0.0.1 - - [27/Mar/2026 10:48:55] "GET /media/get_event_image/17070/cache HTTP/1.1" 202 833 0.033914
+127.0.0.1 - - [27/Mar/2026 10:48:55] "GET /media/get_event_image/17070/cache HTTP/1.1" 202 833 0.032177
+127.0.0.1 - - [27/Mar/2026 10:48:55] "GET /media/get_event_image/17070/cache HTTP/1.1" 202 833 0.037065
+127.0.0.1 - - [27/Mar/2026 10:48:55] "GET /media/get_event_image/17070/cache HTTP/1.1" 202 833 0.029965
+127.0.0.1 - - [27/Mar/2026 10:48:55] "GET /media/get_event_image/17070/cache HTTP/1.1" 202 833 0.031296
+127.0.0.1 - - [27/Mar/2026 10:48:55] "GET /media/get_event_image/17070/cache HTTP/1.1" 202 833 0.037380
+127.0.0.1 - - [27/Mar/2026 10:48:55] "GET /media/get_event_image/17070/base HTTP/1.1" 202 814 0.030780
+127.0.0.1 - - [27/Mar/2026 10:48:56] "GET /media/get_event_image/17070/base HTTP/1.1" 202 814 0.034562
+127.0.0.1 - - [27/Mar/2026 10:48:56] "GET /media/get_event_image/17070/base HTTP/1.1" 202 814 0.032861
+Exception in thread Thread-22 (async_compress_video):
+Traceback (most recent call last):
+  File "/home/yukang/flaskapp/xinya/app/media/services.py", line 248, in async_compress_video
+    current_video_tasks[video_id]["last_percent"] = percent
+    ~~~~~~~~~~~~~~~~~~~^^^^^^^^^^
+KeyError: 17070
+
+During handling of the above exception, another exception occurred:
+
+Traceback (most recent call last):
+  File "/usr/lib/python3.12/threading.py", line 1073, in _bootstrap_inner
+    self.run()
+  File "/usr/lib/python3.12/threading.py", line 1010, in run
+    self._target(*self._args, **self._kwargs)
+  File "/home/yukang/flaskapp/xinya/app/media/services.py", line 315, in async_compress_video
+    current_video_tasks[video_id]["status"] = "error"
+    ~~~~~~~~~~~~~~~~~~~^^^^^^^^^^
+KeyError: 17070
+127.0.0.1 - - [27/Mar/2026 10:48:56] "GET /media/get_event_image/17070/cache HTTP/1.1" 202 833 0.038919
+127.0.0.1 - - [27/Mar/2026 10:48:56] "GET /media/get_event_image/17070/cache HTTP/1.1" 202 833 0.037031
+127.0.0.1 - - [27/Mar/2026 10:48:56] "GET /media/get_event_image/17070/cache HTTP/1.1" 202 833 0.032469
+127.0.0.1 - - [27/Mar/2026 10:48:56] "GET /media/get_event_image/17070/base HTTP/1.1" 202 814 0.040948
+127.0.0.1 - - [27/Mar/2026 10:48:56] "GET /media/get_event_image/17070/base HTTP/1.1" 202 814 0.044781
+127.0.0.1 - - [27/Mar/2026 10:48:56] "GET /media/get_event_image/17070/base HTTP/1.1" 202 814 0.032927
+127.0.0.1 - - [27/Mar/2026 10:48:57] "GET /media/get_event_image/17070/base HTTP/1.1" 202 814 0.029898
+127.0.0.1 - - [27/Mar/2026 10:48:57] "GET /media/get_event_image/17070/cache HTTP/1.1" 202 833 0.041927
+127.0.0.1 - - [27/Mar/2026 10:48:57] "GET /media/get_event_image/17070/cache HTTP/1.1" 202 833 0.028726
+127.0.0.1 - - [27/Mar/2026 10:48:57] "GET /media/get_event_image/17070/cache HTTP/1.1" 202 833 0.034606
+127.0.0.1 - - [27/Mar/2026 10:48:57] "GET /media/get_event_image/17070/cache HTTP/1.1" 202 833 0.031171
+127.0.0.1 - - [27/Mar/2026 10:48:57] "GET /media/get_event_image/17070/cache HTTP/1.1" 202 833 0.040065
+127.0.0.1 - - [27/Mar/2026 10:48:57] "GET /media/get_event_image/17070/cache HTTP/1.1" 202 833 0.030835
+127.0.0.1 - - [27/Mar/2026 10:48:57] "GET /media/get_event_image/17070/cache HTTP/1.1" 202 833 0.030471
+127.0.0.1 - - [27/Mar/2026 10:48:57] "GET /media/get_event_image/17070/cache HTTP/1.1" 202 833 0.034717
+127.0.0.1 - - [27/Mar/2026 10:48:57] "GET /media/get_event_image/17070/cache HTTP/1.1" 202 833 0.036808
+127.0.0.1 - - [27/Mar/2026 10:48:57] "GET /media/get_event_image/17070/base HTTP/1.1" 202 814 0.030982
+127.0.0.1 - - [27/Mar/2026 10:48:57] "GET /media/get_event_image/17070/base HTTP/1.1" 202 814 0.035260
+127.0.0.1 - - [27/Mar/2026 10:48:57] "GET /media/get_event_image/17070/base HTTP/1.1" 202 814 0.036740
+127.0.0.1 - - [27/Mar/2026 10:48:58] "GET /media/get_event_image/17070/base HTTP/1.1" 202 814 0.030592
+127.0.0.1 - - [27/Mar/2026 10:48:58] "GET /media/get_event_image/17050/cache HTTP/1.1" 200 907 0.068913
+127.0.0.1 - - [27/Mar/2026 10:48:58] "GET /media/get_event_image/17047/cache HTTP/1.1" 200 907 0.076717
+127.0.0.1 - - [27/Mar/2026 10:48:58] "GET /media/get_event_image/17037/cache HTTP/1.1" 200 907 0.070703
+(838439) accepted ('127.0.0.1', 52672)
+(838439) accepted ('127.0.0.1', 52696)
+127.0.0.1 - - [27/Mar/2026 10:48:58] "GET /media/get_event_image/17031/cache HTTP/1.1" 200 907 0.067530
+127.0.0.1 - - [27/Mar/2026 10:48:58] "GET /media/get_event_image/17044/cache HTTP/1.1" 200 907 0.075337
+127.0.0.1 - - [27/Mar/2026 10:48:58] "GET /media/get_event_image/17032/cache HTTP/1.1" 200 907 0.089827
+127.0.0.1 - - [27/Mar/2026 10:48:58] "GET /media/get_event_image/17045/cache HTTP/1.1" 200 907 0.082467
+127.0.0.1 - - [27/Mar/2026 10:48:58] "GET /media/get_event_image/17033/cache HTTP/1.1" 200 907 0.085706
+127.0.0.1 - - [27/Mar/2026 10:48:58] "GET /media/get_event_image/17030/cache HTTP/1.1" 200 907 0.068982
+127.0.0.1 - - [27/Mar/2026 10:48:58] "GET /media/get_event_image/17029/cache HTTP/1.1" 200 907 0.066702
+127.0.0.1 - - [27/Mar/2026 10:48:58] "GET /media/get_event_image/17042/cache HTTP/1.1" 200 907 0.070683
+127.0.0.1 - - [27/Mar/2026 10:48:58] "GET /media/get_event_image/17039/cache HTTP/1.1" 200 907 0.069596
+127.0.0.1 - - [27/Mar/2026 10:48:58] "GET /media/get_event_image/17070/cache HTTP/1.1" 202 833 0.034147
+127.0.0.1 - - [27/Mar/2026 10:48:58] "GET /media/get_event_image/17040/cache HTTP/1.1" 200 907 0.069914
+127.0.0.1 - - [27/Mar/2026 10:48:58] "GET /media_file/CACHE/UTBA/event_photo/EVT_20251213_001/MVI_4802.mp4 HTTP/1.1" 206 2977255 0.004165
+127.0.0.1 - - [27/Mar/2026 10:48:58] "GET /media_file/CACHE/UTBA/event_photo/EVT_20251213_001/MVI_4754.mp4 HTTP/1.1" 206 1789801 0.002683
+127.0.0.1 - - [27/Mar/2026 10:48:58] "GET /media_file/CACHE/UTBA/event_photo/EVT_20251213_001/MVI_4791.mp4 HTTP/1.1" 206 2638497 0.020165
+127.0.0.1 - - [27/Mar/2026 10:48:58] "GET /media_file/CACHE/UTBA/event_photo/EVT_20251213_001/MVI_4717.mp4 HTTP/1.1" 206 506895 0.001912
+127.0.0.1 - - [27/Mar/2026 10:48:59] "GET /media_file/CACHE/UTBA/event_photo/EVT_20251213_001/MVI_4779.mp4 HTTP/1.1" 206 2055390 0.010540
+127.0.0.1 - - [27/Mar/2026 10:49:00] "GET /media/get_event_image/17070/base HTTP/1.1" 202 814 0.035171
+127.0.0.1 - - [27/Mar/2026 10:49:00] "GET /media_file/CACHE/UTBA/event_photo/EVT_20251213_001/MVI_4780.mp4 HTTP/1.1" 206 1194081 0.012409
+127.0.0.1 - - [27/Mar/2026 10:49:00] "GET /media_file/CACHE/UTBA/event_photo/EVT_20251213_001/MVI_4753.mp4 HTTP/1.1" 206 1506691 0.015955
+127.0.0.1 - - [27/Mar/2026 10:49:00] "GET /media_file/CACHE/UTBA/event_photo/EVT_20251213_001/MVI_4718.mp4 HTTP/1.1" 206 1430257 0.013681
+127.0.0.1 - - [27/Mar/2026 10:49:00] "GET /media_file/CACHE/UTBA/event_photo/EVT_20251213_001/MVI_4670.mp4 HTTP/1.1" 206 735986 0.001586
+127.0.0.1 - - [27/Mar/2026 10:49:01] "GET /media_file/CACHE/UTBA/event_photo/EVT_20251213_001/MVI_4674.mp4 HTTP/1.1" 206 2114517 0.003337
+127.0.0.1 - - [27/Mar/2026 10:49:01] "GET /media_file/CACHE/UTBA/event_photo/EVT_20251213_001/MVI_4768.mp4 HTTP/1.1" 206 2583782 0.003731
+127.0.0.1 - - [27/Mar/2026 10:49:01] "GET /media_file/CACHE/UTBA/event_photo/EVT_20251213_001/MVI_4765.mp4 HTTP/1.1" 206 2676471 0.003883
+127.0.0.1 - - [27/Mar/2026 10:49:02] "GET /media_file/CACHE/UTBA/event_photo/EVT_20251213_001/MVI_4766.mp4 HTTP/1.1" 206 2412768 0.014441
+127.0.0.1 - - [27/Mar/2026 10:49:02] "GET /media/get_event_image/17070/cache HTTP/1.1" 202 833 0.057304
+127.0.0.1 - - [27/Mar/2026 10:49:03] "GET /media/get_event_image/17070/cache HTTP/1.1" 202 833 0.033638
+127.0.0.1 - - [27/Mar/2026 10:49:04] "GET /media/get_event_image/17070/cache HTTP/1.1" 202 833 0.033076
+127.0.0.1 - - [27/Mar/2026 10:49:04] "GET /media/get_event_image/17070/base HTTP/1.1" 202 814 0.038129
+127.0.0.1 - - [27/Mar/2026 10:49:04] "GET /media/get_event_image/17070/base HTTP/1.1" 202 814 0.033741
+127.0.0.1 - - [27/Mar/2026 10:49:04] "GET /media/get_event_image/17070/cache HTTP/1.1" 202 833 0.036239
+127.0.0.1 - - [27/Mar/2026 10:49:04] "GET /media/get_event_image/17070/cache HTTP/1.1" 202 833 0.034688
+127.0.0.1 - - [27/Mar/2026 10:49:04] "GET /media/get_event_image/17070/cache HTTP/1.1" 202 833 0.041510
+127.0.0.1 - - [27/Mar/2026 10:49:04] "GET /media/get_event_image/17023/cache HTTP/1.1" 200 907 0.073214
+127.0.0.1 - - [27/Mar/2026 10:49:04] "GET /media/get_event_image/17026/cache HTTP/1.1" 200 907 0.074311
+127.0.0.1 - - [27/Mar/2026 10:49:04] "GET /media/get_event_image/17021/cache HTTP/1.1" 200 907 0.076701
+127.0.0.1 - - [27/Mar/2026 10:49:04] "GET /media/get_event_image/17020/cache HTTP/1.1" 200 907 0.079846
+127.0.0.1 - - [27/Mar/2026 10:49:04] "GET /media/get_event_image/17002/cache HTTP/1.1" 200 908 0.007087
+127.0.0.1 - - [27/Mar/2026 10:49:04] "GET /media/get_event_image/17016/cache HTTP/1.1" 200 907 0.087741
+127.0.0.1 - - [27/Mar/2026 10:49:04] "GET /media/get_event_image/17008/cache HTTP/1.1" 200 907 0.080896
+127.0.0.1 - - [27/Mar/2026 10:49:04] "GET /media/get_event_image/17004/cache HTTP/1.1" 200 907 0.083652
+127.0.0.1 - - [27/Mar/2026 10:49:04] "GET /media/get_event_image/17007/cache HTTP/1.1" 200 907 0.083847
+127.0.0.1 - - [27/Mar/2026 10:49:04] "GET /media/get_event_image/17011/cache HTTP/1.1" 200 907 0.078536
+127.0.0.1 - - [27/Mar/2026 10:49:04] "GET /media/get_event_image/17018/cache HTTP/1.1" 200 907 0.082642
+127.0.0.1 - - [27/Mar/2026 10:49:04] "GET /media/get_event_image/17012/cache HTTP/1.1" 200 907 0.065104
+127.0.0.1 - - [27/Mar/2026 10:49:04] "GET /media/get_event_image/17017/cache HTTP/1.1" 200 907 0.064981
+127.0.0.1 - - [27/Mar/2026 10:49:04] "GET /media/get_event_image/17015/cache HTTP/1.1" 200 907 0.066597
+127.0.0.1 - - [27/Mar/2026 10:49:04] "GET /media_file/CACHE/UTBA/event_photo/EVT_20251213_001/MVI_4637.mp4 HTTP/1.1" 206 1554317 0.002209
+127.0.0.1 - - [27/Mar/2026 10:49:04] "GET /media_file/CACHE/UTBA/event_photo/EVT_20251213_001/MVI_4662.mp4 HTTP/1.1" 206 879737 0.001738
+127.0.0.1 - - [27/Mar/2026 10:49:04] "GET /media_file/CACHE/UTBA/event_photo/EVT_20251213_001/MVI_4656.mp4 HTTP/1.1" 206 447036 0.001536
+127.0.0.1 - - [27/Mar/2026 10:49:05] "GET /media_file/CACHE/UTBA/event_photo/EVT_20251213_001/MVI_4613.mp4 HTTP/1.1" 206 905030 0.002604
+127.0.0.1 - - [27/Mar/2026 10:49:05] "GET /media_file/CACHE/UTBA/event_photo/EVT_20251213_001/MVI_4638.mp4 HTTP/1.1" 206 590187 0.002082
+127.0.0.1 - - [27/Mar/2026 10:49:05] "GET /media/get_event_image/17070/cache HTTP/1.1" 202 833 0.034672
+127.0.0.1 - - [27/Mar/2026 10:49:05] "GET /media_file/CACHE/UTBA/event_photo/EVT_20251213_001/MVI_4658.mp4 HTTP/1.1" 206 435164 0.001438
+127.0.0.1 - - [27/Mar/2026 10:49:05] "GET /media_file/CACHE/UTBA/event_photo/EVT_20251213_001/MVI_4640.mp4 HTTP/1.1" 206 710568 0.001471
+127.0.0.1 - - [27/Mar/2026 10:49:05] "GET /media_file/CACHE/UTBA/event_photo/EVT_20251213_001/IMG_4909.jpeg HTTP/1.1" 200 1467966 0.002730
+127.0.0.1 - - [27/Mar/2026 10:49:05] "GET /media_file/CACHE/UTBA/event_photo/EVT_20251213_001/MVI_4607.mp4 HTTP/1.1" 206 904718 0.002633
+127.0.0.1 - - [27/Mar/2026 10:49:06] "GET /media_file/CACHE/UTBA/event_photo/EVT_20251213_001/MVI_4611.mp4 HTTP/1.1" 206 1117707 0.006444
+127.0.0.1 - - [27/Mar/2026 10:49:06] "GET /media_file/CACHE/UTBA/event_photo/EVT_20251213_001/MVI_4616.mp4 HTTP/1.1" 206 969696 0.003935
+127.0.0.1 - - [27/Mar/2026 10:49:06] "GET /media_file/CACHE/UTBA/event_photo/EVT_20251213_001/MVI_4627.mp4 HTTP/1.1" 206 1187455 0.007534
+127.0.0.1 - - [27/Mar/2026 10:49:06] "GET /media_file/CACHE/UTBA/event_photo/EVT_20251213_001/MVI_4617.mp4 HTTP/1.1" 206 837554 0.001923
+127.0.0.1 - - [27/Mar/2026 10:49:11] "GET /media/get_event_image/16524/cache HTTP/1.1" 200 915 0.016787
+127.0.0.1 - - [27/Mar/2026 10:49:11] "GET /media/get_event_image/16521/cache HTTP/1.1" 200 915 0.008032
+127.0.0.1 - - [27/Mar/2026 10:49:11] "GET /media/get_event_image/16523/cache HTTP/1.1" 200 915 0.006270
+127.0.0.1 - - [27/Mar/2026 10:49:11] "GET /media/get_event_image/16517/cache HTTP/1.1" 202 833 0.003798
+127.0.0.1 - - [27/Mar/2026 10:49:11] "GET /media/get_event_image/16513/cache HTTP/1.1" 200 915 0.005345
+127.0.0.1 - - [27/Mar/2026 10:49:11] "GET /media/get_event_image/16516/cache HTTP/1.1" 200 915 0.006191
+127.0.0.1 - - [27/Mar/2026 10:49:11] "GET /media/get_event_image/16514/cache HTTP/1.1" 200 915 0.005385
+127.0.0.1 - - [27/Mar/2026 10:49:11] "GET /media/get_event_image/16509/cache HTTP/1.1" 200 915 0.002814
+127.0.0.1 - - [27/Mar/2026 10:49:11] "GET /media/get_event_image/16508/cache HTTP/1.1" 200 915 0.003424
+127.0.0.1 - - [27/Mar/2026 10:49:11] "GET /media/get_event_image/16507/cache HTTP/1.1" 200 915 0.004353
+127.0.0.1 - - [27/Mar/2026 10:49:12] "GET /media_file/CACHE/UTBA/event_photo/EVT_20251201_001/20251130_162923.jpeg HTTP/1.1" 200 1419957 0.004104
+127.0.0.1 - - [27/Mar/2026 10:49:12] "GET /media_file/CACHE/UTBA/event_photo/EVT_20251201_001/20251130_163207.jpeg HTTP/1.1" 200 1428053 0.002629
+127.0.0.1 - - [27/Mar/2026 10:49:12] "GET /media_file/CACHE/UTBA/event_photo/EVT_20251201_001/20251130_162930.jpeg HTTP/1.1" 200 1285929 0.002295
+127.0.0.1 - - [27/Mar/2026 10:49:12] "GET /media/get_event_image/16517/base HTTP/1.1" 200 899 0.083494
+127.0.0.1 - - [27/Mar/2026 10:49:13] "GET /media_file/CACHE/UTBA/event_photo/EVT_20251201_001/20251130_163905.jpeg HTTP/1.1" 200 1584140 0.002702
+127.0.0.1 - - [27/Mar/2026 10:49:13] "GET /media_file/CACHE/UTBA/event_photo/EVT_20251201_001/20251130_163928.jpeg HTTP/1.1" 200 1757597 0.002842
+127.0.0.1 - - [27/Mar/2026 10:49:13] "GET /media_file/CACHE/UTBA/event_photo/EVT_20251201_001/20251130_171551.jpeg HTTP/1.1" 200 923614 0.002585
+127.0.0.1 - - [27/Mar/2026 10:49:13] "GET /media_file/CACHE/UTBA/event_photo/EVT_20251201_001/20251130_164456.jpeg HTTP/1.1" 200 1197429 0.002442
+127.0.0.1 - - [27/Mar/2026 10:49:13] "GET /media_file/CACHE/UTBA/event_photo/EVT_20251201_001/20251130_171441.jpeg HTTP/1.1" 200 1415985 0.002534
+127.0.0.1 - - [27/Mar/2026 10:49:13] "GET /media_file/CACHE/UTBA/event_photo/EVT_20251201_001/20251130_180513.jpeg HTTP/1.1" 200 1770388 0.002852
+127.0.0.1 - - [27/Mar/2026 10:49:32] "GET /api/api/get_event/154 HTTP/1.1" 200 3837 0.031770
+127.0.0.1 - - [27/Mar/2026 10:49:34] "GET /media_file/CACHE/UTBA/event_photo/EVT_20260128_001/20260131_160831.jpeg HTTP/1.1" 200 1150870 0.006186
+127.0.0.1 - - [27/Mar/2026 10:49:34] "GET /media_file/CACHE/UTBA/event_photo/EVT_20260128_001/20260131_160825.jpeg HTTP/1.1" 200 1259399 0.005779
+127.0.0.1 - - [27/Mar/2026 10:49:35] "GET /api/api/get_event/137 HTTP/1.1" 200 13271 0.062668
+127.0.0.1 - - [27/Mar/2026 10:49:35] "GET /api/api/get_event/131 HTTP/1.1" 200 1555 0.009821
+127.0.0.1 - - [27/Mar/2026 10:49:36] "GET /api/api/get_event/130 HTTP/1.1" 200 1513 0.031624
+127.0.0.1 - - [27/Mar/2026 10:49:37] "GET /api/api/get_event/112 HTTP/1.1" 200 1606 0.034655
+127.0.0.1 - - [27/Mar/2026 10:49:37] "GET /api/api/get_event/103 HTTP/1.1" 200 1528 0.030280
+127.0.0.1 - - [27/Mar/2026 10:49:38] "GET /api/api/get_event/116 HTTP/1.1" 200 1541 0.022609
+127.0.0.1 - - [27/Mar/2026 10:49:38] "GET /api/api/get_event/127 HTTP/1.1" 200 1512 0.019564
+127.0.0.1 - - [27/Mar/2026 10:49:38] "GET /api/api/get_event/113 HTTP/1.1" 200 1547 0.010240
+127.0.0.1 - - [27/Mar/2026 10:49:38] "GET /api/api/get_event/115 HTTP/1.1" 200 1542 0.013494
+127.0.0.1 - - [27/Mar/2026 10:49:39] "GET /api/api/get_event/97 HTTP/1.1" 200 69338 0.123208
+127.0.0.1 - - [27/Mar/2026 10:49:39] "GET /media/get_event_image/12830/cache HTTP/1.1" 200 915 0.008161
+127.0.0.1 - - [27/Mar/2026 10:49:39] "GET /media/get_event_image/12829/cache HTTP/1.1" 200 915 0.005223
+127.0.0.1 - - [27/Mar/2026 10:49:39] "GET /static/img/placeholder.png HTTP/1.1" 404 984 0.003660
+127.0.0.1 - - [27/Mar/2026 10:49:39] "GET /media_file/CACHE/UTBA/event_photo/EVT_20250413_001/20250412_221205.jpeg HTTP/1.1" 200 1399328 0.012480
+127.0.0.1 - - [27/Mar/2026 10:49:39] "GET /api/api/get_event/94 HTTP/1.1" 200 16041 0.079506
+127.0.0.1 - - [27/Mar/2026 10:49:39] "GET /media/get_event_image/6552/cache HTTP/1.1" 200 915 0.007215
+127.0.0.1 - - [27/Mar/2026 10:49:40] "GET /media_file/CACHE/UTBA/event_photo/EVT_20250302_014/20250302_143022.jpeg HTTP/1.1" 200 948614 0.014811
+127.0.0.1 - - [27/Mar/2026 10:49:42] "GET /api/api/get_event/94 HTTP/1.1" 200 16041 0.063269
+127.0.0.1 - - [27/Mar/2026 10:49:42] "GET /static/img/placeholder.png HTTP/1.1" 404 984 0.002646
+127.0.0.1 - - [27/Mar/2026 10:49:42] "GET /media/get_event_image/6536/cache HTTP/1.1" 200 915 0.003037
+127.0.0.1 - - [27/Mar/2026 10:49:42] "GET /media/get_event_image/6545/cache HTTP/1.1" 200 915 0.009268
+127.0.0.1 - - [27/Mar/2026 10:49:42] "GET /media/get_event_image/6546/cache HTTP/1.1" 200 915 0.020108
+127.0.0.1 - - [27/Mar/2026 10:49:42] "GET /media/get_event_image/6555/cache HTTP/1.1" 200 915 0.016982
+127.0.0.1 - - [27/Mar/2026 10:49:42] "GET /media/get_event_image/6558/cache HTTP/1.1" 200 915 0.014395
+127.0.0.1 - - [27/Mar/2026 10:49:42] "GET /media/get_event_image/6540/cache HTTP/1.1" 200 910 0.010217
+127.0.0.1 - - [27/Mar/2026 10:49:42] "GET /media/get_event_image/6548/cache HTTP/1.1" 200 915 0.013549
+127.0.0.1 - - [27/Mar/2026 10:49:42] "GET /media/get_event_image/6543/cache HTTP/1.1" 200 915 0.007913
+127.0.0.1 - - [27/Mar/2026 10:49:42] "GET /media/get_event_image/6553/cache HTTP/1.1" 200 908 0.011028
+127.0.0.1 - - [27/Mar/2026 10:49:42] "GET /media_file/CACHE/UTBA/event_photo/EVT_20250302_014/20250302_074316.jpeg HTTP/1.1" 200 1087205 0.015205
+127.0.0.1 - - [27/Mar/2026 10:49:42] "GET /media_file/CACHE/UTBA/event_photo/EVT_20250302_014/20250302_141830.jpeg HTTP/1.1" 200 1049533 0.003307
+127.0.0.1 - - [27/Mar/2026 10:49:42] "GET /media_file/CACHE/UTBA/event_photo/EVT_20250302_014/20250302_074718.jpeg HTTP/1.1" 200 1363227 0.002394
+127.0.0.1 - - [27/Mar/2026 10:49:43] "GET /media_file/CACHE/UTBA/event_photo/EVT_20250302_014/20250302_075522.jpeg HTTP/1.1" 200 1890993 0.003181
+127.0.0.1 - - [27/Mar/2026 10:49:43] "GET /media_file/CACHE/UTBA/event_photo/EVT_20250302_014/20250302_134342.jpeg HTTP/1.1" 200 615320 0.002912
+127.0.0.1 - - [27/Mar/2026 10:49:43] "GET /media_file/CACHE/UTBA/event_photo/EVT_20250302_014/20250302_075725.jpeg HTTP/1.1" 200 1575777 0.006926
+127.0.0.1 - - [27/Mar/2026 10:49:43] "GET /media_file/CACHE/UTBA/event_photo/EVT_20250302_014/20250302_134539.jpeg HTTP/1.1" 200 919410 0.014660
+127.0.0.1 - - [27/Mar/2026 10:49:43] "GET /media_file/CACHE/UTBA/event_photo/EVT_20250302_014/20250302_080009.jpeg HTTP/1.1" 200 1242750 0.002210
+127.0.0.1 - - [27/Mar/2026 10:49:43] "GET /media_file/CACHE/UTBA/event_photo/EVT_20250302_014/1000178318.jpeg HTTP/1.1" 200 42005 0.016257
+127.0.0.1 - - [27/Mar/2026 10:49:44] "GET /media_file/CACHE/UTBA/event_photo/EVT_20250302_014/1000178339.jpeg HTTP/1.1" 200 21190 0.004432
+127.0.0.1 - - [27/Mar/2026 10:49:44] "GET /api/api/get_file_data/6545 HTTP/1.1" 200 2560 0.028951
+127.0.0.1 - - [27/Mar/2026 10:49:44] "GET /media/get_event_image/6545/base HTTP/1.1" 200 896 0.013008
+127.0.0.1 - - [27/Mar/2026 10:49:51] "GET /api/api/get_event/94 HTTP/1.1" 200 16041 0.048555
+127.0.0.1 - - [27/Mar/2026 10:49:51] "GET /static/img/placeholder.png HTTP/1.1" 404 984 0.002744
+127.0.0.1 - - [27/Mar/2026 10:49:52] "GET /api/api/get_file_data/6558 HTTP/1.1" 200 2560 0.012892
+127.0.0.1 - - [27/Mar/2026 10:49:52] "GET /media/get_event_image/6558/base HTTP/1.1" 200 896 0.007118
+ * Detected change in '/home/yukang/flaskapp/xinya/app/media/utils.py', reloading
+[CHECK] ✅ MP4 时长正常: 14.066667s
+[CHECK] ✅ MP4 时长正常: 9.733333s
+[CHECK] ✅ MP4 时长正常: 6.966667s
+[CHECK] ✅ MP4 时长正常: 15.0s
+[CHECK] ✅ MP4 时长正常: 6.466667s
+[CHECK] ✅ MP4 时长正常: 2.966667s
+[CHECK] ✅ MP4 时长正常: 15.0s
+[CHECK] ✅ MP4 时长正常: 15.0s
+[CHECK] ✅ MP4 时长正常: 15.0s
+[CHECK] ✅ MP4 时长正常: 8.833333s
+[CHECK] ✅ MP4 时长正常: 8.133333s
+[CHECK] ✅ MP4 时长正常: 6.166667s
+[CHECK] ❌ MP4 时长异常: 1.0
+[CHECK] ❌ MP4 时长异常: 1.0
+[CHECK] ❌ MP4 时长异常: 1.0
+[CHECK] ❌ MP4 时长异常: 1.0
+[CHECK] ❌ MP4 时长异常: None
+[CHECK] ❌ MP4 时长异常: 1.0
+[CHECK] ❌ MP4 时长异常: 1.0
+[CHECK] ❌ MP4 时长异常: None
+[CHECK] ❌ MP4 时长异常: 1.0
+[CHECK] ❌ MP4 时长异常: None
+[CHECK] ❌ MP4 时长异常: None
+[CHECK] ❌ MP4 时长异常: 1.0
+[CHECK] ❌ MP4 时长异常: 1.0
+[CHECK] ❌ MP4 时长异常: None
+[CHECK] ❌ MP4 时长异常: 1.0
+[CHECK] ❌ MP4 时长异常: None
+[CHECK] ❌ MP4 时长异常: None
+[CHECK] ❌ MP4 时长异常: 1.0
+[CHECK] ❌ MP4 时长异常: None
+[CHECK] ❌ MP4 时长异常: 1.0
+[CHECK] ❌ MP4 时长异常: 1.0
+[CHECK] ❌ MP4 时长异常: None
+[CHECK] ❌ MP4 时长异常: 1.0
+[CHECK] ❌ MP4 时长异常: 1.0
+[CHECK] ❌ MP4 时长异常: None
+[CHECK] ❌ MP4 时长异常: 1.0
+[CHECK] ❌ MP4 时长异常: 1.0
+[CHECK] ❌ MP4 时长异常: None
+[CHECK] ❌ MP4 时长异常: 1.0
+[CHECK] ❌ MP4 时长异常: None
+[CHECK] ❌ MP4 时长异常: None
+[CHECK] ❌ MP4 时长异常: None
+[CHECK] ❌ MP4 时长异常: 1.0
+[CHECK] ❌ MP4 时长异常: None
+[CHECK] ❌ MP4 时长异常: None
+[CHECK] ❌ MP4 时长异常: 1.0
+[CHECK] ❌ MP4 时长异常: 1.0
+[CHECK] ❌ MP4 时长异常: None
+[CHECK] ❌ MP4 时长异常: None
+[CHECK] ❌ MP4 时长异常: 1.0
+[CHECK] ❌ MP4 时长异常: None
+[CHECK] ✅ MP4 时长正常: 15.0s
+[CHECK] ✅ MP4 时长正常: 15.0s
+[CHECK] ✅ MP4 时长正常: 13.333333s
+[CHECK] ✅ MP4 时长正常: 3.4s
+[CHECK] ✅ MP4 时长正常: 15.0s
+[CHECK] ✅ MP4 时长正常: 8.866667s
+[CHECK] ✅ MP4 时长正常: 7.533333s
+[CHECK] ✅ MP4 时长正常: 11.1s
+[CHECK] ✅ MP4 时长正常: 3.333333s
+[CHECK] ✅ MP4 时长正常: 12.933333s
+[CHECK] ✅ MP4 时长正常: 15.0s
+[CHECK] ✅ MP4 时长正常: 15.0s
+[CHECK] ❌ MP4 时长异常: 1.0
+[CHECK] ✅ MP4 时长正常: 15.0s
+[CHECK] ❌ MP4 时长异常: 1.0
+[CHECK] ❌ MP4 时长异常: 1.0
+[CHECK] ❌ MP4 时长异常: 1.0
+[CHECK] ❌ MP4 时长异常: None
+[CHECK] ❌ MP4 时长异常: None
+[CHECK] ❌ MP4 时长异常: 1.0
+[CHECK] ❌ MP4 时长异常: None
+[CHECK] ❌ MP4 时长异常: 1.0
+[CHECK] ❌ MP4 时长异常: 1.0
+[CHECK] ✅ MP4 时长正常: 5.4s
+[CHECK] ✅ MP4 时长正常: 7.633333s
+[CHECK] ✅ MP4 时长正常: 5.7s
+[CHECK] ✅ MP4 时长正常: 6.633333s
+[CHECK] ✅ MP4 时长正常: 11.366667s
+[CHECK] ✅ MP4 时长正常: 7.266667s
+[CHECK] ✅ MP4 时长正常: 5.333333s
+[CHECK] ✅ MP4 时长正常: 7.233333s
+[CHECK] ✅ MP4 时长正常: 6.2s
+[CHECK] ✅ MP4 时长正常: 4.833333s
+[CHECK] ✅ MP4 时长正常: 5.966667s
+[CHECK] ✅ MP4 时长正常: 7.033333s
+[CHECK] ✅ MP4 时长正常: 3.766667s
+[CHECK] ❌ MP4 时长异常: 1.0
+[CHECK] ✅ MP4 时长正常: 7.027563s
+ * Restarting with stat
+/home/yukang/flaskapp/xinya/run.py:3: DeprecationWarning: 
+Eventlet is deprecated. It is currently being maintained in bugfix mode, and
+we strongly recommend against using it for new projects.
+
+If you are already using Eventlet, we recommend migrating to a different
+framework.  For more detail see
+https://eventlet.readthedocs.io/en/latest/asyncio/migration.html
+
+  import eventlet
+ * Debugger is active!
+ * Debugger PIN: 103-153-293
+(860673) wsgi starting up on http://0.0.0.0:5102
+ * Detected change in '/home/yukang/flaskapp/xinya/app/media/routes.py', reloading
+ * Restarting with stat
+/home/yukang/flaskapp/xinya/run.py:3: DeprecationWarning: 
+Eventlet is deprecated. It is currently being maintained in bugfix mode, and
+we strongly recommend against using it for new projects.
+
+If you are already using Eventlet, we recommend migrating to a different
+framework.  For more detail see
+https://eventlet.readthedocs.io/en/latest/asyncio/migration.html
+
+  import eventlet
+ * Debugger is active!
+ * Debugger PIN: 103-153-293
+(860898) wsgi starting up on http://0.0.0.0:5102
+ * Detected change in '/home/yukang/flaskapp/xinya/app/media/services.py', reloading
+ * Restarting with stat
+/home/yukang/flaskapp/xinya/run.py:3: DeprecationWarning: 
+Eventlet is deprecated. It is currently being maintained in bugfix mode, and
+we strongly recommend against using it for new projects.
+
+If you are already using Eventlet, we recommend migrating to a different
+framework.  For more detail see
+https://eventlet.readthedocs.io/en/latest/asyncio/migration.html
+
+  import eventlet
+ * Debugger is active!
+ * Debugger PIN: 103-153-293
+(861115) wsgi starting up on http://0.0.0.0:5102

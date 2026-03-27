@@ -162,6 +162,7 @@ export function TrackRow({
   isPlaying,
   inQueue,
   showAlbum,
+  albumName,
   onSelect,
   onAddToQueue,
 }: {
@@ -171,6 +172,7 @@ export function TrackRow({
   isPlaying: boolean;
   inQueue: boolean;
   showAlbum?: boolean;
+  albumName?: string;
   onSelect: () => void;
   onAddToQueue: () => void;
 }) {
@@ -186,7 +188,7 @@ export function TrackRow({
         <div style={trackInfoStyle}>
           <span style={trackTitleStyle(isActive)}>{track.title}</span>
           <span style={trackMetaStyle}>
-            {showAlbum && track.album?.name ? `${track.album.name}  ·  ` : ""}
+            {showAlbum && (albumName || track.album?.name) ? `${albumName || track.album?.name}  ·  ` : ""}
             {track.duration != null ? formatTime(track.duration) : ""}
           </span>
         </div>

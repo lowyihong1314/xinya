@@ -1,11 +1,14 @@
-import { useEffect, useState, type CSSProperties } from "react";
+import { useEffect, useRef, useState, type CSSProperties, type KeyboardEvent as ReactKeyboardEvent, type ReactNode } from "react";
+import { createPortal } from "react-dom";
 import { useNavigate, useParams } from "react-router-dom";
-import { createRoot, type Root } from "react-dom/client";
-import heic2any from "heic2any";
 
-import { CacheMediaPlayer } from "../../components/CacheMediaPlayer";
-import { ensureDesignTokens } from "../../theme/designTokens";
 import { useUserState } from "../../app/UserState";
+import { CacheMediaPlayer } from "../../components/CacheMediaPlayer";
+import { API_BASE } from "../../js/apiBase";
+import { apiFetch } from "../../js/apiFetch";
+import { ensureDesignTokens } from "../../theme/designTokens";
+
+ensureDesignTokens();
 
 type FileRecord = {
   id: number;
@@ -38,17 +41,20 @@ type MediaInfoPayload = {
   path?: string;
 };
 
-type SlideSource = {
-  kind: "slide";
-  slide: {
-    type?: "video";
-    src: string;
-    alt?: string;
-  };
-  originalUrl: string;
-  objectUrl?: string;
-  fileId?: number;
+type ImageSource = {
+  kind: "image";
+  originalUrl?: string;
+  fileId: number;
   fileType?: string;
+  alt: string;
+};
+
+type VideoSource = {
+  kind: "video";
+  originalUrl?: string;
+  fileId: number;
+  fileType?: string;
+  alt: string;
 };
 
 type UnsupportedSource = {
@@ -57,99 +63,72 @@ type UnsupportedSource = {
   reason: string;
 };
 
-type MediaSource = SlideSource | UnsupportedSource;
+type MediaSource = ImageSource | VideoSource | UnsupportedSource;
+
+type ImageDetailState = {
+  file: FileRecord | null;
+  event: EventRecord | null;
+  mediaSource: MediaSource | null;
+  loading: boolean;
+  error: string | null;
+};
+
+type ViewerProps = {
+  isMobile: boolean;
+  file: FileRecord | null;
+  mediaSource: MediaSource | null;
+  loading: boolean;
+  onClose: () => void;
+  onPrev?: () => void;
+  onNext?: () => void;
+};
+
+const INITIAL_STATE: ImageDetailState = {
+  file: null,
+  event: null,
+  mediaSource: null,
+  loading: true,
+  error: null,
+};
 
 const VIDEO_EXTENSIONS = new Set(["mp4", "mov", "m4v", "avi", "mkv", "webm", "flv", "mts", "m2ts", "3gp", "wmv"]);
 const IMAGE_EXTENSIONS = new Set(["jpg", "jpeg", "png", "bmp", "tif", "tiff", "webp"]);
 const HEIC_EXTENSIONS = new Set(["heic", "heif"]);
 const ROTATABLE_EXTENSIONS = new Set(["png", "jpg", "jpeg", "heic"]);
 
-export function ImageDetailPage() {
-  ensureDesignTokens();
+export function ImageDetailPageRoute() {
+  const { isMobile } = useUserState();
+  return <ImageDetailPage isMobile={isMobile} />;
+}
 
+export function ImageDetailPage({ isMobile }: { isMobile: boolean }) {
   const navigate = useNavigate();
   const { imageId } = useParams();
-  const { isMobile } = useUserState();
-
-  const [file, setFile] = useState<FileRecord | null>(null);
-  const [event, setEvent] = useState<EventRecord | null>(null);
-  const [mediaSource, setMediaSource] = useState<MediaSource | null>(null);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
+  const { file, event, mediaSource, loading, error, reloadCurrent } = useImageDetail(imageId);
+  const [actionError, setActionError] = useState<string | null>(null);
   const [rotating, setRotating] = useState(false);
   const [viewerOpen, setViewerOpen] = useState(false);
 
   useEffect(() => {
-    if (!imageId) {
-      setError("缺少 image_id");
-      setLoading(false);
-      return;
+    if (!loading && (error || !mediaSource || mediaSource.kind === "unsupported")) {
+      setViewerOpen(false);
     }
-    void loadData(imageId);
+  }, [error, loading, mediaSource]);
+
+  useEffect(() => {
+    setActionError(null);
   }, [imageId]);
 
-  useEffect(() => {
-    return () => {
-      cleanupMediaSource(mediaSource);
-    };
-  }, [mediaSource]);
-
-  useEffect(() => {
-    if (!viewerOpen) {
-      renderDetachedViewer(null);
-      return;
-    }
-
-    renderDetachedViewer({
-      file,
-      mediaSource,
-      loading,
-      onClose: () => setViewerOpen(false),
-      onPrev: file?.prev_id ? () => navigate(`/image/${file.prev_id}`) : undefined,
-      onNext: file?.next_id ? () => navigate(`/image/${file.next_id}`) : undefined,
-    });
-  }, [viewerOpen, file, mediaSource, loading, navigate]);
-
-  useEffect(() => () => renderDetachedViewer(null), []);
-
-  async function loadData(id: string) {
-    setLoading(true);
-    setError(null);
-
-    try {
-      const response = await fetch(`/api/api/get_file_data/${id}`, { credentials: "include" });
-      const payload = (await response.json().catch(() => ({}))) as FilePayload;
-
-      if (!response.ok || payload.status !== "success") {
-        throw new Error(payload.message || "读取媒体失败");
-      }
-
-      const nextFile = payload.data?.file;
-      if (!nextFile) {
-        throw new Error("文件不存在");
-      }
-
-      setMediaSource((current) => {
-        cleanupMediaSource(current);
-        return null;
-      });
-
-      const nextSource = await resolveMediaSource(nextFile);
-      setMediaSource(nextSource);
-      setFile(nextFile);
-      setEvent(payload.data?.event || null);
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "读取媒体失败");
-      setFile(null);
-      setEvent(null);
-      setMediaSource((current) => {
-        cleanupMediaSource(current);
-        return null;
-      });
-    } finally {
-      setLoading(false);
-    }
-  }
+  const isVideo = mediaSource?.kind === "video" || isVideoFile(file?.file_type);
+  const canRotate = canRotateFile(file?.file_type);
+  const supportsViewer = mediaSource?.kind === "image" || mediaSource?.kind === "video";
+  const openOriginalLabel = isVideo ? "打开原文件" : "打开原图";
+  const viewerActionLabel = viewerOpen ? "关闭全屏" : isVideo ? "打开全屏" : "查看大图";
+  const viewStatus = isVideo
+    ? `视频模式，可直接播放，也可${viewerOpen ? "关闭" : "打开"}全屏播放器。`
+    : supportsViewer
+      ? `图片模式，可在当前页预览，也可${viewerOpen ? "关闭" : "打开"}全屏查看。`
+      : "当前文件建议直接打开原文件查看。";
 
   function goBack() {
     if (event?.id) {
@@ -165,29 +144,25 @@ export function ImageDetailPage() {
     }
   }
 
+  const canOpenOriginal = Boolean(mediaSource && mediaSource.kind !== "unsupported" && mediaSource.originalUrl);
+
   function openOriginal() {
-    if (!mediaSource) {
+    if (!mediaSource || mediaSource.kind === "unsupported" || !mediaSource.originalUrl) {
       return;
     }
     window.open(mediaSource.originalUrl, "_blank", "noopener,noreferrer");
   }
 
-  function toggleViewer() {
-    if (mediaSource?.kind !== "slide") {
-      return;
-    }
-    setViewerOpen((current) => !current);
-  }
-
   async function rotateImage(angle: number) {
-    if (!file || !canRotateFile(file.file_type)) {
+    if (!file || !canRotate || rotating) {
       return;
     }
 
     setRotating(true);
-    setError(null);
+    setActionError(null);
+
     try {
-      const response = await fetch(`/media/rotate_file/${file.id}/${angle}`, {
+      const response = await apiFetch(`/media/rotate_file/${file.id}/${angle}`, {
         method: "POST",
         credentials: "include",
       });
@@ -195,269 +170,331 @@ export function ImageDetailPage() {
       if (!response.ok) {
         throw new Error(payload.message || "旋转失败");
       }
-      await loadData(String(file.id));
+      reloadCurrent();
     } catch (err) {
-      setError(err instanceof Error ? err.message : "旋转失败");
+      setActionError(err instanceof Error ? err.message : "旋转失败");
     } finally {
       setRotating(false);
     }
   }
 
+  function handleViewerFrameKeyDown(event: ReactKeyboardEvent<HTMLDivElement>) {
+    if (!supportsViewer) {
+      return;
+    }
+    if (event.key === "Enter" || event.key === " ") {
+      event.preventDefault();
+      setViewerOpen(true);
+    }
+  }
+
+  const viewer = viewerOpen ? (
+    <ImageDetailViewer
+      isMobile={isMobile}
+      file={file}
+      mediaSource={mediaSource}
+      loading={loading}
+      onClose={() => setViewerOpen(false)}
+      onPrev={file?.prev_id ? () => jumpToImage(file.prev_id) : undefined}
+      onNext={file?.next_id ? () => jumpToImage(file.next_id) : undefined}
+    />
+  ) : null;
+
   if (loading) {
-    return <div style={statusStyle(false)}>媒体加载中…</div>;
+    return (
+      <>
+        <StatusScreen message="媒体加载中…" />
+        {viewer}
+      </>
+    );
   }
 
   if (error || !file) {
-    return <div style={statusStyle(true)}>{error || "媒体不存在"}</div>;
+    return (
+      <>
+        <StatusScreen message={error || "媒体不存在"} isError />
+        {viewer}
+      </>
+    );
   }
 
-  const isVideo = isVideoFile(file.file_type);
-  const canRotate = canRotateFile(file.file_type);
-  const supportsViewer = mediaSource?.kind === "slide";
-  const viewStatus = isVideo
-    ? `视频模式，点击${viewerOpen ? "关闭" : "打开"}全屏查看，支持播放与原文件打开`
-    : supportsViewer
-      ? `图片查看模式，点击${viewerOpen ? "关闭" : "打开"}全屏查看`
-      : "当前文件建议打开原文件查看";
-
   return (
-    <div style={pageStyle}>
-      <div style={pageGlowStyle} />
-      <div style={shellStyle}>
-        <header style={toolbarStyle(isMobile)}>
-          <div style={toolbarGroupStyle(isMobile)}>
-            <button type="button" style={ghostButtonStyle} onClick={goBack}>
-              返回活动
-            </button>
-            <button type="button" style={ghostButtonStyle} disabled={!file.prev_id} onClick={() => jumpToImage(file.prev_id)}>
-              上一张
-            </button>
-            <button type="button" style={ghostButtonStyle} disabled={!file.next_id} onClick={() => jumpToImage(file.next_id)}>
-              下一张
-            </button>
-          </div>
-          <div style={toolbarGroupStyle(isMobile)}>
-            {!isVideo ? (
-              <>
-                <button type="button" style={ghostButtonStyle} disabled={rotating || !canRotate} onClick={() => void rotateImage(-90)}>
-                  左转
-                </button>
-                <button type="button" style={ghostButtonStyle} disabled={rotating || !canRotate} onClick={() => void rotateImage(90)}>
-                  {rotating ? "旋转中…" : "右转"}
-                </button>
-              </>
-            ) : null}
-            <button type="button" style={primaryButtonStyle} onClick={openOriginal}>
-              打开原图
-            </button>
-          </div>
-        </header>
-
-        <main style={contentStyle(isMobile)}>
-          <section style={viewerPanelStyle}>
-            <div style={viewerHeaderStyle}>
-              <div style={eyebrowStyle}>Media Viewer</div>
-              <h1 style={viewerTitleStyle}>{event?.event_name || file.file_name || `文件 #${file.id}`}</h1>
-              <div style={viewerMetaStyle}>
-                <span>ID {file.id}</span>
-                <span>{String(file.file_type || "-").toUpperCase()}</span>
-                <span>{formatDate(file.created_at)}</span>
-              </div>
+      <>
+        <div style={pageStyle}>
+          <div style={pageGlowStyle} />
+          <div style={shellStyle(isMobile)}>
+          <header style={toolbarStyle(isMobile)}>
+            <div style={toolbarGroupStyle(isMobile)}>
+              <button type="button" style={ghostButtonStyle(isMobile)} onClick={goBack}>
+                返回活动
+              </button>
+              <button type="button" style={ghostButtonStyle(isMobile)} disabled={!file.prev_id} onClick={() => jumpToImage(file.prev_id)}>
+                上一张
+              </button>
+              <button type="button" style={ghostButtonStyle(isMobile)} disabled={!file.next_id} onClick={() => jumpToImage(file.next_id)}>
+                下一张
+              </button>
             </div>
+            <div style={toolbarGroupStyle(isMobile)}>
+              {!isVideo ? (
+                <>
+                  <button type="button" style={ghostButtonStyle(isMobile)} disabled={!canRotate || rotating || loading} onClick={() => void rotateImage(-90)}>
+                    左转
+                  </button>
+                  <button type="button" style={ghostButtonStyle(isMobile)} disabled={!canRotate || rotating || loading} onClick={() => void rotateImage(90)}>
+                    {rotating ? "旋转中…" : "右转"}
+                  </button>
+                </>
+              ) : null}
+              {supportsViewer ? (
+                <button type="button" style={ghostButtonStyle(isMobile)} onClick={() => setViewerOpen((current) => !current)}>
+                  {viewerActionLabel}
+                </button>
+              ) : null}
+              <button type="button" style={primaryButtonStyle(isMobile)} onClick={openOriginal} disabled={!canOpenOriginal}>
+                {openOriginalLabel}
+              </button>
+            </div>
+          </header>
 
-            <div style={viewerFrameStyle(isMobile, supportsViewer)} onClick={toggleViewer}>
-              {mediaSource?.kind === "slide" ? (
-                <div style={previewStageStyle}>
-                  {mediaSource.slide.type === "video" ? (
-                    <div onClick={(event) => event.stopPropagation()}>
-                      <CacheMediaPlayer
-                        fileId={mediaSource.fileId}
-                        fileType={mediaSource.fileType}
-                        variant="base"
-                        style={previewVideoStyle}
-                        videoAutoPlay={false}
-                        videoMuted={false}
-                        videoLoop={false}
-                        videoControls
-                      />
-                    </div>
-                  ) : (
-                    <img src={mediaSource.slide.src} alt={mediaSource.slide.alt || file.file_name || ""} style={previewImageStyle} />
-                  )}
+          {actionError ? <div style={inlineErrorStyle}>{actionError}</div> : null}
+
+          <main style={contentStyle(isMobile)}>
+            <section style={viewerPanelStyle(isMobile)}>
+              <div style={viewerHeaderStyle}>
+                <div style={eyebrowStyle}>Media Viewer</div>
+                <h1 style={viewerTitleStyle(isMobile)}>{event?.event_name || file.file_name || `文件 #${file.id}`}</h1>
+                <div style={viewerMetaStyle(isMobile)}>
+                  <span>ID {file.id}</span>
+                  <span>{String(file.file_type || "-").toUpperCase()}</span>
+                  <span>{formatDate(file.created_at)}</span>
                 </div>
-              ) : (
-                <div style={unsupportedStateStyle}>
-                  <div style={unsupportedTitleStyle}>当前浏览器不支持直接预览此文件</div>
-                  <div style={unsupportedBodyStyle}>{mediaSource?.reason || "请直接打开原文件查看。"}</div>
-                </div>
-              )}
-            </div>
-          </section>
-
-          <aside style={infoPanelStyle}>
-            <div style={infoCardStyle(isMobile)}>
-              <div style={infoLabelStyle}>活动</div>
-              <div style={infoValueStyle}>{event?.event_name || "-"}</div>
-            </div>
-            <div style={infoCardStyle(isMobile)}>
-              <div style={infoLabelStyle}>文件名</div>
-              <div style={infoValueStyle}>{file.file_name || "-"}</div>
-            </div>
-            <div style={infoCardStyle(isMobile)}>
-              <div style={infoLabelStyle}>上传者</div>
-              <div style={infoValueStyle}>{file.user_display_name || "-"}</div>
-            </div>
-            <div style={infoCardStyle(isMobile)}>
-              <div style={infoLabelStyle}>拍摄/上传时间</div>
-              <div style={infoValueStyle}>{formatDate(file.created_at)}</div>
-            </div>
-            <div style={infoCardStyle(isMobile)}>
-              <div style={infoLabelStyle}>查看状态</div>
-              <div style={infoValueStyle}>{viewStatus}</div>
-            </div>
-            <div style={infoCardStyle(isMobile)}>
-              <div style={infoLabelStyle}>导航</div>
-              <div style={navStackStyle}>
-                <button
-                  type="button"
-                  style={secondaryActionStyle}
-                  disabled={!file.prev_id}
-                  onClick={() => jumpToImage(file.prev_id)}
-                >
-                  查看上一张
-                </button>
-                <button
-                  type="button"
-                  style={secondaryActionStyle}
-                  disabled={!file.next_id}
-                  onClick={() => jumpToImage(file.next_id)}
-                >
-                  查看下一张
-                </button>
               </div>
-            </div>
-          </aside>
-        </main>
+
+              <div
+                style={viewerFrameStyle(isMobile, supportsViewer)}
+                onClick={supportsViewer ? () => setViewerOpen(true) : undefined}
+                onKeyDown={handleViewerFrameKeyDown}
+                role={supportsViewer ? "button" : undefined}
+                tabIndex={supportsViewer ? 0 : undefined}
+                aria-label={supportsViewer ? "打开全屏媒体查看器" : undefined}
+              >
+                <InlineMediaPreview isMobile={isMobile} file={file} mediaSource={mediaSource} />
+              </div>
+            </section>
+
+            <aside style={infoPanelStyle(isMobile)}>
+              <InfoCard isMobile={isMobile} label="活动">{event?.event_name || "-"}</InfoCard>
+              <InfoCard isMobile={isMobile} label="文件名">{file.file_name || "-"}</InfoCard>
+              <InfoCard isMobile={isMobile} label="上传者">{file.user_display_name || "-"}</InfoCard>
+              <InfoCard isMobile={isMobile} label="拍摄/上传时间">{formatDate(file.created_at)}</InfoCard>
+              <InfoCard isMobile={isMobile} label="查看状态">{viewStatus}</InfoCard>
+              <InfoCard isMobile={isMobile} label="导航" fullWidth>
+                <div style={navStackStyle}>
+                  <button
+                    type="button"
+                    style={secondaryActionStyle(isMobile)}
+                    disabled={!file.prev_id}
+                    onClick={() => jumpToImage(file.prev_id)}
+                  >
+                    查看上一张
+                  </button>
+                  <button
+                    type="button"
+                    style={secondaryActionStyle(isMobile)}
+                    disabled={!file.next_id}
+                    onClick={() => jumpToImage(file.next_id)}
+                  >
+                    查看下一张
+                  </button>
+                </div>
+              </InfoCard>
+            </aside>
+          </main>
+        </div>
       </div>
+      {viewer}
+    </>
+  );
+}
+
+function useImageDetail(imageId?: string) {
+  const [state, setState] = useState<ImageDetailState>(INITIAL_STATE);
+  const [reloadTick, setReloadTick] = useState(0);
+  const requestIdRef = useRef(0);
+
+  useEffect(() => {
+    if (!imageId) {
+      setState({
+        ...INITIAL_STATE,
+        loading: false,
+        error: "缺少 image_id",
+      });
+      return;
+    }
+
+    let active = true;
+    const requestId = requestIdRef.current + 1;
+    requestIdRef.current = requestId;
+
+    setState((current) => ({
+      ...current,
+      loading: true,
+      error: null,
+    }));
+
+    void (async () => {
+      try {
+        const detail = await fetchFileDetail(imageId);
+        const nextMediaSource = buildMediaSource(detail.file);
+
+        if (!active || requestId !== requestIdRef.current) {
+          return;
+        }
+
+        setState({
+          file: detail.file,
+          event: detail.event,
+          mediaSource: nextMediaSource,
+          loading: false,
+          error: null,
+        });
+
+        if (nextMediaSource.kind === "unsupported") {
+          return;
+        }
+
+        void resolveOriginalUrl(detail.file.id)
+          .then((originalUrl) => {
+            if (!active || requestId !== requestIdRef.current || !originalUrl) {
+              return;
+            }
+
+            setState((current) => {
+              if (current.file?.id !== detail.file.id || !current.mediaSource || current.mediaSource.kind === "unsupported") {
+                return current;
+              }
+              return {
+                ...current,
+                mediaSource: {
+                  ...current.mediaSource,
+                  originalUrl,
+                },
+              };
+            });
+          })
+          .catch(() => {});
+      } catch (err) {
+        if (!active || requestId !== requestIdRef.current) {
+          return;
+        }
+
+        setState({
+          file: null,
+          event: null,
+          mediaSource: null,
+          loading: false,
+          error: err instanceof Error ? err.message : "读取媒体失败",
+        });
+      }
+    })();
+
+    return () => {
+      active = false;
+    };
+  }, [imageId, reloadTick]);
+
+  return {
+    ...state,
+    reloadCurrent: () => setReloadTick((current) => current + 1),
+  };
+}
+
+function InfoCard({
+  isMobile,
+  label,
+  children,
+  fullWidth = false,
+}: {
+  isMobile: boolean;
+  label: string;
+  children: ReactNode;
+  fullWidth?: boolean;
+}) {
+  return (
+    <div style={infoCardStyle(isMobile, fullWidth)}>
+      <div style={infoLabelStyle}>{label}</div>
+      <div style={infoValueStyle}>{children}</div>
     </div>
   );
 }
 
-async function resolveMediaSource(file: FileRecord): Promise<MediaSource> {
-  const response = await fetch(`/media/get_event_image/${file.id}/base`, { credentials: "include" });
-  const payload = (await response.json().catch(() => ({}))) as MediaInfoPayload;
-
-  if (!response.ok || payload.status !== "success" || !payload.ready || !payload.path) {
-    throw new Error("媒体文件尚未准备好");
-  }
-
-  const fileType = String(file.file_type || "").toLowerCase();
-  const mediaPath = `/media_file/${payload.path}`;
-
-  if (isVideoFile(fileType)) {
-    return {
-      kind: "slide",
-      originalUrl: mediaPath,
-      fileId: file.id,
-      fileType: file.file_type,
-      slide: {
-        type: "video",
-        width: 1920,
-        height: 1080,
-        autoPlay: true,
-        controls: true,
-        playsInline: true,
-        sources: [
-          {
-            src: mediaPath,
-            type: `video/${fileType === "m4v" ? "mp4" : fileType || "mp4"}`,
-          },
-        ],
-      },
-    };
-  }
-
-  if (!HEIC_EXTENSIONS.has(fileType) && !IMAGE_EXTENSIONS.has(fileType)) {
-    return {
-      kind: "unsupported",
-      originalUrl: mediaPath,
-      reason: `${String(file.file_type || "").toUpperCase()} 暂不支持浏览器内预览，请直接打开原文件。`,
-    };
-  }
-
-  const responseBlob = await fetch(mediaPath, { credentials: "include" });
-  if (!responseBlob.ok) {
-    throw new Error("图片读取失败");
-  }
-
-  let blob = await responseBlob.blob();
-  if (HEIC_EXTENSIONS.has(fileType)) {
-    let converted = await heic2any({
-      blob,
-      toType: "image/jpeg",
-      quality: 0.92,
-    });
-    if (Array.isArray(converted)) {
-      converted = converted[0];
-    }
-    blob = converted as Blob;
-  }
-
-  const objectUrl = URL.createObjectURL(blob);
-  const { width, height } = await readImageDimensions(objectUrl);
-
-  return {
-    kind: "slide",
-    originalUrl: mediaPath,
-    objectUrl,
-    slide: {
-      src: objectUrl,
-      alt: file.file_name || `file-${file.id}`,
-      width,
-      height,
-    },
-  };
+function StatusScreen({ message, isError = false }: { message: string; isError?: boolean }) {
+  return <div style={statusStyle(isError)}>{message}</div>;
 }
 
-function cleanupMediaSource(source: MediaSource | null) {
-  if (!source || source.kind !== "slide" || !source.objectUrl) {
-    return;
-  }
-  URL.revokeObjectURL(source.objectUrl);
-}
-
-type DetachedViewerState = {
-  file: FileRecord | null;
+function InlineMediaPreview({
+  isMobile,
+  file,
+  mediaSource,
+}: {
+  isMobile: boolean;
+  file: FileRecord;
   mediaSource: MediaSource | null;
-  loading: boolean;
-  onClose: () => void;
-  onPrev?: () => void;
-  onNext?: () => void;
-};
-
-let detachedViewerHost: HTMLDivElement | null = null;
-let detachedViewerRoot: Root | null = null;
-
-function renderDetachedViewer(state: DetachedViewerState | null) {
-  if (!state) {
-    detachedViewerRoot?.unmount();
-    detachedViewerHost?.remove();
-    detachedViewerRoot = null;
-    detachedViewerHost = null;
-    return;
+}) {
+  if (!mediaSource) {
+    return <div style={unsupportedStateStyle}>媒体尚未准备好</div>;
   }
 
-  if (!detachedViewerHost) {
-    detachedViewerHost = document.createElement("div");
-    detachedViewerHost.dataset.xinyaDetachedViewer = "true";
-    document.body.appendChild(detachedViewerHost);
-    detachedViewerRoot = createRoot(detachedViewerHost);
+  if (mediaSource.kind === "unsupported") {
+    return (
+      <div style={unsupportedStateStyle}>
+        <div style={unsupportedTitleStyle}>当前浏览器不支持直接预览此文件</div>
+        <div style={unsupportedBodyStyle}>{mediaSource.reason}</div>
+      </div>
+    );
   }
 
-  detachedViewerRoot?.render(<DetachedMediaViewer {...state} />);
+  if (mediaSource.kind === "video") {
+    return (
+      <div style={previewStageStyle(isMobile)} onClick={(event) => event.stopPropagation()}>
+        <CacheMediaPlayer
+          fileId={mediaSource.fileId}
+          fileType={mediaSource.fileType}
+          alt={mediaSource.alt}
+          variant="base"
+          style={previewVideoStyle}
+          videoAutoPlay={false}
+          videoMuted={false}
+          videoLoop={false}
+          videoControls
+        />
+      </div>
+    );
+  }
+
+  return (
+    <div style={previewStageStyle(isMobile)}>
+      <CacheMediaPlayer
+        fileId={mediaSource.fileId}
+        fileType={mediaSource.fileType}
+        alt={mediaSource.alt || file.file_name || ""}
+        variant="base"
+        style={previewImageStyle}
+      />
+    </div>
+  );
 }
 
-function DetachedMediaViewer({ file, mediaSource, loading, onClose, onPrev, onNext }: DetachedViewerState) {
+function ImageDetailViewer({ isMobile, file, mediaSource, loading, onClose, onPrev, onNext }: ViewerProps) {
+  useEffect(() => {
+    const previousOverflow = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    return () => {
+      document.body.style.overflow = previousOverflow;
+    };
+  }, []);
+
   useEffect(() => {
     const onKeyDown = (event: KeyboardEvent) => {
       if (event.key === "Escape") {
@@ -477,67 +514,134 @@ function DetachedMediaViewer({ file, mediaSource, loading, onClose, onPrev, onNe
     return () => window.removeEventListener("keydown", onKeyDown);
   }, [onClose, onPrev, onNext]);
 
-  return (
-    <div style={detachedOverlayStyle} onClick={onClose}>
+  return createPortal(
+    <div style={detachedOverlayStyle(isMobile)} onClick={onClose}>
       <div style={detachedShellStyle} onClick={(event) => event.stopPropagation()}>
-        <div style={detachedToolbarStyle}>
+        <div style={detachedToolbarStyle(isMobile)}>
           <div style={detachedMetaStyle}>
             <div style={detachedTitleStyle}>{file?.file_name || `文件 #${file?.id || "-"}`}</div>
             <div style={detachedHintStyle}>点击空白处或按 Esc 关闭</div>
           </div>
-          <div style={detachedActionRowStyle}>
-            <button type="button" style={detachedButtonStyle} disabled={!onPrev || loading} onClick={onPrev}>
+          <div style={detachedActionRowStyle(isMobile)}>
+            <button type="button" style={detachedButtonStyle(isMobile)} disabled={!onPrev || loading} onClick={onPrev}>
               上一张
             </button>
-            <button type="button" style={detachedButtonStyle} disabled={!onNext || loading} onClick={onNext}>
+            <button type="button" style={detachedButtonStyle(isMobile)} disabled={!onNext || loading} onClick={onNext}>
               下一张
             </button>
-            <button type="button" style={detachedPrimaryButtonStyle} onClick={onClose}>
+            <button type="button" style={detachedPrimaryButtonStyle(isMobile)} onClick={onClose}>
               关闭
             </button>
           </div>
         </div>
+
         <div style={detachedBodyStyle}>
           {loading ? (
             <div style={detachedStatusStyle}>媒体加载中…</div>
-          ) : mediaSource?.kind === "slide" ? (
-            <div style={detachedMediaStageStyle}>
-              {mediaSource.slide.type === "video" ? (
-                <CacheMediaPlayer
-                  fileId={mediaSource.fileId}
-                  fileType={mediaSource.fileType}
-                  variant="base"
-                  style={detachedVideoStyle}
-                  videoAutoPlay
-                  videoMuted={false}
-                  videoLoop={false}
-                  videoControls
-                />
-              ) : (
-                <img
-                  src={mediaSource.slide.src}
-                  alt={mediaSource.slide.alt || file?.file_name || ""}
-                  style={detachedImageStyle}
-                  onClick={(event) => event.stopPropagation()}
-                />
-              )}
+          ) : mediaSource?.kind === "unsupported" ? (
+            <div style={detachedStatusStyle}>{mediaSource.reason}</div>
+          ) : mediaSource?.kind === "video" ? (
+            <div style={detachedMediaStageStyle(isMobile)}>
+              <CacheMediaPlayer
+                fileId={mediaSource.fileId}
+                fileType={mediaSource.fileType}
+                alt={mediaSource.alt}
+                variant="base"
+                style={detachedVideoStyle(isMobile)}
+                videoAutoPlay
+                videoMuted={false}
+                videoLoop={false}
+                videoControls
+              />
+            </div>
+          ) : mediaSource?.kind === "image" ? (
+            <div style={detachedMediaStageStyle(isMobile)}>
+              <CacheMediaPlayer
+                fileId={mediaSource.fileId}
+                fileType={mediaSource.fileType}
+                alt={mediaSource.alt || file?.file_name || ""}
+                variant="base"
+                style={detachedImageStyle(isMobile)}
+              />
             </div>
           ) : (
-            <div style={detachedStatusStyle}>{mediaSource?.reason || "当前文件建议打开原文件查看"}</div>
+            <div style={detachedStatusStyle}>媒体不存在</div>
           )}
         </div>
       </div>
-    </div>
+    </div>,
+    document.body,
   );
 }
 
-function readImageDimensions(src: string) {
-  return new Promise<{ width: number; height: number }>((resolve, reject) => {
-    const image = new Image();
-    image.onload = () => resolve({ width: image.naturalWidth || 1, height: image.naturalHeight || 1 });
-    image.onerror = () => reject(new Error("图片解码失败"));
-    image.src = src;
-  });
+async function fetchFileDetail(imageId: string) {
+  const response = await apiFetch(`/api/api/get_file_data/${imageId}`, { credentials: "include" });
+  const payload = (await response.json().catch(() => ({}))) as FilePayload;
+
+  if (!response.ok || payload.status !== "success") {
+    throw new Error(payload.message || "读取媒体失败");
+  }
+
+  const file = payload.data?.file;
+  if (!file) {
+    throw new Error("文件不存在");
+  }
+
+  return {
+    file,
+    event: payload.data?.event || null,
+  };
+}
+
+function buildMediaSource(file: FileRecord): MediaSource {
+  const fileType = String(file.file_type || "").toLowerCase();
+
+  if (isVideoFile(fileType)) {
+    return {
+      kind: "video",
+      fileId: file.id,
+      fileType: file.file_type,
+      alt: file.file_name || `file-${file.id}`,
+    };
+  }
+
+  if (!HEIC_EXTENSIONS.has(fileType) && !IMAGE_EXTENSIONS.has(fileType)) {
+    return {
+      kind: "unsupported",
+      originalUrl: undefined,
+      reason: `${String(file.file_type || "").toUpperCase()} 暂不支持浏览器内预览，请直接打开原文件。`,
+    };
+  }
+
+  return {
+    kind: "image",
+    fileId: file.id,
+    fileType: file.file_type,
+    alt: file.file_name || `file-${file.id}`,
+  };
+}
+
+async function resolveOriginalUrl(fileId: number): Promise<string | undefined> {
+  const response = await apiFetch(`/media/get_event_image/${fileId}/base`, { credentials: "include" });
+  const payload = (await response.json().catch(() => ({}))) as MediaInfoPayload;
+  if (!response.ok || payload.status !== "success" || !payload.ready || !payload.path) {
+    return undefined;
+  }
+  return resolveMediaFileUrl(payload.path);
+}
+
+function resolveMediaFileUrl(path?: string) {
+  const normalized = String(path || "").trim();
+  if (!normalized) {
+    return undefined;
+  }
+  if (/^https?:\/\//i.test(normalized)) {
+    return normalized;
+  }
+  if (normalized.startsWith("/media_file/")) {
+    return `${API_BASE}${normalized}`;
+  }
+  return `${API_BASE}/media_file/${normalized.replace(/^\/+/, "")}`;
 }
 
 function isVideoFile(fileType?: string) {
@@ -552,16 +656,18 @@ function formatDate(value?: string) {
   if (!value) {
     return "-";
   }
+
   const date = new Date(value);
   if (Number.isNaN(date.getTime())) {
     return value;
   }
+
   return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}-${String(date.getDate()).padStart(2, "0")} ${String(date.getHours()).padStart(2, "0")}:${String(date.getMinutes()).padStart(2, "0")}`;
 }
 
 const pageStyle: CSSProperties = {
   minHeight: "calc(100vh - 60px)",
-  background: "linear-gradient(180deg, #f3efe6 0%, #f7f3eb 44%, #ece5d8 100%)",
+  background: "linear-gradient(180deg, var(--x-color-canvas) 0%, var(--x-color-panel-alt) 48%, var(--x-color-accent-soft) 100%)",
   position: "relative",
   overflow: "hidden",
 };
@@ -570,19 +676,21 @@ const pageGlowStyle: CSSProperties = {
   position: "absolute",
   inset: 0,
   background:
-    "radial-gradient(circle at 8% 12%, rgba(180, 114, 55, 0.18), transparent 26%), radial-gradient(circle at 88% 14%, rgba(32, 91, 120, 0.14), transparent 24%), radial-gradient(circle at 50% 100%, rgba(215, 166, 93, 0.14), transparent 28%)",
+    "radial-gradient(circle at 8% 12%, rgba(217, 119, 6, 0.12), transparent 26%), radial-gradient(circle at 88% 14%, rgba(29, 78, 216, 0.12), transparent 24%), radial-gradient(circle at 50% 100%, rgba(15, 118, 110, 0.14), transparent 28%)",
   pointerEvents: "none",
 };
 
-const shellStyle: CSSProperties = {
-  position: "relative",
-  zIndex: 1,
-  maxWidth: "1440px",
-  margin: "0 auto",
-  padding: "24px 16px 32px",
-  display: "grid",
-  gap: "18px",
-};
+function shellStyle(isMobile: boolean): CSSProperties {
+  return {
+    position: "relative",
+    zIndex: 1,
+    maxWidth: "1440px",
+    margin: "0 auto",
+    padding: isMobile ? "14px 10px 20px" : "24px 16px 32px",
+    display: "grid",
+    gap: isMobile ? "12px" : "18px",
+  };
+}
 
 function toolbarStyle(isMobile: boolean): CSSProperties {
   return {
@@ -593,16 +701,17 @@ function toolbarStyle(isMobile: boolean): CSSProperties {
     flexDirection: isMobile ? "column" : "row",
     padding: "14px",
     borderRadius: "22px",
-    background: "rgba(255,255,255,0.72)",
-    border: "1px solid rgba(112, 82, 45, 0.12)",
-    boxShadow: "0 18px 34px rgba(101, 77, 46, 0.12)",
+    background: "var(--x-color-panel-glass)",
+    border: "1px solid var(--x-color-line-soft)",
+    boxShadow: "0 18px 34px var(--x-color-shadow-soft)",
     backdropFilter: "blur(16px)",
   };
 }
 
 function toolbarGroupStyle(isMobile: boolean): CSSProperties {
   return {
-    display: "flex",
+    display: isMobile ? "grid" : "flex",
+    gridTemplateColumns: isMobile ? "repeat(2, minmax(0, 1fr))" : undefined,
     gap: "10px",
     flexWrap: "wrap",
     width: isMobile ? "100%" : undefined,
@@ -613,19 +722,31 @@ function contentStyle(isMobile: boolean): CSSProperties {
   return {
     display: "grid",
     gridTemplateColumns: isMobile ? "1fr" : "minmax(0, 1fr) 320px",
-    gap: "18px",
+    gap: isMobile ? "12px" : "18px",
     alignItems: "start",
   };
 }
 
-const viewerPanelStyle: CSSProperties = {
-  padding: "18px",
-  borderRadius: "30px",
-  background: "rgba(255,255,255,0.78)",
-  border: "1px solid rgba(112, 82, 45, 0.12)",
-  boxShadow: "0 24px 50px rgba(71, 57, 39, 0.12)",
-  display: "grid",
-  gap: "16px",
+function viewerPanelStyle(isMobile: boolean): CSSProperties {
+  return {
+    padding: isMobile ? "12px" : "18px",
+    borderRadius: isMobile ? "22px" : "30px",
+    background: "var(--x-color-panel-glass)",
+    border: "1px solid var(--x-color-line-soft)",
+    boxShadow: "0 24px 50px var(--x-color-shadow-soft)",
+    display: "grid",
+    gap: isMobile ? "12px" : "16px",
+  };
+}
+
+const inlineErrorStyle: CSSProperties = {
+  padding: "12px 14px",
+  borderRadius: "18px",
+  background: "var(--x-color-danger-soft)",
+  border: "1px solid var(--x-color-danger-border)",
+  color: "var(--x-color-danger)",
+  fontSize: "14px",
+  fontWeight: 700,
 };
 
 const viewerHeaderStyle: CSSProperties = {
@@ -638,41 +759,54 @@ const eyebrowStyle: CSSProperties = {
   fontWeight: 800,
   letterSpacing: "0.18em",
   textTransform: "uppercase",
-  color: "#8f6644",
+  color: "var(--x-color-warning)",
 };
 
-const viewerTitleStyle: CSSProperties = {
-  margin: 0,
-  fontSize: "clamp(24px, 4vw, 42px)",
-  lineHeight: 1.02,
-  color: "#1f2937",
-};
+function viewerTitleStyle(isMobile: boolean): CSSProperties {
+  return {
+    margin: 0,
+    fontSize: isMobile ? "clamp(22px, 7vw, 30px)" : "clamp(24px, 4vw, 42px)",
+    lineHeight: 1.02,
+    color: "var(--x-color-ink)",
+  };
+}
 
-const viewerMetaStyle: CSSProperties = {
-  display: "flex",
-  gap: "8px",
-  flexWrap: "wrap",
-  color: "#6b7280",
-  fontSize: "13px",
-};
+function viewerMetaStyle(isMobile: boolean): CSSProperties {
+  return {
+    display: "flex",
+    gap: isMobile ? "6px" : "8px",
+    flexWrap: "wrap",
+    flexDirection: isMobile ? "column" : "row",
+    color: "var(--x-color-ink-muted)",
+    fontSize: "13px",
+  };
+}
 
 function viewerFrameStyle(isMobile: boolean, interactive: boolean): CSSProperties {
   return {
     minHeight: isMobile ? "min(54vh, 520px)" : "min(72vh, 760px)",
     borderRadius: isMobile ? "22px" : "28px",
     overflow: "hidden",
-    background: "linear-gradient(145deg, #1e293b, #0f172a 58%, #111827)",
-    padding: "clamp(12px, 2vw, 22px)",
+    background: "linear-gradient(145deg, var(--x-color-nav-start), #0f172a 58%, #111827)",
     boxShadow: "inset 0 0 0 1px rgba(255,255,255,0.05)",
-    cursor: interactive ? "pointer" : "default",
+    cursor: interactive ? "zoom-in" : "default",
+    border: "none",
+    width: "100%",
+    textAlign: "left",
   };
 }
 
-const previewStageStyle: CSSProperties = {
-  minHeight: "min(72vh, 716px)",
-  display: "grid",
-  placeItems: "center",
-};
+function previewStageStyle(isMobile: boolean): CSSProperties {
+  return {
+    minHeight: isMobile ? "min(48vh, 420px)" : "min(72vh, 716px)",
+    display: "grid",
+    placeItems: "center",
+    width: "100%",
+    height: "100%",
+    padding: isMobile ? "10px" : "clamp(12px, 2vw, 22px)",
+    boxSizing: "border-box",
+  };
+}
 
 const previewImageStyle: CSSProperties = {
   display: "block",
@@ -718,20 +852,24 @@ const unsupportedBodyStyle: CSSProperties = {
   color: "rgba(226, 232, 240, 0.82)",
 };
 
-const infoPanelStyle: CSSProperties = {
-  display: "grid",
-  gap: "14px",
-};
-
-function infoCardStyle(isMobile: boolean): CSSProperties {
+function infoPanelStyle(isMobile: boolean): CSSProperties {
   return {
-    padding: isMobile ? "14px" : "16px",
-    borderRadius: "22px",
-    background: "rgba(255,255,255,0.82)",
-    border: "1px solid rgba(112, 82, 45, 0.12)",
-    boxShadow: "0 16px 30px rgba(71, 57, 39, 0.08)",
+    display: "grid",
+    gap: isMobile ? "10px" : "14px",
+    gridTemplateColumns: isMobile ? "repeat(2, minmax(0, 1fr))" : "1fr",
+  };
+}
+
+function infoCardStyle(isMobile: boolean, fullWidth: boolean): CSSProperties {
+  return {
+    padding: isMobile ? "12px" : "16px",
+    borderRadius: isMobile ? "18px" : "22px",
+    background: "var(--x-color-panel-strong)",
+    border: "1px solid var(--x-color-line-soft)",
+    boxShadow: "0 16px 30px var(--x-color-shadow-soft)",
     display: "grid",
     gap: "8px",
+    gridColumn: isMobile && fullWidth ? "1 / -1" : undefined,
   };
 }
 
@@ -740,13 +878,13 @@ const infoLabelStyle: CSSProperties = {
   fontWeight: 800,
   letterSpacing: "0.16em",
   textTransform: "uppercase",
-  color: "#9a7152",
+  color: "var(--x-color-warning)",
 };
 
 const infoValueStyle: CSSProperties = {
   fontSize: "15px",
   lineHeight: 1.55,
-  color: "#1f2937",
+  color: "var(--x-color-ink)",
   wordBreak: "break-word",
 };
 
@@ -755,43 +893,53 @@ const navStackStyle: CSSProperties = {
   gap: "10px",
 };
 
-const ghostButtonStyle: CSSProperties = {
-  padding: "11px 15px",
-  borderRadius: "999px",
-  border: "1px solid rgba(112, 82, 45, 0.14)",
-  background: "rgba(255,255,255,0.82)",
-  color: "#1f2937",
-  cursor: "pointer",
-  fontWeight: 700,
-};
+function ghostButtonStyle(isMobile: boolean): CSSProperties {
+  return {
+    padding: isMobile ? "10px 12px" : "11px 15px",
+    borderRadius: isMobile ? "16px" : "999px",
+    border: "1px solid var(--x-color-line)",
+    background: "var(--x-color-panel-strongest)",
+    color: "var(--x-color-ink)",
+    cursor: "pointer",
+    fontWeight: 700,
+    width: isMobile ? "100%" : undefined,
+  };
+}
 
-const primaryButtonStyle: CSSProperties = {
-  ...ghostButtonStyle,
-  background: "linear-gradient(135deg, #a16207, #c08427)",
-  color: "white",
-  border: "none",
-};
+function primaryButtonStyle(isMobile: boolean): CSSProperties {
+  return {
+    ...ghostButtonStyle(isMobile),
+    background: "linear-gradient(135deg, var(--x-color-warning), var(--x-color-danger))",
+    color: "white",
+    border: "none",
+  };
+}
 
-const secondaryActionStyle: CSSProperties = {
-  padding: "12px 14px",
-  borderRadius: "16px",
-  border: "1px solid rgba(112, 82, 45, 0.12)",
-  background: "#fffdf9",
-  color: "#1f2937",
-  cursor: "pointer",
-  fontWeight: 700,
-  textAlign: "left",
-};
+function secondaryActionStyle(isMobile: boolean): CSSProperties {
+  return {
+    padding: isMobile ? "11px 12px" : "12px 14px",
+    borderRadius: "16px",
+    border: "1px solid var(--x-color-line-soft)",
+    background: "var(--x-color-panel)",
+    color: "var(--x-color-ink)",
+    cursor: "pointer",
+    fontWeight: 700,
+    textAlign: "left",
+    width: isMobile ? "100%" : undefined,
+  };
+}
 
-const detachedOverlayStyle: CSSProperties = {
-  position: "fixed",
-  inset: 0,
-  zIndex: 10050,
-  background: "rgba(6, 10, 18, 0.86)",
-  backdropFilter: "blur(10px)",
-  padding: "18px",
-  boxSizing: "border-box",
-};
+function detachedOverlayStyle(isMobile: boolean): CSSProperties {
+  return {
+    position: "fixed",
+    inset: 0,
+    zIndex: 10050,
+    background: "rgba(6, 10, 18, 0.86)",
+    backdropFilter: "blur(10px)",
+    padding: isMobile ? "10px" : "18px",
+    boxSizing: "border-box",
+  };
+}
 
 const detachedShellStyle: CSSProperties = {
   width: "100%",
@@ -801,17 +949,20 @@ const detachedShellStyle: CSSProperties = {
   gap: "12px",
 };
 
-const detachedToolbarStyle: CSSProperties = {
-  display: "flex",
-  justifyContent: "space-between",
-  alignItems: "center",
-  gap: "12px",
-  flexWrap: "wrap",
-  padding: "14px 16px",
-  borderRadius: "20px",
-  background: "rgba(15, 23, 42, 0.72)",
-  border: "1px solid rgba(255,255,255,0.08)",
-};
+function detachedToolbarStyle(isMobile: boolean): CSSProperties {
+  return {
+    display: "flex",
+    justifyContent: "space-between",
+    alignItems: isMobile ? "stretch" : "center",
+    flexDirection: isMobile ? "column" : "row",
+    gap: "12px",
+    flexWrap: "wrap",
+    padding: isMobile ? "12px" : "14px 16px",
+    borderRadius: "20px",
+    background: "rgba(15, 23, 42, 0.72)",
+    border: "1px solid rgba(255,255,255,0.08)",
+  };
+}
 
 const detachedMetaStyle: CSSProperties = {
   display: "grid",
@@ -830,27 +981,36 @@ const detachedHintStyle: CSSProperties = {
   fontSize: "13px",
 };
 
-const detachedActionRowStyle: CSSProperties = {
-  display: "flex",
-  gap: "10px",
-  flexWrap: "wrap",
-};
+function detachedActionRowStyle(isMobile: boolean): CSSProperties {
+  return {
+    display: "grid",
+    gridTemplateColumns: isMobile ? "repeat(3, minmax(0, 1fr))" : undefined,
+    gap: "10px",
+    flexWrap: "wrap",
+    width: isMobile ? "100%" : undefined,
+  };
+}
 
-const detachedButtonStyle: CSSProperties = {
-  padding: "10px 14px",
-  borderRadius: "999px",
-  border: "1px solid rgba(255,255,255,0.14)",
-  background: "rgba(255,255,255,0.08)",
-  color: "#f8fafc",
-  cursor: "pointer",
-  fontWeight: 700,
-};
+function detachedButtonStyle(isMobile: boolean): CSSProperties {
+  return {
+    padding: "10px 14px",
+    borderRadius: isMobile ? "16px" : "999px",
+    border: "1px solid rgba(255,255,255,0.14)",
+    background: "rgba(255,255,255,0.08)",
+    color: "#f8fafc",
+    cursor: "pointer",
+    fontWeight: 700,
+    width: isMobile ? "100%" : undefined,
+  };
+}
 
-const detachedPrimaryButtonStyle: CSSProperties = {
-  ...detachedButtonStyle,
-  background: "linear-gradient(135deg, #a16207, #c08427)",
-  border: "none",
-};
+function detachedPrimaryButtonStyle(isMobile: boolean): CSSProperties {
+  return {
+    ...detachedButtonStyle(isMobile),
+    background: "linear-gradient(135deg, var(--x-color-warning), var(--x-color-danger))",
+    border: "none",
+  };
+}
 
 const detachedBodyStyle: CSSProperties = {
   minHeight: 0,
@@ -871,44 +1031,50 @@ const detachedStatusStyle: CSSProperties = {
   fontSize: "15px",
 };
 
-const detachedMediaStageStyle: CSSProperties = {
-  width: "100%",
-  height: "100%",
-  display: "grid",
-  placeItems: "center",
-  padding: "24px",
-  boxSizing: "border-box",
-};
+function detachedMediaStageStyle(isMobile: boolean): CSSProperties {
+  return {
+    width: "100%",
+    height: "100%",
+    display: "grid",
+    placeItems: "center",
+    padding: isMobile ? "12px" : "24px",
+    boxSizing: "border-box",
+  };
+}
 
-const detachedImageStyle: CSSProperties = {
-  display: "block",
-  maxWidth: "calc(100vw - 84px)",
-  maxHeight: "calc(100vh - 156px)",
-  width: "auto",
-  height: "auto",
-  objectFit: "contain",
-  objectPosition: "center center",
-};
+function detachedImageStyle(isMobile: boolean): CSSProperties {
+  return {
+    display: "block",
+    maxWidth: isMobile ? "calc(100vw - 32px)" : "calc(100vw - 84px)",
+    maxHeight: isMobile ? "calc(100vh - 132px)" : "calc(100vh - 156px)",
+    width: "auto",
+    height: "auto",
+    objectFit: "contain",
+    objectPosition: "center center",
+  };
+}
 
-const detachedVideoStyle: CSSProperties = {
-  display: "block",
-  maxWidth: "calc(100vw - 84px)",
-  maxHeight: "calc(100vh - 156px)",
-  width: "auto",
-  height: "auto",
-  objectFit: "contain",
-  objectPosition: "center center",
-  background: "#000",
-  borderRadius: "18px",
-};
+function detachedVideoStyle(isMobile: boolean): CSSProperties {
+  return {
+    display: "block",
+    maxWidth: isMobile ? "calc(100vw - 32px)" : "calc(100vw - 84px)",
+    maxHeight: isMobile ? "calc(100vh - 132px)" : "calc(100vh - 156px)",
+    width: "auto",
+    height: "auto",
+    objectFit: "contain",
+    objectPosition: "center center",
+    background: "#000",
+    borderRadius: isMobile ? "14px" : "18px",
+  };
+}
 
 function statusStyle(isError: boolean): CSSProperties {
   return {
     minHeight: "calc(100vh - 60px)",
     display: "grid",
     placeItems: "center",
-    background: "linear-gradient(180deg, #f3efe6 0%, #f7f3eb 44%, #ece5d8 100%)",
-    color: isError ? "#b91c1c" : "#1f2937",
+    background: "linear-gradient(180deg, var(--x-color-canvas) 0%, var(--x-color-panel-alt) 48%, var(--x-color-accent-soft) 100%)",
+    color: isError ? "var(--x-color-danger)" : "var(--x-color-ink)",
     padding: "24px",
   };
 }

@@ -3,7 +3,7 @@ import { createHashRouter, Navigate, useParams } from "react-router-dom";
 import { CRMPage } from "../CRM/react/CRMPage";
 import { HomeAlbumPage } from "../album/react/HomeAlbumPage";
 import { EventDetailPage } from "../album/react/EventDetailPage";
-import { ImageDetailPage } from "../album/react/ImageDetailPage";
+import { ImageDetailPageRoute } from "../album/react/ImageDetailPage";
 import { InfoPage } from "../info/react/InfoPage";
 import { LampPage } from "../lamp/react/LampPage";
 import {
@@ -48,7 +48,7 @@ export const appRouter = createHashRouter([
       musicRoute,
       { path: "lamp-registration", element: <LampPage /> },
       { path: "event/:eventId", element: <EventDetailPage /> },
-      { path: "image/:imageId", element: <ImageDetailPage /> },
+      { path: "image/:imageId", element: <ImageDetailPageRoute /> },
       { path: "login", element: <LoginPage /> },
       { path: "not-found", element: <ErrorPage message="页面不存在" /> },
       { path: "*", element: <ErrorPage message="页面不存在" /> },
