@@ -1,7 +1,9 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import type { ChangeEvent, CSSProperties, FormEvent } from "react";
+import { useNavigate } from "react-router-dom";
 
 import { useUserState } from "../../app/UserState";
+import { CachedImage } from "../../components/CachedMedia";
 import { ensureDesignTokens } from "../../theme/designTokens";
 import { API_BASE } from "../../js/apiBase";
 import { fetchAppReleases, fetchMyFootprints, startMembershipRenewal, updateProfile, uploadProfileImage } from "./api";
@@ -183,6 +185,7 @@ function pickLatestFootprint(
 export function ProfilePage() {
   ensureDesignTokens();
 
+  const navigate = useNavigate();
   const { user, isAuthenticated, loadingUser, refreshUser, logout, openLogin, isMobile } = useUserState();
   const profileUser = (user as ProfileUser | null) ?? null;
 
@@ -300,7 +303,7 @@ export function ProfilePage() {
             <button
               type="button"
               style={ghostButtonStyle}
-              onClick={() => window.__xinyaNavigate?.("home")}
+              onClick={() => navigate("/")}
             >
               返回首页
             </button>
@@ -350,7 +353,7 @@ export function ProfilePage() {
     setError(null);
     try {
       await logout();
-      window.__xinyaNavigate?.("home", { replace: true });
+      navigate("/", { replace: true });
     } catch (err) {
       setError(err instanceof Error ? err.message : "退出失败");
     }
@@ -408,7 +411,13 @@ export function ProfilePage() {
             </div>
             <div style={heroAvatarPanelStyle(isMobile)}>
               <div style={avatarFrameStyle}>
-                <img src={avatarSrc} alt={profileUser.username} style={avatarStyle(isMobile)} />
+                <CachedImage
+                  src={avatarSrc}
+                  cacheKey={`profile-avatar:${profileUser.username}`}
+                  refreshKey={avatarVersion}
+                  alt={profileUser.username}
+                  style={avatarStyle(isMobile)}
+                />
               </div>
               <label style={avatarUploadLabelStyle(isMobile)}>
                 <input type="file" accept="image/*" onChange={handleAvatarChange} style={{ display: "none" }} />

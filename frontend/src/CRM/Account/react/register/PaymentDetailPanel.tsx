@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import type { ChangeEvent, CSSProperties } from "react";
 
+import { CachedImage } from "../../../../components/CachedMedia";
 import type { FormPayment } from "../../../form/react/types";
 import { designTokens } from "../../../../theme/designTokens";
 import { deleteRegisterPayment, replaceRegisterPaymentProof } from "./api";
@@ -160,7 +161,7 @@ export function PaymentDetailPanel({
               查看原图
             </a>
           </div>
-          <img src={proofUrl} alt={`payment-proof-${payment.id}`} style={proofImageStyle} />
+          <CachedImage src={proofUrl} cacheKey={`register-payment-proof:${payment.id}`} refreshKey={proofVersion || proofBaseUrl} alt={`payment-proof-${payment.id}`} style={proofImageStyle} />
         </div>
       ) : (
         <div style={emptyStyle}>这个 payment 没有上传付款截图。</div>

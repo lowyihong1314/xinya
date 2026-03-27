@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import type { CSSProperties } from "react";
 import heic2any from "heic2any";
 
+import { CachedImage } from "../../../components/CachedMedia";
 import { uploadFeeImage } from "./api";
 
 export type FeeDraft = {
@@ -334,7 +335,7 @@ function FeeInlineEditor({
           </div>
           {draft.image_path ? (
             <a href={draft.image_path} target="_blank" rel="noreferrer" style={feeImagePreviewStyle}>
-              <img src={draft.image_path} alt={imageLabel} style={feeImageStyle} />
+              <CachedImage src={draft.image_path} cacheKey={draft.id != null ? `fee-image:${draft.id}` : undefined} alt={imageLabel} style={feeImageStyle} />
             </a>
           ) : (
             <div style={feeImageEmptyStyle}>未上传图片</div>

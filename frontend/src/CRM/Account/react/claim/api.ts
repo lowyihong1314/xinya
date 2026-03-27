@@ -1,4 +1,5 @@
 import type {
+  ClaimRecord,
   ClaimListResponse,
   PaymentVoucherPublicPayload,
   PaymentVoucherSharePayload,
@@ -40,6 +41,20 @@ export async function decideClaim(
     body: JSON.stringify(payload),
   });
   return parseJson<Record<string, unknown>>(response);
+}
+
+export async function updateClaimEvent(requestId: number, eventId: number | null) {
+  const response = await apiFetch(`/api/account/claim/${requestId}/event`, {
+    method: "PUT",
+    headers: { "Content-Type": "application/json" },
+    credentials: "include",
+    body: JSON.stringify({ event_id: eventId }),
+  });
+  const payload = await parseJson<{ data?: ClaimRecord }>(response);
+  if (!payload.data) {
+    throw new Error("申请数据缺失");
+  }
+  return payload.data;
 }
 
 export async function fetchPaymentVoucherShare(requestId: number) {

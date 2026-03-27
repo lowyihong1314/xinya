@@ -3,6 +3,7 @@ import type { CSSProperties } from "react";
 
 import { CacheMediaPlayer } from "../../components/CacheMediaPlayer";
 import type { AlbumFile, EventDetailRecord } from "../../event/shared/types";
+import { apiFetch } from "../../js/apiFetch";
 import { PhotoGridBatchActions } from "./PhotoGridBatchActions";
 import type { MediaNotification } from "./mediaRealtime";
 
@@ -167,7 +168,7 @@ export function PhotoGrid({
       const formData = new FormData();
       formData.append("file_ids", JSON.stringify(selectedIds));
       formData.append("download_type", downloadType);
-      const response = await fetch("/media/download_files", {
+      const response = await apiFetch("/media/download_files", {
         method: "POST",
         credentials: "include",
         body: formData,
@@ -203,7 +204,7 @@ export function PhotoGrid({
 
     setBusy(true);
     try {
-      const response = await fetch("/media/delete_files", {
+      const response = await apiFetch("/media/delete_files", {
         method: "DELETE",
         credentials: "include",
         headers: { "Content-Type": "application/json" },

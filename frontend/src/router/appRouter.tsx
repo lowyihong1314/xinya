@@ -1,6 +1,6 @@
 import { createHashRouter, Navigate, useParams } from "react-router-dom";
 
-import { CRMPage } from "../CRM/react/CRMPage";
+import { crmRoute } from "../CRM/react/routes";
 import { HomeAlbumPage } from "../album/react/HomeAlbumPage";
 import { EventDetailPage } from "../album/react/EventDetailPage";
 import { ImageDetailPageRoute } from "../album/react/ImageDetailPage";
@@ -43,7 +43,7 @@ export const appRouter = createHashRouter([
     children: [
       { index: true, element: <HomeAlbumPage /> },
       { path: "info", element: <InfoPage /> },
-      { path: "crm", element: <CRMPage /> },
+      crmRoute,
       { path: "profile", element: <ProfilePage /> },
       musicRoute,
       { path: "lamp-registration", element: <LampPage /> },

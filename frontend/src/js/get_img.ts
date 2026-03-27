@@ -1,6 +1,8 @@
 import heic2any from "heic2any";
+
 import { API_BASE } from "./apiBase";
 import { apiFetch } from "./apiFetch";
+import { invalidateNativeMediaCache, resolveNativeCachedUrl } from "./nativeMediaCache";
 
 type ImageLookupResponse = {
   status?: string;
@@ -16,10 +18,15 @@ export type SmartMediaAsset = {
 
 export type SmartMediaVariant = "auto" | "cache" | "base";
 
+type ConvertedHeicEntry = {
+  objectUrl: string;
+  cacheTag: string;
+};
+
 const FALLBACK_IMAGE_URL = `${API_BASE}/static/images/file_icon/broken-image.png`;
 const smartImageCache = new Map<string, Promise<string>>();
 const smartMediaCache = new Map<string, Promise<SmartMediaAsset>>();
-const convertedHeicUrls = new Map<string, string>();
+const convertedHeicUrls = new Map<string, ConvertedHeicEntry>();
 const MEDIA_INFO_STORAGE_PREFIX = "xinya:media-info:v3:";
 
 async function fetchImageInfo(id: number | string, variant: string): Promise<ImageLookupResponse | null> {
@@ -60,21 +67,58 @@ function normalizeFileType(fileType?: string | null) {
   return String(fileType || "").trim().toLowerCase();
 }
 
-function isPreferredImageType(fileType?: string | null) {
-  return ["png", "jpg", "jpeg", "heic", "heif"].includes(normalizeFileType(fileType));
-}
-
 function isBaseVideoType(fileType?: string | null) {
   return ["mp4", "mov"].includes(normalizeFileType(fileType));
 }
 
-async function convertHeicUrlToObjectUrl(url: string) {
-  const cached = convertedHeicUrls.get(url);
+function scheduleObjectUrlRevoke(url: string) {
+  window.setTimeout(() => {
+    try {
+      URL.revokeObjectURL(url);
+    } catch {
+      // ignore revoke failures
+    }
+  }, 30_000);
+}
+
+function clearStoredMediaInfo(id?: number | string) {
+  try {
+    const prefix = id === undefined ? MEDIA_INFO_STORAGE_PREFIX : `${MEDIA_INFO_STORAGE_PREFIX}${id}:`;
+    const keysToDelete: string[] = [];
+    for (let index = 0; index < window.localStorage.length; index += 1) {
+      const key = window.localStorage.key(index);
+      if (key?.startsWith(prefix)) {
+        keysToDelete.push(key);
+      }
+    }
+    keysToDelete.forEach((key) => {
+      window.localStorage.removeItem(key);
+    });
+  } catch {
+    // ignore localStorage failures
+  }
+}
+
+function clearConvertedHeicUrls(prefix?: string) {
+  for (const [key, entry] of convertedHeicUrls.entries()) {
+    if (prefix && !entry.cacheTag.startsWith(prefix)) {
+      continue;
+    }
+    convertedHeicUrls.delete(key);
+    scheduleObjectUrlRevoke(entry.objectUrl);
+  }
+}
+
+async function convertHeicUrlToObjectUrl(url: string, cacheTag: string) {
+  const cached = convertedHeicUrls.get(cacheTag);
   if (cached) {
-    return cached;
+    return cached.objectUrl;
   }
 
-  const response = await apiFetch(url, { credentials: "include" });
+  const localUrl = await resolveNativeCachedUrl(url, {
+    cacheKey: cacheTag,
+  });
+  const response = await fetch(localUrl);
   if (!response.ok) {
     throw new Error("HEIC 文件读取失败");
   }
@@ -87,16 +131,16 @@ async function convertHeicUrlToObjectUrl(url: string) {
   });
   const normalizedBlob = Array.isArray(converted) ? converted[0] : converted;
   const objectUrl = URL.createObjectURL(normalizedBlob as Blob);
-  convertedHeicUrls.set(url, objectUrl);
+  convertedHeicUrls.set(cacheTag, { objectUrl, cacheTag });
   return objectUrl;
 }
 
 async function resolveMediaUrl(id: number | string, type: string) {
   const variants = type === "cache" ? ["cache"] : [type, "cache"];
 
-  for (const variant of variants) {
-    const info = await fetchImageInfo(id, variant);
-    if (!info || info.status !== "success" || !info.ready) {
+  for (const candidate of variants) {
+    const info = await fetchImageInfo(id, candidate);
+    if (!info || info.status !== "success" || !info.ready || !info.path) {
       continue;
     }
 
@@ -104,15 +148,12 @@ async function resolveMediaUrl(id: number | string, type: string) {
       continue;
     }
 
-    if (!info.path) {
-      continue;
-    }
-
     const url = `${API_BASE}/media_file/${info.path}`;
+    const cacheKey = `smart-image:${id}:${candidate}`;
     if (isHeicPath(url)) {
-      return convertHeicUrlToObjectUrl(url);
+      return convertHeicUrlToObjectUrl(url, `${cacheKey}:heic`);
     }
-    return url;
+    return resolveNativeCachedUrl(url, { cacheKey });
   }
 
   return FALLBACK_IMAGE_URL;
@@ -124,7 +165,6 @@ async function resolveMediaAsset(
   variant: SmartMediaVariant = "auto",
 ): Promise<SmartMediaAsset> {
   const normalizedType = normalizeFileType(fileType);
-
   const variants = variant === "base" ? ["base", "cache"] : variant === "cache" ? ["cache", "base"] : ["cache", "base"];
 
   for (const candidate of variants) {
@@ -134,14 +174,26 @@ async function resolveMediaAsset(
     }
 
     const url = `${API_BASE}/media_file/${info.path}`;
+    const cacheKey = `smart-media:${id}:${candidate}`;
+
     if ((info.kind === "video" || isBaseVideoType(normalizedType) || isVideoPath(url)) && /\.mp4$/i.test(url)) {
-      return { kind: "video", url };
+      return {
+        kind: "video",
+        url: await resolveNativeCachedUrl(url, { cacheKey: `${cacheKey}:video` }),
+      };
     }
+
     if ((!info.kind || info.kind === "image") && isPreferredImagePath(url)) {
       if (isHeicPath(url)) {
-        return { kind: "image", url: await convertHeicUrlToObjectUrl(url) };
+        return {
+          kind: "image",
+          url: await convertHeicUrlToObjectUrl(url, `${cacheKey}:heic`),
+        };
       }
-      return { kind: "image", url };
+      return {
+        kind: "image",
+        url: await resolveNativeCachedUrl(url, { cacheKey: `${cacheKey}:image` }),
+      };
     }
   }
 
@@ -164,7 +216,11 @@ export async function smartImageURL(id: number | string, type = "base") {
   return task;
 }
 
-export async function smartMediaAsset(id: number | string, fileType?: string | null, variant: SmartMediaVariant = "auto") {
+export async function smartMediaAsset(
+  id: number | string,
+  fileType?: string | null,
+  variant: SmartMediaVariant = "auto",
+) {
   const cacheKey = `${id}:media:${normalizeFileType(fileType)}:${variant}`;
   const cached = smartMediaCache.get(cacheKey);
   if (cached) {
@@ -192,6 +248,10 @@ export function clearSmartImageCache(id?: number | string) {
   if (id === undefined) {
     smartImageCache.clear();
     smartMediaCache.clear();
+    clearStoredMediaInfo();
+    clearConvertedHeicUrls();
+    void invalidateNativeMediaCache({ prefix: "smart-image:" });
+    void invalidateNativeMediaCache({ prefix: "smart-media:" });
     return;
   }
 
@@ -206,6 +266,12 @@ export function clearSmartImageCache(id?: number | string) {
       smartMediaCache.delete(key);
     }
   }
+
+  clearStoredMediaInfo(id);
+  clearConvertedHeicUrls(`smart-image:${id}:`);
+  clearConvertedHeicUrls(`smart-media:${id}:`);
+  void invalidateNativeMediaCache({ prefix: `smart-image:${id}:` });
+  void invalidateNativeMediaCache({ prefix: `smart-media:${id}:` });
 }
 
 function readStoredMediaInfo(key: string) {

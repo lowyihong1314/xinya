@@ -37,6 +37,7 @@ export type ClaimApprover = {
 
 export type ClaimRecord = {
   id: number;
+  applicant_user_id?: number | null;
   applicant_name?: string;
   amount?: number | string;
   request_date?: string;
@@ -46,7 +47,9 @@ export type ClaimRecord = {
   event_id?: number;
   event_name?: string;
   created_at?: string;
+  updated_at?: string;
   status?: string;
+  is_locked?: boolean;
   sign_json_data?: unknown;
   public_token?: string;
   voucher_recipient_name?: string;

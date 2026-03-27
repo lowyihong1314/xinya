@@ -26,16 +26,8 @@ export type CRMModuleSpec = {
   title: string;
   icon: string;
   description: string;
-} & (
-  | {
-      panelType: 'legacy';
-      render: (container: HTMLElement) => void | Promise<void>;
-    }
-  | {
-      panelType: 'react';
-      Component: ComponentType;
-    }
-);
+  Component: ComponentType;
+};
 
 export const CRM_MODULES: CRMModuleSpec[] = [
   {
@@ -43,7 +35,6 @@ export const CRM_MODULES: CRMModuleSpec[] = [
     title: '用户管理',
     icon: 'fas fa-users-cog',
     description: '部门、权限与用户数据维护。',
-    panelType: 'react',
     Component: UserControlPage,
   },
   {
@@ -51,7 +42,6 @@ export const CRM_MODULES: CRMModuleSpec[] = [
     title: '活动表格',
     icon: 'fas fa-table',
     description: '查看和管理活动主表数据。',
-    panelType: 'react',
     Component: EventTablePage,
   },
   {
@@ -59,7 +49,6 @@ export const CRM_MODULES: CRMModuleSpec[] = [
     title: '法会',
     icon: 'fas fa-praying-hands',
     description: '法会相关后台管理入口。',
-    panelType: 'react',
     Component: FahuiPage,
   },
   {
@@ -67,7 +56,6 @@ export const CRM_MODULES: CRMModuleSpec[] = [
     title: '财务',
     icon: 'fas fa-coins',
     description: '报销与财务审批工作台。',
-    panelType: 'react',
     Component: FinancePage,
   },
   {
@@ -75,7 +63,6 @@ export const CRM_MODULES: CRMModuleSpec[] = [
     title: '报名',
     icon: 'fas fa-clipboard-list',
     description: '表单报名、注册与记录查询。',
-    panelType: 'react',
     Component: FormWorkspacePage,
   },
   {
@@ -83,7 +70,6 @@ export const CRM_MODULES: CRMModuleSpec[] = [
     title: '长期开放表格',
     icon: 'fas fa-id-card-clip',
     description: '会员与青少年班等长期开放报名表格工作台。',
-    panelType: 'react',
     Component: PermanentRegistrationPage,
   },
   {
@@ -91,7 +77,6 @@ export const CRM_MODULES: CRMModuleSpec[] = [
     title: '监控',
     icon: 'fas fa-video',
     description: '直播监控与 PTZ 控制入口。',
-    panelType: 'react',
     Component: CCTVPage,
   },
   {
@@ -99,7 +84,6 @@ export const CRM_MODULES: CRMModuleSpec[] = [
     title: '唱游歌簿',
     icon: 'fas fa-guitar',
     description: '管理唱游使用的歌词与 chord 歌簿。',
-    panelType: 'react',
     Component: SongbookAdminPage,
   },
   {
@@ -107,7 +91,6 @@ export const CRM_MODULES: CRMModuleSpec[] = [
     title: '文件系统',
     icon: 'fas fa-folder-tree',
     description: '文件浏览、上传、权限和回收站管理。',
-    panelType: 'react',
     Component: () => createElement(FileSystemPage, { embedded: true }),
   },
 ];
@@ -137,4 +120,23 @@ export function getCRMModuleAliasSection(moduleKey?: string | null): string | nu
     return 'youth_class';
   }
   return null;
+}
+
+export function buildCRMModulePath(moduleKey?: string | null) {
+  return `/crm/${resolveCRMModuleKey(moduleKey)}`;
+}
+
+export function buildCRMModuleHref(moduleKey?: string | null, sourceSearchParams?: URLSearchParams) {
+  const resolvedKey = resolveCRMModuleKey(moduleKey);
+  const nextParams = new URLSearchParams();
+  const aliasSection = getCRMModuleAliasSection(moduleKey);
+  const currentSection = sourceSearchParams?.get('registration');
+
+  if (resolvedKey === 'permanent_registration') {
+    const nextSection = aliasSection ?? (currentSection === 'youth_class' ? 'youth_class' : 'membership');
+    nextParams.set('registration', nextSection);
+  }
+
+  const search = nextParams.toString();
+  return search ? `${buildCRMModulePath(resolvedKey)}?${search}` : buildCRMModulePath(resolvedKey);
 }

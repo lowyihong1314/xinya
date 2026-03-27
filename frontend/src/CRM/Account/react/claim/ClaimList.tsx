@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 
+import { apiFetch } from "../../../../js/apiFetch";
 import {
   buttonGhostStyle,
   buttonPrimaryStyle,
@@ -77,7 +78,7 @@ export function ClaimList({
       const entries = await Promise.all(
         approverIds.map(async (userId) => {
           try {
-            const response = await fetch(`/api/user_control/get_user_detail/${userId}`, {
+            const response = await apiFetch(`/api/user_control/get_user_detail/${userId}`, {
               credentials: "include",
             });
             const payload = (await response.json().catch(() => ({}))) as ApproverUserProfile;

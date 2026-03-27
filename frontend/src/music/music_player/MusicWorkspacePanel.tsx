@@ -1,5 +1,6 @@
 import type { CSSProperties, RefObject } from "react";
 
+import { CachedImage } from "../../components/CachedMedia";
 import { resolveAlbumCoverUrl } from "./musicCoverUtils";
 import type { AlbumRecord, MusicRecord } from "./types";
 import type { AlbumDraft, EditorMode, Toast, TrackDraft, WorkspaceScreen } from "./workspaceTypes";
@@ -277,7 +278,7 @@ function AlbumsScreen({
             {pagedAlbums.map((album) => (
               <article key={album.id} style={albumCardStyle}>
                 <button type="button" style={albumOpenButtonStyle} onClick={() => void onOpenAlbumTracks(album.id)}>
-                  <img src={resolveAlbumCoverUrl(album.cover_url)} alt={album.name} style={albumArtStyle} />
+                  <CachedImage src={resolveAlbumCoverUrl(album.cover_url)} cacheKey={`music-workspace-album:${album.id}`} alt={album.name} style={albumArtStyle} />
                 </button>
                 <div style={albumCardBodyStyle}>
                   <div>
@@ -522,7 +523,7 @@ function EditorScreen({
         {canManage && editorMode === "album" ? (
           <div style={editorGridStyle(isMobile)}>
             <div style={previewCardStyle}>
-              <img src={resolveAlbumCoverUrl(selectedAlbumDetail?.cover_url)} alt={selectedAlbumDetail?.name ?? ""} style={albumArtStyle} />
+              <CachedImage src={resolveAlbumCoverUrl(selectedAlbumDetail?.cover_url)} cacheKey={selectedAlbumDetail ? `music-workspace-selected-album:${selectedAlbumDetail.id}` : undefined} alt={selectedAlbumDetail?.name ?? ""} style={albumArtStyle} />
               <input
                 ref={coverInputRef}
                 type="file"
@@ -568,7 +569,7 @@ function EditorScreen({
         {canManage && editorMode === "track" ? (
           <div style={editorGridStyle(isMobile)}>
             <div style={previewCardStyle}>
-              <img src={resolveAlbumCoverUrl(editingMusicDetail?.cover_url)} alt={editingMusicDetail?.title ?? ""} style={albumArtStyle} />
+              <CachedImage src={resolveAlbumCoverUrl(editingMusicDetail?.cover_url)} cacheKey={editingMusicDetail ? `music-workspace-track:${editingMusicDetail.id}` : undefined} alt={editingMusicDetail?.title ?? ""} style={albumArtStyle} />
               <input
                 ref={replaceInputRef}
                 type="file"

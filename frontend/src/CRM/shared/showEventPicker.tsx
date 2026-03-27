@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { createRoot } from "react-dom/client";
 
+import { apiFetch } from "../../js/apiFetch";
 import { smartImageURL } from "../../js/get_img";
 
 export type EventPickerRecord = {
@@ -19,7 +20,7 @@ type EventPickerResponse = {
 };
 
 async function fetchEvents() {
-  const response = await fetch("/api/event_data/get_all_event", {
+  const response = await apiFetch("/api/event_data/get_all_event", {
     credentials: "include",
   });
   const payload = (await response.json().catch(() => ({}))) as EventPickerResponse;

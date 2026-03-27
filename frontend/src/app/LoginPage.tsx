@@ -2,6 +2,7 @@ import { useState } from "react";
 import type { CSSProperties, FormEvent } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
 
+import { CachedImage } from "../components/CachedMedia";
 import { API_BASE } from "../js/apiBase";
 import { useUserState } from "./UserState";
 
@@ -38,8 +39,9 @@ export function LoginPage() {
     <div style={pageStyle}>
       <div style={cardStyle}>
         <div style={brandSideStyle}>
-          <img
+          <CachedImage
             src={`${API_BASE}/static/images/logo/logo.png`}
+            cacheKey="login-logo"
             alt="logo"
             style={logoStyle}
           />

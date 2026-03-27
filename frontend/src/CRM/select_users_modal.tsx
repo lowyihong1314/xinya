@@ -1,6 +1,9 @@
 import { useEffect, useMemo, useState } from "react";
 import { createRoot } from "react-dom/client";
 
+import { CachedImage } from "../components/CachedMedia";
+import { apiFetch } from "../js/apiFetch";
+
 type UserRecord = {
   id: number;
   username?: string | null;
@@ -19,7 +22,7 @@ type SelectUsersDialogProps = {
 };
 
 async function fetchUsers() {
-  const response = await fetch("/api/user_control/get_all_user_data", {
+  const response = await apiFetch("/api/user_control/get_all_user_data", {
     credentials: "include",
   });
   const payload = (await response.json().catch(() => ({}))) as UserResponse;
@@ -138,8 +141,10 @@ function SelectUsersDialog({ maxId, onClose }: SelectUsersDialogProps) {
                     style={cardStyle(selected)}
                     onClick={() => toggleUser(user.id)}
                   >
-                    <img
+                    <CachedImage
                       src={`/api/user_control/get_profile_image/${user.id}`}
+                      cacheKey={`select-users-avatar:${user.id}`}
+                      resolveRelativeToApi
                       alt=""
                       style={avatarStyle}
                     />

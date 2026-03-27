@@ -1,8 +1,10 @@
 import { useEffect, useMemo, useState } from "react";
 import type { CSSProperties } from "react";
 
+import { CachedImage } from "../../components/CachedMedia";
 import { saveEventCheckIn, deleteEventCheckIn } from "../../event/shared/api";
 import type { EventCheckInRecord, EventDetailRecord } from "../../event/shared/types";
+import { apiFetch } from "../../js/apiFetch";
 
 type UserRecord = {
   id: number;
@@ -39,7 +41,7 @@ export function EventCheckInPanel({
     async function loadUsers() {
       setLoadingUsers(true);
       try {
-        const response = await fetch("/api/user_control/get_all_user_data", {
+        const response = await apiFetch("/api/user_control/get_all_user_data", {
           credentials: "include",
         });
         const payload = (await response.json().catch(() => ({}))) as { data?: UserRecord[]; error?: string; message?: string };
@@ -189,8 +191,10 @@ export function EventCheckInPanel({
                   style={userCardStyle(active)}
                   onClick={() => setSelectedUserId(user.id)}
                 >
-                  <img
+                  <CachedImage
                     src={`/api/user_control/get_profile_image/${user.id}`}
+                    cacheKey={`event-checkin-user:${user.id}`}
+                    resolveRelativeToApi
                     alt=""
                     style={avatarStyle(checked)}
                   />
@@ -205,8 +209,10 @@ export function EventCheckInPanel({
           {selectedUser ? (
             <>
               <div style={sideHeaderStyle}>
-                <img
+                <CachedImage
                   src={`/api/user_control/get_profile_image/${selectedUser.id}`}
+                  cacheKey={`event-checkin-selected-user:${selectedUser.id}`}
+                  resolveRelativeToApi
                   alt=""
                   style={sideAvatarStyle(Boolean(selectedCheckIn))}
                 />

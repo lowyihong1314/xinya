@@ -1,5 +1,6 @@
 import type { CSSProperties, RefObject } from "react";
 
+import { CachedImage } from "../../components/CachedMedia";
 import { useMusicPlayback } from "./MusicPlaybackContext";
 import { resolveTrackAlbumName, resolveTrackCoverUrl } from "./musicCoverUtils";
 import type { MusicRecord } from "./types";
@@ -46,8 +47,9 @@ export function MusicPlayerPanel({
       <div style={playerHeroStyle(compact)}>
         <div style={coverShellStyle}>
           {currentMusic ? (
-            <img
+            <CachedImage
               src={resolveTrackCoverUrl(currentMusic.id, libraryMusics, albums)}
+              cacheKey={`music-cover:web-player:${currentMusic.id}`}
               alt={currentMusic.title}
               style={coverImageStyle}
             />

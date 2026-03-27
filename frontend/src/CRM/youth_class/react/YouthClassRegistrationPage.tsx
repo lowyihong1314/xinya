@@ -3,6 +3,8 @@ import type { CSSProperties } from "react";
 import QRCode from "qrcode";
 
 import { useUserState } from "../../../app/UserState";
+import { CachedImage } from "../../../components/CachedMedia";
+import { apiFetch } from "../../../js/apiFetch";
 import { ensureDesignTokens } from "../../../theme/designTokens";
 import {
   FeePanel,
@@ -84,21 +86,21 @@ async function parseJson<T>(response: Response): Promise<T> {
 }
 
 async function fetchEntries() {
-  const response = await fetch("/api/form/youth-class-registration/entries", {
+  const response = await apiFetch("/api/form/youth-class-registration/entries", {
     credentials: "include",
   });
   return parseJson<{ entries?: Entry[] }>(response);
 }
 
 async function fetchSettings() {
-  const response = await fetch("/api/form/youth-class-registration/settings", {
+  const response = await apiFetch("/api/form/youth-class-registration/settings", {
     credentials: "include",
   });
   return parseJson<{ settings?: Settings }>(response);
 }
 
 async function saveSettings(payload: Settings) {
-  const response = await fetch("/api/form/youth-class-registration/settings", {
+  const response = await apiFetch("/api/form/youth-class-registration/settings", {
     method: "PUT",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(payload),
@@ -107,7 +109,7 @@ async function saveSettings(payload: Settings) {
 }
 
 async function updatePaymentStatus(paymentId: number, status: string) {
-  const response = await fetch(`/api/form/youth-class-registration/payment/${paymentId}/status`, {
+  const response = await apiFetch(`/api/form/youth-class-registration/payment/${paymentId}/status`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ status }),
@@ -290,7 +292,7 @@ export function YouthClassRegistrationPage() {
             <a href={PUBLIC_URL} target="_blank" rel="noreferrer" style={linkStyle}>打开公开报名页</a>
           </div>
           <div style={qrWrapStyle(isMobile)}>
-            {qrDataUrl ? <img src={qrDataUrl} alt="报名二维码" style={qrImageStyle(isMobile)} /> : <div style={emptyStyle}>生成二维码中…</div>}
+            {qrDataUrl ? <CachedImage src={qrDataUrl} alt="报名二维码" style={qrImageStyle(isMobile)} /> : <div style={emptyStyle}>生成二维码中…</div>}
           </div>
           <div style={urlBoxStyle}>{PUBLIC_URL}</div>
         </div>

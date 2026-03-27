@@ -1,7 +1,8 @@
-import { useEffect, useState, type CSSProperties } from "react";
+import { useEffect, useRef, useState, type CSSProperties } from "react";
 
 import { API_BASE } from "../js/apiBase";
 import { clearSmartImageCache, smartMediaAsset, type SmartMediaAsset, type SmartMediaVariant } from "../js/get_img";
+import { CachedImage, CachedVideo } from "./CachedMedia";
 import {
   connectEventMediaRoom,
   MEDIA_ROOM_UPDATE_EVENT,
@@ -64,9 +65,23 @@ export function CacheMediaPlayer({
   const [asset, setAsset] = useState<SmartMediaAsset | null>(null);
   const [internalVideoProgress, setInternalVideoProgress] = useState<CacheMediaPlayerProgress | null>(null);
   const resolvedVideoProgress = videoProgress ?? internalVideoProgress;
+  const lastLoadRef = useRef<{
+    fileId?: number | string | null;
+    reloadKey?: string | number;
+  } | null>(null);
 
   useEffect(() => {
     let cancelled = false;
+    const previousLoad = lastLoadRef.current;
+    const shouldRefreshCurrentFile =
+      previousLoad?.fileId != null
+      && fileId != null
+      && String(previousLoad.fileId) === String(fileId)
+      && previousLoad.reloadKey !== reloadKey;
+    lastLoadRef.current = {
+      fileId,
+      reloadKey,
+    };
 
     async function loadAsset() {
       if (fileId == null) {
@@ -75,9 +90,11 @@ export function CacheMediaPlayer({
         return;
       }
 
-      for (let attempt = 0; attempt < retryAttempts; attempt += 1) {
+      if (shouldRefreshCurrentFile) {
         clearSmartImageCache(fileId);
+      }
 
+      for (let attempt = 0; attempt < retryAttempts; attempt += 1) {
         try {
           const nextAsset = await smartMediaAsset(fileId, fileType, variant);
           if (!cancelled) {
@@ -145,7 +162,7 @@ export function CacheMediaPlayer({
       return;
     }
 
-      if (mediaNotification.event === "video_processing_started") {
+    if (mediaNotification.event === "video_processing_started") {
       setInternalVideoProgress({ status: "started", percent: 0 });
       return;
     }
@@ -232,7 +249,7 @@ export function CacheMediaPlayer({
   return (
     <div style={{ ...rootStyle, ...containerStyle }}>
       {asset?.kind === "video" ? (
-        <video
+        <CachedVideo
           src={asset.url}
           style={style}
           autoPlay={videoAutoPlay}
@@ -244,7 +261,7 @@ export function CacheMediaPlayer({
           onEnded={onVideoEnded}
         />
       ) : (
-        <img src={asset?.url || fallbackSrc} alt={alt || ""} style={style} />
+        <CachedImage src={asset?.url || fallbackSrc} alt={alt || ""} style={style} loading="lazy" decoding="async" />
       )}
       {resolvedVideoProgress ? <div style={videoStatusStyle(resolvedVideoProgress)}>{formatVideoStatus(resolvedVideoProgress)}</div> : null}
     </div>

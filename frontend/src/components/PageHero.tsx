@@ -4,6 +4,7 @@ import { useUserState } from "../app/UserState";
 import { useEventData } from "../event/shared/EventDataContext";
 import { API_BASE } from "../js/apiBase";
 import { CacheMediaPlayer } from "./CacheMediaPlayer";
+import { CachedImage } from "./CachedMedia";
 
 type PageHeroProps = {
   title: string;
@@ -85,7 +86,7 @@ export function PageHero({ title, subtitle }: PageHeroProps) {
       <div style={heroMaskStyle(pressed)} />
       <div style={heroContentStyle(isMobile)}>
         <div style={logoCircleStyle(isMobile)}>
-          <img src={`${API_BASE}/static/images/logo/logo.png`} alt="logo" style={logoStyle(isMobile)} />
+          <CachedImage src={`${API_BASE}/static/images/logo/logo.png`} cacheKey="page-hero-logo" alt="logo" style={logoStyle(isMobile)} />
         </div>
         <h1 style={heroTitleStyle(isMobile)}>{title}</h1>
         <p style={heroSubtitleStyle(isMobile)}>{subtitle}</p>

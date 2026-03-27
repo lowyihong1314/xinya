@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import type { CSSProperties, ReactNode } from "react";
 import QRCode from "qrcode";
 
+import { CachedImage } from "../../../components/CachedMedia";
 import { ExtraFieldEditor } from "./ExtraFieldEditor";
 import { FeePanel } from "./FeePanel";
 import type { ExtraFieldDraft } from "./ExtraFieldEditor";
@@ -529,7 +530,7 @@ function ShareFormView({
         <div style={sectionStyle}>
           <div style={fieldLabelStyle}>QR Code</div>
           <div style={qrPreviewStyle}>
-            {qrCodeUrl ? <img src={qrCodeUrl} alt={`报名表 ${title} 的二维码`} style={qrImageStyle} /> : <div style={inlineNoteStyle}>二维码生成中…</div>}
+            {qrCodeUrl ? <CachedImage src={qrCodeUrl} alt={`报名表 ${title} 的二维码`} style={qrImageStyle} /> : <div style={inlineNoteStyle}>二维码生成中…</div>}
           </div>
           <div style={footerActionsStyle}>
             <button type="button" style={secondaryButtonStyle} onClick={handleDownload}>

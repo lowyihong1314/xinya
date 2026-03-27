@@ -1,6 +1,7 @@
 import { useMemo, useState } from "react";
 import type { CSSProperties } from "react";
 
+import { CachedImage } from "../../../components/CachedMedia";
 import { API_BASE } from "../../../js/apiBase";
 import type { DepartmentRecord, MemberRenewalRecord, PermissionRecord, UserRecord } from "./types";
 
@@ -232,8 +233,9 @@ export function UserCard({
 }) {
   const body = (
     <>
-      <img
+      <CachedImage
         src={`${API_BASE}/api/user_control/get_profile_image/${user.id}`}
+        cacheKey={`user-control-avatar:${user.id}`}
         alt={user.display_name || user.username || String(user.id)}
         style={avatarStyle}
       />

@@ -3,6 +3,7 @@ import ReactDOM from "react-dom/client";
 import faCss from "@fortawesome/fontawesome-free/css/all.min.css?url";
 
 import { App } from "./src/app/App";
+import { installApkFetchCache } from "./src/js/apkFetchCache";
 
 function detectMobile() {
   if (typeof window === "undefined") {
@@ -21,6 +22,8 @@ function detectMobile() {
   link.href = href;
   document.head.appendChild(link);
 })(faCss);
+
+installApkFetchCache();
 
 const mountNode = document.getElementById("root") ?? document.getElementById("app");
 

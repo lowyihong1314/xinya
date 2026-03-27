@@ -1,7 +1,11 @@
 import { useEffect, useMemo, useState } from "react";
 import type { ReactNode } from "react";
 
+import { CachedImage } from "../../../../components/CachedMedia";
+import { apiFetch } from "../../../../js/apiFetch";
 import { openPreviewModal } from "../../../../js/attachment_preview";
+import { showEventPicker } from "../../../shared/showEventPicker";
+import { updateClaimEvent } from "./api";
 import {
   approverAvatarStyle,
   approverCardStyle,
@@ -16,6 +20,7 @@ import {
   buttonApproveStyle,
   buttonGhostStyle,
   buttonPrimaryStyle,
+  buttonSecondaryStyle,
   buttonRejectStyle,
   detailGridStyle,
   detailLabelStyle,
@@ -41,6 +46,7 @@ type ClaimDetailProps = {
   onBack: () => void;
   onApprove: () => void;
   onReject: () => void;
+  onClaimUpdated: (claim: ClaimRecord) => void;
 };
 
 export function ClaimDetail({
@@ -52,6 +58,7 @@ export function ClaimDetail({
   onBack,
   onApprove,
   onReject,
+  onClaimUpdated,
 }: ClaimDetailProps) {
   const [approverUsers, setApproverUsers] = useState<Record<number, ApproverUserProfile>>({});
   const [approverLoadError, setApproverLoadError] = useState("");
@@ -61,7 +68,11 @@ export function ClaimDetail({
     sign: { strokes?: Array<{ points?: Array<{ x: number; y: number }> }> } | null;
   } | null>(null);
   const [voucherOpen, setVoucherOpen] = useState(false);
+  const [savingEvent, setSavingEvent] = useState(false);
+  const [eventFeedback, setEventFeedback] = useState("");
+  const [eventError, setEventError] = useState("");
   const claimStatus = useMemo(() => getClaimStatus(claim), [claim]);
+  const canEditEvent = Boolean(!claim.is_locked && (hasAccountPermission || claim.applicant_user_id === currentUserId));
 
   useEffect(() => {
     const approverIds = Array.from(new Set((claim.approver_data || []).map((item) => item.user_id).filter(Boolean)));
@@ -78,7 +89,7 @@ export function ClaimDetail({
       const entries = await Promise.all(
         approverIds.map(async (userId) => {
           try {
-            const response = await fetch(`/api/user_control/get_user_detail/${userId}`, {
+            const response = await apiFetch(`/api/user_control/get_user_detail/${userId}`, {
               credentials: "include",
             });
             const payload = (await response.json().catch(() => ({}))) as ApproverUserProfile;
@@ -111,6 +122,55 @@ export function ClaimDetail({
     };
   }, [claim]);
 
+  useEffect(() => {
+    setEventFeedback("");
+    setEventError("");
+    setSavingEvent(false);
+  }, [claim.id]);
+
+  async function handlePickEvent() {
+    if (!canEditEvent || savingEvent) {
+      return;
+    }
+
+    const selected = await showEventPicker();
+    if (!selected || selected.id === claim.event_id) {
+      return;
+    }
+
+    setSavingEvent(true);
+    setEventFeedback("");
+    setEventError("");
+    try {
+      const updated = await updateClaimEvent(claim.id, selected.id);
+      onClaimUpdated(updated);
+      setEventFeedback(`已关联活动：${updated.event_name || "未命名活动"} #${updated.event_id}`);
+    } catch (error) {
+      setEventError(error instanceof Error ? error.message : "更新活动失败");
+    } finally {
+      setSavingEvent(false);
+    }
+  }
+
+  async function handleClearEvent() {
+    if (!canEditEvent || savingEvent || !claim.event_id) {
+      return;
+    }
+
+    setSavingEvent(true);
+    setEventFeedback("");
+    setEventError("");
+    try {
+      const updated = await updateClaimEvent(claim.id, null);
+      onClaimUpdated(updated);
+      setEventFeedback("已清除关联活动");
+    } catch (error) {
+      setEventError(error instanceof Error ? error.message : "清除活动失败");
+    } finally {
+      setSavingEvent(false);
+    }
+  }
+
   return (
     <div className="claim-detail" style={{ display: "grid", gap: "16px" }}>
       <div className="claim-detail__header" style={panelHeaderStyle}>
@@ -136,10 +196,37 @@ export function ClaimDetail({
         <DetailRow label="金额" value={`RM ${safeMoney(claim.amount)}`} />
         <DetailRow label="日期" value={claim.request_date} />
         <DetailRow label="部门" value={claim.department_name || String(claim.department_id ?? "-")} />
-        <DetailRow
-          label="活动"
-          value={claim.event_id ? `${claim.event_name || "未命名活动"} (#${claim.event_id})` : "-"}
-        />
+        <div className="claim-detail__row" style={detailRowStyle}>
+          <div className="claim-detail__row-label" style={detailLabelStyle}>活动</div>
+          <div className="claim-detail__row-value" style={detailValueStyle}>
+            {claim.event_id ? `${claim.event_name || "未命名活动"} (#${claim.event_id})` : "-"}
+          </div>
+          {canEditEvent ? (
+            <div style={eventActionRowStyle}>
+              <button
+                type="button"
+                style={disabledStyle(buttonSecondaryStyle, savingEvent)}
+                disabled={savingEvent}
+                onClick={() => void handlePickEvent()}
+              >
+                {savingEvent ? "保存中…" : claim.event_id ? "更换活动" : "选择活动"}
+              </button>
+              {claim.event_id ? (
+                <button
+                  type="button"
+                  style={disabledStyle(buttonGhostStyle, savingEvent)}
+                  disabled={savingEvent}
+                  onClick={() => void handleClearEvent()}
+                >
+                  清除
+                </button>
+              ) : null}
+            </div>
+          ) : null}
+          {eventFeedback ? <div style={{ ...chipStyle, color: "var(--x-color-success)" }}>{eventFeedback}</div> : null}
+          {eventError ? <div style={{ ...chipStyle, color: "var(--x-color-danger)" }}>{eventError}</div> : null}
+          {claim.is_locked ? <div style={{ ...chipStyle, color: "var(--x-color-ink-muted)" }}>该申请已锁定，不能修改活动</div> : null}
+        </div>
         <DetailRow label="创建时间" value={formatDateTime(claim.created_at)} />
       </div>
 
@@ -180,8 +267,10 @@ export function ClaimDetail({
                         });
                       }}
                     >
-                      <img
+                      <CachedImage
                         src={`/api/user_control/get_profile_image/${approver.user_id}`}
+                        cacheKey={`claim-approver:${approver.user_id}`}
+                        resolveRelativeToApi
                         alt=""
                         style={approverAvatarStyle(approver.reject)}
                       />
@@ -280,6 +369,24 @@ function DetailRow({ label, value }: { label: string; value?: string }) {
     </div>
   );
 }
+
+function disabledStyle<T extends Record<string, unknown>>(style: T, disabled: boolean): T {
+  if (!disabled) {
+    return style;
+  }
+  return {
+    ...style,
+    opacity: 0.6,
+    cursor: "not-allowed",
+  };
+}
+
+const eventActionRowStyle = {
+  display: "flex",
+  gap: "8px",
+  flexWrap: "wrap" as const,
+  alignItems: "center",
+};
 
 function Section({ title, children }: { title: string; children: ReactNode }) {
   return (

@@ -8,7 +8,7 @@ import { musicPlayerController } from "../music/music_player/MusicPlayerControll
 import { useMusicPlayback } from "../music/music_player/MusicPlaybackContext";
 import { CHANGYOU_PATH, MUSIC_PLAYER_PATH, MUSIC_ROOT_PATH } from "../music/router/paths";
 import { ensureDesignTokens } from "../theme/designTokens";
-import { NAV_ITEMS, legacyPageToPath, pageKeyFromPath } from "./routeConfig";
+import { NAV_ITEMS, pageKeyFromPath, resolveLegacyPath } from "./routeConfig";
 
 const MUSIC_NAV_ITEMS = [
   {
@@ -112,38 +112,20 @@ export function AppLayout() {
   ]);
 
   useEffect(() => {
-    window.base_navbar = document.getElementById("base_navbar");
-  }, []);
-
-  useEffect(() => {
     if (!isInsideMusicRouter) {
       lastPrimaryPathRef.current = location.pathname + location.search + location.hash;
     }
   }, [isInsideMusicRouter, location.hash, location.pathname, location.search]);
 
   useEffect(() => {
-    window.__xinyaNavigate = (nextPage, options = {}) => {
-      const resolved = resolveLegacyPath(nextPage, new URL(window.location.href));
-      navigate(resolved, { replace: options.replace ?? false });
-    };
-    return () => {
-      delete window.__xinyaNavigate;
-    };
-  }, [navigate]);
-
-  useEffect(() => {
-    const url = new URL(window.location.href);
-    const legacyPage = url.searchParams.get("page");
+    const searchParams = new URLSearchParams(location.search);
+    const legacyPage = searchParams.get("page");
     if (!legacyPage) {
       return;
     }
 
-    navigate(resolveLegacyPath(legacyPage, url), { replace: true });
-    url.searchParams.delete("page");
-    url.searchParams.delete("event_id");
-    url.searchParams.delete("image_id");
-    history.replaceState(history.state, "", url.toString());
-  }, [navigate]);
+    navigate(resolveLegacyPath(legacyPage, searchParams), { replace: true });
+  }, [location.search, navigate]);
 
   const visibleItems = NAV_ITEMS.filter(
     (item) => (!item.auth || user) && !(user && item.key === "login"),
@@ -201,21 +183,6 @@ export function AppLayout() {
       <Outlet />
     </div>
   );
-}
-
-export function resolveLegacyPath(page: string, url = new URL(window.location.href)) {
-  if (page === "event_detail") {
-    const eventId = url.searchParams.get("event_id");
-    return eventId ? `/event/${eventId}` : "/not-found?reason=missing-event-id";
-  }
-  if (page === "image_detail") {
-    const imageId = url.searchParams.get("image_id");
-    return imageId ? `/image/${imageId}` : "/not-found?reason=missing-image-id";
-  }
-  if (page === "lamp_registration") {
-    return "/lamp-registration";
-  }
-  return legacyPageToPath[page] ?? "/not-found";
 }
 
 const shellStyle: CSSProperties = {

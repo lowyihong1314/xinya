@@ -1,5 +1,6 @@
 import { CSSProperties, useEffect, useMemo, useState } from "react";
 
+import { CachedImage } from "../../components/CachedMedia";
 import { uploadEventMedia } from "../../event/shared/api";
 
 type UploadQueueItem = {
@@ -209,7 +210,7 @@ export function UploadMediaModal({
             {queue.map((item) => (
               <div key={item.id} style={queueItemStyle(item.status)}>
                 {item.previewUrl ? (
-                  <img src={item.previewUrl} alt={item.file.name} style={previewImageStyle} />
+                  <CachedImage src={item.previewUrl} alt={item.file.name} style={previewImageStyle} />
                 ) : (
                   <div style={videoTileStyle}>VIDEO</div>
                 )}

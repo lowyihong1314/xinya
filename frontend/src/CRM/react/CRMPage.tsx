@@ -1,62 +1,23 @@
-import { useEffect, useMemo } from "react";
+import { NavLink, Outlet, useLocation, useNavigate } from "react-router-dom";
 import type { CSSProperties } from "react";
-import { useSearchParams } from "react-router-dom";
 
 import { useUserState } from "../../app/UserState";
 import { ensureDesignTokens } from "../../theme/designTokens";
-import { LegacyCRMPanel } from "./LegacyCRMPanel";
 import {
   CRM_MODULES,
-  DEFAULT_CRM_MODULE_KEY,
-  getCRMModule,
-  getCRMModuleAliasSection,
-  resolveCRMModuleKey,
+  buildCRMModulePath,
+  buildCRMModuleHref,
 } from "./crmModules";
 
 export function CRMPage() {
   ensureDesignTokens();
 
   const { isAuthenticated, openLogin, isMobile } = useUserState();
-  const [searchParams, setSearchParams] = useSearchParams();
-
-  const activeKey = useMemo(() => {
-    const nextKey = searchParams.get("crm") ?? searchParams.get("CRM");
-    return resolveCRMModuleKey(nextKey) ?? DEFAULT_CRM_MODULE_KEY;
-  }, [searchParams]);
-
-  const activeModule = getCRMModule(activeKey);
-
-  useEffect(() => {
-    const rawKey = searchParams.get("crm") ?? searchParams.get("CRM");
-    const legacyKey = searchParams.get("CRM");
-    const lowerKey = searchParams.get("crm");
-    const aliasSection = getCRMModuleAliasSection(rawKey);
-    const nextParams = new URLSearchParams(searchParams);
-    let changed = false;
-
-    if (lowerKey !== activeKey || legacyKey) {
-      nextParams.delete("CRM");
-      nextParams.set("crm", activeKey);
-      changed = true;
-    }
-
-    if (activeKey === "permanent_registration") {
-      const currentSection = nextParams.get("registration");
-      const targetSection = aliasSection ?? currentSection ?? "membership";
-      if (currentSection !== targetSection) {
-        nextParams.set("registration", targetSection);
-        changed = true;
-      }
-    } else if (nextParams.has("registration")) {
-      nextParams.delete("registration");
-      changed = true;
-    }
-
-    if (!changed) {
-      return;
-    }
-    setSearchParams(nextParams, { replace: true });
-  }, [activeKey, searchParams, setSearchParams]);
+  const location = useLocation();
+  const navigate = useNavigate();
+  const searchParams = new URLSearchParams(location.search);
+  const isMobileHome = isMobile && location.pathname === "/crm/home";
+  const activeModule = CRM_MODULES.find((module) => location.pathname === buildCRMModulePath(module.key)) ?? null;
 
   if (!isAuthenticated) {
     return (
@@ -78,44 +39,47 @@ export function CRMPage() {
   return (
     <div style={pageShellStyle}>
       <section style={contentStyle(isMobile)}>
-        <nav style={moduleNavStyle(isMobile)}>
-          {CRM_MODULES.map((module) => {
-            const active = module.key === activeModule.key;
-            return (
-              <button
-                key={module.key}
-                type="button"
-                onClick={() => {
-                  const nextParams = new URLSearchParams(searchParams);
-                  nextParams.delete("CRM");
-                  nextParams.set("crm", module.key);
-                  if (module.key === "permanent_registration") {
-                    nextParams.set("registration", nextParams.get("registration") || "membership");
-                  } else {
-                    nextParams.delete("registration");
-                  }
-                  setSearchParams(nextParams);
-                }}
-                style={moduleButtonStyle(active, isMobile)}
-              >
-                <span style={moduleIconStyle(active)}>
-                  <i className={module.icon} />
-                </span>
-                <span style={moduleButtonCopyStyle}>
-                  <span style={moduleButtonTitleStyle(active)}>{module.title}</span>
-                  <span style={moduleButtonDescriptionStyle(active)}>{module.description}</span>
-                </span>
-              </button>
-            );
-          })}
-        </nav>
+        {!isMobile ? (
+          <nav style={moduleNavStyle(false)}>
+            {CRM_MODULES.map((module) => {
+              const active = location.pathname === buildCRMModulePath(module.key);
+              return (
+                <NavLink
+                  key={module.key}
+                  to={buildCRMModuleHref(module.key, searchParams)}
+                  style={moduleButtonStyle(active, false)}
+                >
+                  <span style={moduleIconStyle(active)}>
+                    <i className={module.icon} />
+                  </span>
+                  <span style={moduleButtonCopyStyle}>
+                    <span style={moduleButtonTitleStyle(active)}>{module.title}</span>
+                    <span style={moduleButtonDescriptionStyle(active)}>{module.description}</span>
+                  </span>
+                </NavLink>
+              );
+            })}
+          </nav>
+        ) : null}
 
-        <section style={workspaceStyle(isMobile)}>
-          {activeModule.panelType === "react" ? (
-            <activeModule.Component />
-          ) : (
-            <LegacyCRMPanel module={activeModule} />
-          )}
+        <section style={workspaceStyle(isMobile, isMobileHome)}>
+          {isMobile && !isMobileHome && activeModule ? (
+            <header style={mobileModuleHeaderStyle}>
+              <button
+                type="button"
+                onClick={() => navigate("/crm/home")}
+                style={mobileBackButtonStyle}
+              >
+                <i className="fas fa-arrow-left" />
+                <span>返回</span>
+              </button>
+              <div style={mobileHeaderCopyStyle}>
+                <div style={mobileHeaderTitleStyle}>{activeModule.title}</div>
+                <div style={mobileHeaderDescriptionStyle}>{activeModule.description}</div>
+              </div>
+            </header>
+          ) : null}
+          <Outlet />
         </section>
       </section>
     </div>
@@ -210,16 +174,54 @@ function moduleButtonDescriptionStyle(active: boolean): CSSProperties {
   };
 }
 
-function workspaceStyle(isMobile: boolean): CSSProperties {
+function workspaceStyle(isMobile: boolean, isMobileHome: boolean): CSSProperties {
   return {
-    padding: isMobile ? "16px" : "22px",
+    padding: isMobile ? (isMobileHome ? "0" : "16px") : "22px",
     borderRadius: "var(--x-radius-lg)",
-    background: "var(--x-color-panel-glass)",
-    border: "1px solid var(--x-color-line-soft)",
-    boxShadow: "0 20px 44px var(--x-color-shadow-medium)",
+    background: isMobileHome ? "transparent" : "var(--x-color-panel-glass)",
+    border: isMobileHome ? "none" : "1px solid var(--x-color-line-soft)",
+    boxShadow: isMobileHome ? "none" : "0 20px 44px var(--x-color-shadow-medium)",
     minWidth: 0,
   };
 }
+
+const mobileModuleHeaderStyle: CSSProperties = {
+  display: "grid",
+  gap: "12px",
+  marginBottom: "14px",
+};
+
+const mobileBackButtonStyle: CSSProperties = {
+  width: "fit-content",
+  display: "inline-flex",
+  alignItems: "center",
+  gap: "8px",
+  padding: "10px 14px",
+  borderRadius: "999px",
+  border: "1px solid var(--x-color-line-soft)",
+  background: "var(--x-color-panel)",
+  color: "var(--x-color-ink)",
+  fontWeight: 700,
+  cursor: "pointer",
+  boxShadow: "0 10px 24px var(--x-color-shadow-soft)",
+};
+
+const mobileHeaderCopyStyle: CSSProperties = {
+  display: "grid",
+  gap: "4px",
+};
+
+const mobileHeaderTitleStyle: CSSProperties = {
+  fontSize: "22px",
+  fontWeight: 800,
+  lineHeight: 1.1,
+};
+
+const mobileHeaderDescriptionStyle: CSSProperties = {
+  fontSize: "13px",
+  lineHeight: 1.6,
+  color: "var(--x-color-ink-muted)",
+};
 
 const workspaceHeaderStyle: CSSProperties = {
   display: "flex",

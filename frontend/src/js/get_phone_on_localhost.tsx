@@ -1,6 +1,8 @@
 import { useState } from "react";
 import { createRoot } from "react-dom/client";
 
+import { CachedImage } from "../components/CachedMedia";
+import { apiFetch } from "./apiFetch";
 import { show_alert } from "./show_alert";
 
 function normalizePhoneMY(raw: string) {
@@ -58,7 +60,7 @@ function PhoneVerificationModal({
     setSending(true);
     try {
       const payload = await parseJson(
-        await fetch("/api/twilio/send_otp", {
+        await apiFetch("/api/twilio/send_otp", {
           method: "POST",
           body: formData,
         }),
@@ -93,7 +95,7 @@ function PhoneVerificationModal({
     try {
       const phone = normalizePhoneMY(rawPhone);
       await parseJson(
-        await fetch("/api/twilio/verify", {
+        await apiFetch("/api/twilio/verify", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ phone, otp }),
@@ -150,7 +152,7 @@ function PhoneVerificationModal({
           ) : null}
 
           <div style={posterWrapStyle}>
-            <img src="/static/poster/lamp.png" alt="poster" style={posterImageStyle} />
+            <CachedImage src="/static/poster/lamp.png" alt="poster" style={posterImageStyle} />
           </div>
         </div>
       </div>

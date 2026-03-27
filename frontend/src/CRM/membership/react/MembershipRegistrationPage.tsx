@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from "react";
 import type { CSSProperties } from "react";
 
 import { useUserState } from "../../../app/UserState";
+import { apiFetch } from "../../../js/apiFetch";
 import { ensureDesignTokens } from "../../../theme/designTokens";
 import {
   FeePanel,
@@ -92,21 +93,21 @@ async function parseJson<T>(response: Response): Promise<T> {
 }
 
 async function fetchEntries() {
-  const response = await fetch("/api/user_control/membership/entries", {
+  const response = await apiFetch("/api/user_control/membership/entries", {
     credentials: "include",
   });
   return parseJson<{ entries?: Entry[] }>(response);
 }
 
 async function fetchSettings() {
-  const response = await fetch("/api/user_control/membership/settings", {
+  const response = await apiFetch("/api/user_control/membership/settings", {
     credentials: "include",
   });
   return parseJson<{ settings?: Settings }>(response);
 }
 
 async function saveSettings(payload: Settings) {
-  const response = await fetch("/api/user_control/membership/settings", {
+  const response = await apiFetch("/api/user_control/membership/settings", {
     method: "PUT",
     headers: { "Content-Type": "application/json" },
     credentials: "include",
@@ -116,7 +117,7 @@ async function saveSettings(payload: Settings) {
 }
 
 async function updatePaymentStatus(paymentId: number, status: string) {
-  const response = await fetch(`/api/user_control/membership/payment/${paymentId}/status`, {
+  const response = await apiFetch(`/api/user_control/membership/payment/${paymentId}/status`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     credentials: "include",

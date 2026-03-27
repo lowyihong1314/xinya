@@ -9,6 +9,7 @@ import type { ReactNode } from "react";
 
 import { ensureDesignTokens } from "../theme/designTokens";
 import { apiFetch } from "../js/apiFetch";
+import { clearAllNativeResponseCache } from "../js/nativeResponseCache";
 
 type UserData = {
   username?: string;
@@ -28,18 +29,29 @@ type UserStateContextValue = {
 
 const UserStateContext = createContext<UserStateContextValue | null>(null);
 
-async function fetchCurrentUser(): Promise<UserData | null> {
+type CurrentUserFetchResult = {
+  user: UserData | null;
+  state: "authenticated" | "unauthenticated" | "unavailable";
+};
+
+async function fetchCurrentUser(): Promise<CurrentUserFetchResult> {
   try {
     const response = await apiFetch("/api/user_control/get_user_data", {
       credentials: "include",
     });
+    if (response.status === 401 || response.status === 403) {
+      return { user: null, state: "unauthenticated" };
+    }
     if (!response.ok) {
-      throw new Error("Unauthenticated");
+      throw new Error("User fetch unavailable");
     }
     const data = (await response.json()) as UserData;
-    return data.username ? data : null;
+    if (!data.username) {
+      return { user: null, state: "unauthenticated" };
+    }
+    return { user: data, state: "authenticated" };
   } catch {
-    return null;
+    return { user: null, state: "unavailable" };
   }
 }
 
@@ -79,21 +91,22 @@ export function UserStateProvider({
     };
   }, []);
 
-  useEffect(() => {
-    window.__xinyaFetchUserAuth = async () => user;
-    window.__xinyaOpenLogin = () => navigateToLogin();
-    return () => {
-      delete window.__xinyaFetchUserAuth;
-      delete window.__xinyaOpenLogin;
-    };
-  }, [user]);
-
   async function refreshUser() {
     setLoadingUser(true);
     try {
       const nextUser = await fetchCurrentUser();
-      setUser(nextUser);
-      return nextUser;
+      if (nextUser.state === "unavailable") {
+        return user;
+      }
+
+      if (nextUser.state === "unauthenticated") {
+        setUser(null);
+        void clearAllNativeResponseCache();
+        return null;
+      }
+
+      setUser(nextUser.user);
+      return nextUser.user;
     } finally {
       setLoadingUser(false);
     }
@@ -110,15 +123,19 @@ export function UserStateProvider({
     if (!response.ok) {
       throw new Error(data.error || "登录失败");
     }
+    await clearAllNativeResponseCache();
     await refreshUser();
   }
 
   async function logout() {
-    const response = await apiFetch("/api/user_control/logout", { credentials: "include" });
+    const response = await apiFetch("/api/user_control/logout", {
+      credentials: "include",
+    });
     const data = await response.json();
     if (!response.ok) {
       throw new Error(data.error || "退出失败");
     }
+    await clearAllNativeResponseCache();
     setUser(null);
   }
 

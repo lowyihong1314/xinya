@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from "react";
 import type { CSSProperties } from "react";
 
 import { useUserState } from "../../app/UserState";
+import { CachedImage } from "../../components/CachedMedia";
 import { PageHero } from "../../components/PageHero";
 import { UserCard } from "../../CRM/user_control/react/UserControlView";
 import { fetchAllUsers } from "../../CRM/user_control/react/api";
@@ -260,7 +261,7 @@ function HistorySection(props: {
                 ) : null}
               </div>
               <p style={bodyTextStyle}>{entry.text}</p>
-              {entry.img ? <img src={entry.img} alt="" style={historyImageStyle} /> : null}
+              {entry.img ? <CachedImage src={entry.img} alt="" style={historyImageStyle} /> : null}
             </div>
           </article>
         ))}
@@ -401,7 +402,7 @@ function EditorModal({
             {imageFile ? <div style={fieldHintStyle}>已选择：{imageFile.name}</div> : null}
             {editor.entry?.img && !removeImage ? (
               <div style={historyImageEditorStyle}>
-                <img src={editor.entry.img} alt="" style={historyEditorPreviewStyle} />
+                <CachedImage src={editor.entry.img} alt="" style={historyEditorPreviewStyle} />
                 <label style={historyImageToggleStyle}>
                   <input
                     type="checkbox"

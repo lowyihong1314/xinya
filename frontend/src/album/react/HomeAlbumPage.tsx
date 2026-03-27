@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from "react";
 import type { CSSProperties } from "react";
 
 import { CacheMediaPlayer } from "../../components/CacheMediaPlayer";
+import { CachedImage } from "../../components/CachedMedia";
 import { PageHero } from "../../components/PageHero";
 import { smartImageURL } from "../../js/get_img";
 import { useEventData } from "../../event/shared/EventDataContext";
@@ -193,7 +194,7 @@ function EventPreviewCard({ event, isMobile }: { event: SharedEventRecord; isMob
           {[0, 1, 2].map((index) => {
             const src = previewUrls[index];
             return src ? (
-              <img key={`${event.id}-${index}`} src={src} alt="" style={eventCardPreviewImageStyle} />
+              <CachedImage key={`${event.id}-${index}`} src={src} alt="" style={eventCardPreviewImageStyle} />
             ) : (
               <div key={`${event.id}-${index}`} style={eventCardPreviewFallbackStyle} />
             );

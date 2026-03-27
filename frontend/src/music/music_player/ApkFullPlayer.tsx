@@ -1,6 +1,7 @@
 import type { CSSProperties } from "react";
 import { useState } from "react";
 
+import { CachedImage } from "../../components/CachedMedia";
 import { useMusicPlayback } from "./MusicPlaybackContext";
 import { resolveTrackAlbumName, resolveTrackCoverUrl } from "./musicCoverUtils";
 import { formatTime } from "./ApkAlbumComponents";
@@ -84,8 +85,9 @@ export function FullPlayer({
       ) : (
         <div style={playerPanelStyle}>
           <div style={fullCoverStyle}>
-            <img
+            <CachedImage
               src={resolveTrackCoverUrl(music.id, libraryMusics, albums)}
+              cacheKey={`music-cover:full-player:${music.id}`}
               alt={music.title}
               style={fullCoverImgStyle}
             />

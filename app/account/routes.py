@@ -14,6 +14,7 @@ from app.account.services import (
     list_claims_for_user,
     record_claim_decision,
     submit_public_payment_voucher_signature,
+    update_claim_event,
 )
 
 account_bp = Blueprint("account", __name__)
@@ -77,6 +78,31 @@ def claim_decision(request_id):
                 {
                     "status": "success",
                     "message": "操作成功",
+                    "data": serialize_request_data(request_obj, with_children=True),
+                }
+            ),
+            200,
+        )
+    except AccountError as exc:
+        return _error_response(exc)
+    except Exception as exc:
+        from models import db
+
+        db.session.rollback()
+        return jsonify({"status": "error", "message": str(exc)}), 500
+
+
+@account_bp.put("/claim/<int:request_id>/event")
+def update_claim_event_route(request_id):
+    try:
+        user = require_authenticated_user()
+        payload = request.get_json(silent=True) or {}
+        request_obj = update_claim_event(request_id, payload, user)
+        return (
+            jsonify(
+                {
+                    "status": "success",
+                    "message": "活动已更新",
                     "data": serialize_request_data(request_obj, with_children=True),
                 }
             ),

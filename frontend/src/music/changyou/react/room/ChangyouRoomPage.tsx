@@ -3,6 +3,7 @@ import QRCode from 'qrcode';
 import { useNavigate, useParams } from 'react-router-dom';
 
 import { useUserState } from '../../../../app/UserState';
+import { CachedImage } from '../../../../components/CachedMedia';
 import { ensureDesignTokens } from '../../../../theme/designTokens';
 import { CHANGYOU_PATH, CHANGYOU_ROOM_PATH, getChangyouRoomPath } from '../../../router/paths';
 import { fetchSongbookEntries, fetchSongbookEntry } from '../api';
@@ -201,7 +202,7 @@ export function ChangyouRoomPage() {
           </div>
           <div style={panelStyle}>
             <div style={sectionTitleStyle}>播放入口</div>
-            {qrDataUrl ? <img src={qrDataUrl} alt="room qr" style={qrStyle} /> : <div style={emptyCardStyle}>正在生成 QR...</div>}
+            {qrDataUrl ? <CachedImage src={qrDataUrl} alt="room qr" style={qrStyle} /> : <div style={emptyCardStyle}>正在生成 QR...</div>}
             <div style={roomMetaStyle}>{window.location.origin}/#{getChangyouRoomPath(room.room_id)}</div>
           </div>
         </div>

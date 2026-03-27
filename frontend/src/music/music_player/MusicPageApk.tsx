@@ -1,6 +1,7 @@
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import type { CSSProperties } from "react";
 
+import { CachedImage } from "../../components/CachedMedia";
 import { fetchAlbums, fetchMusicList } from "./api";
 import { AlbumCard, AlbumHero, AlbumListRow, TrackRow } from "./ApkAlbumComponents";
 import { FullPlayer } from "./ApkFullPlayer";
@@ -258,8 +259,9 @@ export function MusicPageApk() {
       {hasPlaybackSession && currentMusic && (
         <button style={miniBarStyle} onClick={() => setShowFullPlayer(true)}>
           <div style={miniArtStyle}>
-            <img
+            <CachedImage
               src={resolveTrackCoverUrl(currentMusic.id, allMusics, albums)}
+              cacheKey={`music-cover:apk-page:${currentMusic.id}`}
               alt={currentMusic.title}
               style={miniArtImgStyle}
             />

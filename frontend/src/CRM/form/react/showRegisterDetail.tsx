@@ -3,6 +3,7 @@ import type { CSSProperties, ReactNode } from "react";
 import { createRoot } from "react-dom/client";
 
 import { open_parental_form } from "../../../../../static/js/form/parental/modal.js";
+import { CachedImage } from "../../../components/CachedMedia";
 import { designTokens } from "../../../theme/designTokens";
 import { previewMemberNricChange } from "./api";
 import type {
@@ -184,7 +185,7 @@ function PaymentCard({ payment }: { payment: FormPayment }) {
           <a href={proofPath} target="_blank" rel="noreferrer" style={proofLinkStyle}>
             查看原图
           </a>
-          <img src={proofPath} alt={`payment-proof-${payment.id}`} style={paymentProofImageStyle} />
+          <CachedImage src={proofPath} cacheKey={`register-detail-proof:${payment.id}`} alt={`payment-proof-${payment.id}`} style={paymentProofImageStyle} />
         </div>
       ) : null}
     </article>

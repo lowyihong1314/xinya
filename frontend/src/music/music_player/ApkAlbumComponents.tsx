@@ -1,5 +1,6 @@
 import type { CSSProperties } from "react";
 
+import { CachedImage } from "../../components/CachedMedia";
 import { resolveAlbumCoverUrl } from "./musicCoverUtils";
 import type { AlbumRecord, MusicRecord } from "./types";
 
@@ -16,8 +17,9 @@ export function AlbumHero({ album, trackCount }: { album: AlbumRecord; trackCoun
   return (
     <div style={albumHeroStyle}>
       <div style={albumHeroCoverStyle}>
-        <img
+        <CachedImage
           src={resolveAlbumCoverUrl(album.cover_url)}
+          cacheKey={`music-apk-album-hero:${album.id}`}
           alt={album.name}
           style={{ width: "100%", height: "100%", objectFit: "cover" }}
         />
@@ -64,8 +66,9 @@ export function AlbumCard({
   return (
     <button style={albumCardStyle} onClick={onSelect}>
       <div style={albumCoverStyle}>
-        <img
+        <CachedImage
           src={resolveAlbumCoverUrl(album.cover_url)}
+          cacheKey={`music-apk-album-card:${album.id}`}
           alt={album.name}
           style={albumCoverImgStyle}
         />
@@ -111,8 +114,9 @@ export function AlbumListRow({
   return (
     <button style={albumListRowStyle} onClick={onSelect}>
       <div style={albumListCoverStyle}>
-        <img
+        <CachedImage
           src={resolveAlbumCoverUrl(album.cover_url)}
+          cacheKey={`music-apk-album-row:${album.id}`}
           alt={album.name}
           style={{ width: "100%", height: "100%", objectFit: "cover" }}
         />

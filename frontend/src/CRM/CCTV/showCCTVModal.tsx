@@ -3,8 +3,11 @@ import { createRoot } from "react-dom/client";
 import type { CSSProperties } from "react";
 import Hls from "hls.js";
 
+import { CachedVideo } from "../../components/CachedMedia";
+import { apiFetch } from "../../js/apiFetch";
+
 function ptzMove(x: number, y: number, z = 0) {
-  void fetch("/api/move_camera/ptz/move", {
+  void apiFetch("/api/move_camera/ptz/move", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ x, y, z }),
@@ -12,7 +15,7 @@ function ptzMove(x: number, y: number, z = 0) {
 }
 
 function ptzStop() {
-  void fetch("/api/move_camera/ptz/stop", { method: "POST" });
+  void apiFetch("/api/move_camera/ptz/stop", { method: "POST" });
 }
 
 function CCTVPlayerModal({
@@ -82,7 +85,7 @@ function CCTVPlayerModal({
         <button type="button" style={closeButtonStyle} onClick={onClose}>
           ✕
         </button>
-        <video ref={videoRef} controls autoPlay muted playsInline style={videoStyle} />
+        <CachedVideo ref={videoRef} controls autoPlay muted playsInline style={videoStyle} />
         <div style={ptzGridStyle}>
           <div />
           <PtzButton label="▲" onPress={() => ptzMove(0, 0.3)} />

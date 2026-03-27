@@ -287,6 +287,12 @@ export function ClaimWorkspace() {
     }));
   }
 
+  function handleClaimUpdated(nextClaim: ClaimRecord) {
+    setClaims((prev) => prev.map((claim) => (claim.id === nextClaim.id ? nextClaim : claim)));
+    setMessage("活动已更新");
+    setError(null);
+  }
+
   return (
     <div className="claim-workspace" style={shellStyle}>
       {message ? (
@@ -347,6 +353,7 @@ export function ClaimWorkspace() {
             onBack={() => setView({ kind: "list" })}
             onApprove={() => void handleDecision("approve")}
             onReject={() => void handleDecision("reject")}
+            onClaimUpdated={handleClaimUpdated}
           />
         ) : null}
       </div>

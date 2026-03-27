@@ -2,6 +2,9 @@ import { useEffect, useMemo, useState } from "react";
 import { createRoot } from "react-dom/client";
 import heic2any from "heic2any";
 
+import { CachedImage, CachedVideo } from "../components/CachedMedia";
+import { apiFetch } from "./apiFetch";
+
 type AttachmentRecord = {
   file_name?: string;
   file_path: string;
@@ -79,7 +82,7 @@ async function loadPreview(attachment: AttachmentRecord) {
   const fileName = attachment.file_name || attachment.file_path || "附件预览";
   const mime = attachment.mime_type || "";
   const ext = getExt(fileName, mime);
-  const response = await fetch(getFileUrl(attachment), { credentials: "include" });
+  const response = await apiFetch(getFileUrl(attachment), { credentials: "include" });
 
   if (!response.ok) {
     throw new Error(`附件读取失败 (${response.status})`);
@@ -383,7 +386,7 @@ function PreviewSurface({
   if (preview.mode === "image") {
     return (
       <div className="attachment-preview__image-stage" style={mediaStageStyle}>
-        <img
+        <CachedImage
           className="attachment-preview__image"
           src={preview.objectUrl}
           alt={fileName}
@@ -399,7 +402,7 @@ function PreviewSurface({
   if (preview.mode === "video") {
     return (
       <div className="attachment-preview__video-stage" style={mediaStageStyle}>
-        <video
+        <CachedVideo
           className="attachment-preview__video"
           src={preview.objectUrl}
           controls

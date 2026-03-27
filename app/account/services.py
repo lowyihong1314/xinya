@@ -12,6 +12,7 @@ from app.account.permissions import resolve_user_permissions, user_can_manage_cl
 from app.account.serializers import serialize_request_data
 from app.paths import DATA_ROOT
 from models import db
+from models.event_data import EventData
 from models.finance import (
     ReimbursementApproverData,
     ReimbursementAttachment,
@@ -237,6 +238,36 @@ def record_claim_decision(request_id, payload, user):
     )
     db.session.add(approver_row)
     request_obj.status = "rejected" if action == "reject" else "approved"
+    db.session.commit()
+    return request_obj
+
+
+def update_claim_event(request_id, payload, user):
+    request_obj = _get_claim_or_raise(request_id)
+
+    can_manage = user_can_manage_claims(user)
+    if request_obj.applicant_user_id != user.id and not can_manage:
+        raise PermissionDenied("没有权限编辑该申请")
+
+    if request_obj.is_locked:
+        raise PermissionDenied("该申请已锁定，不能修改活动")
+
+    raw_event_id = (payload or {}).get("event_id")
+    if raw_event_id in (None, "", 0, "0"):
+        request_obj.event_id = None
+        db.session.commit()
+        return request_obj
+
+    try:
+        event_id = int(raw_event_id)
+    except Exception as exc:
+        raise ValidationError("event_id 格式错误") from exc
+
+    event = EventData.query.get(event_id)
+    if not event:
+        raise ValidationError("活动不存在")
+
+    request_obj.event_id = event.id
     db.session.commit()
     return request_obj
 

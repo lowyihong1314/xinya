@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 
 import { ensureDesignTokens } from "../../theme/designTokens";
 import { useUserState } from "../../app/UserState";
+import { CachedImage } from "../../components/CachedMedia";
 import { LAMP_META } from "../../lamp/render_lamp_init.js";
 import { approvePayment, fetchPayments, removePayment } from "./api";
 import type { PaymentRecord, RegistrationRecord } from "./types";
@@ -252,8 +253,10 @@ export function FahuiPage() {
                   }}
                 >
                   {approved && payment.submitter_id ? (
-                    <img
+                    <CachedImage
                       src={`/api/user_control/get_profile_image/${payment.submitter_id}`}
+                      cacheKey={`fahui-submitter:${payment.submitter_id}`}
+                      resolveRelativeToApi
                       alt=""
                       style={styles.avatar}
                     />

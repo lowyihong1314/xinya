@@ -1,5 +1,6 @@
 import { useRef, useState, type CSSProperties, type FormEvent } from "react";
 
+import { CachedImage } from "../../../components/CachedMedia";
 import { openPreviewModal } from "../../../js/attachment_preview";
 import { openBrochurePreviewModal } from "../../../event/shared/brochurePreview";
 import type { EventCreatePayload, EventMutationPayload, EventRecord } from "./types";
@@ -275,8 +276,9 @@ export function EventTableView(props: {
             <>
               <section style={heroStyle(isMobile)}>
                 <div style={heroImageWrapStyle}>
-                  <img
+                  <CachedImage
                     src={props.imageUrl || "https://via.placeholder.com/180x180?text=No+Image"}
+                    cacheKey={props.selectedEventId != null ? `event-table-image:${props.selectedEventId}` : undefined}
                     alt={props.selectedEvent.event_name || "event"}
                     style={heroImageStyle}
                   />
@@ -520,8 +522,10 @@ export function EventTableView(props: {
                   {(props.selectedEvent.organizers || []).length ? (
                     props.selectedEvent.organizers!.map((user) => (
                       <div key={user.id} style={organizerCardStyle}>
-                        <img
+                        <CachedImage
                           src={`/api/user_control/get_profile_image/${user.id}`}
+                          cacheKey={`event-table-user:${user.id}`}
+                          resolveRelativeToApi
                           alt={user.display_name || user.username || String(user.id)}
                           style={organizerAvatarStyle}
                         />

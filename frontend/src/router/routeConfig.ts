@@ -42,6 +42,21 @@ export const legacyPageToPath: Record<string, string> = {
   lamp_registration: "/lamp-registration",
 };
 
+export function resolveLegacyPath(page: string, searchParams: URLSearchParams) {
+  if (page === "event_detail") {
+    const eventId = searchParams.get("event_id");
+    return eventId ? `/event/${eventId}` : "/not-found?reason=missing-event-id";
+  }
+  if (page === "image_detail") {
+    const imageId = searchParams.get("image_id");
+    return imageId ? `/image/${imageId}` : "/not-found?reason=missing-image-id";
+  }
+  if (page === "lamp_registration") {
+    return "/lamp-registration";
+  }
+  return legacyPageToPath[page] ?? "/not-found";
+}
+
 export function pageKeyFromPath(pathname: string) {
   if (pathname === "/") return "home";
   if (pathname.startsWith("/info")) return "info";

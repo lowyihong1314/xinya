@@ -4,17 +4,18 @@ This directory contains the React shell for the CRM page.
 
 ## Goal
 
-Move CRM routing and module switching into React first, while keeping existing CRM business panels alive during the migration.
+Move CRM routing and module switching into React Router, while keeping CRM business panels path-based and React-first.
 
 ## Structure
 
-- `CRMPage.tsx`: top-level CRM page, tab state, URL sync, access gate.
-- `LegacyCRMPanel.tsx`: mounts one legacy CRM module into a React-managed container.
-- `crmModules.ts`: shared CRM module registry and key helpers.
+- `CRMPage.tsx`: CRM layout shell, module nav, access gate, and `<Outlet />`.
+- `CRMHomePage.tsx`: compact mobile-first CRM landing page.
+- `crmModules.ts`: shared CRM module registry plus path helpers.
+- `routes.tsx`: nested CRM route definitions and legacy query redirects.
 
 ## Current registry status
 
-The current `CRM_MODULES` registry is already React-first:
+The current `CRM_MODULES` registry is fully React:
 
 - user control
 - event table
@@ -26,22 +27,19 @@ The current `CRM_MODULES` registry is already React-first:
 - songbook
 - embedded file system
 
-`LegacyCRMPanel.tsx` is still useful as a migration utility, but the active module list is no longer relying on legacy renderers today.
-
 ## URL state
 
-- Active module is stored in `?crm=<module_key>`.
-- The legacy `?CRM=` query is normalized to `?crm=` automatically.
-- Alias sections such as `membership_registration` and `youth_class_registration` are normalized to `permanent_registration` plus a `registration` section query.
+- Active module is stored on path routes such as `/crm/user_control` and `/crm/finance`.
+- Mobile UI exposes an extra `/crm/home` entry as a cleaner CRM landing page.
+- Legacy `?crm=` and `?CRM=` links are redirected automatically into the matching CRM child route.
+- Alias sections such as `membership_registration` and `youth_class_registration` are normalized to `/crm/permanent_registration` plus a `registration` section query.
 
 ## Migration rule
 
 - New CRM modules should be implemented as React pages when practical.
-- Existing modules can stay in the registry as legacy renderers until they are rewritten.
 - All new colors must come from `frontend/src/theme/designTokens.ts`. If a needed tone does not exist, add a token there first instead of hardcoding colors inside CRM components.
 
 ## React Router Migration Track
 
-- `CRMPage.tsx` is still acting as both layout and a query-string router. The end-state should turn it into a CRM layout route with `<Outlet />` and path-based children instead of `useSearchParams()`-driven panel switching.
-- `crmModules.ts` should gradually evolve from a panel registry into route metadata used by nested router definitions and CRM nav rendering.
-- `LegacyCRMPanel.tsx` should be treated as removal debt. Do not route new work through it.
+- CRM module switching now runs on nested React Router child routes.
+- A remaining broader migration target is converting finance and permanent-registration sub-sections from query-param tabs into deeper nested paths.
