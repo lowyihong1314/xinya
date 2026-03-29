@@ -54,7 +54,8 @@ def get_event_image(id, type):
 
 
 @media_bp.post("/upload_media")
-@permission_required("event")
+@login_required
+@permission_required("event_edit")
 def upload_media():
     event_id = request.form.get("event_id")
     if not event_id:
@@ -83,7 +84,8 @@ def upload_media():
 
 
 @media_bp.post("/rotate_file/<int:file_id>/<int:angle>")
-@permission_required("event")
+@login_required
+@permission_required("event_edit")
 def rotate_file(file_id, angle):
     rotate_album_file(file_id, angle)
     return jsonify({"status": "success", "message": "Image rotated"})
@@ -91,6 +93,7 @@ def rotate_file(file_id, angle):
 
 @media_bp.delete("/delete_files")
 @login_required
+@permission_required("event_edit")
 def delete_files():
     try:
         file_ids = (request.json or {}).get("file_ids", [])
@@ -107,7 +110,6 @@ def delete_files():
 
 
 @media_bp.post("/download_files")
-@login_required
 def download_files():
     try:
         file_ids = parse_file_ids(request.form.get("file_ids", "[]"))

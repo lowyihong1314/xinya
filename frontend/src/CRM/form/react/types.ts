@@ -99,7 +99,9 @@ export type FormRecord = {
   detail?: string;
   expired?: string;
   created_at?: string;
+  member_count?: number;
   fees?: FormFee[];
+  payments?: FormPayment[];
   extra_field_configs?: ExtraFieldConfig[];
   members?: FormMember[];
   events?: FormEvent[];

@@ -14,12 +14,17 @@ permission_names = [
     "account_edit",
     "member",
     "member_edit",
-    "event",
+    "form_read",
+    "form_edit",
+    "member_detail",
+    "youth_class_read",
+    "youth_class_edit",
     "event_edit",
     "permission",
     "permission_edit",
     "music_edit",
     "edit_info",
+    "info_tree_hole",
 ]
 
 

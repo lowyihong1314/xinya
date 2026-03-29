@@ -1,16 +1,31 @@
 import { ensureDesignTokens } from "../../../theme/designTokens";
 import { useUserState } from "../../../app/UserState";
+import { getUserPermissionNames } from "../../../app/permissions";
 import { useFormWorkspace } from "./useFormWorkspace";
 import { FormWorkspaceView } from "./FormWorkspaceView";
 
 export function FormWorkspacePage() {
   ensureDesignTokens();
 
-  const { isMobile } = useUserState();
-  const { state, actions } = useFormWorkspace();
+  const { user, isMobile } = useUserState();
+  const permissionNames = getUserPermissionNames(user);
+  const canReadForms =
+    permissionNames.has("form_read") ||
+    permissionNames.has("form_edit") ||
+    permissionNames.has("member_detail");
+  const canEditForms = permissionNames.has("form_edit");
+  const canViewMemberDetail = canEditForms || permissionNames.has("member_detail");
+  const { state, actions } = useFormWorkspace({
+    enabled: canReadForms,
+    canEditMembers: canEditForms,
+  });
 
   return (
     <FormWorkspaceView
+      canReadForms={canReadForms}
+      canEditForms={canEditForms}
+      canViewMemberDetail={canViewMemberDetail}
+      canEditMembers={canEditForms}
       forms={state.forms}
       selectedForm={state.selectedForm}
       fees={state.fees}

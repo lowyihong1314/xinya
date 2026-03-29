@@ -23,6 +23,14 @@
 - Member export is generated client-side with lazy-loaded `xlsx`.
 - Share actions are exposed from the main workspace for both the registration page and payment page.
 
+## Permission behavior
+
+- The page now has three practical states: no access, read-only form access, and full edit access.
+- `form_read` can read form structure and settings but cannot mutate them.
+- `member_detail` unlocks the Members section and sensitive member detail modal.
+- `form_edit` unlocks all form configuration changes and member mutations.
+- When the backend withholds member data, the UI shows member counts and a permission hint instead of trying to open empty detail views.
+
 ## Shared dependencies
 
 - `FeePanel.tsx` is reused by `frontend/src/CRM/membership/react` and `frontend/src/CRM/youth_class/react`.

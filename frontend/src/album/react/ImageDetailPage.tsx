@@ -3,6 +3,7 @@ import { createPortal } from "react-dom";
 import { useNavigate, useParams } from "react-router-dom";
 
 import { useUserState } from "../../app/UserState";
+import { hasUserPermission } from "../../app/permissions";
 import { CacheMediaPlayer } from "../../components/CacheMediaPlayer";
 import { API_BASE } from "../../js/apiBase";
 import { apiFetch } from "../../js/apiFetch";
@@ -97,17 +98,18 @@ const HEIC_EXTENSIONS = new Set(["heic", "heif"]);
 const ROTATABLE_EXTENSIONS = new Set(["png", "jpg", "jpeg", "heic"]);
 
 export function ImageDetailPageRoute() {
-  const { isMobile } = useUserState();
-  return <ImageDetailPage isMobile={isMobile} />;
+  const { isMobile, user } = useUserState();
+  return <ImageDetailPage isMobile={isMobile} user={user} />;
 }
 
-export function ImageDetailPage({ isMobile }: { isMobile: boolean }) {
+export function ImageDetailPage({ isMobile, user }: { isMobile: boolean; user?: unknown }) {
   const navigate = useNavigate();
   const { imageId } = useParams();
   const { file, event, mediaSource, loading, error, reloadCurrent } = useImageDetail(imageId);
   const [actionError, setActionError] = useState<string | null>(null);
   const [rotating, setRotating] = useState(false);
   const [viewerOpen, setViewerOpen] = useState(false);
+  const canEditEvent = hasUserPermission(user, "event_edit");
 
   useEffect(() => {
     if (!loading && (error || !mediaSource || mediaSource.kind === "unsupported")) {
@@ -154,7 +156,7 @@ export function ImageDetailPage({ isMobile }: { isMobile: boolean }) {
   }
 
   async function rotateImage(angle: number) {
-    if (!file || !canRotate || rotating) {
+    if (!canEditEvent || !file || !canRotate || rotating) {
       return;
     }
 
@@ -236,7 +238,7 @@ export function ImageDetailPage({ isMobile }: { isMobile: boolean }) {
               </button>
             </div>
             <div style={toolbarGroupStyle(isMobile)}>
-              {!isVideo ? (
+              {!isVideo && canEditEvent ? (
                 <>
                   <button type="button" style={ghostButtonStyle(isMobile)} disabled={!canRotate || rotating || loading} onClick={() => void rotateImage(-90)}>
                     左转

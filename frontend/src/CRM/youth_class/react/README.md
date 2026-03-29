@@ -12,6 +12,12 @@
 - Shows summary stats for paid, rejected, processing, and no-payment entries.
 - Lets admins copy applicant payment links and update payment review status.
 
+## Permission behavior
+
+- `youth_class_read` can open the workspace in read-only mode.
+- `youth_class_edit` can change fee settings and applicant/payment statuses.
+- Without either permission, the page renders a clear permission notice instead of attempting API calls.
+
 ## Public link and APIs
 
 - The public registration URL exposed by the page is `${window.location.origin}/template/youth-class-registration`.

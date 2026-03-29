@@ -2,6 +2,7 @@ export type ProfileUser = {
   id: number;
   username: string;
   display_name?: string;
+  has_password?: boolean;
   display?: boolean | null;
   nric_asset_id?: number | null;
   nric_data_id?: number | null;

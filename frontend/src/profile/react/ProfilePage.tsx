@@ -6,7 +6,7 @@ import { useUserState } from "../../app/UserState";
 import { CachedImage } from "../../components/CachedMedia";
 import { ensureDesignTokens } from "../../theme/designTokens";
 import { API_BASE } from "../../js/apiBase";
-import { fetchAppReleases, fetchMyFootprints, startMembershipRenewal, updateProfile, uploadProfileImage } from "./api";
+import { changeMyPassword, fetchAppReleases, fetchMyFootprints, startMembershipRenewal, updateProfile, uploadProfileImage } from "./api";
 import { MembershipActionCard } from "./MembershipActionCard";
 import type {
   AppRelease,
@@ -19,6 +19,11 @@ import type {
 } from "./types";
 
 type ProfileSectionKey = "overview" | "profile" | "journey" | "account" | "bank-note";
+type PasswordFormValues = {
+  currentPassword: string;
+  newPassword: string;
+  confirmPassword: string;
+};
 
 const DEFAULT_SECTION: ProfileSectionKey = "overview";
 
@@ -189,6 +194,14 @@ function emptyFootprintPayload(): ProfileFootprintPayload {
   };
 }
 
+function emptyPasswordFormValues(): PasswordFormValues {
+  return {
+    currentPassword: "",
+    newPassword: "",
+    confirmPassword: "",
+  };
+}
+
 function formatDateTime(value: string | null | undefined) {
   if (!value) {
     return "未记录";
@@ -261,6 +274,8 @@ export function ProfilePage() {
   const [formValues, setFormValues] = useState<ProfileFormValues>(emptyFormValues);
   const [avatarVersion, setAvatarVersion] = useState(Date.now());
   const [saving, setSaving] = useState(false);
+  const [passwordValues, setPasswordValues] = useState<PasswordFormValues>(emptyPasswordFormValues);
+  const [passwordSaving, setPasswordSaving] = useState(false);
   const [uploading, setUploading] = useState(false);
   const [membershipActionBusy, setMembershipActionBusy] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
@@ -301,6 +316,10 @@ export function ProfilePage() {
   useEffect(() => {
     setFormValues(formValuesFromUser(profileUser));
   }, [profileUser]);
+
+  useEffect(() => {
+    setPasswordValues(emptyPasswordFormValues());
+  }, [profileUser?.id, profileUser?.has_password]);
 
   useEffect(() => {
     if (!message && !error) {
@@ -438,6 +457,10 @@ export function ProfilePage() {
     setFormValues((prev) => ({ ...prev, [key]: value }));
   }
 
+  function updatePasswordField<Key extends keyof PasswordFormValues>(key: Key, value: PasswordFormValues[Key]) {
+    setPasswordValues((prev) => ({ ...prev, [key]: value }));
+  }
+
   function navigateToSection(section: ProfileSectionKey) {
     navigate(profileSectionPath(section));
   }
@@ -472,6 +495,44 @@ export function ProfilePage() {
       setError(err instanceof Error ? err.message : "生成续费链接失败");
     } finally {
       setMembershipActionBusy(false);
+    }
+  }
+
+  async function handlePasswordSubmit(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+
+    const hasPassword = Boolean(profileUser?.has_password);
+    if (hasPassword && !passwordValues.currentPassword) {
+      setError("请输入当前密码。");
+      return;
+    }
+    if (!passwordValues.newPassword.trim()) {
+      setError("请输入新密码。");
+      return;
+    }
+    if (passwordValues.newPassword.length < 6) {
+      setError("新密码至少需要 6 位。");
+      return;
+    }
+    if (passwordValues.newPassword !== passwordValues.confirmPassword) {
+      setError("两次输入的新密码不一致。");
+      return;
+    }
+
+    setPasswordSaving(true);
+    setError(null);
+    try {
+      const payload = await changeMyPassword({
+        old_password: hasPassword ? passwordValues.currentPassword : undefined,
+        new_password: passwordValues.newPassword,
+      });
+      await refreshUser();
+      setPasswordValues(emptyPasswordFormValues());
+      setMessage(payload.message || (hasPassword ? "密码修改成功" : "密码设置成功"));
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "密码保存失败");
+    } finally {
+      setPasswordSaving(false);
     }
   }
 
@@ -798,6 +859,7 @@ export function ProfilePage() {
               <h3 style={featureCardTitleStyle}>当前状态</h3>
               <div style={featureListStyle}>
                 <InfoRow label="Username" value={profileUser.username} isMobile={isMobile} />
+                <InfoRow label="密码状态" value={profileUser.has_password ? "已设置" : "未设置"} isMobile={isMobile} />
                 <InfoRow label="Email" value={profileUser.email || "未填写"} isMobile={isMobile} />
                 <InfoRow label="Phone" value={profileUser.phone || "未填写"} isMobile={isMobile} />
                 <InfoRow label="Guardian" value={profileUser.parent_1 || "未填写"} isMobile={isMobile} />
@@ -833,6 +895,73 @@ export function ProfilePage() {
               <div style={footprintNoteStyle}>
                 头像上传仍然保留在页首；这里保留纯账号操作，避免功能混在同一个区域里。
               </div>
+            </article>
+
+            <article style={featureCardStyle(isMobile)}>
+              <div style={featureCardEyebrowStyle}>Security</div>
+              <h3 style={featureCardTitleStyle}>{profileUser.has_password ? "修改密码" : "设置密码"}</h3>
+              <form style={profileFormStackStyle} onSubmit={handlePasswordSubmit}>
+                {profileUser.has_password ? (
+                  <label style={fieldStyle}>
+                    <span style={fieldLabelStyle}>当前密码</span>
+                    <input
+                      type="password"
+                      autoComplete="current-password"
+                      value={passwordValues.currentPassword}
+                      onChange={(event) => updatePasswordField("currentPassword", event.target.value)}
+                      style={inputStyle}
+                    />
+                  </label>
+                ) : (
+                  <div style={footprintNoteStyle}>
+                    当前账号还没有设置密码。保存后，你就可以用 `username + 新密码` 登录。
+                  </div>
+                )}
+
+                <label style={fieldStyle}>
+                  <span style={fieldLabelStyle}>新密码</span>
+                  <input
+                    type="password"
+                    autoComplete="new-password"
+                    value={passwordValues.newPassword}
+                    onChange={(event) => updatePasswordField("newPassword", event.target.value)}
+                    style={inputStyle}
+                  />
+                </label>
+
+                <label style={fieldStyle}>
+                  <span style={fieldLabelStyle}>确认新密码</span>
+                  <input
+                    type="password"
+                    autoComplete="new-password"
+                    value={passwordValues.confirmPassword}
+                    onChange={(event) => updatePasswordField("confirmPassword", event.target.value)}
+                    style={inputStyle}
+                  />
+                </label>
+
+                <div style={fieldHintStyle}>
+                  密码至少 6 位。保存后，新密码会立即生效。
+                </div>
+
+                <div style={formActionsStyle(isMobile)}>
+                  <button
+                    type="button"
+                    style={ghostButtonStyle}
+                    disabled={passwordSaving}
+                    onClick={() => setPasswordValues(emptyPasswordFormValues())}
+                  >
+                    清空
+                  </button>
+                  <button type="submit" style={primaryButtonStyle} disabled={passwordSaving}>
+                    {passwordSaving
+                      ? "保存中…"
+                      : profileUser.has_password
+                        ? "更新密码"
+                        : "设置密码"}
+                  </button>
+                </div>
+              </form>
             </article>
 
             <AppDownloadCard releases={appReleases} loading={appReleasesLoading} isMobile={isMobile} />

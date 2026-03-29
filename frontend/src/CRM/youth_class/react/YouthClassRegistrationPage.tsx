@@ -3,6 +3,7 @@ import type { CSSProperties } from "react";
 import QRCode from "qrcode";
 
 import { useUserState } from "../../../app/UserState";
+import { getUserPermissionNames } from "../../../app/permissions";
 import { CachedImage } from "../../../components/CachedMedia";
 import { apiFetch } from "../../../js/apiFetch";
 import { ensureDesignTokens } from "../../../theme/designTokens";
@@ -152,7 +153,10 @@ function registrationStatusLabel(status: string | undefined) {
 export function YouthClassRegistrationPage() {
   ensureDesignTokens();
 
-  const { isMobile } = useUserState();
+  const { user, isMobile } = useUserState();
+  const permissionNames = getUserPermissionNames(user);
+  const canReadYouthClass = permissionNames.has("youth_class_read") || permissionNames.has("youth_class_edit");
+  const canEditYouthClass = permissionNames.has("youth_class_edit");
   const [entries, setEntries] = useState<Entry[]>([]);
   const [settings, setSettings] = useState<Settings>({ fees: [] });
   const [loading, setLoading] = useState(true);
@@ -161,8 +165,16 @@ export function YouthClassRegistrationPage() {
   const [error, setError] = useState("");
   const [notice, setNotice] = useState<Notice | null>(null);
   const [qrDataUrl, setQrDataUrl] = useState("");
+  const [publicPageOpen, setPublicPageOpen] = useState(false);
 
   async function loadData() {
+    if (!canReadYouthClass) {
+      setEntries([]);
+      setSettings({ fees: [] });
+      setLoading(false);
+      return;
+    }
+
     setLoading(true);
     setError("");
     try {
@@ -181,8 +193,12 @@ export function YouthClassRegistrationPage() {
   }
 
   useEffect(() => {
+    if (!canReadYouthClass) {
+      setLoading(false);
+      return;
+    }
     void loadData();
-  }, []);
+  }, [canReadYouthClass]);
 
   useEffect(() => {
     void QRCode.toDataURL(PUBLIC_URL, {
@@ -271,32 +287,63 @@ export function YouthClassRegistrationPage() {
     }));
   }
 
+  if (!canReadYouthClass) {
+    return (
+      <div style={pageStyle}>
+        <section style={panelStyle(isMobile)}>
+          <div style={errorStyle}>需要 `youth_class_read` 或 `youth_class_edit` 权限才能查看青少年班后台。</div>
+        </section>
+      </div>
+    );
+  }
+
   return (
     <div style={pageStyle}>
-      <section style={heroStyle(isMobile)}>
-        <div style={panelStyle(isMobile)}>
-          <div style={eyebrowStyle}>CRM / 报名管理</div>
-          <h1 style={titleStyle(isMobile)}>青少年 & 青年佛学班</h1>
-          <p style={descStyle}>这里可以维护按年龄分段的报名费率、查看每位学员的付款入口、追踪付款截图并完成审核。</p>
-          <div style={statsRowStyle(isMobile)}>
-            <MetricCard label="报名总数" value={String(entries.length)} />
-            <MetricCard label="已付款" value={String(stats.paid)} />
-            <MetricCard label="处理中" value={String(stats.processing)} />
-            <MetricCard label="未提交付款" value={String(stats.noPayment)} />
-          </div>
-        </div>
-
-        <div style={panelStyle(isMobile)}>
+      {publicPageOpen ? (
+        <section style={panelStyle(isMobile)}>
           <div style={sectionTitleRowStyle(isMobile)}>
-            <h2 style={sectionTitleStyle()}>公开报名页</h2>
-            <a href={PUBLIC_URL} target="_blank" rel="noreferrer" style={linkStyle}>打开公开报名页</a>
+            <div>
+              <div style={eyebrowStyle}>CRM / 报名管理</div>
+              <h2 style={sectionTitleStyle()}>公开报名页</h2>
+            </div>
+            <button type="button" style={secondaryButtonStyle} onClick={() => setPublicPageOpen(false)}>
+              返回
+            </button>
           </div>
-          <div style={qrWrapStyle(isMobile)}>
-            {qrDataUrl ? <CachedImage src={qrDataUrl} alt="报名二维码" style={qrImageStyle(isMobile)} /> : <div style={emptyStyle}>生成二维码中…</div>}
+          <iframe
+            src={PUBLIC_URL}
+            title="青少年班公开报名页"
+            style={iframeStyle(isMobile)}
+          />
+        </section>
+      ) : (
+        <section style={heroStyle(isMobile)}>
+          <div style={panelStyle(isMobile)}>
+            <div style={eyebrowStyle}>CRM / 报名管理</div>
+            <h1 style={titleStyle(isMobile)}>青少年 & 青年佛学班</h1>
+            <p style={descStyle}>这里可以维护按年龄分段的报名费率、查看每位学员的付款入口、追踪付款截图并完成审核。</p>
+            <div style={statsRowStyle(isMobile)}>
+              <MetricCard label="报名总数" value={String(entries.length)} />
+              <MetricCard label="已付款" value={String(stats.paid)} />
+              <MetricCard label="处理中" value={String(stats.processing)} />
+              <MetricCard label="未提交付款" value={String(stats.noPayment)} />
+            </div>
           </div>
-          <div style={urlBoxStyle}>{PUBLIC_URL}</div>
-        </div>
-      </section>
+
+          <div style={panelStyle(isMobile)}>
+            <div style={sectionTitleRowStyle(isMobile)}>
+              <h2 style={sectionTitleStyle()}>公开报名页</h2>
+              <button type="button" style={secondaryButtonStyle} onClick={() => setPublicPageOpen(true)}>
+                打开公开报名页
+              </button>
+            </div>
+            <div style={qrWrapStyle(isMobile)}>
+              {qrDataUrl ? <CachedImage src={qrDataUrl} alt="报名二维码" style={qrImageStyle(isMobile)} /> : <div style={emptyStyle}>生成二维码中…</div>}
+            </div>
+            <div style={urlBoxStyle}>{PUBLIC_URL}</div>
+          </div>
+        </section>
+      )}
 
       <section style={panelStyle(isMobile)}>
         <div style={sectionTitleRowStyle(isMobile)}>
@@ -311,6 +358,7 @@ export function YouthClassRegistrationPage() {
         {error ? <div style={errorStyle}>{error}</div> : null}
         <FeePanel
           fees={(settings.fees || []).map((fee, index) => ({ ...fee, id: fee.id ?? `youth-fee-${index}` }))}
+          readOnly={!canEditYouthClass}
           onAdd={handleAddFee}
           onEdit={handleEditFee}
           onDelete={handleDeleteFee}
@@ -323,14 +371,18 @@ export function YouthClassRegistrationPage() {
           descriptionPlaceholder="例如：含教材 / 青年班报名费"
         />
         <div style={settingsFooterStyle}>
-            <div style={amountHintStyle}>
+          <div style={amountHintStyle}>
             {settings.fees?.length
               ? `已配置 ${settings.fees.length} 条费率`
               : "尚未配置年龄费率"}
-            </div>
-          <button type="button" style={primaryButtonStyle} onClick={() => void handleSaveSettings()} disabled={savingSettings}>
-            {savingSettings ? "保存中…" : "保存报名费率"}
-          </button>
+          </div>
+          {canEditYouthClass ? (
+            <button type="button" style={primaryButtonStyle} onClick={() => void handleSaveSettings()} disabled={savingSettings}>
+              {savingSettings ? "保存中…" : "保存报名费率"}
+            </button>
+          ) : (
+            <div style={mutedStyle}>当前为只读模式</div>
+          )}
         </div>
       </section>
 
@@ -403,15 +455,21 @@ export function YouthClassRegistrationPage() {
                               <span style={mutedStyle}>没有截图</span>
                             )}
                             <div style={paymentButtonGroupStyle()}>
-                              <button type="button" style={miniButtonStyle} disabled={isUpdating} onClick={() => void handlePaymentStatus(payment.id, "process")}>
-                                标记处理中
-                              </button>
-                              <button type="button" style={miniSuccessButtonStyle} disabled={isUpdating} onClick={() => void handlePaymentStatus(payment.id, "checked")}>
-                                审核通过
-                              </button>
-                              <button type="button" style={miniDangerButtonStyle} disabled={isUpdating} onClick={() => void handlePaymentStatus(payment.id, "fail")}>
-                                退回付款
-                              </button>
+                              {canEditYouthClass ? (
+                                <>
+                                  <button type="button" style={miniButtonStyle} disabled={isUpdating} onClick={() => void handlePaymentStatus(payment.id, "process")}>
+                                    标记处理中
+                                  </button>
+                                  <button type="button" style={miniSuccessButtonStyle} disabled={isUpdating} onClick={() => void handlePaymentStatus(payment.id, "checked")}>
+                                    审核通过
+                                  </button>
+                                  <button type="button" style={miniDangerButtonStyle} disabled={isUpdating} onClick={() => void handlePaymentStatus(payment.id, "fail")}>
+                                    退回付款
+                                  </button>
+                                </>
+                              ) : (
+                                <span style={mutedStyle}>当前为只读模式</span>
+                              )}
                             </div>
                           </div>
                         </div>
@@ -505,6 +563,17 @@ function panelStyle(isMobile: boolean): CSSProperties {
     boxShadow: "0 18px 36px var(--x-color-shadow-soft)",
     display: "grid",
     gap: "16px",
+  };
+}
+
+function iframeStyle(isMobile: boolean): CSSProperties {
+  return {
+    width: "100%",
+    minHeight: isMobile ? "68vh" : "74vh",
+    height: isMobile ? "68vh" : "74vh",
+    border: "1px solid var(--x-color-line-soft)",
+    borderRadius: "18px",
+    background: "white",
   };
 }
 

@@ -1,4 +1,4 @@
-import type { AboutEntry, HistoryEntry } from "./types";
+import type { AboutEntry, HistoryEntry, TreeHoleEntry } from "./types";
 import { apiFetch } from "../../js/apiFetch";
 
 async function parseJson(response: Response) {
@@ -75,4 +75,42 @@ export async function deleteHistoryEntry(id: number) {
     body: JSON.stringify({ id }),
   });
   return parseJson(response);
+}
+
+export async function fetchTreeHoleEntries(): Promise<TreeHoleEntry[]> {
+  const response = await apiFetch("/api/info/tree_hole/messages", {
+    credentials: "include",
+  });
+  return parseJson(response);
+}
+
+export async function createTreeHoleEntry(input: { author_name?: string; message: string }) {
+  const response = await apiFetch("/api/info/tree_hole/messages", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    credentials: "include",
+    body: JSON.stringify(input),
+  });
+  return parseJson<{ success?: boolean; message?: string }>(response);
+}
+
+export async function updateTreeHoleEntry(
+  id: number,
+  input: { author_name?: string; message: string; display: boolean; is_spam: boolean },
+) {
+  const response = await apiFetch(`/api/info/tree_hole/messages/${id}`, {
+    method: "PUT",
+    headers: { "Content-Type": "application/json" },
+    credentials: "include",
+    body: JSON.stringify(input),
+  });
+  return parseJson<{ success?: boolean; message?: string; data?: TreeHoleEntry }>(response);
+}
+
+export async function deleteTreeHoleEntry(id: number) {
+  const response = await apiFetch(`/api/info/tree_hole/messages/${id}`, {
+    method: "DELETE",
+    credentials: "include",
+  });
+  return parseJson<{ success?: boolean; message?: string }>(response);
 }

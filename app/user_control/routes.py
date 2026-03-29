@@ -58,6 +58,17 @@ TEXT_USER_FIELDS = {
     "tng_number",
     "user_theme",
 }
+FULL_USER_READ_PERMISSION_NAMES = {"member", "member_edit"}
+FULL_DEPARTMENT_READ_PERMISSION_NAMES = {
+    "department",
+    "department_edit",
+    "permission",
+    "permission_edit",
+    "member",
+    "member_edit",
+}
+MEMBERSHIP_ADMIN_READ_PERMISSION_NAMES = {"member", "member_edit", "account_edit"}
+MEMBERSHIP_ADMIN_WRITE_PERMISSION_NAMES = {"member_edit", "account_edit"}
 
 
 def _format_department_delete_integrity_error(exc):
@@ -71,6 +82,53 @@ def _format_department_delete_integrity_error(exc):
         return "该部门仍存在关联成员或权限，无法删除。请刷新后重试；如果仍失败，请先检查部门成员和权限设置。"
 
     return "该部门仍有关联数据，无法删除。请先移除关联后再试。"
+
+
+def _current_user_permission_names():
+    if not getattr(current_user, "is_authenticated", False):
+        return set()
+    return set(get_current_user_permissions(current_user))
+
+
+def _current_user_has_any_permission(permission_names):
+    return bool(_current_user_permission_names() & set(permission_names))
+
+
+def _permission_denied_response(permission_names):
+    joined = " / ".join(sorted(permission_names))
+    return jsonify({"status": "error", "message": f"缺少权限，需要以下任一权限：{joined}"}), 403
+
+
+def _serialize_basic_user(user, *, include_membership=False):
+    data = {
+        "id": user.id,
+        "username": user.username,
+        "display_name": user.display_name,
+    }
+    if include_membership:
+        data["is_member"] = bool(user.is_member)
+    return data
+
+
+def _serialize_user_for_request(user):
+    if current_user.is_authenticated and (
+        current_user.id == user.id or _current_user_has_any_permission(FULL_USER_READ_PERMISSION_NAMES)
+    ):
+        return user.to_dict()
+    return _serialize_basic_user(user)
+
+
+def _serialize_basic_department(department):
+    return {
+        "id": department.id,
+        "name": department.name,
+    }
+
+
+def _serialize_department_for_request(department):
+    if _current_user_has_any_permission(FULL_DEPARTMENT_READ_PERMISSION_NAMES):
+        return department.to_dict()
+    return _serialize_basic_department(department)
 
 
 def _normalize_identity_value(value, *, undefined_as_none=False):
@@ -418,33 +476,38 @@ def get_membership_payment_proof_image(payment_id):
 
 @user_control_bp.get("/membership/settings")
 @login_required
-@permission_required("account_edit")
 def get_membership_settings():
+    if not _current_user_has_any_permission(MEMBERSHIP_ADMIN_READ_PERMISSION_NAMES):
+        return _permission_denied_response(MEMBERSHIP_ADMIN_READ_PERMISSION_NAMES)
     return membership.get_membership_payment_settings()
 
 
 @user_control_bp.put("/membership/settings")
 @login_required
-@permission_required("account_edit")
 def update_membership_settings():
+    if not _current_user_has_any_permission(MEMBERSHIP_ADMIN_WRITE_PERMISSION_NAMES):
+        return _permission_denied_response(MEMBERSHIP_ADMIN_WRITE_PERMISSION_NAMES)
     return membership.update_membership_payment_settings(request.get_json(silent=True) or {})
 
 
 @user_control_bp.get("/membership/entries")
 @login_required
-@permission_required("account_edit")
 def get_membership_entries():
+    if not _current_user_has_any_permission(MEMBERSHIP_ADMIN_READ_PERMISSION_NAMES):
+        return _permission_denied_response(MEMBERSHIP_ADMIN_READ_PERMISSION_NAMES)
     return membership.get_membership_registrations()
 
 
 @user_control_bp.post("/membership/payment/<int:payment_id>/status")
 @login_required
-@permission_required("account_edit")
 def update_membership_payment_status(payment_id):
+    if not _current_user_has_any_permission(MEMBERSHIP_ADMIN_WRITE_PERMISSION_NAMES):
+        return _permission_denied_response(MEMBERSHIP_ADMIN_WRITE_PERMISSION_NAMES)
     return membership.update_membership_payment_status(payment_id, request.get_json(silent=True) or {})
 
 
 @user_control_bp.post("/edit_reject_local/<edit_type>")
+@login_required
 @permission_required("member_edit")
 def edit_reject_local(edit_type):
     if edit_type not in ["approve", "reject"]:
@@ -471,20 +534,17 @@ def edit_reject_local(edit_type):
 
 @user_control_bp.get("/get_all_user_data")
 def get_all_user_data():
-    if current_user.is_authenticated:
+    if current_user.is_authenticated and _current_user_has_any_permission(FULL_USER_READ_PERMISSION_NAMES):
         users = User.query.all()
         user_data = [user.to_dict() for user in users]
         login = True
+    elif current_user.is_authenticated:
+        users = User.query.all()
+        user_data = [_serialize_basic_user(user, include_membership=True) for user in users]
+        login = True
     else:
         users = User.query.filter_by(display=True).all()
-        user_data = [
-            {
-                "id": user.id,
-                "username": user.username,
-                "display_name": user.display_name,
-            }
-            for user in users
-        ]
+        user_data = [_serialize_basic_user(user) for user in users]
         login = False
 
     return jsonify({"login": login, "data": user_data})
@@ -496,10 +556,11 @@ def get_user_detail(user_id):
     user = User.query.get(user_id)
     if not user:
         return jsonify({"status": "error", "message": "用户不存在"}), 404
-    return jsonify(user.to_dict())
+    return jsonify(_serialize_user_for_request(user))
 
 
 @user_control_bp.post("/edit_user_data")
+@login_required
 @permission_required("member_edit")
 def edit_user_data():
     try:
@@ -537,6 +598,7 @@ def edit_user_data():
 
 
 @user_control_bp.post("/register")
+@login_required
 @permission_required("member_edit")
 def register():
     data = request.get_json() or {}
@@ -596,23 +658,33 @@ def login():
 @user_control_bp.post("/change_password")
 @login_required
 def change_password():
-    data = request.get_json() or {}
+    data = request.get_json(silent=True) or {}
     old_password = data.get("old_password")
     new_password = data.get("new_password")
+    has_password = bool(current_user.password_hash)
 
-    if not old_password or not new_password:
-        return jsonify({"status": "error", "message": "旧密码和新密码不能为空"}), 400
-    if not current_user.check_password(old_password):
-        return jsonify({"status": "error", "message": "旧密码错误"}), 403
+    if not isinstance(new_password, str) or not new_password.strip():
+        return jsonify({"status": "error", "message": "新密码不能为空"}), 400
+    if len(new_password) < 6:
+        return jsonify({"status": "error", "message": "新密码至少需要 6 位"}), 400
+
+    if has_password:
+        if not old_password:
+            return jsonify({"status": "error", "message": "请输入当前密码"}), 400
+        if not current_user.check_password(old_password):
+            return jsonify({"status": "error", "message": "当前密码错误"}), 403
+        if current_user.check_password(new_password):
+            return jsonify({"status": "error", "message": "新密码不能与当前密码相同"}), 400
 
     current_user.set_password(new_password)
     current_user.increment_login_version()
     db.session.commit()
     session["login_version"] = current_user.login_version
-    return jsonify({"status": "success", "message": "密码修改成功"}), 200
+    return jsonify({"status": "success", "message": "密码修改成功" if has_password else "密码设置成功"}), 200
 
 
 @user_control_bp.get("/reset_password/<int:user_id>")
+@login_required
 @permission_required("member_edit")
 def reset_password(user_id):
     user = User.query.get(user_id)
@@ -626,11 +698,14 @@ def reset_password(user_id):
 
 
 @user_control_bp.get("/departments")
+@login_required
 def list_departments():
-    return jsonify([department.to_dict() for department in Department.query.all()])
+    departments = Department.query.order_by(Department.name.asc(), Department.id.asc()).all()
+    return jsonify([_serialize_department_for_request(department) for department in departments])
 
 
 @user_control_bp.post("/departments")
+@login_required
 @permission_required("department_edit")
 def create_department():
     try:
@@ -651,6 +726,7 @@ def create_department():
 
 
 @user_control_bp.put("/departments/<int:dept_id>")
+@login_required
 @permission_required("department_edit")
 def rename_department(dept_id):
     try:
@@ -682,6 +758,7 @@ def rename_department(dept_id):
 
 
 @user_control_bp.delete("/departments/<int:dept_id>")
+@login_required
 @permission_required("department_edit")
 def delete_department(dept_id):
     try:
@@ -708,6 +785,7 @@ def delete_department(dept_id):
 
 
 @user_control_bp.post("/departments/<int:dept_id>/add_user")
+@login_required
 @permission_required("department_edit")
 def add_user_to_department(dept_id):
     try:
@@ -728,6 +806,7 @@ def add_user_to_department(dept_id):
 
 
 @user_control_bp.post("/departments/<int:dept_id>/remove_user")
+@login_required
 @permission_required("department_edit")
 def remove_user_from_department(dept_id):
     try:
@@ -771,8 +850,9 @@ def _save_member_renewal_proof(user, uploaded_file):
 
 @user_control_bp.get("/member_renewal/<int:user_id>")
 @login_required
-@permission_required("account_edit")
 def get_member_renewals(user_id):
+    if not _current_user_has_any_permission(MEMBERSHIP_ADMIN_READ_PERMISSION_NAMES):
+        return _permission_denied_response(MEMBERSHIP_ADMIN_READ_PERMISSION_NAMES)
     user = User.query.get(user_id)
     if not user:
         return jsonify({"status": "error", "message": "用户不存在"}), 404
@@ -781,8 +861,9 @@ def get_member_renewals(user_id):
 
 @user_control_bp.post("/member_renewal/<int:user_id>")
 @login_required
-@permission_required("account_edit")
 def create_member_renewal(user_id):
+    if not _current_user_has_any_permission(MEMBERSHIP_ADMIN_WRITE_PERMISSION_NAMES):
+        return _permission_denied_response(MEMBERSHIP_ADMIN_WRITE_PERMISSION_NAMES)
     user = User.query.get(user_id)
     if not user:
         return jsonify({"status": "error", "message": "用户不存在"}), 404
@@ -817,8 +898,9 @@ def create_member_renewal(user_id):
 
 @user_control_bp.delete("/member_renewal/<int:renewal_id>")
 @login_required
-@permission_required("account_edit")
 def delete_member_renewal(renewal_id):
+    if not _current_user_has_any_permission(MEMBERSHIP_ADMIN_WRITE_PERMISSION_NAMES):
+        return _permission_denied_response(MEMBERSHIP_ADMIN_WRITE_PERMISSION_NAMES)
     record = MemberRenewal.query.get(renewal_id)
     if not record:
         return jsonify({"status": "error", "message": "续费记录不存在"}), 404
@@ -837,6 +919,7 @@ def delete_member_renewal(renewal_id):
 
 
 @user_control_bp.delete("/delete_user/<int:user_id>")
+@login_required
 @permission_required("member_edit")
 def delete_user(user_id):
     if not any(department.id == 1 for department in current_user.departments):
@@ -858,38 +941,33 @@ def delete_user(user_id):
 
 
 @user_control_bp.get("/departments/<int:dept_id>/users")
+@login_required
 def get_department_users(dept_id):
+    if not _current_user_has_any_permission(FULL_DEPARTMENT_READ_PERMISSION_NAMES):
+        return _permission_denied_response(FULL_DEPARTMENT_READ_PERMISSION_NAMES)
+
     department = Department.query.get(dept_id)
     if not department:
         return jsonify({"status": "error", "message": "部门不存在"}), 404
 
-    if current_user.is_authenticated:
-        users = department.users
+    users = department.users
+    if _current_user_has_any_permission(FULL_USER_READ_PERMISSION_NAMES):
         user_data = [user.to_dict() for user in users]
-        login = True
     else:
-        users = [user for user in department.users if user.display]
-        user_data = [
-            {
-                "id": user.id,
-                "username": user.username,
-                "display_name": user.display_name,
-            }
-            for user in users
-        ]
-        login = False
+        user_data = [_serialize_basic_user(user, include_membership=True) for user in users]
 
     return jsonify(
         {
             "id": department.id,
             "name": department.name,
-            "login": login,
+            "login": True,
             "users": user_data,
         }
     )
 
 
 @user_control_bp.post("/upload_profile_image")
+@login_required
 def upload_profile_image():
     if "image" not in request.files:
         return jsonify({"success": False, "error": "No file part"})

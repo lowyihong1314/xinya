@@ -2,12 +2,14 @@ import { ensureDesignTokens } from "../../../theme/designTokens";
 import { useUserState } from "../../../app/UserState";
 import { useEventTableController } from "./useEventTableController";
 import { EventTableView } from "./EventTableView";
+import { hasUserPermission } from "../../../app/permissions";
 
 export function EventTablePage() {
   ensureDesignTokens();
 
-  const { isMobile } = useUserState();
+  const { isMobile, user } = useUserState();
   const { state, actions } = useEventTableController();
+  const canEditEvent = hasUserPermission(user, "event_edit");
 
   return (
     <EventTableView
@@ -27,6 +29,7 @@ export function EventTablePage() {
       realtimeEnabled={state.realtimeEnabled}
       imageUrl={state.imageUrl}
       isMobile={isMobile}
+      canEditEvent={canEditEvent}
       onQueryChange={actions.setQuery}
       onPageChange={actions.setPage}
       onSelectEvent={actions.setSelectedEventId}

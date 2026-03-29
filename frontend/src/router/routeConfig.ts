@@ -22,7 +22,7 @@ export type NavItem = {
 
 export const NAV_ITEMS: NavItem[] = [
   { key: "home", title: "首页", icon: "fa-solid fa-house", auth: false, path: "/" },
-  { key: "info", title: "简介", icon: "fas fa-info-circle", auth: false, path: "/info" },
+  { key: "info", title: "简介", icon: "fas fa-info-circle", auth: false, path: "/info/history" },
   { key: "CRM", title: "CRM 管理", icon: "fas fa-layer-group", auth: true, path: "/crm" },
   // { key: "fileSystem", title: "文件管理", icon: "fas fa-folder", auth: true, path: "/files" },
   { key: "music", title: "音乐", icon: "fas fa-music", auth: true, path: MUSIC_PLAYER_PATH },
@@ -32,7 +32,7 @@ export const NAV_ITEMS: NavItem[] = [
 
 export const legacyPageToPath: Record<string, string> = {
   home: "/",
-  info: "/info",
+  info: "/info/history",
   CRM: "/crm",
   profile: "/profile",
   fileSystem: "/files",

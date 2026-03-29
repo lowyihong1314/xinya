@@ -28,6 +28,7 @@ type ShowRegisterDetailOptions = {
   formId?: number;
   extraFields?: ExtraFieldConfig[];
   onSaveField?: (member: FormMember, field: string | number, value: unknown) => Promise<void>;
+  readOnly?: boolean;
 };
 
 type EditableField = {
@@ -93,11 +94,13 @@ function ReadItem({ label, value }: { label: string; value: unknown }) {
 function EditRow({
   field,
   disabled,
+  readOnly,
   value,
   onChange,
 }: {
   field: EditableField;
   disabled: boolean;
+  readOnly?: boolean;
   value: string;
   onChange: (field: EditableField, value: string) => void;
 }) {
@@ -149,7 +152,7 @@ function EditRow({
           />
         )}
       </div>
-      <div style={editHintStyle}>{disabled ? "保存中" : "可编辑"}</div>
+      <div style={editHintStyle}>{readOnly ? "只读" : disabled ? "保存中" : "可编辑"}</div>
     </div>
   );
 }
@@ -197,6 +200,7 @@ function MemberDetailModal({
   formId,
   extraFields,
   onSaveField,
+  readOnly = false,
   onClose,
 }: ShowRegisterDetailOptions & {
   onClose: () => void;
@@ -265,7 +269,7 @@ function MemberDetailModal({
   }
 
   async function handleSaveAll() {
-    if (!onSaveField || !formId || !dirtyFields.length) {
+    if (readOnly || !onSaveField || !formId || !dirtyFields.length) {
       return;
     }
     setSaving(true);
@@ -340,7 +344,8 @@ function MemberDetailModal({
                 key={field.key}
                 field={field}
                 value={draftValues[field.key] ?? normalizeFieldValue(field.value)}
-                disabled={saving}
+                disabled={saving || readOnly}
+                readOnly={readOnly}
                 onChange={handleFieldChange}
               />
             ))}
@@ -399,7 +404,8 @@ function MemberDetailModal({
                 key={field.key}
                 field={field}
                 value={draftValues[field.key] ?? normalizeFieldValue(field.value)}
-                disabled={saving}
+                disabled={saving || readOnly}
+                readOnly={readOnly}
                 onChange={handleFieldChange}
               />
             ))}
@@ -421,20 +427,26 @@ function MemberDetailModal({
         {editableFields.length ? (
           <div style={footerBarStyle}>
             <div style={footerHintStyle}>
-              {dirtyFields.length ? `已修改 ${dirtyFields.length} 项资料` : "没有未保存的修改"}
+              {readOnly
+                ? "当前为只读模式，需要 form_edit 权限才能修改成员资料"
+                : dirtyFields.length
+                  ? `已修改 ${dirtyFields.length} 项资料`
+                  : "没有未保存的修改"}
             </div>
             <div style={footerActionsStyle}>
               <button type="button" style={secondaryButtonStyle} onClick={onClose}>
                 关闭
               </button>
-              <button
-                type="button"
-                style={saveButtonStyle}
-                disabled={saving || !dirtyFields.length}
-                onClick={() => void handleSaveAll()}
-              >
-                {saving ? "保存中" : "保存修改"}
-              </button>
+              {!readOnly ? (
+                <button
+                  type="button"
+                  style={saveButtonStyle}
+                  disabled={saving || !dirtyFields.length}
+                  onClick={() => void handleSaveAll()}
+                >
+                  {saving ? "保存中" : "保存修改"}
+                </button>
+              ) : null}
             </div>
           </div>
         ) : null}

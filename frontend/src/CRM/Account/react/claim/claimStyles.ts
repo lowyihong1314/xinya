@@ -123,6 +123,41 @@ export const chipStyle: CSSProperties = {
   color: "var(--x-color-ink-muted)",
 };
 
+const noticeBaseStyle: CSSProperties = {
+  display: "grid",
+  gap: "6px",
+  padding: "14px 16px",
+  borderRadius: "16px",
+  border: "1px solid transparent",
+  boxShadow: "0 12px 24px var(--x-color-shadow-soft)",
+  marginBottom: "12px",
+};
+
+export const noticeSuccessStyle: CSSProperties = {
+  ...noticeBaseStyle,
+  background: "var(--x-color-success-soft)",
+  borderColor: "rgba(21,128,61,0.18)",
+  color: "var(--x-color-success)",
+};
+
+export const noticeErrorStyle: CSSProperties = {
+  ...noticeBaseStyle,
+  background: "var(--x-color-danger-soft)",
+  borderColor: "var(--x-color-danger-border)",
+  color: "var(--x-color-danger)",
+};
+
+export const noticeTitleStyle: CSSProperties = {
+  fontSize: "14px",
+  fontWeight: 800,
+  lineHeight: 1.3,
+};
+
+export const noticeTextStyle: CSSProperties = {
+  fontSize: "14px",
+  lineHeight: 1.6,
+};
+
 export const listStyle: CSSProperties = {
   display: "grid",
   width: "100%",

@@ -13,6 +13,7 @@ import type { EventDetailRecord, EventFlowRecord } from "../../event/shared/type
 
 type Props = {
   detail: EventDetailRecord;
+  canEdit?: boolean;
   onClose: () => void;
 };
 
@@ -23,7 +24,7 @@ type EditorState = {
   minutes: string;
 };
 
-export function EventFlowModal({ detail, onClose }: Props) {
+export function EventFlowModal({ detail, canEdit = false, onClose }: Props) {
   ensureDesignTokens();
 
   const [flows, setFlows] = useState<EventFlowRecord[]>([]);
@@ -46,6 +47,13 @@ export function EventFlowModal({ detail, onClose }: Props) {
     window.addEventListener("keydown", onKeyDown);
     return () => window.removeEventListener("keydown", onKeyDown);
   }, [onClose]);
+
+  useEffect(() => {
+    if (!canEdit) {
+      setEditor(null);
+      setDraggingId(null);
+    }
+  }, [canEdit]);
 
   const renderedFlows = useMemo(() => {
     let cumulativeMinutes = 0;
@@ -76,6 +84,9 @@ export function EventFlowModal({ detail, onClose }: Props) {
   }
 
   async function handleDelete(flowId: number) {
+    if (!canEdit) {
+      return;
+    }
     if (!window.confirm("确定删除该流程？")) {
       return;
     }
@@ -91,7 +102,7 @@ export function EventFlowModal({ detail, onClose }: Props) {
   }
 
   async function handleSaveEditor() {
-    if (!editor) {
+    if (!canEdit || !editor) {
       return;
     }
     const minutesValue = editor.minutes.trim() === "" ? null : Number(editor.minutes);
@@ -127,6 +138,9 @@ export function EventFlowModal({ detail, onClose }: Props) {
   }
 
   async function handleDrop(targetId: number) {
+    if (!canEdit) {
+      return;
+    }
     if (!draggingId || draggingId === targetId) {
       return;
     }
@@ -166,13 +180,15 @@ export function EventFlowModal({ detail, onClose }: Props) {
             </div>
           </div>
           <div style={headerActionsStyle}>
-            <button
-              type="button"
-              style={primaryButtonStyle}
-              onClick={() => setEditor({ flowId: null, title: "", detail: "", minutes: "" })}
-            >
-              + 新增
-            </button>
+            {canEdit ? (
+              <button
+                type="button"
+                style={primaryButtonStyle}
+                onClick={() => setEditor({ flowId: null, title: "", detail: "", minutes: "" })}
+              >
+                + 新增
+              </button>
+            ) : null}
             <button type="button" style={closeButtonStyle} onClick={onClose}>
               关闭
             </button>
@@ -182,13 +198,15 @@ export function EventFlowModal({ detail, onClose }: Props) {
         {error ? <div style={errorStyle}>{error}</div> : null}
 
         <div style={hintStyle}>
-          {detail.datetime
-            ? "拖动左侧把手可以排序。每一行开始时间会根据活动开始时间和前面流程时长自动推算。"
-            : "当前活动没有开始时间，流程仍可编辑，但不会推算具体时钟时间。"}
+          {canEdit
+            ? detail.datetime
+              ? "拖动左侧把手可以排序。每一行开始时间会根据活动开始时间和前面流程时长自动推算。"
+              : "当前活动没有开始时间，流程仍可编辑，但不会推算具体时钟时间。"
+            : "当前账号可查看流程，但新增、编辑、删除和排序需要 event_edit 权限。"}
         </div>
 
         {loading ? <div style={placeholderStyle}>读取流程中…</div> : null}
-        {!loading && !flows.length ? <div style={placeholderStyle}>暂无流程，点击右上角新增。</div> : null}
+        {!loading && !flows.length ? <div style={placeholderStyle}>{canEdit ? "暂无流程，点击右上角新增。" : "当前活动还没有流程。"}</div> : null}
 
         {!loading && flows.length ? (
           <div style={listStyle}>
@@ -196,9 +214,17 @@ export function EventFlowModal({ detail, onClose }: Props) {
               <div
                 key={flow.id}
                 style={rowStyle}
-                draggable
-                onDragStart={() => setDraggingId(flow.id)}
-                onDragOver={(event) => event.preventDefault()}
+                draggable={canEdit}
+                onDragStart={() => {
+                  if (canEdit) {
+                    setDraggingId(flow.id);
+                  }
+                }}
+                onDragOver={(event) => {
+                  if (canEdit) {
+                    event.preventDefault();
+                  }
+                }}
                 onDrop={() => void handleDrop(flow.id)}
                 onDragEnd={() => setDraggingId(null)}
               >
@@ -208,6 +234,7 @@ export function EventFlowModal({ detail, onClose }: Props) {
                 <button
                   type="button"
                   style={timeBoxStyle}
+                  disabled={!canEdit}
                   onClick={() =>
                     setEditor({
                       flowId: flow.id,
@@ -224,25 +251,27 @@ export function EventFlowModal({ detail, onClose }: Props) {
                   <div style={contentTitleStyle}>{flow.title || "(无标题)"}</div>
                   {flow.detail ? <div style={contentBodyStyle}>{flow.detail}</div> : null}
                 </div>
-                <div style={rowActionsStyle}>
-                  <button
-                    type="button"
-                    style={secondaryPillStyle}
-                    onClick={() =>
-                      setEditor({
-                        flowId: flow.id,
-                        title: flow.title || "",
-                        detail: flow.detail || "",
-                        minutes: flow.minutes == null ? "" : String(flow.minutes),
-                      })
-                    }
-                  >
-                    编辑
-                  </button>
-                  <button type="button" style={dangerPillStyle} disabled={saving} onClick={() => void handleDelete(flow.id)}>
-                    移除
-                  </button>
-                </div>
+                {canEdit ? (
+                  <div style={rowActionsStyle}>
+                    <button
+                      type="button"
+                      style={secondaryPillStyle}
+                      onClick={() =>
+                        setEditor({
+                          flowId: flow.id,
+                          title: flow.title || "",
+                          detail: flow.detail || "",
+                          minutes: flow.minutes == null ? "" : String(flow.minutes),
+                        })
+                      }
+                    >
+                      编辑
+                    </button>
+                    <button type="button" style={dangerPillStyle} disabled={saving} onClick={() => void handleDelete(flow.id)}>
+                      移除
+                    </button>
+                  </div>
+                ) : null}
               </div>
             ))}
           </div>

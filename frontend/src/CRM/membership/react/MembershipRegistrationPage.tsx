@@ -178,6 +178,7 @@ export function MembershipRegistrationPage() {
   const [updatingPaymentId, setUpdatingPaymentId] = useState<number | null>(null);
   const [error, setError] = useState("");
   const [notice, setNotice] = useState<Notice | null>(null);
+  const [applicationPageOpen, setApplicationPageOpen] = useState(false);
 
   async function loadData() {
     setLoading(true);
@@ -282,28 +283,49 @@ export function MembershipRegistrationPage() {
 
   return (
     <div style={pageStyle}>
-      <section style={heroStyle(isMobile)}>
-        <div style={panelStyle(isMobile)}>
-          <div style={eyebrowStyle}>CRM / 会员</div>
-          <h1 style={titleStyle(isMobile)}>会员升级与续费</h1>
-          <p style={descStyle}>这里可以设置按年龄分段的会员费率、上传付款二维码、查看申请资料，并在付款截图提交后完成审核生效。</p>
-          <div style={statsRowStyle(isMobile)}>
-            <MetricCard label="升级申请" value={String(stats.upgrades)} />
-            <MetricCard label="续费申请" value={String(stats.renewals)} />
-            <MetricCard label="已生效" value={String(stats.approved)} />
-            <MetricCard label="处理中" value={String(stats.processing)} />
-          </div>
-        </div>
-
-        <div style={panelStyle(isMobile)}>
+      {applicationPageOpen ? (
+        <section style={panelStyle(isMobile)}>
           <div style={sectionTitleRowStyle(isMobile)}>
-            <h2 style={sectionTitleStyle()}>用户入口</h2>
-            <a href={APPLICATION_URL} target="_blank" rel="noreferrer" style={linkStyle}>打开会员申请页</a>
+            <div>
+              <div style={eyebrowStyle}>CRM / 会员</div>
+              <h2 style={sectionTitleStyle()}>用户入口</h2>
+            </div>
+            <button type="button" style={secondaryButtonStyle} onClick={() => setApplicationPageOpen(false)}>
+              返回
+            </button>
           </div>
-          <div style={emptyPreviewStyle}>会员申请入口来自 Profile 的 Actions 按钮；这里保留直达链接方便后台测试。</div>
-          <div style={urlBoxStyle}>{APPLICATION_URL}</div>
-        </div>
-      </section>
+          <iframe
+            src={APPLICATION_URL}
+            title="会员申请页"
+            style={iframeStyle(isMobile)}
+          />
+        </section>
+      ) : (
+        <section style={heroStyle(isMobile)}>
+          <div style={panelStyle(isMobile)}>
+            <div style={eyebrowStyle}>CRM / 会员</div>
+            <h1 style={titleStyle(isMobile)}>会员升级与续费</h1>
+            <p style={descStyle}>这里可以设置按年龄分段的会员费率、上传付款二维码、查看申请资料，并在付款截图提交后完成审核生效。</p>
+            <div style={statsRowStyle(isMobile)}>
+              <MetricCard label="升级申请" value={String(stats.upgrades)} />
+              <MetricCard label="续费申请" value={String(stats.renewals)} />
+              <MetricCard label="已生效" value={String(stats.approved)} />
+              <MetricCard label="处理中" value={String(stats.processing)} />
+            </div>
+          </div>
+
+          <div style={panelStyle(isMobile)}>
+            <div style={sectionTitleRowStyle(isMobile)}>
+              <h2 style={sectionTitleStyle()}>用户入口</h2>
+              <button type="button" style={secondaryButtonStyle} onClick={() => setApplicationPageOpen(true)}>
+                打开会员申请页
+              </button>
+            </div>
+            <div style={emptyPreviewStyle}>会员申请入口来自 Profile 的 Actions 按钮；这里保留直达链接方便后台测试。</div>
+            <div style={urlBoxStyle}>{APPLICATION_URL}</div>
+          </div>
+        </section>
+      )}
 
       <section style={panelStyle(isMobile)}>
         <div style={sectionTitleRowStyle(isMobile)}>
@@ -530,6 +552,17 @@ function panelStyle(isMobile: boolean): CSSProperties {
     boxShadow: "0 18px 36px var(--x-color-shadow-soft)",
     display: "grid",
     gap: "16px",
+  };
+}
+
+function iframeStyle(isMobile: boolean): CSSProperties {
+  return {
+    width: "100%",
+    minHeight: isMobile ? "68vh" : "74vh",
+    height: isMobile ? "68vh" : "74vh",
+    border: "1px solid var(--x-color-line-soft)",
+    borderRadius: "18px",
+    background: "white",
   };
 }
 

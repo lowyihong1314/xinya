@@ -15,3 +15,15 @@ export type HistoryEntry = {
 export type InfoUser = {
   username?: string;
 };
+
+export type TreeHoleEntry = {
+  id: number;
+  created_at?: string | null;
+  updated_at?: string | null;
+  author_name?: string | null;
+  message: string;
+  ip?: string | null;
+  phone?: string | null;
+  is_spam?: boolean | null;
+  display?: boolean | null;
+};

@@ -13,6 +13,7 @@ import { EditEventModal } from "./EditEventModal";
 import { EventFlowModal } from "./EventFlowModal";
 import { UploadMediaModal } from "./UploadMediaModal";
 import { useUserState } from "../../app/UserState";
+import { hasUserPermission } from "../../app/permissions";
 import {
   connectEventMediaRoom,
   MEDIA_ROOM_UPDATE_EVENT,
@@ -25,7 +26,7 @@ export function EventDetailPage() {
 
   const { eventId } = useParams();
   const { getEventById, refreshEvents } = useEventData();
-  const { isMobile } = useUserState();
+  const { isMobile, user } = useUserState();
   const [detail, setDetail] = useState<EventDetailRecord | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -37,6 +38,13 @@ export function EventDetailPage() {
   const [mediaNotification, setMediaNotification] = useState<MediaNotification | null>(null);
   const detailRef = useRef<EventDetailRecord | null>(null);
   const refreshTimerRef = useRef<number | null>(null);
+  const canEditEvent = hasUserPermission(user, "event_edit");
+
+  useEffect(() => {
+    if (!canEditEvent && viewMode === "checkin") {
+      setViewMode("photos");
+    }
+  }, [canEditEvent, viewMode]);
 
   useEffect(() => {
     detailRef.current = detail;
@@ -253,15 +261,15 @@ export function EventDetailPage() {
           </button>
         </div>
         <div style={toolbarGroupStyle}>
-          {detail.login ? (
-            <>
-              <button
-                type="button"
-                style={viewMode === "photos" ? primaryButtonStyle : secondaryButtonStyle}
-                onClick={() => setViewMode("photos")}
-              >
-                照片
-              </button>
+          <>
+            <button
+              type="button"
+              style={viewMode === "photos" ? primaryButtonStyle : secondaryButtonStyle}
+              onClick={() => setViewMode("photos")}
+            >
+              照片
+            </button>
+            {canEditEvent ? (
               <button
                 type="button"
                 style={viewMode === "checkin" ? primaryButtonStyle : secondaryButtonStyle}
@@ -269,19 +277,23 @@ export function EventDetailPage() {
               >
                 签到
               </button>
+            ) : null}
+            {canEditEvent ? (
               <button type="button" style={primaryButtonStyle} onClick={() => setEditing(true)}>
                 编辑活动资料
               </button>
+            ) : null}
+            {canEditEvent ? (
               <button type="button" style={secondaryButtonStyle} onClick={() => setShowUpload(true)}>
                 上传照片 / 视频
               </button>
-              {detail.datetime && detail.end_datetime ? (
-                <button type="button" style={secondaryButtonStyle} onClick={() => setShowFlow(true)}>
-                  Event Flow
-                </button>
-              ) : null}
-            </>
-          ) : null}
+            ) : null}
+            {detail.datetime && detail.end_datetime ? (
+              <button type="button" style={secondaryButtonStyle} onClick={() => setShowFlow(true)}>
+                活动流程
+              </button>
+            ) : null}
+          </>
         </div>
       </section>
 
@@ -346,7 +358,7 @@ export function EventDetailPage() {
         ) : null}
 
         {viewMode === "photos" ? (
-          <PhotoGrid detail={detail} isMobile={isMobile} mediaNotification={mediaNotification} />
+          <PhotoGrid detail={detail} isMobile={isMobile} mediaNotification={mediaNotification} canEditEvent={canEditEvent} />
         ) : (
           <EventCheckInPanel
             detail={detail}
@@ -380,7 +392,7 @@ export function EventDetailPage() {
           }}
         />
       ) : null}
-      {showFlow ? <EventFlowModal detail={detail} onClose={() => setShowFlow(false)} /> : null}
+      {showFlow ? <EventFlowModal detail={detail} canEdit={canEditEvent} onClose={() => setShowFlow(false)} /> : null}
     </div>
   );
 }

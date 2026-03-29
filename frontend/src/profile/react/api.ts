@@ -50,3 +50,13 @@ export async function fetchAppReleases(): Promise<AppRelease[]> {
   const data = await parseResponse<{ releases: AppRelease[] }>(response);
   return data.releases ?? [];
 }
+
+export async function changeMyPassword(payload: { old_password?: string; new_password: string }) {
+  const response = await apiFetch("/api/user_control/change_password", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    credentials: "include",
+    body: JSON.stringify(payload),
+  });
+  return parseResponse<{ status?: string; message?: string }>(response);
+}

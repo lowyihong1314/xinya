@@ -4,9 +4,9 @@ This directory holds the React rewrite of the profile page.
 
 ## Files
 
-- `ProfilePage.tsx`: page component, section navigation, form rendering, avatar upload, footprints, membership actions, app download, and logout.
+- `ProfilePage.tsx`: page component, section navigation, form rendering, avatar upload, footprints, membership actions, password change, app download, and logout.
 - `MembershipActionCard.tsx`: membership upgrade / renewal CTA card.
-- `api.ts`: profile update, avatar upload, footprint fetch, membership renewal, and app release listing.
+- `api.ts`: profile update, avatar upload, password change, footprint fetch, membership renewal, and app release listing.
 - `types.ts`: local profile user, footprint, payment, form, and app release types.
 
 ## State model
@@ -22,7 +22,7 @@ This directory holds the React rewrite of the profile page.
 - `overview` — identity summary, latest footprint, profile completeness checklist
 - `profile` — editable form for identity, contact, and health fields
 - `journey` — footprint timeline (registration forms + youth class entries)
-- `account` — session info, membership actions, app download, logout
+- `account` — session info, membership actions, password change, app download, logout
 - `bank-note` — personal transfer info (`bank_account`, `tng_number`) and reference notes
 
 ## Backend endpoints
@@ -30,6 +30,7 @@ This directory holds the React rewrite of the profile page.
 - `GET /api/user_control/get_user_data`
 - `POST /api/user_control/update_user/:userId`
 - `POST /api/user_control/upload_profile_image`
+- `POST /api/user_control/change_password`
 - `GET /api/user_control/my_footprints`
 - `POST /api/user_control/membership/renew`
 - `GET /api/app/releases` — list all APK files in `frontend/apk/`

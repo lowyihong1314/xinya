@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import type { ChangeEvent } from "react";
 
 import { useUserState } from "../../../../app/UserState";
@@ -10,6 +10,10 @@ import { ClaimDetail } from "./ClaimDetail";
 import { ClaimList } from "./ClaimList";
 import {
   chipStyle,
+  noticeErrorStyle,
+  noticeSuccessStyle,
+  noticeTextStyle,
+  noticeTitleStyle,
   scrollPanelStyle,
   shellStyle,
 } from "./claimStyles";
@@ -60,6 +64,7 @@ export function ClaimWorkspace() {
   const [error, setError] = useState<string | null>(null);
   const [query, setQuery] = useState("");
   const [page, setPage] = useState(1);
+  const scrollPanelRef = useRef<HTMLDivElement | null>(null);
 
   useEffect(() => {
     const nextInitial = buildInitialCreateState(accountUser);
@@ -89,6 +94,13 @@ export function ClaimWorkspace() {
     }, 2800);
     return () => window.clearTimeout(timer);
   }, [message, error]);
+
+  useEffect(() => {
+    if (!error) {
+      return;
+    }
+    scrollPanelRef.current?.scrollTo({ top: 0, behavior: "smooth" });
+  }, [error]);
 
   const selectedClaim = useMemo(() => {
     if (view.kind !== "detail") {
@@ -334,17 +346,24 @@ export function ClaimWorkspace() {
   return (
     <div className="claim-workspace" style={shellStyle}>
       {message ? (
-        <div className="claim-workspace__message claim-workspace__message--success" style={{ ...chipStyle, color: "var(--x-color-success)", marginBottom: "12px" }}>
-          {message}
+        <div className="claim-workspace__message claim-workspace__message--success" style={noticeSuccessStyle}>
+          <div style={noticeTitleStyle}>操作成功</div>
+          <div style={noticeTextStyle}>{message}</div>
         </div>
       ) : null}
       {error ? (
-        <div className="claim-workspace__message claim-workspace__message--error" style={{ ...chipStyle, color: "var(--x-color-danger)", marginBottom: "12px" }}>
-          {error}
+        <div
+          className="claim-workspace__message claim-workspace__message--error"
+          style={noticeErrorStyle}
+          role="alert"
+          aria-live="assertive"
+        >
+          <div style={noticeTitleStyle}>{view.kind === "create" ? "报销申请未提交" : "操作失败"}</div>
+          <div style={noticeTextStyle}>{error}</div>
         </div>
       ) : null}
 
-      <div className="claim-workspace__scroll-panel" style={scrollPanelStyle}>
+      <div className="claim-workspace__scroll-panel" style={scrollPanelStyle} ref={scrollPanelRef}>
         {view.kind === "list" ? (
           <ClaimList
             loading={loading}

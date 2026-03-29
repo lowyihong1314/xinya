@@ -52,7 +52,9 @@ function normalizeFieldSwitches(form: FormRecord | null): FormRecord | null {
   };
 }
 
-export function useFormWorkspace() {
+export function useFormWorkspace(options?: { enabled?: boolean; canEditMembers?: boolean }) {
+  const enabled = options?.enabled ?? true;
+  const canEditMembers = options?.canEditMembers ?? true;
   const [forms, setForms] = useState<FormRecord[]>([]);
   const [selectedFormId, setSelectedFormId] = useState<number | null>(null);
   const [selectedForm, setSelectedForm] = useState<FormRecord | null>(null);
@@ -65,8 +67,19 @@ export function useFormWorkspace() {
   const [realtimeEnabled, setRealtimeEnabled] = useState(false);
 
   useEffect(() => {
+    if (!enabled) {
+      setForms([]);
+      setSelectedFormId(null);
+      setSelectedForm(null);
+      setFees([]);
+      setExtraFields([]);
+      setLoading(false);
+      setDetailLoading(false);
+      return;
+    }
+
     void loadForms();
-  }, []);
+  }, [enabled]);
 
   useEffect(() => {
     if (!toast) {
@@ -77,7 +90,7 @@ export function useFormWorkspace() {
   }, [toast]);
 
   useFormRealtime({
-    enabled: realtimeEnabled,
+    enabled: enabled && realtimeEnabled,
     formId: selectedFormId,
     onRefresh: () => {
       void refreshSelectedForm();
@@ -89,6 +102,11 @@ export function useFormWorkspace() {
   }
 
   async function loadForms(preferredFormId?: number | null) {
+    if (!enabled) {
+      setLoading(false);
+      return;
+    }
+
     setLoading(true);
     try {
       const payload = await fetchForms();
@@ -114,6 +132,10 @@ export function useFormWorkspace() {
   }
 
   async function openForm(formId: number, existingForms = forms) {
+    if (!enabled) {
+      return;
+    }
+
     setSelectedFormId(formId);
     setDetailLoading(true);
     try {
@@ -340,6 +362,9 @@ export function useFormWorkspace() {
   }
 
   async function handleEditMemberField(member: FormMember, field: string | number, value: unknown) {
+    if (!canEditMembers) {
+      throw new Error("当前是只读模式，不能修改成员资料");
+    }
     if (!selectedFormId) {
       return;
     }
@@ -363,7 +388,8 @@ export function useFormWorkspace() {
       member,
       formId: selectedFormId ?? undefined,
       extraFields,
-      onSaveField: handleEditMemberField,
+      onSaveField: canEditMembers ? handleEditMemberField : undefined,
+      readOnly: !canEditMembers,
     });
   }
 

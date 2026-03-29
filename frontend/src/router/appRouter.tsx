@@ -42,7 +42,8 @@ export const appRouter = createHashRouter([
     element: <AppLayout />,
     children: [
       { index: true, element: <HomeAlbumPage /> },
-      { path: "info", element: <InfoPage /> },
+      { path: "info", element: <Navigate to="/info/history" replace /> },
+      { path: "info/:section", element: <InfoPage /> },
       crmRoute,
       { path: "profile", element: <Navigate to="/profile/overview" replace /> },
       { path: "profile/:section", element: <ProfilePage /> },

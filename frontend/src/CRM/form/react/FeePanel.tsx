@@ -21,6 +21,7 @@ type FeePanelProps = {
   onAdd: (payload: FeeDraft) => void;
   onEdit: (feeId: number | string, payload: FeeDraft) => void;
   onDelete: (feeId: number | string) => void;
+  readOnly?: boolean;
   linkHref?: string;
   linkLabel?: string;
   addButtonLabel?: string;
@@ -39,6 +40,7 @@ type FeeInlineEditorProps = {
   buttonLabel: string;
   onSave: (payload: FeeDraft) => void;
   onDelete?: () => void;
+  readOnly?: boolean;
   resetOnSave?: boolean;
   showCategory?: boolean;
   enableImageUpload?: boolean;
@@ -143,6 +145,7 @@ export function FeePanel({
   onAdd,
   onEdit,
   onDelete,
+  readOnly = false,
   linkHref,
   linkLabel = "付款入口",
   addButtonLabel = "添加费用",
@@ -167,17 +170,19 @@ export function FeePanel({
         </div>
       ) : null}
 
-      <FeeInlineEditor
-        buttonLabel={addButtonLabel}
-        resetOnSave
-        onSave={(payload) => onAdd(payload)}
-        showCategory={showCategory}
-        enableImageUpload={enableImageUpload}
-        imageLabel={imageLabel}
-        categoryLabel={categoryLabel}
-        categoryPlaceholder={categoryPlaceholder}
-        descriptionPlaceholder={descriptionPlaceholder}
-      />
+      {!readOnly ? (
+        <FeeInlineEditor
+          buttonLabel={addButtonLabel}
+          resetOnSave
+          onSave={(payload) => onAdd(payload)}
+          showCategory={showCategory}
+          enableImageUpload={enableImageUpload}
+          imageLabel={imageLabel}
+          categoryLabel={categoryLabel}
+          categoryPlaceholder={categoryPlaceholder}
+          descriptionPlaceholder={descriptionPlaceholder}
+        />
+      ) : null}
 
       <div style={stackStyle}>
         {fees.length ? (
@@ -193,6 +198,7 @@ export function FeePanel({
                 buttonLabel={saveButtonLabel}
                 onSave={(payload) => onEdit(feeKey, payload)}
                 onDelete={() => onDelete(feeKey)}
+                readOnly={readOnly}
                 showCategory={showCategory}
                 enableImageUpload={enableImageUpload}
                 imageLabel={imageLabel}
@@ -215,6 +221,7 @@ function FeeInlineEditor({
   buttonLabel,
   onSave,
   onDelete,
+  readOnly = false,
   resetOnSave = false,
   showCategory = true,
   enableImageUpload = true,
@@ -275,6 +282,7 @@ function FeeInlineEditor({
               style={compactInputStyle}
               value={draft.category}
               placeholder={categoryPlaceholder}
+              disabled={readOnly}
               onChange={(event) => setDraft((prev) => ({ ...prev, category: event.target.value }))}
             />
           </label>
@@ -286,6 +294,7 @@ function FeeInlineEditor({
             style={compactInputStyle}
             value={draft.amount}
             placeholder="金额"
+            disabled={readOnly}
             onChange={(event) => setDraft((prev) => ({ ...prev, amount: event.target.value }))}
           />
         </label>
@@ -295,6 +304,7 @@ function FeeInlineEditor({
             style={compactInputStyle}
             value={draft.age_range_from || ""}
             placeholder="可空"
+            disabled={readOnly}
             onChange={(event) => setDraft((prev) => ({ ...prev, age_range_from: event.target.value }))}
           />
         </label>
@@ -304,6 +314,7 @@ function FeeInlineEditor({
             style={compactInputStyle}
             value={draft.age_range_to || ""}
             placeholder="可空"
+            disabled={readOnly}
             onChange={(event) => setDraft((prev) => ({ ...prev, age_range_to: event.target.value }))}
           />
         </label>
@@ -316,6 +327,7 @@ function FeeInlineEditor({
           style={feeTextareaStyle}
           value={draft.description || ""}
           placeholder={descriptionPlaceholder}
+          disabled={readOnly}
           onChange={(event) => setDraft((prev) => ({ ...prev, description: event.target.value }))}
         />
       </label>
@@ -329,6 +341,7 @@ function FeeInlineEditor({
               ref={fileInputRef}
               type="file"
               accept="image/png,image/jpeg,image/heic,image/heif,.png,.jpg,.jpeg,.heic,.heif"
+              disabled={readOnly}
               onChange={(event) => void handleFeeImageChange(event.target.files?.[0] || null)}
             />
             {uploading ? <span style={inlineNoteStyle}>上传中…</span> : null}
@@ -344,14 +357,20 @@ function FeeInlineEditor({
       ) : null}
 
       <div style={feeActionRowStyle}>
-        <button type="button" style={smallSecondaryButtonStyle} onClick={handleSave}>
-          {buttonLabel}
-        </button>
-        {onDelete ? (
-          <button type="button" style={smallDangerButtonStyle} onClick={onDelete}>
-            删除
-          </button>
-        ) : null}
+        {readOnly ? (
+          <span style={inlineNoteStyle}>只读</span>
+        ) : (
+          <>
+            <button type="button" style={smallSecondaryButtonStyle} onClick={handleSave}>
+              {buttonLabel}
+            </button>
+            {onDelete ? (
+              <button type="button" style={smallDangerButtonStyle} onClick={onDelete}>
+                删除
+              </button>
+            ) : null}
+          </>
+        )}
       </div>
     </div>
   );

@@ -19,10 +19,12 @@ export function PhotoGrid({
   detail,
   isMobile = false,
   mediaNotification = null,
+  canEditEvent = false,
 }: {
   detail: EventDetailRecord;
   isMobile?: boolean;
   mediaNotification?: MediaNotification | null;
+  canEditEvent?: boolean;
 }) {
   const [page, setPage] = useState(1);
   const [selectionMode, setSelectionMode] = useState(false);
@@ -195,6 +197,9 @@ export function PhotoGrid({
   }
 
   async function handleDeleteSelected() {
+    if (!canEditEvent) {
+      return;
+    }
     if (!selectedIds.length) {
       return;
     }
@@ -255,6 +260,7 @@ export function PhotoGrid({
         onClear={() => setSelectedIds([])}
         onDownloadOriginal={() => void handleDownloadSelected("original")}
         onDownloadJpeg={() => void handleDownloadSelected("jpeg")}
+        canDelete={canEditEvent}
         onDelete={() => void handleDeleteSelected()}
       />
 

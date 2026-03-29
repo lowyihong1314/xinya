@@ -165,6 +165,8 @@ class User(db.Model, UserMixin):
         self.password_hash = bcrypt.generate_password_hash(password).decode('utf-8')
 
     def check_password(self, password):
+        if not self.password_hash:
+            return False
         return bcrypt.check_password_hash(self.password_hash, password)
     
     # ----------------------------------------------------------
@@ -189,6 +191,7 @@ class User(db.Model, UserMixin):
             "id": self.id,
             "username": self.username,
             "display_name": self.display_name,
+            "has_password": bool(self.password_hash),
             "email": self.email,
             "phone": self.phone,
             "name_NRIC": member_name_nric,

@@ -18,6 +18,7 @@ type CreateDraft = {
 
 export function EventTableView(props: {
   isMobile?: boolean;
+  canEditEvent?: boolean;
   events: EventRecord[];
   totalResults: number;
   selectedEvent: EventRecord | null;
@@ -48,6 +49,7 @@ export function EventTableView(props: {
   onDeleteEvent: () => void;
 }) {
   const isMobile = props.isMobile ?? false;
+  const canEditEvent = props.canEditEvent ?? false;
   const [createOpen, setCreateOpen] = useState(false);
   const [draft, setDraft] = useState<CreateDraft>(() => createDefaultDraft());
   const [createError, setCreateError] = useState<string | null>(null);
@@ -81,17 +83,19 @@ export function EventTableView(props: {
           <h3 style={titleStyle}>活动管理</h3>
         </div>
         <div style={headerActionsStyle}>
-          <button
-            type="button"
-            style={primaryButtonStyle}
-            onClick={() => {
-              setDraft(createDefaultDraft());
-              setCreateError(null);
-              setCreateOpen(true);
-            }}
-          >
-            新建活动
-          </button>
+          {canEditEvent ? (
+            <button
+              type="button"
+              style={primaryButtonStyle}
+              onClick={() => {
+                setDraft(createDefaultDraft());
+                setCreateError(null);
+                setCreateOpen(true);
+              }}
+            >
+              新建活动
+            </button>
+          ) : null}
           <label style={toggleStyle}>
             <input
               type="checkbox"
@@ -109,6 +113,12 @@ export function EventTableView(props: {
       {props.toast ? (
         <div style={props.toast.type === "success" ? successBannerStyle : errorBannerStyle}>
           {props.toast.text}
+        </div>
+      ) : null}
+
+      {!canEditEvent ? (
+        <div style={errorBannerStyle}>
+          当前账号只有活动读取权限。新增、修改、删除、上传和团队维护都需要 <code>event_edit</code>。
         </div>
       ) : null}
 
@@ -239,8 +249,9 @@ export function EventTableView(props: {
                 style={eventNavCardStyle(active)}
                 onClick={() => props.onSelectEvent(event.id)}
               >
+                <div style={eventNavMetaStyle}>Event ID #{event.id}</div>
                 <div style={eventNavTitleStyle(active)}>{event.event_name || `活动 #${event.id}`}</div>
-                <div style={eventNavMetaStyle}>{event.datetime ? event.datetime.split("T")[0] : "-"}</div>
+                <div style={eventNavMetaStyle}>{formatEventNavDate(event.datetime)}</div>
                 <div style={eventNavMetaStyle}>
                   {event.location || "-"} · {event.type || "-"}
                 </div>
@@ -286,9 +297,11 @@ export function EventTableView(props: {
                 <div style={heroCopyStyle}>
                   <div style={heroTopRowStyle}>
                     <div style={sectionEyebrowStyle}>Current Event</div>
-                    <button type="button" style={ghostDangerStyle} onClick={props.onDeleteEvent}>
-                      删除活动
-                    </button>
+                    {canEditEvent ? (
+                      <button type="button" style={ghostDangerStyle} onClick={props.onDeleteEvent}>
+                        删除活动
+                      </button>
+                    ) : null}
                   </div>
                   <h4 style={sectionTitleStyle}>{props.selectedEvent.event_name || `活动 #${props.selectedEvent.id}`}</h4>
                   <div style={inlineNoteStyle}>
@@ -311,44 +324,53 @@ export function EventTableView(props: {
                     <div style={sectionEyebrowStyle}>Editor</div>
                     <h4 style={sectionTitleStyle}>活动资料</h4>
                   </div>
-                  <div style={inlineNoteStyle}>{props.saving ? "保存中…" : "修改会立即同步到后端"}</div>
+                  <div style={inlineNoteStyle}>
+                    {canEditEvent ? (props.saving ? "保存中…" : "修改会立即同步到后端") : "当前为只读模式"}
+                  </div>
                 </div>
                 <div style={formGridStyle(isMobile)}>
                   <Field
                     label="活动名称"
                     value={props.selectedEvent.event_name || ""}
+                    readOnly={!canEditEvent}
                     onCommit={(value) => props.onUpdateEvent({ event_name: value })}
                   />
                   <Field
                     label="开始时间"
                     value={props.selectedEvent.datetime || ""}
+                    readOnly={!canEditEvent}
                     onCommit={(value) => props.onUpdateEvent({ datetime: value })}
                     type="datetime-local"
                   />
                   <Field
                     label="结束时间"
                     value={props.selectedEvent.end_datetime || ""}
+                    readOnly={!canEditEvent}
                     onCommit={(value) => props.onUpdateEvent({ end_datetime: value || undefined })}
                     type="datetime-local"
                   />
                   <Field
                     label="地点"
                     value={props.selectedEvent.location || ""}
+                    readOnly={!canEditEvent}
                     onCommit={(value) => props.onUpdateEvent({ location: value })}
                   />
                   <Field
                     label="类型"
                     value={props.selectedEvent.type || ""}
+                    readOnly={!canEditEvent}
                     onCommit={(value) => props.onUpdateEvent({ type: value })}
                   />
                   <Field
                     label="对象"
                     value={props.selectedEvent.target || ""}
+                    readOnly={!canEditEvent}
                     onCommit={(value) => props.onUpdateEvent({ target: value })}
                   />
                   <Field
                     label="活动说明"
                     value={props.selectedEvent.purpose || ""}
+                    readOnly={!canEditEvent}
                     onCommit={(value) => props.onUpdateEvent({ purpose: value })}
                     textarea
                     wide
@@ -391,37 +413,41 @@ export function EventTableView(props: {
                             下载
                           </button>
                         ) : null}
-                        <button
-                          type="button"
-                          style={secondaryButtonStyle}
-                          disabled={props.brochureUploading}
-                          onClick={() => brochureInputRef.current?.click()}
-                        >
-                          {props.brochureUploading ? "上传中…" : props.selectedEvent.brochure_path ? "替换文件" : "上传文件"}
-                        </button>
-                        {props.selectedEvent.brochure_path ? (
-                          <button
-                            type="button"
-                            style={ghostDangerStyle}
-                            disabled={props.brochureUploading}
-                            onClick={props.onRemoveBrochure}
-                          >
-                            移除
-                          </button>
+                        {canEditEvent ? (
+                          <>
+                            <button
+                              type="button"
+                              style={secondaryButtonStyle}
+                              disabled={props.brochureUploading}
+                              onClick={() => brochureInputRef.current?.click()}
+                            >
+                              {props.brochureUploading ? "上传中…" : props.selectedEvent.brochure_path ? "替换文件" : "上传文件"}
+                            </button>
+                            {props.selectedEvent.brochure_path ? (
+                              <button
+                                type="button"
+                                style={ghostDangerStyle}
+                                disabled={props.brochureUploading}
+                                onClick={props.onRemoveBrochure}
+                              >
+                                移除
+                              </button>
+                            ) : null}
+                            <input
+                              ref={brochureInputRef}
+                              type="file"
+                              accept=".pdf,.ppt,.pptx,.xls,.xlsx,.doc,.docx,.dox"
+                              style={hiddenInputStyle}
+                              onChange={(event) => {
+                                const file = event.target.files?.[0];
+                                if (file) {
+                                  props.onUploadBrochure(file);
+                                }
+                                event.target.value = "";
+                              }}
+                            />
+                          </>
                         ) : null}
-                        <input
-                          ref={brochureInputRef}
-                          type="file"
-                          accept=".pdf,.ppt,.pptx,.xls,.xlsx,.doc,.docx,.dox"
-                          style={hiddenInputStyle}
-                          onChange={(event) => {
-                            const file = event.target.files?.[0];
-                            if (file) {
-                              props.onUploadBrochure(file);
-                            }
-                            event.target.value = "";
-                          }}
-                        />
                       </div>
                     </div>
                   </label>
@@ -435,26 +461,30 @@ export function EventTableView(props: {
                           <div style={attachmentSubtitleStyle}>可用来放流程单、报名表、海报原档、赞助资料等</div>
                         </div>
                         <div style={attachmentActionRowStyle}>
-                          <button
-                            type="button"
-                            style={secondaryButtonStyle}
-                            disabled={props.attachmentUploading}
-                            onClick={() => attachmentInputRef.current?.click()}
-                          >
-                            {props.attachmentUploading ? "上传中…" : "新增附件"}
-                          </button>
-                          <input
-                            ref={attachmentInputRef}
-                            type="file"
-                            style={hiddenInputStyle}
-                            onChange={(event) => {
-                              const file = event.target.files?.[0];
-                              if (file) {
-                                props.onUploadAttachment(file);
-                              }
-                              event.target.value = "";
-                            }}
-                          />
+                          {canEditEvent ? (
+                            <>
+                              <button
+                                type="button"
+                                style={secondaryButtonStyle}
+                                disabled={props.attachmentUploading}
+                                onClick={() => attachmentInputRef.current?.click()}
+                              >
+                                {props.attachmentUploading ? "上传中…" : "新增附件"}
+                              </button>
+                              <input
+                                ref={attachmentInputRef}
+                                type="file"
+                                style={hiddenInputStyle}
+                                onChange={(event) => {
+                                  const file = event.target.files?.[0];
+                                  if (file) {
+                                    props.onUploadAttachment(file);
+                                  }
+                                  event.target.value = "";
+                                }}
+                              />
+                            </>
+                          ) : null}
                         </div>
                       </div>
 
@@ -490,13 +520,15 @@ export function EventTableView(props: {
                               >
                                 下载
                               </button>
-                              <button
-                                type="button"
-                                style={ghostDangerStyle}
-                                onClick={() => props.onRemoveAttachment(file.id)}
-                              >
-                                删除
-                              </button>
+                              {canEditEvent ? (
+                                <button
+                                  type="button"
+                                  style={ghostDangerStyle}
+                                  onClick={() => props.onRemoveAttachment(file.id)}
+                                >
+                                  删除
+                                </button>
+                              ) : null}
                             </div>
                           </div>
                         ))
@@ -514,9 +546,11 @@ export function EventTableView(props: {
                     <div style={sectionEyebrowStyle}>Organizers</div>
                     <h4 style={sectionTitleStyle}>筹备团队</h4>
                   </div>
-                  <button type="button" style={primaryButtonStyle} onClick={props.onAddOrganizers}>
-                    添加筹备团队
-                  </button>
+                  {canEditEvent ? (
+                    <button type="button" style={primaryButtonStyle} onClick={props.onAddOrganizers}>
+                      添加筹备团队
+                    </button>
+                  ) : null}
                 </div>
                 <div style={organizerRowStyle}>
                   {(props.selectedEvent.organizers || []).length ? (
@@ -580,6 +614,21 @@ function addHoursToDatetimeLocal(value: string, hoursToAdd: number) {
   return formatDatetimeLocal(date);
 }
 
+function formatEventNavDate(datetime?: string | null) {
+  if (!datetime) {
+    return "-";
+  }
+
+  const rawDate = String(datetime).trim().split(/[T ]/)[0];
+  const parsed = new Date(`${rawDate}T00:00:00`);
+  if (Number.isNaN(parsed.getTime())) {
+    return rawDate || "-";
+  }
+
+  const weekday = parsed.toLocaleDateString("zh-CN", { weekday: "long" });
+  return `${rawDate} ${weekday}`;
+}
+
 function Field({
   label,
   value,
@@ -588,6 +637,7 @@ function Field({
   textarea,
   wide,
   placeholder,
+  readOnly = false,
 }: {
   label: string;
   value: string;
@@ -596,6 +646,7 @@ function Field({
   textarea?: boolean;
   wide?: boolean;
   placeholder?: string;
+  readOnly?: boolean;
 }) {
   return (
     <label style={wide ? wideFieldStyle : fieldStyle}>
@@ -605,16 +656,26 @@ function Field({
           rows={5}
           style={textareaStyle}
           defaultValue={value}
+          readOnly={readOnly}
           placeholder={placeholder}
-          onBlur={(event) => onCommit(event.target.value)}
+          onBlur={(event) => {
+            if (!readOnly) {
+              onCommit(event.target.value);
+            }
+          }}
         />
       ) : (
         <input
           type={type}
           style={inputStyle}
           defaultValue={value}
+          readOnly={readOnly}
           placeholder={placeholder}
-          onBlur={(event) => onCommit(event.target.value)}
+          onBlur={(event) => {
+            if (!readOnly) {
+              onCommit(event.target.value);
+            }
+          }}
         />
       )}
     </label>

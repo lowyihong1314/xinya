@@ -4,13 +4,17 @@ React version of the `info` page.
 
 ## Files
 
-- `InfoPage.tsx`: page component and editor modal.
+- `InfoPage.tsx`: route-driven page component, section switcher, and editor modal.
 - `api.ts`: data loading and mutation helpers.
 - `types.ts`: shared types.
 
 ## What the page does
 
 - renders a rotating hero with `PageHero`
+- uses React Router sections under `/info/:section`
+- defaults `/info` to `/info/history`
+- supports `history`, `about`, `members`, and a placeholder `tree-hole` subpage
+- `tree-hole` now supports public submission plus permission-gated moderation
 - loads about entries, history entries, and member cards in parallel
 - prioritizes members from department id `8` before locale sorting names
 - paginates the member card section four items at a time
@@ -22,6 +26,7 @@ React version of the `info` page.
 - `/api/info/get_our_history`
 - `/api/info/about_us_text`
 - `/api/info/add_our_history`
+- `/api/info/tree_hole/messages`
 - CRM member list via `fetchAllUsers()` from `CRM/user_control/react/api`
 
 ## Auth behavior
@@ -29,12 +34,14 @@ React version of the `info` page.
 - Guest users can browse all content.
 - Authenticated users get Add, Edit, and Delete actions for About and History sections.
 - Auth state comes from `useUserState()`, not from a page-local login fetch.
+- Tree-hole submission is public; the backend does not auto-collect account names, and only users with `info_tree_hole` can read and manage submitted messages.
 
 ## Notes
 
 - `History` entries support image upload, replacement, and removal.
 - `UserCard` is imported from the CRM user-control React module, so visual or data-shape changes there affect this page.
 - This page is a good example of a public route that still depends on private CRM code for a subset of its UI.
+- Tree-hole content is intentionally not public after submission; the route shows the public form to everyone and the moderation list only to permissioned users.
 
 ## React Router Migration Track
 

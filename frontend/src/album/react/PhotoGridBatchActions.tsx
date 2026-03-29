@@ -13,6 +13,7 @@ type Props = {
   onClear: () => void;
   onDownloadOriginal: () => void;
   onDownloadJpeg: () => void;
+  canDelete?: boolean;
   onDelete: () => void;
 };
 
@@ -29,6 +30,7 @@ export function PhotoGridBatchActions({
   onClear,
   onDownloadOriginal,
   onDownloadJpeg,
+  canDelete = false,
   onDelete,
 }: Props) {
   return (
@@ -58,9 +60,11 @@ export function PhotoGridBatchActions({
             <button type="button" style={buttonStyle(false)} disabled={!selectedCount || busy} onClick={onDownloadJpeg}>
               {busy ? "处理中…" : "下载 JPEG"}
             </button>
-            <button type="button" style={dangerButtonStyle} disabled={!selectedCount || busy} onClick={onDelete}>
-              {busy ? "处理中…" : "移除所选"}
-            </button>
+            {canDelete ? (
+              <button type="button" style={dangerButtonStyle} disabled={!selectedCount || busy} onClick={onDelete}>
+                {busy ? "处理中…" : "移除所选"}
+              </button>
+            ) : null}
           </>
         ) : null}
       </div>

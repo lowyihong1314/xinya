@@ -32,73 +32,83 @@ def get_all_event():
 
 @event_data_bp.route("/check_in/save", methods=["POST"])
 @login_required
+@permission_required("event_edit")
 def check_in_save():
     return services.save_event_check_in(services.get_json_payload())
 
 
 @event_data_bp.route("/check_in/delete/<int:check_in_id>", methods=["POST", "DELETE"])
 @login_required
+@permission_required("event_edit")
 def check_in_delete(check_in_id):
     return services.delete_event_check_in(check_in_id)
 
 
 @event_data_bp.route("/event_flow/list/<int:event_id>", methods=["GET"])
-@login_required
 def event_flow_list(event_id):
     return services.event_flow_list_response(event_id)
 
 
 @event_data_bp.route("/event_flow/new", methods=["POST"])
 @login_required
+@permission_required("event_edit")
 def event_flow_new():
     return services.create_event_flow(services.get_json_payload())
 
 
 @event_data_bp.route("/event_flow/update/<int:flow_id>", methods=["POST"])
 @login_required
+@permission_required("event_edit")
 def event_flow_update(flow_id):
     return services.update_event_flow(flow_id, services.get_json_payload())
 
 
 @event_data_bp.route("/event_flow/delete/<int:flow_id>", methods=["POST"])
 @login_required
+@permission_required("event_edit")
 def event_flow_delete(flow_id):
     return services.delete_event_flow(flow_id)
 
 
 @event_data_bp.route("/event_flow/reorder", methods=["POST"])
 @login_required
+@permission_required("event_edit")
 def event_flow_reorder():
     return services.reorder_event_flow(services.get_json_payload())
 
 
 @event_data_bp.route("/delete_event/<int:event_id>", methods=["DELETE"])
 @login_required
+@permission_required("event_edit")
 def delete_event(event_id):
     return services.delete_event_by_id(event_id)
 
 
 @event_data_bp.route("/set_poster/<int:event_id>/<int:file_id>", methods=["POST"])
 @login_required
+@permission_required("event_edit")
 def set_poster(event_id, file_id):
     return services.set_event_poster(event_id, file_id)
 
 
 @event_data_bp.route("/new_event", methods=["POST"])
 @login_required
+@permission_required("event_edit")
 def new_or_edit_event():
     return services.save_event(request.json or request.form or {})
 
 
 @event_data_bp.route("/set_album/<int:event_id>", methods=["POST"])
 @login_required
+@permission_required("event_edit")
 def set_album(event_id):
     data = request.get_json(silent=True) or {}
     return services.set_event_album(event_id, data.get("album"))
 
 
 @event_data_bp.route("/upload_brochure/<int:event_id>", methods=["POST"])
-@permission_required("event")
+@login_required
+@permission_required("event_edit")
 def upload_brochure(event_id):
     uploaded_file = request.files.get("file")
     if not uploaded_file:
@@ -107,7 +117,8 @@ def upload_brochure(event_id):
 
 
 @event_data_bp.route("/event_file/upload/<int:event_id>", methods=["POST"])
-@permission_required("event")
+@login_required
+@permission_required("event_edit")
 def upload_event_file(event_id):
     uploaded_file = request.files.get("file")
     if not uploaded_file:
@@ -117,5 +128,6 @@ def upload_event_file(event_id):
 
 @event_data_bp.route("/event_file/delete/<int:file_id>", methods=["POST", "DELETE"])
 @login_required
+@permission_required("event_edit")
 def remove_event_file(file_id):
     return services.delete_event_file(file_id)

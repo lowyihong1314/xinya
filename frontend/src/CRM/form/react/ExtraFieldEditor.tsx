@@ -13,11 +13,13 @@ export function ExtraFieldEditor({
   buttonLabel,
   onSave,
   onDelete,
+  readOnly = false,
 }: {
   initialValue?: ExtraFieldDraft;
   buttonLabel: string;
   onSave: (payload: ExtraFieldDraft) => void;
   onDelete?: () => void;
+  readOnly?: boolean;
 }) {
   const [draft, setDraft] = useState<ExtraFieldDraft>(
     initialValue || {
@@ -40,6 +42,7 @@ export function ExtraFieldEditor({
             style={inputStyle}
             value={draft.label}
             placeholder="label"
+            disabled={readOnly}
             onChange={(event) => setDraft((prev) => ({ ...prev, label: event.target.value }))}
           />
         </label>
@@ -49,6 +52,7 @@ export function ExtraFieldEditor({
           <select
             style={inputStyle}
             value={draft.field_type}
+            disabled={readOnly}
             onChange={(event) =>
               setDraft((prev) => ({
                 ...prev,
@@ -73,6 +77,7 @@ export function ExtraFieldEditor({
             type="number"
             value={draft.order == null ? "" : String(draft.order)}
             placeholder="0"
+            disabled={readOnly}
             onChange={(event) =>
               setDraft((prev) => ({
                 ...prev,
@@ -90,6 +95,7 @@ export function ExtraFieldEditor({
             <button
               type="button"
               style={ghostButtonStyle}
+              disabled={readOnly}
               onClick={() =>
                 setDraft((prev) => ({
                   ...prev,
@@ -110,6 +116,7 @@ export function ExtraFieldEditor({
                   style={inputStyle}
                   value={option}
                   placeholder={`选项 ${index + 1}`}
+                  disabled={readOnly}
                   onChange={(event) =>
                     setDraft((prev) => ({
                       ...prev,
@@ -120,6 +127,7 @@ export function ExtraFieldEditor({
                 <button
                   type="button"
                   style={deleteButtonStyle}
+                  disabled={readOnly}
                   onClick={() =>
                     setDraft((prev) => ({
                       ...prev,
@@ -136,14 +144,20 @@ export function ExtraFieldEditor({
       ) : null}
 
       <div style={actionsStyle}>
-        <button type="button" style={saveButtonStyle} onClick={() => onSave(draft)}>
-          {buttonLabel}
-        </button>
-        {onDelete ? (
-          <button type="button" style={deleteButtonStyle} onClick={onDelete}>
-            删除
-          </button>
-        ) : null}
+        {readOnly ? (
+          <div style={hintStyle}>只读</div>
+        ) : (
+          <>
+            <button type="button" style={saveButtonStyle} onClick={() => onSave(draft)}>
+              {buttonLabel}
+            </button>
+            {onDelete ? (
+              <button type="button" style={deleteButtonStyle} onClick={onDelete}>
+                删除
+              </button>
+            ) : null}
+          </>
+        )}
       </div>
     </div>
   );

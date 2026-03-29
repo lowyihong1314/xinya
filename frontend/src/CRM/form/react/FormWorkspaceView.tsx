@@ -77,6 +77,10 @@ async function exportMembersToExcel(formTitle: string, members: FormMember[], ex
 
 export function FormWorkspaceView(props: {
   isMobile?: boolean;
+  canReadForms: boolean;
+  canEditForms: boolean;
+  canViewMemberDetail: boolean;
+  canEditMembers: boolean;
   forms: FormRecord[];
   selectedForm: FormRecord | null;
   fees: FormFee[];
@@ -152,9 +156,11 @@ export function FormWorkspaceView(props: {
           <button type="button" style={secondaryButtonStyle} onClick={props.onRefresh}>
             刷新
           </button>
-          <button type="button" style={primaryButtonStyle} onClick={props.onOpenCreate}>
-            创建报名表
-          </button>
+          {props.canEditForms ? (
+            <button type="button" style={primaryButtonStyle} onClick={props.onOpenCreate}>
+              创建报名表
+            </button>
+          ) : null}
         </div>
       </header>
 
@@ -162,7 +168,15 @@ export function FormWorkspaceView(props: {
         <div style={props.toast.type === "success" ? successBannerStyle : errorBannerStyle}>{props.toast.text}</div>
       ) : null}
 
-      <div style={layoutStyle(isMobile)}>
+      {!props.canReadForms ? (
+        <section style={panelStyle}>
+          <div style={sectionEyebrowStyle}>Permission</div>
+          <h4 style={sectionTitleStyle}>没有报名表工作台权限</h4>
+          <div style={inlineNoteStyle}>需要 `form_read`、`form_edit` 或 `member_detail` 其中之一才能进入这里。</div>
+        </section>
+      ) : null}
+
+      {props.canReadForms ? <div style={layoutStyle(isMobile)}>
         <aside style={sidebarStyle(isMobile)}>
           {props.loading ? <div style={placeholderStyle}>加载报名表中…</div> : null}
           {!props.loading && !props.forms.length ? <div style={placeholderStyle}>暂无报名表</div> : null}
@@ -172,7 +186,7 @@ export function FormWorkspaceView(props: {
               <button key={form.id} type="button" style={formNavCardStyle(active)} onClick={() => props.onOpenForm(form.id)}>
                 <div style={formNavTitleStyle(active)}>{form.title}</div>
                 <div style={formNavMetaStyle}>
-                  截止 {form.expired || "-"} · 成员 {(form.members || []).length}
+                  截止 {form.expired || "-"} · 成员 {form.member_count ?? (form.members || []).length}
                 </div>
               </button>
             );
@@ -219,23 +233,32 @@ export function FormWorkspaceView(props: {
                     <button type="button" style={secondaryButtonStyle} onClick={() => setShareView("share")}>
                       分享报名表格
                     </button>
-                    <button type="button" style={dangerButtonStyle} onClick={() => props.onDeleteForm(selectedForm.id)}>
-                      删除表单
-                    </button>
+                    {props.canEditForms ? (
+                      <button type="button" style={dangerButtonStyle} onClick={() => props.onDeleteForm(selectedForm.id)}>
+                        删除表单
+                      </button>
+                    ) : null}
                   </div>
                 </div>
 
                 <div style={summaryGridStyle(isMobile)}>
-                  <Field label="标题" value={selectedForm.title} onChange={(value) => props.onPatchForm({ title: value })} />
+                  <Field
+                    label="标题"
+                    value={selectedForm.title}
+                    disabled={!props.canEditForms}
+                    onChange={(value) => props.onPatchForm({ title: value })}
+                  />
                   <Field
                     label="截止日期"
                     type="date"
                     value={selectedForm.expired || ""}
+                    disabled={!props.canEditForms}
                     onChange={(value) => props.onPatchForm({ expired: value })}
                   />
                   <Field
                     label="详情"
                     value={selectedForm.detail || ""}
+                    disabled={!props.canEditForms}
                     onChange={(value) => props.onPatchForm({ detail: value })}
                     textarea
                     wide
@@ -248,11 +271,13 @@ export function FormWorkspaceView(props: {
                   <ConfigToggle
                     label="启用 Email"
                     checked={Boolean(selectedForm.field_switches?.email ?? selectedForm.email)}
+                    disabled={!props.canEditForms}
                     onChange={(next) => props.onPatchForm({ field_switches: { ...(selectedForm.field_switches || {}), email: next } })}
                   />
                   <ConfigToggle
                     label="家长同意书"
                     checked={Boolean(selectedForm.field_switches?.parental_form ?? selectedForm.parental_form)}
+                    disabled={!props.canEditForms}
                     onChange={(next) =>
                       props.onPatchForm({ field_switches: { ...(selectedForm.field_switches || {}), parental_form: next } })
                     }
@@ -260,6 +285,7 @@ export function FormWorkspaceView(props: {
                   <ConfigToggle
                     label="家长 1"
                     checked={Boolean(selectedForm.field_switches?.parent_1 ?? selectedForm.parent_1)}
+                    disabled={!props.canEditForms}
                     onChange={(next) =>
                       props.onPatchForm({
                         field_switches: { ...(selectedForm.field_switches || {}), parent_1: next, parent_1_phone: next },
@@ -269,6 +295,7 @@ export function FormWorkspaceView(props: {
                   <ConfigToggle
                     label="家长 2"
                     checked={Boolean(selectedForm.field_switches?.parent_2 ?? selectedForm.parent_2)}
+                    disabled={!props.canEditForms}
                     onChange={(next) =>
                       props.onPatchForm({
                         field_switches: { ...(selectedForm.field_switches || {}), parent_2: next, parent_2_phone: next },
@@ -278,16 +305,19 @@ export function FormWorkspaceView(props: {
                   <ConfigToggle
                     label="医疗备注"
                     checked={Boolean(selectedForm.field_switches?.medical ?? selectedForm.medical)}
+                    disabled={!props.canEditForms}
                     onChange={(next) => props.onPatchForm({ field_switches: { ...(selectedForm.field_switches || {}), medical: next } })}
                   />
                   <ConfigToggle
                     label="过敏"
                     checked={Boolean(selectedForm.field_switches?.allergy ?? selectedForm.allergy)}
+                    disabled={!props.canEditForms}
                     onChange={(next) => props.onPatchForm({ field_switches: { ...(selectedForm.field_switches || {}), allergy: next } })}
                   />
                   <ConfigToggle
                     label="居住地址"
                     checked={Boolean(selectedForm.field_switches?.address ?? selectedForm.address)}
+                    disabled={!props.canEditForms}
                     onChange={(next) => props.onPatchForm({ field_switches: { ...(selectedForm.field_switches || {}), address: next } })}
                   />
                 </div>
@@ -298,11 +328,11 @@ export function FormWorkspaceView(props: {
                 title="关联活动"
                 collapsed={collapsedSections.event}
                 onToggle={() => toggleSection("event")}
-                actions={
+                actions={props.canEditForms ? (
                   <button type="button" style={secondaryButtonStyle} onClick={props.onPickEvent}>
                     选择活动
                   </button>
-                }
+                ) : null}
               >
                 {!linkedEvents.length ? <div style={inlineNoteStyle}>当前未关联活动</div> : null}
                 {linkedEvents.length ? (
@@ -311,11 +341,14 @@ export function FormWorkspaceView(props: {
                       <div key={event.id} style={eventCardStyle}>
                         <div>
                           <div style={eventTitleStyle}>{event.event_name || `活动 #${event.id}`}</div>
+                          <div style={eventMetaStyle}>Event ID #{event.id}</div>
                           <div style={eventMetaStyle}>{event.datetime || event.purpose || `活动 #${event.id}`}</div>
                         </div>
-                        <button type="button" style={ghostDangerStyle} onClick={() => props.onRemoveEvent(event.id)}>
-                          移除
-                        </button>
+                        {props.canEditForms ? (
+                          <button type="button" style={ghostDangerStyle} onClick={() => props.onRemoveEvent(event.id)}>
+                            移除
+                          </button>
+                        ) : null}
                       </div>
                     ))}
                   </div>
@@ -331,6 +364,7 @@ export function FormWorkspaceView(props: {
                 <FeePanel
                   formId={selectedForm.id}
                   fees={props.fees}
+                  readOnly={!props.canEditForms}
                   onAdd={props.onAddFee}
                   onEdit={props.onEditFee}
                   onDelete={props.onDeleteFee}
@@ -345,6 +379,7 @@ export function FormWorkspaceView(props: {
               >
                 <ExtraFieldPanel
                   fields={props.extraFields}
+                  readOnly={!props.canEditForms}
                   onAdd={props.onAddExtraField}
                   onEdit={props.onEditExtraField}
                   onDelete={props.onDeleteExtraField}
@@ -356,7 +391,7 @@ export function FormWorkspaceView(props: {
                 title="报名成员"
                 collapsed={collapsedSections.members}
                 onToggle={() => toggleSection("members")}
-                actions={
+                actions={props.canViewMemberDetail ? (
                   <button
                     type="button"
                     style={secondaryButtonStyle}
@@ -364,22 +399,30 @@ export function FormWorkspaceView(props: {
                   >
                     下载 Excel
                   </button>
-                }
+                ) : null}
               >
-                <MemberPanel
-                  members={selectedForm.members || []}
-                  extraFields={props.extraFields}
-                  onRemove={props.onRemoveMember}
-                  onShowDetail={props.onShowMemberDetail}
-                  onOpenParental={props.onOpenParental}
-                />
+                {props.canViewMemberDetail ? (
+                  <MemberPanel
+                    members={selectedForm.members || []}
+                    extraFields={props.extraFields}
+                    canEditMembers={props.canEditMembers}
+                    onRemove={props.onRemoveMember}
+                    onShowDetail={props.onShowMemberDetail}
+                    onOpenParental={props.onOpenParental}
+                  />
+                ) : (
+                  <div style={inlineNoteStyle}>
+                    这个表单目前共有 {selectedForm.member_count ?? (selectedForm.members || []).length} 位报名成员。
+                    需要 `member_detail` 或 `form_edit` 权限才能查看详细资料。
+                  </div>
+                )}
               </CollapsibleSection>
             </>
           ) : null}
         </section>
-      </div>
+      </div> : null}
 
-      {props.createOpen ? <CreateFormModal onClose={props.onCloseCreate} onSubmit={props.onCreateForm} /> : null}
+      {props.createOpen && props.canEditForms ? <CreateFormModal onClose={props.onCloseCreate} onSubmit={props.onCreateForm} /> : null}
     </div>
   );
 }
@@ -682,18 +725,22 @@ function CreateFormModal({
 
 function ExtraFieldPanel({
   fields,
+  readOnly,
   onAdd,
   onEdit,
   onDelete,
 }: {
   fields: ExtraFieldConfig[];
+  readOnly?: boolean;
   onAdd: (payload: ExtraFieldDraft) => void;
   onEdit: (fieldId: number, payload: ExtraFieldDraft) => void;
   onDelete: (fieldId: number) => void;
 }) {
   return (
     <div style={sectionBodyStyle}>
-      <ExtraFieldEditor buttonLabel="添加字段" onSave={(payload) => onAdd(normalizeExtraFieldDraft(payload, fields.length))} />
+      {!readOnly ? (
+        <ExtraFieldEditor buttonLabel="添加字段" onSave={(payload) => onAdd(normalizeExtraFieldDraft(payload, fields.length))} />
+      ) : null}
       <div style={stackStyle}>
         {fields.length ? (
           fields.map((field) => (
@@ -706,6 +753,7 @@ function ExtraFieldPanel({
                 order: field.order ?? null,
               }}
               buttonLabel="保存"
+              readOnly={readOnly}
               onSave={(payload) => onEdit(field.id, normalizeExtraFieldDraft(payload, field.order ?? 0))}
               onDelete={() => onDelete(field.id)}
             />
@@ -721,12 +769,14 @@ function ExtraFieldPanel({
 function MemberPanel({
   members,
   extraFields,
+  canEditMembers,
   onRemove,
   onShowDetail,
   onOpenParental,
 }: {
   members: FormMember[];
   extraFields: ExtraFieldConfig[];
+  canEditMembers: boolean;
   onRemove: (memberId: number) => void;
   onShowDetail: (member: FormMember) => void;
   onOpenParental: (member: FormMember) => void;
@@ -761,16 +811,18 @@ function MemberPanel({
                   </div>
                   <div style={headerActionsStyle}>
                     <button type="button" style={secondaryButtonStyle} onClick={() => onShowDetail(member)}>
-                      详情 / 编辑
+                      {canEditMembers ? "详情 / 编辑" : "查看详情"}
                     </button>
                     {member.parental_data ? (
                       <button type="button" style={secondaryButtonStyle} onClick={() => onOpenParental(member)}>
                         家长同意书
                       </button>
                     ) : null}
-                    <button type="button" style={ghostDangerStyle} onClick={() => onRemove(member.id)}>
-                      移除
-                    </button>
+                    {canEditMembers ? (
+                      <button type="button" style={ghostDangerStyle} onClick={() => onRemove(member.id)}>
+                        移除
+                      </button>
+                    ) : null}
                   </div>
                 </div>
                 <div style={chipRowStyle}>
@@ -804,6 +856,7 @@ function Field({
   label,
   value,
   onChange,
+  disabled,
   textarea,
   wide,
   type = "text",
@@ -811,6 +864,7 @@ function Field({
   label: string;
   value: string;
   onChange: (value: string) => void;
+  disabled?: boolean;
   textarea?: boolean;
   wide?: boolean;
   type?: string;
@@ -819,9 +873,21 @@ function Field({
     <label style={wide ? wideFieldStyle : fieldStyle}>
       <span style={fieldLabelStyle}>{label}</span>
       {textarea ? (
-        <textarea rows={4} style={textareaStyle} value={value} onChange={(event) => onChange(event.target.value)} />
+        <textarea
+          rows={4}
+          style={textareaStyle}
+          value={value}
+          disabled={disabled}
+          onChange={(event) => onChange(event.target.value)}
+        />
       ) : (
-        <input type={type} style={inputStyle} value={value} onChange={(event) => onChange(event.target.value)} />
+        <input
+          type={type}
+          style={inputStyle}
+          value={value}
+          disabled={disabled}
+          onChange={(event) => onChange(event.target.value)}
+        />
       )}
     </label>
   );
@@ -830,15 +896,17 @@ function Field({
 function ConfigToggle({
   label,
   checked,
+  disabled,
   onChange,
 }: {
   label: string;
   checked: boolean;
+  disabled?: boolean;
   onChange: (next: boolean) => void;
 }) {
   return (
     <label style={configToggleStyle(checked)}>
-      <input type="checkbox" checked={checked} onChange={(event) => onChange(event.target.checked)} />
+      <input type="checkbox" checked={checked} disabled={disabled} onChange={(event) => onChange(event.target.checked)} />
       <span>{label}</span>
     </label>
   );
