@@ -24,7 +24,7 @@ export type CreateState = {
   applicant_name: string;
   request_date: string;
   amount: string;
-  department_id: string;
+  department_name: string;
   acctDept: string;
   purpose: string;
   selectedEvent: { id: number; event_name?: string } | null;
@@ -101,13 +101,13 @@ export function ClaimCreateForm({
         </Field>
         <Field label="部门">
           <select
-            value={state.department_id}
-            onChange={(event) => onChange((prev) => ({ ...prev, department_id: event.target.value }))}
+            value={state.department_name}
+            onChange={(event) => onChange((prev) => ({ ...prev, department_name: event.target.value }))}
             style={inputStyle}
           >
             <option value="">请选择部门</option>
             {(user?.departments || []).map((department) => (
-              <option key={department.id} value={department.id}>
+              <option key={department.id} value={department.name}>
                 {department.name}
               </option>
             ))}

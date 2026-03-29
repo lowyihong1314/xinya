@@ -22,6 +22,7 @@
 - `ClaimWorkspace.tsx` loads claims with `fetchClaims()` and keeps local list/create/detail state in React.
 - New claims are submitted as `FormData` through `submitClaim()`, including attachments and serialized signature data.
 - Claim approval goes through `decideClaim()` and can require signature/comment data.
+- Claim deletion goes through `deleteClaim()` and is limited to edit-capable finance users.
 - Voucher sharing uses `/api/account/print_payment_voucher/share_payment_voucher/:requestId`.
 - Public voucher signing uses `/api/account/print_payment_voucher/public/:token` and `/sign`.
 
@@ -29,7 +30,7 @@
 
 - Creating a claim requires applicant name, request date, amount, department, purpose, and a handwritten signature.
 - Claims can optionally link a CRM event through `showEventPicker`.
-- Finance permission is inferred from a department permission named `account`.
+- Claim actions are split by department permissions: `account_submit` can create, `account_read` can view all claims, and `account_edit` can approve/reject/delete.
 - Payment voucher actions are only exposed when the current user is eligible through approval state or finance permission.
 
 ## Upgrade notes

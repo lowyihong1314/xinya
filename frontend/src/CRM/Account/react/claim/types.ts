@@ -41,7 +41,6 @@ export type ClaimRecord = {
   applicant_name?: string;
   amount?: number | string;
   request_date?: string;
-  department_id?: number;
   department_name?: string;
   purpose?: string;
   event_id?: number;

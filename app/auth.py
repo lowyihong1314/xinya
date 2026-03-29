@@ -9,7 +9,8 @@ from models.user_data import User
 permission_names = [
     "department",
     "department_edit",
-    "account",
+    "account_submit",
+    "account_read",
     "account_edit",
     "member",
     "member_edit",

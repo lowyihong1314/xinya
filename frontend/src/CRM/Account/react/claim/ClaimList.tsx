@@ -38,6 +38,7 @@ type ClaimListProps = {
   scopeLabel: string;
   onRefresh: () => void;
   onCreate: () => void;
+  canCreate: boolean;
 };
 
 export function ClaimList({
@@ -54,6 +55,7 @@ export function ClaimList({
   scopeLabel,
   onRefresh,
   onCreate,
+  canCreate,
 }: ClaimListProps) {
   const [approverUsers, setApproverUsers] = useState<Record<number, ApproverUserProfile>>({});
   const [approverLoadError, setApproverLoadError] = useState("");
@@ -144,9 +146,11 @@ export function ClaimList({
               <button type="button" style={buttonSecondaryStyle} onClick={onRefresh}>
                 刷新
               </button>
-              <button type="button" style={buttonPrimaryStyle} onClick={onCreate}>
-                新建申请
-              </button>
+              {canCreate ? (
+                <button type="button" style={buttonPrimaryStyle} onClick={onCreate}>
+                  新建申请
+                </button>
+              ) : null}
             </div>
             <div className="claim-list__pagination-actions" style={paginationActionsStyle}>
               <span style={chipStyle}>
@@ -182,7 +186,7 @@ export function ClaimList({
                       </div>
                       <div className="claim-list__card-meta" style={cardMetaStyle}>
                         单号 #{claim.id} | 日期：{claim.request_date || "-"} | 部门：
-                        {claim.department_name || claim.department_id || "-"}
+                        {claim.department_name || "-"}
                       </div>
                     </div>
                     <div className="claim-list__card-status" style={statusBadgeStyle(getClaimStatus(claim))}>

@@ -62,6 +62,16 @@ export async function createDepartment(name: string) {
   return parseJson<{ status?: string; id?: number; message?: string }>(response);
 }
 
+export async function renameDepartment(departmentId: number, name: string) {
+  const response = await apiFetch(`/api/user_control/departments/${departmentId}`, {
+    method: "PUT",
+    headers: { "Content-Type": "application/json" },
+    credentials: "include",
+    body: JSON.stringify({ name }),
+  });
+  return parseJson<{ status?: string; message?: string }>(response);
+}
+
 export async function deleteDepartment(departmentId: number) {
   const response = await apiFetch(`/api/user_control/departments/${departmentId}`, {
     method: "DELETE",

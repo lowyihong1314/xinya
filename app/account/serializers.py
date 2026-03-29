@@ -10,8 +10,8 @@ def serialize_request_data(request_obj, with_children=True):
         if request_obj.request_date
         else None,
         "amount": request_obj.amount,
-        "department_id": request_obj.department_id,
-        "department_name": request_obj.department.name if request_obj.department else None,
+        "department_id": None,
+        "department_name": request_obj.department_name,
         "purpose": request_obj.purpose,
         "public_token": request_obj.public_token,
         "sign_json_data": request_obj.sign_json_data,

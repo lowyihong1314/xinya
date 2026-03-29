@@ -17,12 +17,13 @@ This directory holds the React rewrite of the profile page.
 
 ## Screen structure
 
-`ProfilePage.tsx` is organized around four sections:
+`ProfilePage.tsx` is organized around five sections:
 
 - `overview` — identity summary, latest footprint, profile completeness checklist
 - `profile` — editable form for identity, contact, and health fields
 - `journey` — footprint timeline (registration forms + youth class entries)
 - `account` — session info, membership actions, app download, logout
+- `bank-note` — personal transfer info (`bank_account`, `tng_number`) and reference notes
 
 ## Backend endpoints
 
@@ -55,7 +56,8 @@ The footprint view combines two backend domains into one timeline-style summary:
 
 ## Routing
 
-- The `/profile` route renders `ProfilePage` directly from the React router.
+- `/profile` redirects to `/profile/overview`.
+- `/profile/:section` renders `ProfilePage`, and section switching is driven by React Router.
 
 ## React Router Migration Track
 

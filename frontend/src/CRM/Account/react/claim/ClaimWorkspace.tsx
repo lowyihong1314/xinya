@@ -4,7 +4,7 @@ import type { ChangeEvent } from "react";
 import { useUserState } from "../../../../app/UserState";
 import { showEventPicker } from "../../../shared/showEventPicker";
 import { render_sign_modal } from "../../../../../../static/js/sign_tools.js";
-import { decideClaim, fetchClaims, submitClaim } from "./api";
+import { decideClaim, deleteClaim, fetchClaims, submitClaim } from "./api";
 import { ClaimCreateForm, type CreateState } from "./ClaimCreateForm";
 import { ClaimDetail } from "./ClaimDetail";
 import { ClaimList } from "./ClaimList";
@@ -36,7 +36,7 @@ function buildInitialCreateState(user: AccountUser | null): CreateState {
     applicant_name: String(user?.display_name || user?.name_NRIC || user?.username || ""),
     request_date: todayIsoDate(),
     amount: "",
-    department_id: user?.departments?.[0] ? String(user.departments[0].id) : "",
+    department_name: user?.departments?.[0]?.name || "",
     acctDept: "",
     purpose: "",
     selectedEvent: null,
@@ -66,7 +66,7 @@ export function ClaimWorkspace() {
     setCreateState((prev) => ({
       ...nextInitial,
       ...prev,
-      department_id: prev.department_id || nextInitial.department_id,
+      department_name: prev.department_name || nextInitial.department_name,
       applicant_name: prev.applicant_name || nextInitial.applicant_name,
     }));
   }, [accountUser]);
@@ -110,7 +110,7 @@ export function ClaimWorkspace() {
         claim.purpose,
         claim.event_name,
         claim.event_id,
-        claim.department_id,
+        claim.department_name,
         claim.request_date,
         claim.status,
         claim.amount,
@@ -130,10 +130,13 @@ export function ClaimWorkspace() {
     }
   }, [page, safePage]);
 
-  const hasAccountPermission =
-    accountUser?.departments?.some((department) =>
-      (department.permissions || []).some((permission) => permission.name === "account"),
-    ) ?? false;
+  const claimPermissions =
+    accountUser?.departments?.flatMap((department) => department.permissions || []).map((permission) => permission.name || "") ??
+    [];
+  const claimPermissionNames = new Set(claimPermissions);
+  const canSubmitClaims = claimPermissionNames.has("account_submit");
+  const canReadAllClaims = claimPermissionNames.has("account_read") || claimPermissionNames.has("account_edit");
+  const canEditClaims = claimPermissionNames.has("account_edit");
 
   const isApprovedByMe =
     selectedClaim?.approver_data?.some(
@@ -176,6 +179,11 @@ export function ClaimWorkspace() {
   async function handleCreateSubmit() {
     setError(null);
 
+    if (!canSubmitClaims) {
+      setError("你没有提交申请的权限");
+      return;
+    }
+
     if (!createState.signJsonData?.strokes?.length) {
       setError("请先签名");
       return;
@@ -192,7 +200,7 @@ export function ClaimWorkspace() {
       setError("请输入正确金额");
       return;
     }
-    if (!createState.department_id) {
+    if (!createState.department_name.trim()) {
       setError("请选择部门");
       return;
     }
@@ -216,7 +224,7 @@ export function ClaimWorkspace() {
     formData.append("applicant_name", createState.applicant_name.trim());
     formData.append("request_date", createState.request_date);
     formData.append("amount", createState.amount);
-    formData.append("department_id", createState.department_id);
+    formData.append("department_name", createState.department_name.trim());
     formData.append(
       "purpose",
       createState.acctDept
@@ -244,6 +252,11 @@ export function ClaimWorkspace() {
 
   async function handleDecision(action: "approve" | "reject") {
     if (!selectedClaim) {
+      return;
+    }
+
+    if (!canEditClaims) {
+      setError("你没有审批申请的权限");
       return;
     }
 
@@ -277,6 +290,31 @@ export function ClaimWorkspace() {
       setMessage(action === "approve" ? "已批准" : "已拒绝");
     } catch (err) {
       setError(err instanceof Error ? err.message : "操作失败");
+    }
+  }
+
+  async function handleDeleteClaim() {
+    if (!selectedClaim) {
+      return;
+    }
+
+    if (!canEditClaims) {
+      setError("你没有删除申请的权限");
+      return;
+    }
+
+    const confirmed = window.confirm(`确认删除申请 #${selectedClaim.id} 吗？此操作无法撤销。`);
+    if (!confirmed) {
+      return;
+    }
+
+    try {
+      const payload = await deleteClaim(selectedClaim.id);
+      await loadClaims();
+      setView({ kind: "list" });
+      setMessage(payload.message || "申请已删除");
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "删除失败");
     }
   }
 
@@ -319,9 +357,14 @@ export function ClaimWorkspace() {
             pageSize={pageSize}
             onPageChange={setPage}
             onOpen={(claimId) => setView({ kind: "detail", claimId })}
-            scopeLabel={canViewAll ? "范围：全部申请" : "范围：我的申请"}
+            scopeLabel={canViewAll || canReadAllClaims ? "范围：全部申请" : "范围：我的申请"}
             onRefresh={() => void loadClaims()}
+            canCreate={canSubmitClaims}
             onCreate={() => {
+              if (!canSubmitClaims) {
+                setError("你没有提交申请的权限");
+                return;
+              }
               setCreateState(buildInitialCreateState(accountUser));
               setView({ kind: "create" });
             }}
@@ -347,12 +390,13 @@ export function ClaimWorkspace() {
           <ClaimDetail
             isMobile={isMobile}
             claim={selectedClaim}
-            hasAccountPermission={hasAccountPermission}
+            canEditClaims={canEditClaims}
             isApprovedByMe={isApprovedByMe}
             currentUserId={accountUser?.id}
             onBack={() => setView({ kind: "list" })}
             onApprove={() => void handleDecision("approve")}
             onReject={() => void handleDecision("reject")}
+            onDelete={() => void handleDeleteClaim()}
             onClaimUpdated={handleClaimUpdated}
           />
         ) : null}

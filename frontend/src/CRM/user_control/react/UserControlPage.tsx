@@ -33,6 +33,7 @@ export function UserControlPage() {
       onCloseNewUser={actions.closeNewUser}
       onCreateUser={(payload) => void actions.createUser(payload)}
       onCreateDepartment={(name) => void actions.createDept(name)}
+      onRenameDepartment={(departmentId, name) => void actions.renameDept(departmentId, name)}
       onDeleteDepartment={(departmentId) => void actions.removeDept(departmentId)}
       onAttachUser={(departmentId, userId) => void actions.attachUser(departmentId, userId)}
       onDetachUser={(departmentId, userId) => void actions.detachUser(departmentId, userId)}

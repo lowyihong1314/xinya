@@ -15,6 +15,7 @@ import {
   fetchDepartments,
   fetchUserDetail,
   registerUser,
+  renameDepartment,
   removePermissionFromDepartment,
   removeUserFromDepartment,
   resetUserPassword,
@@ -220,6 +221,16 @@ export function useUserControlController() {
     }
   }
 
+  async function renameDept(departmentId: number, name: string) {
+    try {
+      await renameDepartment(departmentId, name);
+      setToast({ type: "success", text: "部门名称已更新" });
+      await loadInitial();
+    } catch (err) {
+      setToast({ type: "error", text: err instanceof Error ? err.message : "更新部门失败" });
+    }
+  }
+
   async function attachUser(departmentId: number, userId: number) {
     try {
       await addUserToDepartment(departmentId, userId);
@@ -298,6 +309,7 @@ export function useUserControlController() {
       removeRenewal,
       createUser,
       createDept,
+      renameDept,
       removeDept,
       attachUser,
       detachUser,

@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import type { CSSProperties } from "react";
 
 import { CachedImage } from "../../../components/CachedMedia";
@@ -6,6 +6,10 @@ import { API_BASE } from "../../../js/apiBase";
 import type { DepartmentRecord, MemberRenewalRecord, PermissionRecord, UserRecord } from "./types";
 
 type Toast = { type: "success" | "error"; text: string } | null;
+
+const ALL_USERS_PAGE_SIZE_DESKTOP = 10;
+const ALL_USERS_PAGE_SIZE_MOBILE = 8;
+const DEPARTMENT_USERS_PAGE_SIZE = 8;
 
 export function UserControlView(props: {
   isMobile?: boolean;
@@ -30,6 +34,7 @@ export function UserControlView(props: {
   onCloseNewUser: () => void;
   onCreateUser: (payload: { username: string; email: string; phone?: string; password: string }) => void;
   onCreateDepartment: (name: string) => void;
+  onRenameDepartment: (departmentId: number, name: string) => void;
   onDeleteDepartment: (departmentId: number) => void;
   onAttachUser: (departmentId: number, userId: number) => void;
   onDetachUser: (departmentId: number, userId: number) => void;
@@ -45,6 +50,45 @@ export function UserControlView(props: {
 }) {
   const isMobile = props.isMobile ?? false;
   const [newDepartmentName, setNewDepartmentName] = useState("");
+  const [departmentUsersPage, setDepartmentUsersPage] = useState(1);
+  const [allUsersPage, setAllUsersPage] = useState(1);
+  const departmentUsersPageCount = Math.max(1, Math.ceil(props.departmentUsers.length / DEPARTMENT_USERS_PAGE_SIZE));
+  const safeDepartmentUsersPage = Math.min(departmentUsersPage, departmentUsersPageCount);
+  const pagedDepartmentUsers = useMemo(
+    () =>
+      props.departmentUsers.slice(
+        (safeDepartmentUsersPage - 1) * DEPARTMENT_USERS_PAGE_SIZE,
+        safeDepartmentUsersPage * DEPARTMENT_USERS_PAGE_SIZE,
+      ),
+    [props.departmentUsers, safeDepartmentUsersPage],
+  );
+  const allUsersPageSize = isMobile ? ALL_USERS_PAGE_SIZE_MOBILE : ALL_USERS_PAGE_SIZE_DESKTOP;
+  const allUsersPageCount = Math.max(1, Math.ceil(props.filteredUsers.length / allUsersPageSize));
+  const safeAllUsersPage = Math.min(allUsersPage, allUsersPageCount);
+  const pagedAllUsers = useMemo(
+    () => props.filteredUsers.slice((safeAllUsersPage - 1) * allUsersPageSize, safeAllUsersPage * allUsersPageSize),
+    [allUsersPageSize, props.filteredUsers, safeAllUsersPage],
+  );
+
+  useEffect(() => {
+    setDepartmentUsersPage(1);
+  }, [props.selectedDepartmentId]);
+
+  useEffect(() => {
+    if (departmentUsersPage !== safeDepartmentUsersPage) {
+      setDepartmentUsersPage(safeDepartmentUsersPage);
+    }
+  }, [departmentUsersPage, safeDepartmentUsersPage]);
+
+  useEffect(() => {
+    setAllUsersPage(1);
+  }, [props.search]);
+
+  useEffect(() => {
+    if (allUsersPage !== safeAllUsersPage) {
+      setAllUsersPage(safeAllUsersPage);
+    }
+  }, [allUsersPage, safeAllUsersPage]);
 
   return (
     <div style={pageStyle}>
@@ -90,7 +134,7 @@ export function UserControlView(props: {
       ) : (
         <>
           <div style={layoutStyle(isMobile)}>
-            <section style={panelStyle}>
+            <section style={departmentPanelStyle(isMobile)}>
               <div style={panelHeaderStyle}>
                 <div>
                   <div style={sectionEyebrowStyle}>Departments</div>
@@ -131,7 +175,7 @@ export function UserControlView(props: {
               </div>
             </section>
 
-            <section style={panelStyle}>
+            <section style={departmentUsersPanelStyle}>
               <div style={panelHeaderStyle}>
                 <div>
                   <div style={sectionEyebrowStyle}>Department Users</div>
@@ -139,6 +183,24 @@ export function UserControlView(props: {
                 </div>
                 {props.selectedDepartment ? (
                   <div style={toolbarStyle(isMobile)}>
+                    <button
+                      type="button"
+                      style={secondaryButtonStyle}
+                      onClick={() => {
+                        const currentName = props.selectedDepartment?.name || "";
+                        const nextName = window.prompt("请输入新的部门名称", currentName);
+                        if (nextName === null) {
+                          return;
+                        }
+                        const trimmed = nextName.trim();
+                        if (!trimmed || trimmed === currentName) {
+                          return;
+                        }
+                        props.onRenameDepartment(props.selectedDepartment!.id, trimmed);
+                      }}
+                    >
+                      改名
+                    </button>
                     <button type="button" style={secondaryButtonStyle} onClick={props.onOpenPermissionEditor}>
                       权限
                     </button>
@@ -154,8 +216,33 @@ export function UserControlView(props: {
               </div>
               {props.loading ? <div style={placeholderStyle}>读取中…</div> : null}
               {!props.loading && !props.departmentUsers.length ? <div style={placeholderStyle}>该部门暂无成员</div> : null}
+              {!props.loading && props.departmentUsers.length ? (
+                <div style={listSummaryStyle(isMobile)}>
+                  <div style={listMetaStyle}>
+                    共 {props.departmentUsers.length} 人 · 第 {safeDepartmentUsersPage} / {departmentUsersPageCount} 页
+                  </div>
+                  <div style={paginationActionsStyle}>
+                    <button
+                      type="button"
+                      style={paginationButtonStyle(safeDepartmentUsersPage <= 1)}
+                      onClick={() => setDepartmentUsersPage((prev) => Math.max(1, prev - 1))}
+                      disabled={safeDepartmentUsersPage <= 1}
+                    >
+                      上一页
+                    </button>
+                    <button
+                      type="button"
+                      style={paginationButtonStyle(safeDepartmentUsersPage >= departmentUsersPageCount)}
+                      onClick={() => setDepartmentUsersPage((prev) => Math.min(departmentUsersPageCount, prev + 1))}
+                      disabled={safeDepartmentUsersPage >= departmentUsersPageCount}
+                    >
+                      下一页
+                    </button>
+                  </div>
+                </div>
+              ) : null}
               <div style={cardGridStyle}>
-                {props.departmentUsers.map((user) => (
+                {pagedDepartmentUsers.map((user) => (
                   <UserCard
                     key={user.id}
                     user={user}
@@ -184,8 +271,32 @@ export function UserControlView(props: {
                 onChange={(event) => props.onSearchChange(event.target.value)}
               />
             </div>
+            <div style={listSummaryStyle(isMobile)}>
+              <div style={listMetaStyle}>
+                共 {props.filteredUsers.length} 人 · 第 {safeAllUsersPage} / {allUsersPageCount} 页
+              </div>
+              <div style={paginationActionsStyle}>
+                <button
+                  type="button"
+                  style={paginationButtonStyle(safeAllUsersPage <= 1)}
+                  onClick={() => setAllUsersPage((prev) => Math.max(1, prev - 1))}
+                  disabled={safeAllUsersPage <= 1}
+                >
+                  上一页
+                </button>
+                <button
+                  type="button"
+                  style={paginationButtonStyle(safeAllUsersPage >= allUsersPageCount)}
+                  onClick={() => setAllUsersPage((prev) => Math.min(allUsersPageCount, prev + 1))}
+                  disabled={safeAllUsersPage >= allUsersPageCount}
+                >
+                  下一页
+                </button>
+              </div>
+            </div>
+            {!props.filteredUsers.length ? <div style={placeholderStyle}>没有匹配的成员</div> : null}
             <div style={cardGridStyle}>
-              {props.filteredUsers.map((user) => (
+              {pagedAllUsers.map((user) => (
                 <UserCard
                   key={user.id}
                   user={user}
@@ -559,13 +670,56 @@ const headerStyle: CSSProperties = { display: "flex", justifyContent: "space-bet
 const eyebrowStyle: CSSProperties = { fontSize: "12px", letterSpacing: "0.14em", textTransform: "uppercase", color: "var(--x-color-ink-muted)" };
 const titleStyle: CSSProperties = { margin: "8px 0 0", fontSize: "30px", lineHeight: 1.1, color: "var(--x-color-ink)" };
 function toolbarStyle(isMobile: boolean): CSSProperties { return { display: "flex", gap: "10px", flexWrap: "wrap", alignItems: "center", width: isMobile ? "100%" : undefined }; }
-function layoutStyle(isMobile: boolean): CSSProperties { return { display: "grid", gridTemplateColumns: isMobile ? "1fr" : "300px minmax(0, 1fr)", gap: "18px" }; }
-const panelStyle: CSSProperties = { padding: "20px", borderRadius: "var(--x-radius-lg)", background: "var(--x-color-panel-strong)", border: "1px solid var(--x-color-line-soft)", boxShadow: "0 14px 34px var(--x-color-shadow-soft)", display: "grid", gap: "16px" };
+function layoutStyle(isMobile: boolean): CSSProperties {
+  return {
+    display: "flex",
+    flexDirection: isMobile ? "column" : "row",
+    alignItems: "stretch",
+    gap: "18px",
+  };
+}
+const panelFrameStyle: CSSProperties = { padding: "20px", borderRadius: "var(--x-radius-lg)", background: "var(--x-color-panel-strong)", border: "1px solid var(--x-color-line-soft)", boxShadow: "0 14px 34px var(--x-color-shadow-soft)" };
+const panelStyle: CSSProperties = { ...panelFrameStyle, display: "grid", gap: "16px" };
+function departmentPanelStyle(isMobile: boolean): CSSProperties {
+  return {
+    ...panelFrameStyle,
+    display: "flex",
+    flexDirection: "column",
+    gap: "16px",
+    flex: isMobile ? "1 1 auto" : "0 0 300px",
+    minWidth: 0,
+    maxHeight: isMobile ? undefined : "calc(100vh - 220px)",
+    overflow: "hidden",
+  };
+}
+const departmentUsersPanelStyle: CSSProperties = {
+  ...panelFrameStyle,
+  display: "flex",
+  flexDirection: "column",
+  gap: "16px",
+  flex: "1 1 0",
+  minWidth: 0,
+};
 const panelHeaderStyle: CSSProperties = { display: "flex", justifyContent: "space-between", gap: "14px", alignItems: "center", flexWrap: "wrap" };
 const sectionEyebrowStyle: CSSProperties = eyebrowStyle;
 const sectionTitleStyle: CSSProperties = { margin: "6px 0 0", fontSize: "22px", color: "var(--x-color-ink)" };
-function createRowStyle(isMobile: boolean): CSSProperties { return { display: "grid", gridTemplateColumns: isMobile ? "1fr" : "minmax(0,1fr) auto", gap: "10px" }; }
-const departmentListStyle: CSSProperties = { display: "grid", gap: "10px" };
+function createRowStyle(isMobile: boolean): CSSProperties {
+  return {
+    display: "flex",
+    flexDirection: isMobile ? "column" : "row",
+    alignItems: "stretch",
+    gap: "10px",
+  };
+}
+const departmentListStyle: CSSProperties = {
+  display: "flex",
+  flexDirection: "column",
+  gap: "10px",
+  flex: "1 1 auto",
+  minHeight: 0,
+  overflowY: "auto",
+  paddingRight: "4px",
+};
 const departmentCardStyle = (active: boolean): CSSProperties => ({ textAlign: "left", padding: "14px", borderRadius: "var(--x-radius-md)", border: active ? "1px solid var(--x-color-accent-border)" : "1px solid var(--x-color-line-soft)", background: active ? "var(--x-color-accent-tint-strong)" : "var(--x-color-panel)", cursor: "pointer" });
 const departmentTitleStyle: CSSProperties = { fontWeight: 700, color: "var(--x-color-ink)" };
 const departmentMetaStyle: CSSProperties = { marginTop: "4px", fontSize: "12px", color: "var(--x-color-ink-muted)" };
@@ -579,6 +733,17 @@ const userMetaStyle: CSSProperties = { fontSize: "12px", color: "var(--x-color-i
 const memberBadgeStyle = (active: boolean): CSSProperties => ({ display: "inline-flex", alignItems: "center", justifyContent: "center", minHeight: "24px", padding: "4px 10px", borderRadius: "999px", fontSize: "12px", fontWeight: 800, background: active ? "var(--x-color-success-soft)" : "var(--x-color-panel-alt)", color: active ? "var(--x-color-success)" : "var(--x-color-ink-muted)", border: active ? "1px solid rgba(21,128,61,0.16)" : "1px solid var(--x-color-line-soft)" });
 const actionButtonStyle = (danger?: boolean): CSSProperties => ({ width: "100%", padding: "10px 12px", border: "none", borderTop: "1px solid var(--x-color-line-soft)", background: danger ? "var(--x-color-danger-soft)" : "var(--x-color-accent-tint)", color: danger ? "var(--x-color-danger)" : "var(--x-color-accent-strong)", fontWeight: 700, cursor: "pointer" });
 const placeholderStyle: CSSProperties = { padding: "24px", borderRadius: "var(--x-radius-md)", background: "var(--x-color-panel)", border: "1px solid var(--x-color-line-soft)", color: "var(--x-color-ink-muted)" };
+function listSummaryStyle(isMobile: boolean): CSSProperties { return { display: "flex", justifyContent: "space-between", alignItems: "center", gap: "12px", flexWrap: "wrap", flexDirection: isMobile ? "column" : "row" }; }
+const listMetaStyle: CSSProperties = { fontSize: "13px", color: "var(--x-color-ink-muted)" };
+const paginationActionsStyle: CSSProperties = { display: "flex", gap: "10px", flexWrap: "wrap" };
+function paginationButtonStyle(disabled: boolean): CSSProperties {
+  return {
+    ...secondaryButtonStyle,
+    padding: "10px 14px",
+    opacity: disabled ? 0.5 : 1,
+    cursor: disabled ? "not-allowed" : "pointer",
+  };
+}
 function searchStyle(isMobile: boolean): CSSProperties { return { minWidth: isMobile ? "0" : "320px", maxWidth: isMobile ? "100%" : "420px", width: "100%", minHeight: "46px", padding: "12px 14px", borderRadius: "var(--x-radius-sm)", border: "1px solid var(--x-color-line-soft)", background: "var(--x-color-panel)", boxSizing: "border-box" }; }
 const overlayStyle: CSSProperties = { position: "fixed", inset: 0, background: "rgba(9,16,29,0.6)", display: "grid", placeItems: "center", zIndex: 5000, padding: "24px" };
 const modalStyle: CSSProperties = { width: "min(820px, 100%)", maxHeight: "90vh", overflow: "auto", padding: "22px", borderRadius: "var(--x-radius-lg)", background: "var(--x-color-panel-strongest)", border: "1px solid var(--x-color-line-soft)", boxShadow: "0 24px 54px var(--x-color-shadow-strong)", display: "grid", gap: "16px" };

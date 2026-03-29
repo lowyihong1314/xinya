@@ -2,6 +2,7 @@ export type ProfileUser = {
   id: number;
   username: string;
   display_name?: string;
+  display?: boolean | null;
   nric_asset_id?: number | null;
   nric_data_id?: number | null;
   email?: string;
@@ -13,6 +14,10 @@ export type ProfileUser = {
   parent_1_phone?: string;
   medical?: string;
   allergy?: string;
+  bank_name?: string;
+  account_name?: string;
+  bank_account?: string;
+  tng_number?: string;
   is_member?: boolean | null;
   member_renewals?: MemberRenewalRecord[];
   [key: string]: unknown;
@@ -102,15 +107,21 @@ export type ProfileFootprintPayload = {
 };
 
 export type ProfileFormValues = {
+  username: string;
+  display_name: string;
+  display: string;
   email: string;
   phone: string;
-  name_NRIC: string;
   NRIC: string;
   gender: string;
   parent_1: string;
   parent_1_phone: string;
   medical: string;
   allergy: string;
+  bank_name: string;
+  account_name: string;
+  bank_account: string;
+  tng_number: string;
 };
 
 export type AppRelease = {

@@ -137,7 +137,7 @@ def build_payment_voucher_pdf(data, approver_list):
     draw_kv("Applicant 申请人", data.get("applicant_name"))
     draw_kv("Date 日期", data.get("request_date"))
     draw_kv("Amount 金额", f"RM {float(data.get('amount') or 0):.2f}")
-    draw_kv("Department 部门", data.get("department_name") or f"ID {data.get('department_id')}")
+    draw_kv("Department 部门", data.get("department_name") or "-")
     draw_kv(
         "Event 活动",
         data.get("event_name")

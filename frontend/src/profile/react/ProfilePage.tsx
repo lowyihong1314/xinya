@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import type { ChangeEvent, CSSProperties, FormEvent } from "react";
-import { useNavigate } from "react-router-dom";
+import { Link, useNavigate, useParams } from "react-router-dom";
 
 import { useUserState } from "../../app/UserState";
 import { CachedImage } from "../../components/CachedMedia";
@@ -18,14 +18,57 @@ import type {
   ProfileYouthFootprint,
 } from "./types";
 
-type ProfileSectionKey = "overview" | "profile" | "journey" | "account";
+type ProfileSectionKey = "overview" | "profile" | "journey" | "account" | "bank-note";
+
+const DEFAULT_SECTION: ProfileSectionKey = "overview";
 
 const SECTION_ITEMS: Array<{ key: ProfileSectionKey; label: string; hint: string }> = [
   { key: "overview", label: "总览", hint: "At a glance" },
   { key: "profile", label: "资料", hint: "Profile data" },
   { key: "journey", label: "足迹", hint: "My journey" },
   { key: "account", label: "账号", hint: "Account" },
+  { key: "bank-note", label: "转账资料", hint: "个人收款" },
 ];
+
+const BANK_NOTE_FIELDS: Array<{
+  key: keyof ProfileFormValues;
+  label: string;
+  type?: "text" | "email" | "tel" | "textarea" | "select";
+  description: string;
+}> = [
+  {
+    key: "bank_name",
+    label: "银行名称",
+    type: "text",
+    description: "填写你常用收款银行的名称，方便后续核对与转账。",
+  },
+  {
+    key: "account_name",
+    label: "账户名称",
+    type: "text",
+    description: "填写银行账户持有人姓名，建议与银行资料一致。",
+  },
+  {
+    key: "bank_account",
+    label: "银行账号",
+    type: "text",
+    description: "填写你个人收款银行账号，可用于后续转账或人工核对。",
+  },
+  {
+    key: "tng_number",
+    label: "TNG 号码",
+    type: "tel",
+    description: "填写你的 Touch 'n Go 绑定号码，方便个人电子钱包转账。",
+  },
+];
+
+function isProfileSectionKey(value: string | undefined): value is ProfileSectionKey {
+  return SECTION_ITEMS.some((item) => item.key === value);
+}
+
+function profileSectionPath(section: ProfileSectionKey) {
+  return `/profile/${section}`;
+}
 
 const FIELD_GROUPS: Array<{
   title: string;
@@ -35,13 +78,15 @@ const FIELD_GROUPS: Array<{
     label: string;
     type?: "text" | "email" | "tel" | "textarea" | "select";
     options?: Array<{ label: string; value: string }>;
+    readOnly?: boolean;
   }>;
 }> = [
   {
     title: "身份资料",
     description: "这部分会影响成员绑定与报名足迹整理。",
     fields: [
-      { key: "name_NRIC", label: "姓名", type: "text" },
+      { key: "username", label: "Username", type: "text", readOnly: true },
+      { key: "display_name", label: "显示名称", type: "text" },
       { key: "NRIC", label: "NRIC", type: "text" },
       {
         key: "gender",
@@ -51,6 +96,16 @@ const FIELD_GROUPS: Array<{
           { label: "未指定", value: "" },
           { label: "男", value: "男" },
           { label: "女", value: "女" },
+        ],
+      },
+      {
+        key: "display",
+        label: "对外显示",
+        type: "select",
+        options: [
+          { label: "未设置", value: "" },
+          { label: "公开显示", value: "true" },
+          { label: "不公开显示", value: "false" },
         ],
       },
     ],
@@ -77,29 +132,41 @@ const FIELD_GROUPS: Array<{
 
 function emptyFormValues(): ProfileFormValues {
   return {
+    username: "",
+    display_name: "",
+    display: "",
     email: "",
     phone: "",
-    name_NRIC: "",
     NRIC: "",
     gender: "",
     parent_1: "",
     parent_1_phone: "",
     medical: "",
     allergy: "",
+    bank_name: "",
+    account_name: "",
+    bank_account: "",
+    tng_number: "",
   };
 }
 
 function formValuesFromUser(user: ProfileUser | null): ProfileFormValues {
   return {
+    username: String(user?.username || ""),
+    display_name: String(user?.display_name || ""),
+    display: user?.display == null ? "" : user.display ? "true" : "false",
     email: String(user?.email || ""),
     phone: String(user?.phone || ""),
-    name_NRIC: String(user?.name_NRIC || ""),
     NRIC: String(user?.NRIC || ""),
     gender: String(user?.gender || ""),
     parent_1: String(user?.parent_1 || ""),
     parent_1_phone: String(user?.parent_1_phone || ""),
     medical: String(user?.medical || ""),
     allergy: String(user?.allergy || ""),
+    bank_name: String(user?.bank_name || ""),
+    account_name: String(user?.account_name || ""),
+    bank_account: String(user?.bank_account || ""),
+    tng_number: String(user?.tng_number || ""),
   };
 }
 
@@ -185,11 +252,12 @@ function pickLatestFootprint(
 export function ProfilePage() {
   ensureDesignTokens();
 
+  const { section: sectionParam } = useParams<{ section?: string }>();
   const navigate = useNavigate();
   const { user, isAuthenticated, loadingUser, refreshUser, logout, openLogin, isMobile } = useUserState();
   const profileUser = (user as ProfileUser | null) ?? null;
+  const activeSection = isProfileSectionKey(sectionParam) ? sectionParam : DEFAULT_SECTION;
 
-  const [activeSection, setActiveSection] = useState<ProfileSectionKey>("overview");
   const [formValues, setFormValues] = useState<ProfileFormValues>(emptyFormValues);
   const [avatarVersion, setAvatarVersion] = useState(Date.now());
   const [saving, setSaving] = useState(false);
@@ -256,6 +324,12 @@ export function ProfilePage() {
   }, [isAuthenticated, profileUser?.id, profileUser?.nric_asset_id, profileUser?.NRIC, profileUser?.name_NRIC]);
 
   useEffect(() => {
+    if (sectionParam && !isProfileSectionKey(sectionParam)) {
+      navigate(profileSectionPath(DEFAULT_SECTION), { replace: true });
+    }
+  }, [navigate, sectionParam]);
+
+  useEffect(() => {
     if (activeSection !== "account" || appReleasesFetched.current) return;
     appReleasesFetched.current = true;
     setAppReleasesLoading(true);
@@ -275,15 +349,16 @@ export function ProfilePage() {
   const footprintSummary = footprints.summary ?? emptyFootprintSummary();
   const registrations = footprints.registrations ?? [];
   const youthItems = footprints.youth_class_registrations ?? [];
-  const filledFieldCount = Object.values(formValues).filter((value) => String(value || "").trim()).length;
-  const totalFieldCount = FIELD_GROUPS.reduce((total, group) => total + group.fields.length, 0);
+  const completenessFields = FIELD_GROUPS.flatMap((group) => group.fields).filter((field) => !field.readOnly);
+  const filledFieldCount = completenessFields.filter((field) => String(formValues[field.key] || "").trim()).length;
+  const totalFieldCount = completenessFields.length;
   const latestFootprint = pickLatestFootprint(registrations, youthItems);
   const nextMembershipExpiry = profileUser?.member_renewals?.[0]?.renewal_date ?? null;
   const hasBoundNric = Boolean(profileUser?.NRIC);
 
   if (loadingUser) {
     return (
-      <div style={pageShellStyle}>
+      <div style={pageShellStyle(isMobile)}>
         <div style={stateCardStyle(isMobile)}>Loading profile…</div>
       </div>
     );
@@ -291,7 +366,7 @@ export function ProfilePage() {
 
   if (!isAuthenticated || !profileUser?.username) {
     return (
-      <div style={pageShellStyle}>
+      <div style={pageShellStyle(isMobile)}>
         <div style={gateCardStyle(isMobile)}>
           <div style={eyebrowStyle}>Profile Access</div>
           <h1 style={gateTitleStyle}>请先登录</h1>
@@ -363,12 +438,16 @@ export function ProfilePage() {
     setFormValues((prev) => ({ ...prev, [key]: value }));
   }
 
+  function navigateToSection(section: ProfileSectionKey) {
+    navigate(profileSectionPath(section));
+  }
+
   async function handleMembershipAction() {
     setError(null);
 
     if (!profileUser?.is_member) {
       if (!hasBoundNric) {
-        setActiveSection("profile");
+        navigateToSection("profile");
         setError("请先在资料页填写并保存 NRIC，再继续会员升级申请。");
         return;
       }
@@ -377,7 +456,7 @@ export function ProfilePage() {
     }
 
     if (!hasBoundNric) {
-      setActiveSection("profile");
+      navigateToSection("profile");
       setError("当前账号已标记为会员，但还没有绑定 NRIC，请先回资料页补齐。");
       return;
     }
@@ -397,7 +476,7 @@ export function ProfilePage() {
   }
 
   return (
-    <div style={pageShellStyle}>
+    <div style={pageShellStyle(isMobile)}>
       <section style={heroShellStyle(isMobile)}>
         <div style={heroContentStyle}>
           <div style={heroHeaderRowStyle(isMobile)}>
@@ -431,10 +510,27 @@ export function ProfilePage() {
               label="资料完整度"
               value={`${filledFieldCount}/${totalFieldCount}`}
               hint="已填写字段"
+              isMobile={isMobile}
             />
-            <HeroMetric label="绑定 NRIC" value={profileUser.NRIC || "未绑定"} hint="成员资料识别" />
-            <HeroMetric label="足迹总数" value={String(footprintSummary.total_count ?? 0)} hint="活动与课程" />
-            <HeroMetric label="付款记录" value={String(footprintSummary.payment_count ?? 0)} hint="已提交付款" />
+            <HeroMetric
+              label="绑定 NRIC"
+              value={profileUser.NRIC || "未绑定"}
+              hint="成员资料识别"
+              isMobile={isMobile}
+              wideOnMobile
+            />
+            <HeroMetric
+              label="足迹总数"
+              value={String(footprintSummary.total_count ?? 0)}
+              hint="活动与课程"
+              isMobile={isMobile}
+            />
+            <HeroMetric
+              label="付款记录"
+              value={String(footprintSummary.payment_count ?? 0)}
+              hint="已提交付款"
+              isMobile={isMobile}
+            />
           </div>
         </div>
       </section>
@@ -444,15 +540,14 @@ export function ProfilePage() {
           {SECTION_ITEMS.map((item) => {
             const active = activeSection === item.key;
             return (
-              <button
+              <Link
                 key={item.key}
-                type="button"
-                style={sectionNavButtonStyle(active)}
-                onClick={() => setActiveSection(item.key)}
+                to={profileSectionPath(item.key)}
+                style={sectionNavButtonStyle(active, isMobile)}
               >
                 <span style={sectionNavLabelStyle}>{item.label}</span>
                 <span style={sectionNavHintStyle(active)}>{item.hint}</span>
-              </button>
+              </Link>
             );
           })}
         </div>
@@ -462,7 +557,7 @@ export function ProfilePage() {
       {error ? <div style={errorBannerStyle}>{error}</div> : null}
 
       {activeSection === "overview" ? (
-        <section style={sectionPanelStyle}>
+        <section style={sectionPanelStyle(isMobile)}>
           <div style={panelHeaderStyle}>
             <div>
               <div style={panelEyebrowStyle}>Overview</div>
@@ -470,23 +565,23 @@ export function ProfilePage() {
             </div>
           </div>
           <div style={overviewGridStyle(isMobile)}>
-            <article style={featureCardStyle}>
+            <article style={featureCardStyle(isMobile)}>
               <div style={featureCardEyebrowStyle}>Identity</div>
               <h3 style={featureCardTitleStyle}>成员绑定状态</h3>
               <div style={featureListStyle}>
-                <InfoRow label="显示名称" value={profileUser.display_name || profileUser.username} />
-                <InfoRow label="姓名" value={profileUser.name_NRIC || "未填写"} />
-                <InfoRow label="NRIC" value={profileUser.NRIC || "未绑定"} />
-                <InfoRow label="成员档案" value={footprints.member?.display_name || "尚未生成"} />
+                <InfoRow label="显示名称" value={profileUser.display_name || profileUser.username} isMobile={isMobile} />
+                <InfoRow label="姓名" value={profileUser.name_NRIC || "未填写"} isMobile={isMobile} />
+                <InfoRow label="NRIC" value={profileUser.NRIC || "未绑定"} isMobile={isMobile} />
+                <InfoRow label="成员档案" value={footprints.member?.display_name || "尚未生成"} isMobile={isMobile} />
               </div>
               <div style={featureCardFooterStyle}>
-                <button type="button" style={softPrimaryButtonStyle} onClick={() => setActiveSection("profile")}>
+                <button type="button" style={softPrimaryButtonStyle} onClick={() => navigateToSection("profile")}>
                   前往编辑资料
                 </button>
               </div>
             </article>
 
-            <article style={featureCardStyle}>
+            <article style={featureCardStyle(isMobile)}>
               <div style={featureCardEyebrowStyle}>Journey</div>
               <h3 style={featureCardTitleStyle}>最近足迹</h3>
               {latestFootprint ? (
@@ -499,13 +594,13 @@ export function ProfilePage() {
                 <div style={emptyInlineStyle}>还没有查到报名记录。</div>
               )}
               <div style={featureCardFooterStyle}>
-                <button type="button" style={ghostButtonStyle} onClick={() => setActiveSection("journey")}>
+                <button type="button" style={ghostButtonStyle} onClick={() => navigateToSection("journey")}>
                   查看完整足迹
                 </button>
               </div>
             </article>
 
-            <article style={featureCardStyle}>
+            <article style={featureCardStyle(isMobile)}>
               <div style={featureCardEyebrowStyle}>Profile Health</div>
               <h3 style={featureCardTitleStyle}>资料完整度提示</h3>
               <div style={featureChecklistStyle}>
@@ -527,7 +622,7 @@ export function ProfilePage() {
       ) : null}
 
       {activeSection === "profile" ? (
-        <section style={sectionPanelStyle}>
+        <section style={sectionPanelStyle(isMobile)}>
           <div style={panelHeaderStyle}>
             <div>
               <div style={panelEyebrowStyle}>Profile Data</div>
@@ -538,7 +633,7 @@ export function ProfilePage() {
 
           <form style={profileFormStackStyle} onSubmit={handleSubmit}>
             {FIELD_GROUPS.map((group) => (
-              <section key={group.title} style={groupCardStyle}>
+              <section key={group.title} style={groupCardStyle(isMobile)}>
                 <div style={groupHeaderStyle}>
                   <div>
                     <div style={groupTitleStyle}>{group.title}</div>
@@ -580,15 +675,15 @@ export function ProfilePage() {
       ) : null}
 
       {activeSection === "journey" ? (
-        <section style={sectionPanelStyle}>
+        <section style={sectionPanelStyle(isMobile)}>
           <div style={panelHeaderStyle}>
             <div>
               <div style={panelEyebrowStyle}>My Journey</div>
               <h2 style={panelTitleStyle}>我的足迹</h2>
             </div>
             <div style={journeyHeaderAsideStyle(isMobile)}>
-              <span style={nricChipStyle}>{footprints.member?.nric || profileUser.NRIC || "未绑定 NRIC"}</span>
-              <span style={journeyHeaderTextStyle}>系统会按当前账号绑定的成员资料整理参加过什么。</span>
+              <span style={nricChipStyle(isMobile)}>{footprints.member?.nric || profileUser.NRIC || "未绑定 NRIC"}</span>
+              <span style={journeyHeaderTextStyle(isMobile)}>系统会按当前账号绑定的成员资料整理参加过什么。</span>
             </div>
           </div>
 
@@ -641,8 +736,55 @@ export function ProfilePage() {
         </section>
       ) : null}
 
+      {activeSection === "bank-note" ? (
+        <section style={sectionPanelStyle(isMobile)}>
+          <div style={panelHeaderStyle}>
+            <div>
+              <div style={panelEyebrowStyle}>转账资料</div>
+              <h2 style={panelTitleStyle}>转账信息</h2>
+            </div>
+            <div style={panelHeaderHintStyle}>这里维护你个人的收款资料，后续需要转账给你时可以直接读取银行资料和 TNG 号码。</div>
+          </div>
+
+          <article style={featureCardStyle(isMobile)}>
+            <div style={featureCardEyebrowStyle}>我的收款资料</div>
+            <h3 style={featureCardTitleStyle}>个人转账资料</h3>
+            <form style={profileFormStackStyle} onSubmit={handleSubmit}>
+              <div style={groupFieldGridStyle(isMobile)}>
+                {BANK_NOTE_FIELDS.map((field) => (
+                  <label key={field.key} style={fieldStyle}>
+                    <span style={fieldLabelStyle}>{field.label}</span>
+                    <FieldControl
+                      field={field}
+                      value={formValues[field.key]}
+                      onChange={(value) => updateField(field.key, value)}
+                    />
+                    <span style={fieldHintStyle}>{field.description}</span>
+                  </label>
+                ))}
+              </div>
+              <div style={formActionsStyle(isMobile)}>
+                <button
+                  type="button"
+                  style={ghostButtonStyle}
+                  onClick={() => setFormValues(formValuesFromUser(profileUser))}
+                >
+                  重置
+                </button>
+                <button type="submit" style={primaryButtonStyle} disabled={saving}>
+                  {saving ? "保存中…" : "保存转账资料"}
+                </button>
+              </div>
+            </form>
+            <div style={footprintNoteStyle}>
+              建议收款资料保持最新；如果你常用电子钱包收款，优先填写常用的 TNG 号码。
+            </div>
+          </article>
+        </section>
+      ) : null}
+
       {activeSection === "account" ? (
-        <section style={sectionPanelStyle}>
+        <section style={sectionPanelStyle(isMobile)}>
           <div style={panelHeaderStyle}>
             <div>
               <div style={panelEyebrowStyle}>Account Center</div>
@@ -651,18 +793,18 @@ export function ProfilePage() {
           </div>
 
           <div style={accountGridStyle(isMobile)}>
-            <article style={featureCardStyle}>
+            <article style={featureCardStyle(isMobile)}>
               <div style={featureCardEyebrowStyle}>Session</div>
               <h3 style={featureCardTitleStyle}>当前状态</h3>
               <div style={featureListStyle}>
-                <InfoRow label="Username" value={profileUser.username} />
-                <InfoRow label="Email" value={profileUser.email || "未填写"} />
-                <InfoRow label="Phone" value={profileUser.phone || "未填写"} />
-                <InfoRow label="Guardian" value={profileUser.parent_1 || "未填写"} />
+                <InfoRow label="Username" value={profileUser.username} isMobile={isMobile} />
+                <InfoRow label="Email" value={profileUser.email || "未填写"} isMobile={isMobile} />
+                <InfoRow label="Phone" value={profileUser.phone || "未填写"} isMobile={isMobile} />
+                <InfoRow label="Guardian" value={profileUser.parent_1 || "未填写"} isMobile={isMobile} />
               </div>
             </article>
 
-            <article style={featureCardStyle}>
+            <article style={featureCardStyle(isMobile)}>
               <div style={featureCardEyebrowStyle}>Actions</div>
               <h3 style={featureCardTitleStyle}>账号操作</h3>
               <MembershipActionCard
@@ -670,6 +812,7 @@ export function ProfilePage() {
                 hasBoundNric={hasBoundNric}
                 nextExpiryDate={nextMembershipExpiry}
                 actionBusy={membershipActionBusy}
+                isMobile={isMobile}
                 onAction={() => void handleMembershipAction()}
               />
               <div style={accountActionListStyle}>
@@ -692,7 +835,7 @@ export function ProfilePage() {
               </div>
             </article>
 
-            <AppDownloadCard releases={appReleases} loading={appReleasesLoading} />
+            <AppDownloadCard releases={appReleases} loading={appReleasesLoading} isMobile={isMobile} />
           </div>
         </section>
       ) : null}
@@ -710,6 +853,7 @@ function FieldControl({
     label: string;
     type?: "text" | "email" | "tel" | "textarea" | "select";
     options?: Array<{ label: string; value: string }>;
+    readOnly?: boolean;
   };
   value: string;
   onChange: (value: string) => void;
@@ -720,7 +864,8 @@ function FieldControl({
         rows={4}
         value={value}
         onChange={(event) => onChange(event.target.value)}
-        style={textareaStyle}
+        style={field.readOnly ? readOnlyTextareaStyle : textareaStyle}
+        readOnly={field.readOnly}
       />
     );
   }
@@ -742,16 +887,29 @@ function FieldControl({
       type={field.type || "text"}
       value={value}
       onChange={(event) => onChange(event.target.value)}
-      style={inputStyle}
+      style={field.readOnly ? readOnlyInputStyle : inputStyle}
+      readOnly={field.readOnly}
     />
   );
 }
 
-function HeroMetric({ label, value, hint }: { label: string; value: string; hint: string }) {
+function HeroMetric({
+  label,
+  value,
+  hint,
+  isMobile,
+  wideOnMobile = false,
+}: {
+  label: string;
+  value: string;
+  hint: string;
+  isMobile: boolean;
+  wideOnMobile?: boolean;
+}) {
   return (
-    <div style={heroMetricCardStyle}>
+    <div style={heroMetricCardStyle(isMobile, wideOnMobile)}>
       <div style={heroMetricLabelStyle}>{label}</div>
-      <div style={heroMetricValueStyle}>{value}</div>
+      <div style={heroMetricValueStyle(value, isMobile)}>{value}</div>
       <div style={heroMetricHintStyle}>{hint}</div>
     </div>
   );
@@ -766,11 +924,11 @@ function FootprintMetric({ label, value }: { label: string; value: string }) {
   );
 }
 
-function InfoRow({ label, value }: { label: string; value: string }) {
+function InfoRow({ label, value, isMobile }: { label: string; value: string; isMobile: boolean }) {
   return (
-    <div style={infoRowStyle}>
-      <span style={infoRowLabelStyle}>{label}</span>
-      <span style={infoRowValueStyle}>{value}</span>
+    <div style={infoRowStyle(isMobile)}>
+      <span style={infoRowLabelStyle(isMobile)}>{label}</span>
+      <span style={infoRowValueStyle(isMobile)}>{value}</span>
     </div>
   );
 }
@@ -888,9 +1046,17 @@ function YouthFootprintCard({ item }: { item: ProfileYouthFootprint }) {
   );
 }
 
-function AppDownloadCard({ releases, loading }: { releases: AppRelease[]; loading: boolean }) {
+function AppDownloadCard({
+  releases,
+  loading,
+  isMobile,
+}: {
+  releases: AppRelease[];
+  loading: boolean;
+  isMobile: boolean;
+}) {
   return (
-    <article style={featureCardStyle}>
+    <article style={featureCardStyle(isMobile)}>
       <div style={featureCardEyebrowStyle}>App Download</div>
       <h3 style={featureCardTitleStyle}>下载 App</h3>
       {loading ? (
@@ -900,12 +1066,12 @@ function AppDownloadCard({ releases, loading }: { releases: AppRelease[]; loadin
       ) : (
         <div style={apkListStyle}>
           {releases.map((r) => (
-            <div key={r.filename} style={apkRowStyle}>
+            <div key={r.filename} style={apkRowStyle(isMobile)}>
               <div style={apkInfoStyle}>
                 <span style={apkNameStyle}>{r.filename}</span>
                 <span style={apkSizeStyle}>{r.size_label}</span>
               </div>
-              <a href={r.download_url} download={r.filename} style={apkDownloadButtonStyle}>
+              <a href={r.download_url} download={r.filename} style={apkDownloadButtonStyle(isMobile)}>
                 下载
               </a>
             </div>
@@ -922,16 +1088,18 @@ const apkListStyle: CSSProperties = {
   gap: "10px",
 };
 
-const apkRowStyle: CSSProperties = {
-  display: "flex",
-  alignItems: "center",
-  justifyContent: "space-between",
-  gap: "12px",
-  padding: "12px 14px",
-  borderRadius: "14px",
-  background: "rgba(15,118,110,0.06)",
-  border: "1px solid rgba(15,118,110,0.12)",
-};
+function apkRowStyle(isMobile: boolean): CSSProperties {
+  return {
+    display: isMobile ? "grid" : "flex",
+    alignItems: "center",
+    justifyContent: "space-between",
+    gap: "12px",
+    padding: "12px 14px",
+    borderRadius: "14px",
+    background: "rgba(15,118,110,0.06)",
+    border: "1px solid rgba(15,118,110,0.12)",
+  };
+}
 
 const apkInfoStyle: CSSProperties = {
   display: "flex",
@@ -954,33 +1122,42 @@ const apkSizeStyle: CSSProperties = {
   color: "var(--x-color-ink-muted)",
 };
 
-const apkDownloadButtonStyle: CSSProperties = {
-  flexShrink: 0,
-  padding: "8px 16px",
-  borderRadius: "999px",
-  background: "linear-gradient(135deg, #0f766e, #1d4ed8)",
-  color: "white",
-  fontWeight: 700,
-  fontSize: "13px",
-  textDecoration: "none",
-};
+function apkDownloadButtonStyle(isMobile: boolean): CSSProperties {
+  return {
+    flexShrink: 0,
+    display: "inline-flex",
+    alignItems: "center",
+    justifyContent: "center",
+    width: isMobile ? "100%" : "auto",
+    padding: "8px 16px",
+    borderRadius: "999px",
+    background: "linear-gradient(135deg, #0f766e, #1d4ed8)",
+    color: "white",
+    fontWeight: 700,
+    fontSize: "13px",
+    textDecoration: "none",
+    boxSizing: "border-box",
+  };
+}
 
-const pageShellStyle: CSSProperties = {
-  minHeight: "calc(100vh - 60px)",
-  padding: "28px clamp(18px, 4vw, 40px) 48px",
-  overflowX: "hidden",
-  background:
-    "radial-gradient(circle at top left, rgba(15,118,110,0.18), transparent 32%), linear-gradient(180deg, #eef5f4, #e5edf4 42%, #f6f8fb)",
-  color: "var(--x-color-ink)",
-  fontFamily: "var(--x-font-sans)",
-  display: "grid",
-  gap: "20px",
-};
+function pageShellStyle(isMobile: boolean): CSSProperties {
+  return {
+    minHeight: "calc(100vh - 60px)",
+    padding: isMobile ? "18px 14px 32px" : "28px clamp(18px, 4vw, 40px) 48px",
+    overflowX: "hidden",
+    background:
+      "radial-gradient(circle at top left, rgba(15,118,110,0.18), transparent 32%), linear-gradient(180deg, #eef5f4, #e5edf4 42%, #f6f8fb)",
+    color: "var(--x-color-ink)",
+    fontFamily: "var(--x-font-sans)",
+    display: "grid",
+    gap: isMobile ? "16px" : "20px",
+  };
+}
 
 function heroShellStyle(isMobile: boolean): CSSProperties {
   return {
-    padding: isMobile ? "18px" : "26px",
-    borderRadius: "28px",
+    padding: isMobile ? "16px" : "26px",
+    borderRadius: isMobile ? "24px" : "28px",
     background:
       "linear-gradient(145deg, rgba(11,31,38,0.96), rgba(19,78,74,0.94) 58%, rgba(221,107,32,0.88) 120%)",
     boxShadow: "0 28px 70px rgba(15,23,42,0.16)",
@@ -1082,16 +1259,20 @@ function heroMetricsGridStyle(isMobile: boolean): CSSProperties {
   return {
     display: "grid",
     gridTemplateColumns: isMobile ? "repeat(2, minmax(0, 1fr))" : "repeat(4, minmax(0, 1fr))",
-    gap: "14px",
+    gap: isMobile ? "12px" : "14px",
   };
 }
 
-const heroMetricCardStyle: CSSProperties = {
-  padding: "16px 18px",
-  borderRadius: "20px",
-  background: "rgba(255,255,255,0.1)",
-  border: "1px solid rgba(255,255,255,0.16)",
-};
+function heroMetricCardStyle(isMobile: boolean, wideOnMobile: boolean): CSSProperties {
+  return {
+    padding: isMobile ? "14px" : "16px 18px",
+    borderRadius: isMobile ? "18px" : "20px",
+    background: "rgba(255,255,255,0.1)",
+    border: "1px solid rgba(255,255,255,0.16)",
+    minWidth: 0,
+    gridColumn: isMobile && wideOnMobile ? "1 / -1" : undefined,
+  };
+}
 
 const heroMetricLabelStyle: CSSProperties = {
   fontSize: "12px",
@@ -1100,12 +1281,19 @@ const heroMetricLabelStyle: CSSProperties = {
   opacity: 0.72,
 };
 
-const heroMetricValueStyle: CSSProperties = {
-  marginTop: "10px",
-  fontSize: "22px",
-  fontWeight: 800,
-  lineHeight: 1,
-};
+function heroMetricValueStyle(value: string, isMobile: boolean): CSSProperties {
+  const isLongValue = value.length > 10;
+  return {
+    marginTop: "10px",
+    fontSize: isMobile ? (isLongValue ? "clamp(17px, 5vw, 20px)" : "20px") : isLongValue ? "20px" : "22px",
+    fontWeight: 800,
+    lineHeight: isLongValue ? 1.15 : 1.05,
+    minWidth: 0,
+    overflowWrap: "anywhere",
+    wordBreak: "break-word",
+    whiteSpace: "normal",
+  };
+}
 
 const heroMetricHintStyle: CSSProperties = {
   marginTop: "8px",
@@ -1122,10 +1310,10 @@ const sectionNavWrapStyle: CSSProperties = {
 function sectionNavStyle(isMobile: boolean): CSSProperties {
   return {
     display: "grid",
-    gridTemplateColumns: isMobile ? "repeat(2, minmax(0, 1fr))" : "repeat(4, minmax(0, 1fr))",
-    gap: "10px",
-    padding: "10px",
-    borderRadius: "22px",
+    gridTemplateColumns: isMobile ? "repeat(2, minmax(0, 1fr))" : `repeat(${SECTION_ITEMS.length}, minmax(0, 1fr))`,
+    gap: isMobile ? "8px" : "10px",
+    padding: isMobile ? "8px" : "10px",
+    borderRadius: isMobile ? "18px" : "22px",
     background: "rgba(255,255,255,0.78)",
     border: "1px solid rgba(216,223,235,0.85)",
     boxShadow: "0 18px 40px rgba(15,23,42,0.08)",
@@ -1133,15 +1321,17 @@ function sectionNavStyle(isMobile: boolean): CSSProperties {
   };
 }
 
-function sectionNavButtonStyle(active: boolean): CSSProperties {
+function sectionNavButtonStyle(active: boolean, isMobile: boolean): CSSProperties {
   return {
     border: "none",
     borderRadius: "16px",
-    padding: "14px 16px",
+    padding: isMobile ? "12px 13px" : "14px 16px",
     cursor: "pointer",
     display: "grid",
     gap: "4px",
     textAlign: "left",
+    minWidth: 0,
+    textDecoration: "none",
     background: active
       ? "linear-gradient(135deg, rgba(15,118,110,0.16), rgba(221,107,32,0.14))"
       : "rgba(255,255,255,0.56)",
@@ -1162,16 +1352,18 @@ function sectionNavHintStyle(active: boolean): CSSProperties {
   };
 }
 
-const sectionPanelStyle: CSSProperties = {
-  padding: "24px",
-  borderRadius: "28px",
-  overflow: "hidden",
-  background: "rgba(255,255,255,0.92)",
-  border: "1px solid rgba(216,223,235,0.9)",
-  boxShadow: "0 24px 50px rgba(15,23,42,0.08)",
-  display: "grid",
-  gap: "20px",
-};
+function sectionPanelStyle(isMobile: boolean): CSSProperties {
+  return {
+    padding: isMobile ? "16px" : "24px",
+    borderRadius: isMobile ? "22px" : "28px",
+    overflow: "hidden",
+    background: "rgba(255,255,255,0.92)",
+    border: "1px solid rgba(216,223,235,0.9)",
+    boxShadow: "0 24px 50px rgba(15,23,42,0.08)",
+    display: "grid",
+    gap: isMobile ? "16px" : "20px",
+  };
+}
 
 const panelHeaderStyle: CSSProperties = {
   display: "flex",
@@ -1197,6 +1389,7 @@ const panelTitleStyle: CSSProperties = {
 
 const panelHeaderHintStyle: CSSProperties = {
   maxWidth: "34ch",
+  minWidth: 0,
   color: "var(--x-color-ink-muted)",
   lineHeight: 1.7,
   fontSize: "14px",
@@ -1210,14 +1403,17 @@ function overviewGridStyle(isMobile: boolean): CSSProperties {
   };
 }
 
-const featureCardStyle: CSSProperties = {
-  padding: "18px",
-  borderRadius: "22px",
-  background: "linear-gradient(180deg, rgba(255,255,255,0.98), rgba(245,248,251,0.98))",
-  border: "1px solid rgba(216,223,235,0.9)",
-  display: "grid",
-  gap: "14px",
-};
+function featureCardStyle(isMobile: boolean): CSSProperties {
+  return {
+    padding: isMobile ? "16px" : "18px",
+    borderRadius: isMobile ? "18px" : "22px",
+    background: "linear-gradient(180deg, rgba(255,255,255,0.98), rgba(245,248,251,0.98))",
+    border: "1px solid rgba(216,223,235,0.9)",
+    display: "grid",
+    gap: isMobile ? "12px" : "14px",
+    minWidth: 0,
+  };
+}
 
 const featureCardEyebrowStyle: CSSProperties = {
   fontSize: "12px",
@@ -1289,42 +1485,54 @@ function checkItemStyle(filled: boolean): CSSProperties {
   };
 }
 
-const infoRowStyle: CSSProperties = {
-  display: "flex",
-  justifyContent: "space-between",
-  gap: "14px",
-  alignItems: "center",
-  padding: "10px 0",
-  borderBottom: "1px solid rgba(216,223,235,0.65)",
-};
+function infoRowStyle(isMobile: boolean): CSSProperties {
+  return {
+    display: isMobile ? "grid" : "flex",
+    justifyContent: isMobile ? undefined : "space-between",
+    gap: isMobile ? "4px" : "14px",
+    alignItems: isMobile ? "flex-start" : "center",
+    padding: "10px 0",
+    borderBottom: "1px solid rgba(216,223,235,0.65)",
+  };
+}
 
-const infoRowLabelStyle: CSSProperties = {
-  color: "var(--x-color-ink-muted)",
-  fontSize: "14px",
-};
+function infoRowLabelStyle(isMobile: boolean): CSSProperties {
+  return {
+    color: "var(--x-color-ink-muted)",
+    fontSize: isMobile ? "13px" : "14px",
+  };
+}
 
-const infoRowValueStyle: CSSProperties = {
-  fontWeight: 700,
-  textAlign: "right",
-  minWidth: 0,
-  overflow: "hidden",
-  textOverflow: "ellipsis",
-  whiteSpace: "nowrap",
-};
+function infoRowValueStyle(isMobile: boolean): CSSProperties {
+  return {
+    fontWeight: 700,
+    textAlign: isMobile ? "left" : "right",
+    minWidth: 0,
+    maxWidth: "100%",
+    overflowWrap: "anywhere",
+    wordBreak: "break-word",
+    whiteSpace: isMobile ? "normal" : "nowrap",
+    overflow: isMobile ? undefined : "hidden",
+    textOverflow: isMobile ? undefined : "ellipsis",
+    lineHeight: isMobile ? 1.45 : 1.3,
+  };
+}
 
 const profileFormStackStyle: CSSProperties = {
   display: "grid",
   gap: "16px",
 };
 
-const groupCardStyle: CSSProperties = {
-  padding: "18px",
-  borderRadius: "22px",
-  background: "linear-gradient(180deg, rgba(250,251,253,0.98), rgba(244,248,250,0.98))",
-  border: "1px solid rgba(216,223,235,0.9)",
-  display: "grid",
-  gap: "14px",
-};
+function groupCardStyle(isMobile: boolean): CSSProperties {
+  return {
+    padding: isMobile ? "16px" : "18px",
+    borderRadius: isMobile ? "18px" : "22px",
+    background: "linear-gradient(180deg, rgba(250,251,253,0.98), rgba(244,248,250,0.98))",
+    border: "1px solid rgba(216,223,235,0.9)",
+    display: "grid",
+    gap: "14px",
+  };
+}
 
 const groupHeaderStyle: CSSProperties = {
   display: "flex",
@@ -1368,6 +1576,12 @@ const fieldLabelStyle: CSSProperties = {
   color: "var(--x-color-ink-muted)",
 };
 
+const fieldHintStyle: CSSProperties = {
+  fontSize: "13px",
+  lineHeight: 1.6,
+  color: "var(--x-color-ink-muted)",
+};
+
 const inputStyle: CSSProperties = {
   width: "100%",
   minHeight: "48px",
@@ -1387,10 +1601,30 @@ const textareaStyle: CSSProperties = {
   resize: "vertical",
 };
 
+const readOnlyInputStyle: CSSProperties = {
+  ...inputStyle,
+  background: "rgba(241,245,249,0.92)",
+  color: "var(--x-color-ink-muted)",
+};
+
+const readOnlyTextareaStyle: CSSProperties = {
+  ...textareaStyle,
+  background: "rgba(241,245,249,0.92)",
+  color: "var(--x-color-ink-muted)",
+};
+
 function formActionsStyle(isMobile: boolean): CSSProperties {
+  if (isMobile) {
+    return {
+      display: "grid",
+      gridTemplateColumns: "1fr",
+      gap: "10px",
+    };
+  }
+
   return {
     display: "flex",
-    justifyContent: isMobile ? "stretch" : "flex-end",
+    justifyContent: "flex-end",
     gap: "12px",
     flexWrap: "wrap",
   };
@@ -1404,22 +1638,33 @@ function journeyHeaderAsideStyle(isMobile: boolean): CSSProperties {
   };
 }
 
-const journeyHeaderTextStyle: CSSProperties = {
-  fontSize: "13px",
-  color: "var(--x-color-ink-muted)",
-  textAlign: "right",
-};
+function journeyHeaderTextStyle(isMobile: boolean): CSSProperties {
+  return {
+    fontSize: "13px",
+    color: "var(--x-color-ink-muted)",
+    textAlign: isMobile ? "left" : "right",
+    lineHeight: 1.6,
+  };
+}
 
-const nricChipStyle: CSSProperties = {
-  display: "inline-flex",
-  alignItems: "center",
-  padding: "9px 14px",
-  borderRadius: "999px",
-  background: "rgba(15,118,110,0.1)",
-  color: "var(--x-color-accent-strong)",
-  fontWeight: 700,
-  border: "1px solid rgba(15,118,110,0.12)",
-};
+function nricChipStyle(isMobile: boolean): CSSProperties {
+  return {
+    display: "inline-flex",
+    alignItems: "center",
+    maxWidth: "100%",
+    padding: isMobile ? "8px 12px" : "9px 14px",
+    borderRadius: "999px",
+    background: "rgba(15,118,110,0.1)",
+    color: "var(--x-color-accent-strong)",
+    fontWeight: 700,
+    fontSize: isMobile ? "13px" : "14px",
+    border: "1px solid rgba(15,118,110,0.12)",
+    whiteSpace: "normal",
+    overflowWrap: "anywhere",
+    wordBreak: "break-word",
+    lineHeight: 1.4,
+  };
+}
 
 function footprintMetricGridStyle(isMobile: boolean): CSSProperties {
   return {
@@ -1584,6 +1829,8 @@ const footprintFactValueStyle: CSSProperties = {
   fontWeight: 700,
   color: "var(--x-color-ink)",
   lineHeight: 1.5,
+  overflowWrap: "anywhere",
+  wordBreak: "break-word",
 };
 
 const footprintEventListStyle: CSSProperties = {

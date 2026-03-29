@@ -126,6 +126,10 @@ class User(db.Model, UserMixin):
     medical = db.Column(db.Text, nullable=True)
     allergy = db.Column(db.Text, nullable=True)
     display_name = db.Column(db.String(100), nullable=True)
+    bank_name = db.Column(db.String(100), nullable=True)
+    account_name = db.Column(db.String(120), nullable=True)
+    bank_account = db.Column(db.String(100), nullable=True)
+    tng_number = db.Column(db.String(40), nullable=True)
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
 
     user_theme = db.Column(db.String(20), nullable=False, default='light')
@@ -197,6 +201,10 @@ class User(db.Model, UserMixin):
             "parent_1_phone": self.parent_1_phone,
             "medical": self.medical,
             "allergy": self.allergy,
+            "bank_name": self.bank_name,
+            "account_name": self.account_name,
+            "bank_account": self.bank_account,
+            "tng_number": self.tng_number,
             "created_at": self.created_at.isoformat() if self.created_at else None,
             "user_theme": self.user_theme,
             "login_version": self.login_version,

@@ -23,14 +23,8 @@ class ReimbursementRequest(db.Model):
     request_date = db.Column(db.Date, nullable=False)
     amount = db.Column(db.Float, nullable=False)
 
-    # 做账分配部门（建议 FK）
-    department_id = db.Column(
-        db.Integer,
-        db.ForeignKey("department.id", ondelete="RESTRICT", onupdate="CASCADE"),
-        nullable=False,
-        index=True
-    )
-    department = db.relationship("Department", foreign_keys=[department_id])
+    # 做账分配部门（保存提交时的部门名称，避免和 Department 强关联）
+    department_name = db.Column(db.String(100), nullable=False, index=True)
 
     purpose = db.Column(db.Text, nullable=False)
 

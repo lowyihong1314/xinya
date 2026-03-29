@@ -40,24 +40,26 @@ import type { ApproverUserProfile, ClaimAttachment, ClaimRecord } from "./types"
 type ClaimDetailProps = {
   isMobile: boolean;
   claim: ClaimRecord;
-  hasAccountPermission: boolean;
+  canEditClaims: boolean;
   isApprovedByMe: boolean;
   currentUserId?: number;
   onBack: () => void;
   onApprove: () => void;
   onReject: () => void;
+  onDelete: () => void;
   onClaimUpdated: (claim: ClaimRecord) => void;
 };
 
 export function ClaimDetail({
   isMobile,
   claim,
-  hasAccountPermission,
+  canEditClaims,
   isApprovedByMe,
   currentUserId,
   onBack,
   onApprove,
   onReject,
+  onDelete,
   onClaimUpdated,
 }: ClaimDetailProps) {
   const [approverUsers, setApproverUsers] = useState<Record<number, ApproverUserProfile>>({});
@@ -72,7 +74,7 @@ export function ClaimDetail({
   const [eventFeedback, setEventFeedback] = useState("");
   const [eventError, setEventError] = useState("");
   const claimStatus = useMemo(() => getClaimStatus(claim), [claim]);
-  const canEditEvent = Boolean(!claim.is_locked && (hasAccountPermission || claim.applicant_user_id === currentUserId));
+  const canEditEvent = Boolean(!claim.is_locked && (canEditClaims || claim.applicant_user_id === currentUserId));
 
   useEffect(() => {
     const approverIds = Array.from(new Set((claim.approver_data || []).map((item) => item.user_id).filter(Boolean)));
@@ -195,7 +197,7 @@ export function ClaimDetail({
         <DetailRow label="申请人" value={claim.applicant_name} />
         <DetailRow label="金额" value={`RM ${safeMoney(claim.amount)}`} />
         <DetailRow label="日期" value={claim.request_date} />
-        <DetailRow label="部门" value={claim.department_name || String(claim.department_id ?? "-")} />
+        <DetailRow label="部门" value={claim.department_name || "-"} />
         <div className="claim-detail__row" style={detailRowStyle}>
           <div className="claim-detail__row-label" style={detailLabelStyle}>活动</div>
           <div className="claim-detail__row-value" style={detailValueStyle}>
@@ -313,15 +315,18 @@ export function ClaimDetail({
         </div>
       ) : null}
 
-      {hasAccountPermission || isApprovedByMe ? (
+      {canEditClaims || isApprovedByMe ? (
         <div className="claim-detail__footer" style={footerActionsStyle}>
-          {hasAccountPermission ? (
+          {canEditClaims ? (
             <>
               <button type="button" style={buttonApproveStyle} onClick={onApprove}>
                 批准
               </button>
               <button type="button" style={buttonRejectStyle} onClick={onReject}>
                 拒绝
+              </button>
+              <button type="button" style={buttonRejectStyle} onClick={onDelete}>
+                删除申请
               </button>
             </>
           ) : null}

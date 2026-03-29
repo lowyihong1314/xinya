@@ -3,12 +3,13 @@ import mimetypes
 import os
 import uuid
 from datetime import datetime
+from pathlib import Path
 from urllib.parse import urlsplit
 
 from flask import request
 
 from app.account.exceptions import NotFound, PermissionDenied, ValidationError
-from app.account.permissions import resolve_user_permissions, user_can_manage_claims
+from app.account.permissions import resolve_user_permissions, user_can_manage_claims, user_can_read_all_claims
 from app.account.serializers import serialize_request_data
 from app.paths import DATA_ROOT
 from models import db
@@ -18,6 +19,7 @@ from models.finance import (
     ReimbursementAttachment,
     ReimbursementRequest,
 )
+from models.user_data import Department
 
 
 def _get_claim_or_raise(request_id):
@@ -83,7 +85,7 @@ def _normalize_sign_json(sign_value, field_name="sign_json_data"):
 
 def _require_payment_voucher_access(request_obj, user):
     permissions = resolve_user_permissions(user)
-    can_account = "account" in permissions
+    can_account = "account_read" in permissions or "account_edit" in permissions
     is_approved_by_me = any(
         approver.user_id == user.id and approver.reject is False
         for approver in (request_obj.approver_data or [])
@@ -118,21 +120,43 @@ def _payment_voucher_public_url(token):
     return f"{origin}/#/payment-voucher-sign/{token}"
 
 
+def _resolve_claim_department_name(form):
+    department_name = str(form.get("department_name") or "").strip()
+    if department_name:
+        if len(department_name) > 100:
+            raise ValidationError("部门名称过长")
+        return department_name
+
+    department_id_raw = form.get("department_id")
+    if not department_id_raw:
+        raise ValidationError("请选择部门")
+
+    try:
+        department_id = int(department_id_raw)
+    except Exception as exc:
+        raise ValidationError("部门格式错误") from exc
+
+    department = Department.query.get(department_id)
+    if not department or not str(department.name or "").strip():
+        raise ValidationError("部门不存在")
+
+    return str(department.name).strip()
+
+
 def create_claim_from_form(form, files, current_user=None):
     applicant_name = form.get("applicant_name")
     request_date_raw = form.get("request_date")
     amount_raw = form.get("amount")
-    department_id_raw = form.get("department_id")
     purpose = form.get("purpose")
     event_id_raw = form.get("event_id")
     sign_json_data_raw = form.get("sign_json_data")
+    department_name = _resolve_claim_department_name(form)
 
     if not all(
         [
             applicant_name,
             request_date_raw,
             amount_raw,
-            department_id_raw,
             purpose,
             sign_json_data_raw,
         ]
@@ -144,7 +168,6 @@ def create_claim_from_form(form, files, current_user=None):
     try:
         request_date = datetime.strptime(request_date_raw, "%Y-%m-%d").date()
         amount = float(amount_raw)
-        department_id = int(department_id_raw)
         event_id = int(event_id_raw) if event_id_raw else None
     except Exception as exc:
         raise ValidationError("数据格式错误") from exc
@@ -154,7 +177,7 @@ def create_claim_from_form(form, files, current_user=None):
         applicant_name=applicant_name,
         request_date=request_date,
         amount=amount,
-        department_id=department_id,
+        department_name=department_name,
         purpose=purpose,
         public_token=uuid.uuid4().hex,
         event_id=event_id,
@@ -194,7 +217,7 @@ def create_claim_from_form(form, files, current_user=None):
 
 def list_claims_for_user(user):
     query = ReimbursementRequest.query
-    can_view_all = user_can_manage_claims(user)
+    can_view_all = user_can_read_all_claims(user)
     if not can_view_all:
         query = query.filter(ReimbursementRequest.applicant_user_id == user.id)
 
@@ -270,6 +293,30 @@ def update_claim_event(request_id, payload, user):
     request_obj.event_id = event.id
     db.session.commit()
     return request_obj
+
+
+def delete_claim(request_id, user):
+    request_obj = _get_claim_or_raise(request_id)
+
+    if not user_can_manage_claims(user):
+        raise PermissionDenied("没有权限删除该申请")
+
+    attachment_paths = [
+        str(item.file_path or "").strip()
+        for item in (request_obj.attachments or [])
+        if str(item.file_path or "").strip()
+    ]
+
+    db.session.delete(request_obj)
+    db.session.commit()
+
+    for relative_path in attachment_paths:
+        file_path = DATA_ROOT / Path(relative_path)
+        try:
+            if file_path.is_file():
+                file_path.unlink()
+        except OSError:
+            continue
 
 
 def build_payment_voucher_context(request_id, user):

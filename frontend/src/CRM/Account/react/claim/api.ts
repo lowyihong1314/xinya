@@ -43,6 +43,14 @@ export async function decideClaim(
   return parseJson<Record<string, unknown>>(response);
 }
 
+export async function deleteClaim(requestId: number) {
+  const response = await apiFetch(`/api/account/delete_claim/${requestId}`, {
+    method: "DELETE",
+    credentials: "include",
+  });
+  return parseJson<{ status?: string; message?: string }>(response);
+}
+
 export async function updateClaimEvent(requestId: number, eventId: number | null) {
   const response = await apiFetch(`/api/account/claim/${requestId}/event`, {
     method: "PUT",

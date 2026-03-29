@@ -20,12 +20,14 @@ export function MembershipActionCard({
   hasBoundNric,
   nextExpiryDate,
   actionBusy,
+  isMobile = false,
   onAction,
 }: {
   isMember: boolean;
   hasBoundNric: boolean;
   nextExpiryDate?: string | null;
   actionBusy?: boolean;
+  isMobile?: boolean;
   onAction: () => void;
 }) {
   const title = isMember
@@ -39,32 +41,33 @@ export function MembershipActionCard({
   const actionLabel = isMember ? "直接续费" : "立刻填写报名升级会员";
 
   return (
-    <div style={cardStyle(isMember)}>
+    <div style={cardStyle(isMember, isMobile)}>
       <div style={eyebrowStyle(isMember)}>{isMember ? "Member Active" : "Member Upgrade"}</div>
-      <div style={titleStyle}>{title}</div>
+      <div style={titleStyle(isMobile)}>{title}</div>
       <div style={bodyStyle}>{body}</div>
       <div style={badgeRowStyle}>
         <span style={badgeStyle(isMember)}>
           {isMember ? "会员绿色通道" : hasBoundNric ? "可提交升级申请" : "需先绑定 NRIC"}
         </span>
       </div>
-      <button type="button" style={buttonStyle(isMember)} onClick={onAction} disabled={Boolean(actionBusy)}>
+      <button type="button" style={buttonStyle(isMember, isMobile)} onClick={onAction} disabled={Boolean(actionBusy)}>
         {actionBusy ? (isMember ? "生成续费链接中…" : "打开中…") : actionLabel}
       </button>
     </div>
   );
 }
 
-function cardStyle(isMember: boolean): CSSProperties {
+function cardStyle(isMember: boolean, isMobile: boolean): CSSProperties {
   return {
     display: "grid",
-    gap: "12px",
-    padding: "18px",
-    borderRadius: "20px",
+    gap: isMobile ? "10px" : "12px",
+    padding: isMobile ? "14px" : "18px",
+    borderRadius: isMobile ? "16px" : "20px",
     background: isMember
       ? "linear-gradient(135deg, rgba(2,122,72,0.12), rgba(236,253,243,0.92))"
       : "linear-gradient(135deg, rgba(15,118,110,0.08), rgba(255,255,255,0.96))",
     border: isMember ? "1px solid rgba(2,122,72,0.18)" : "1px solid rgba(15,118,110,0.14)",
+    boxSizing: "border-box",
   };
 }
 
@@ -78,12 +81,16 @@ function eyebrowStyle(isMember: boolean): CSSProperties {
   };
 }
 
-const titleStyle: CSSProperties = {
-  fontSize: "20px",
-  fontWeight: 900,
-  lineHeight: 1.25,
-  color: "var(--x-color-ink)",
-};
+function titleStyle(isMobile: boolean): CSSProperties {
+  return {
+    fontSize: isMobile ? "18px" : "20px",
+    fontWeight: 900,
+    lineHeight: 1.3,
+    color: "var(--x-color-ink)",
+    overflowWrap: "anywhere",
+    wordBreak: "break-word",
+  };
+}
 
 const bodyStyle: CSSProperties = {
   fontSize: "14px",
@@ -101,6 +108,7 @@ function badgeStyle(isMember: boolean): CSSProperties {
   return {
     display: "inline-flex",
     alignItems: "center",
+    maxWidth: "100%",
     width: "fit-content",
     padding: "7px 11px",
     borderRadius: "999px",
@@ -108,12 +116,18 @@ function badgeStyle(isMember: boolean): CSSProperties {
     fontWeight: 800,
     background: isMember ? "var(--x-color-success-soft)" : "rgba(15,118,110,0.1)",
     color: isMember ? "var(--x-color-success)" : "var(--x-color-accent-strong)",
+    whiteSpace: "normal",
+    overflowWrap: "anywhere",
+    wordBreak: "break-word",
   };
 }
 
-function buttonStyle(isMember: boolean): CSSProperties {
+function buttonStyle(isMember: boolean, isMobile: boolean): CSSProperties {
   return {
-    width: "fit-content",
+    width: isMobile ? "100%" : "fit-content",
+    display: "inline-flex",
+    alignItems: "center",
+    justifyContent: "center",
     padding: "12px 18px",
     borderRadius: "999px",
     border: "none",
@@ -121,5 +135,6 @@ function buttonStyle(isMember: boolean): CSSProperties {
     fontWeight: 800,
     color: "white",
     background: isMember ? "linear-gradient(135deg, #027a48, #16a34a)" : "linear-gradient(135deg, #0f766e, #1d4ed8)",
+    boxSizing: "border-box",
   };
 }

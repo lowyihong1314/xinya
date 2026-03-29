@@ -5,12 +5,14 @@ from datetime import datetime, timedelta
 from PIL import Image
 from flask import Blueprint, jsonify, request, send_file, session
 from flask_login import current_user, login_required, login_user, logout_user
+from sqlalchemy.exc import IntegrityError
 
-from app.auth import permission_required
+from app.auth import get_current_user_permissions, permission_required
 from app.form.services import _apply_member_nric_change
 from app.media.paths import DATA_PATH, to_short_data_path
 from . import membership
 from app.user_control.utils import PROFILE_PATH, generate_resized_image
+from models.file_manager_DB import FilePermission
 from models.form import NRIC_Asset
 from models import db
 from models.user_data import Department, MemberRenewal, User
@@ -19,6 +21,56 @@ from models.youth_class_registration import YouthClassRegistration
 user_control_bp = Blueprint("user_control", __name__)
 
 MEMBER_RENEWAL_ROOT = os.path.join(DATA_PATH, "NAS", "UTBA", "member_renewal")
+SELF_EDITABLE_USER_FIELDS = {
+    "display_name",
+    "display",
+    "email",
+    "phone",
+    "NRIC",
+    "gender",
+    "parent_1",
+    "parent_1_phone",
+    "medical",
+    "allergy",
+    "bank_name",
+    "account_name",
+    "bank_account",
+    "tng_number",
+}
+ADMIN_EXTRA_EDITABLE_USER_FIELDS = {
+    "name_NRIC",
+    "user_theme",
+    "is_member",
+}
+BOOLEAN_USER_FIELDS = {"display", "is_member"}
+TEXT_USER_FIELDS = {
+    "display_name",
+    "email",
+    "phone",
+    "gender",
+    "parent_1",
+    "parent_1_phone",
+    "medical",
+    "allergy",
+    "bank_name",
+    "account_name",
+    "bank_account",
+    "tng_number",
+    "user_theme",
+}
+
+
+def _format_department_delete_integrity_error(exc):
+    message = str(getattr(exc, "orig", exc) or "")
+    normalized = message.lower()
+
+    if "file_permissions" in normalized:
+        return "该部门仍有关联的文件权限，无法删除。请先清理相关文件权限后再试。"
+
+    if "user_department" in normalized or "department_permission" in normalized:
+        return "该部门仍存在关联成员或权限，无法删除。请刷新后重试；如果仍失败，请先检查部门成员和权限设置。"
+
+    return "该部门仍有关联数据，无法删除。请先移除关联后再试。"
 
 
 def _normalize_identity_value(value, *, undefined_as_none=False):
@@ -28,6 +80,79 @@ def _normalize_identity_value(value, *, undefined_as_none=False):
     if undefined_as_none and normalized.lower() == "undefined":
         return None
     return normalized
+
+
+def _normalize_user_text_value(value):
+    if value is None:
+        return None
+    normalized = str(value).strip()
+    return normalized or None
+
+
+def _parse_nullable_bool(value, field_name):
+    if isinstance(value, bool):
+        return value
+    if value is None:
+        return None
+
+    normalized = str(value).strip().lower()
+    if normalized in {"", "null", "none", "undefined"}:
+        return None
+    if normalized in {"true", "1", "yes", "on"}:
+        return True
+    if normalized in {"false", "0", "no", "off"}:
+        return False
+    raise ValueError(f"{field_name} 字段格式无效")
+
+
+def _validate_unique_user_contact_fields(user, *, email=None, phone=None):
+    if email:
+        existing = User.query.filter(User.email == email, User.id != user.id).first()
+        if existing:
+            raise ValueError("这个 Email 已被其他账号使用")
+    if phone:
+        existing = User.query.filter(User.phone == phone, User.id != user.id).first()
+        if existing:
+            raise ValueError("这个 Phone 已被其他账号使用")
+
+
+def _apply_user_updates(user, data, *, allowed_fields):
+    identity_keys = {"NRIC", "name_NRIC"}
+    editable_keys = allowed_fields & set(data.keys())
+
+    pending_email = user.email
+    pending_phone = user.phone
+
+    for key in editable_keys:
+        if key in identity_keys:
+            continue
+        if key in BOOLEAN_USER_FIELDS:
+            setattr(user, key, _parse_nullable_bool(data.get(key), key))
+            continue
+        if key in TEXT_USER_FIELDS:
+            normalized = _normalize_user_text_value(data.get(key))
+            if key == "user_theme" and normalized is None:
+                normalized = user.user_theme or "light"
+            setattr(user, key, normalized)
+            if key == "email":
+                pending_email = normalized
+            elif key == "phone":
+                pending_phone = normalized
+            continue
+        if hasattr(user, key):
+            setattr(user, key, data.get(key))
+
+    _validate_unique_user_contact_fields(user, email=pending_email, phone=pending_phone)
+
+    if identity_keys & editable_keys:
+        target_member = user.nric_asset
+        target_nric = data.get("NRIC") if "NRIC" in data else getattr(target_member, "nric", None)
+        target_name_nric = (
+            data.get("name_NRIC")
+            if "name_NRIC" in data
+            else getattr(target_member, "name_nric", None)
+        )
+        _sync_user_nric_member(user, target_nric, target_name_nric)
 
 
 def _member_has_registration_footprint(member):
@@ -510,7 +635,7 @@ def list_departments():
 def create_department():
     try:
         data = request.get_json() or {}
-        name = data.get("name")
+        name = str(data.get("name") or "").strip()
         if not name:
             return jsonify({"status": "error", "message": "部门名称不能为空"}), 400
         if Department.query.filter_by(name=name).first():
@@ -525,6 +650,37 @@ def create_department():
         return jsonify({"status": "error", "message": f"创建失败: {str(exc)}"}), 500
 
 
+@user_control_bp.put("/departments/<int:dept_id>")
+@permission_required("department_edit")
+def rename_department(dept_id):
+    try:
+        department = Department.query.get(dept_id)
+        if not department:
+            return jsonify({"status": "error", "message": "部门不存在"}), 404
+
+        data = request.get_json() or {}
+        name = str(data.get("name") or "").strip()
+        if not name:
+            return jsonify({"status": "error", "message": "部门名称不能为空"}), 400
+
+        existing = Department.query.filter(Department.name == name, Department.id != dept_id).first()
+        if existing:
+            return jsonify({"status": "error", "message": "部门已存在"}), 400
+
+        department.name = name
+        db.session.commit()
+        return jsonify(
+            {
+                "status": "success",
+                "message": "部门名称已更新",
+                "data": department.to_dict(),
+            }
+        )
+    except Exception as exc:
+        db.session.rollback()
+        return jsonify({"status": "error", "message": f"更新失败: {str(exc)}"}), 500
+
+
 @user_control_bp.delete("/departments/<int:dept_id>")
 @permission_required("department_edit")
 def delete_department(dept_id):
@@ -536,9 +692,16 @@ def delete_department(dept_id):
         if not department:
             return jsonify({"status": "error", "message": "部门不存在"}), 404
 
+        department.users.clear()
+        department.permissions.clear()
+        FilePermission.query.filter_by(department_id=dept_id).delete(synchronize_session=False)
+        db.session.flush()
         db.session.delete(department)
         db.session.commit()
         return jsonify({"status": "success", "message": "部门删除成功"})
+    except IntegrityError as exc:
+        db.session.rollback()
+        return jsonify({"status": "error", "message": _format_department_delete_integrity_error(exc)}), 409
     except Exception as exc:
         db.session.rollback()
         return jsonify({"status": "error", "message": f"删除失败: {str(exc)}"}), 500
@@ -785,7 +948,7 @@ def get_profile_image(username, size="M"):
 
 
 @user_control_bp.post("/update_user/<int:user_id>")
-@permission_required("member_edit")
+@login_required
 def update_user(user_id):
     user = User.query.get(user_id)
     if not user:
@@ -793,28 +956,25 @@ def update_user(user_id):
 
     data = request.get_json() or {}
     try:
-        identity_keys = {"NRIC", "name_NRIC"}
-        for key, value in data.items():
-            if key in identity_keys:
-                continue
-            if hasattr(user, key):
-                setattr(user, key, bool(value) if key in {"display", "is_member"} else value)
+        user_permissions = get_current_user_permissions(current_user)
+        can_edit_others = "member_edit" in user_permissions
+        if current_user.id != user.id and not can_edit_others:
+            return jsonify({"status": "error", "message": "你只能修改自己的资料"}), 403
 
-        if identity_keys & set(data.keys()):
-            target_member = user.nric_asset
-            target_nric = data.get("NRIC") if "NRIC" in data else getattr(target_member, "nric", None)
-            target_name_nric = (
-                data.get("name_NRIC")
-                if "name_NRIC" in data
-                else getattr(target_member, "name_nric", None)
-            )
-            _sync_user_nric_member(user, target_nric, target_name_nric)
+        allowed_fields = set(SELF_EDITABLE_USER_FIELDS)
+        if can_edit_others:
+            allowed_fields |= ADMIN_EXTRA_EDITABLE_USER_FIELDS
+
+        _apply_user_updates(user, data, allowed_fields=allowed_fields)
 
         db.session.commit()
         return jsonify({"status": "success", "message": "用户信息更新成功"})
     except ValueError as exc:
         db.session.rollback()
         return jsonify({"status": "error", "message": str(exc)}), 400
+    except IntegrityError:
+        db.session.rollback()
+        return jsonify({"status": "error", "message": "资料更新失败，可能是 Email 或 Phone 已重复"}), 400
     except Exception as exc:
         db.session.rollback()
         return jsonify({"status": "error", "message": f"更新失败: {str(exc)}"}), 500

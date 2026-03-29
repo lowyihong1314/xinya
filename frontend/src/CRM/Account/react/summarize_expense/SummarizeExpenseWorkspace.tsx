@@ -298,7 +298,7 @@ function buildClaimBars(claims: ClaimRecord[]) {
       key: String(claim.id),
       label: claim.purpose?.trim() || `申请 #${claim.id}`,
       amount: getClaimAmount(claim),
-      hint: `${buildActivityLabel(claim)} · ${claim.department_name || claim.department_id || "-"}`,
+      hint: `${buildActivityLabel(claim)} · ${claim.department_name || "-"}`,
     }));
 }
 
