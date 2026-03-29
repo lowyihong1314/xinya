@@ -8,6 +8,7 @@ import type {
   EventSortResponse,
   SharedEventRecord,
 } from "./types";
+import { API_BASE } from "../../js/apiBase";
 import { apiFetch } from "../../js/apiFetch";
 
 async function parseJson<T>(response: Response): Promise<T> {
@@ -100,18 +101,64 @@ export async function reorderEventFlows(eventId: number, flowIds: number[]) {
   return parseJson<EventFlowMutationResponse>(response);
 }
 
-export async function uploadEventMedia(eventId: number, file: File) {
+type UploadEventMediaOptions = {
+  onProgress?: (percent: number, loaded: number, total: number) => void;
+};
+
+export async function uploadEventMedia(
+  eventId: number,
+  file: File,
+  options: UploadEventMediaOptions = {},
+) {
   const formData = new FormData();
   formData.append("event_id", String(eventId));
   formData.append("file", file);
 
-  const response = await apiFetch("/media/upload_media", {
-    method: "POST",
-    credentials: "include",
-    body: formData,
-  });
+  const payload = await new Promise<EventMediaUploadResponse>((resolve, reject) => {
+    const xhr = new XMLHttpRequest();
+    xhr.open("POST", `${API_BASE}/media/upload_media`);
+    xhr.withCredentials = true;
 
-  const payload = await parseJson<EventMediaUploadResponse>(response);
+    options.onProgress?.(0, 0, file.size || 0);
+
+    xhr.upload.addEventListener("progress", (event) => {
+      const total = event.total || file.size || 0;
+      const loaded = event.loaded || 0;
+      const percent = total > 0 ? Math.min(100, Math.round((loaded / total) * 100)) : 0;
+      options.onProgress?.(percent, loaded, total);
+    });
+
+    xhr.onload = () => {
+      const responseText = xhr.responseText || "";
+      let data = {} as EventMediaUploadResponse & {
+        error?: string;
+        message?: string;
+      };
+      try {
+        data = (responseText ? JSON.parse(responseText) : {}) as EventMediaUploadResponse & {
+          error?: string;
+          message?: string;
+        };
+      } catch {
+        data = {};
+      }
+      if (xhr.status < 200 || xhr.status >= 300) {
+        reject(new Error(data.error || data.message || "请求失败"));
+        return;
+      }
+      resolve(data);
+    };
+
+    xhr.onerror = () => {
+      reject(new Error("上传失败"));
+    };
+
+    xhr.onabort = () => {
+      reject(new Error("上传已取消"));
+    };
+
+    xhr.send(formData);
+  });
   const uploadRecord = payload.data || payload;
   const videoTypes = new Set(["mp4", "mov", "avi", "mkv", "webm"]);
   if (uploadRecord.file_id && uploadRecord.file_type && videoTypes.has(uploadRecord.file_type)) {

@@ -1,5 +1,6 @@
-import { CSSProperties, useEffect, useMemo, useState } from "react";
+import { CSSProperties, useEffect, useMemo, useRef, useState } from "react";
 
+import { useUserState } from "../../app/UserState";
 import { CachedImage } from "../../components/CachedMedia";
 import { uploadEventMedia } from "../../event/shared/api";
 
@@ -8,6 +9,7 @@ type UploadQueueItem = {
   file: File;
   previewUrl: string | null;
   status: "queued" | "uploading" | "success" | "error";
+  progress: number;
   error?: string | null;
 };
 
@@ -49,25 +51,35 @@ export function UploadMediaModal({
   onClose,
   onUploaded,
 }: UploadMediaModalProps) {
+  const { isMobile } = useUserState();
   const [queue, setQueue] = useState<UploadQueueItem[]>([]);
   const [uploading, setUploading] = useState(false);
   const [toast, setToast] = useState<string | null>(null);
+  const queueRef = useRef<UploadQueueItem[]>([]);
+
+  useEffect(() => {
+    queueRef.current = queue;
+  }, [queue]);
 
   useEffect(() => {
     return () => {
-      queue.forEach((item) => {
+      queueRef.current.forEach((item) => {
         if (item.previewUrl) {
           URL.revokeObjectURL(item.previewUrl);
         }
       });
     };
-  }, [queue]);
+  }, []);
 
   const stats = useMemo(() => {
     const successCount = queue.filter((item) => item.status === "success").length;
     const failedCount = queue.filter((item) => item.status === "error").length;
     return { successCount, failedCount };
   }, [queue]);
+
+  function patchQueueItem(itemId: string, updater: (item: UploadQueueItem) => UploadQueueItem) {
+    setQueue((prev) => prev.map((item) => (item.id === itemId ? updater(item) : item)));
+  }
 
   function addFiles(fileList: FileList | null) {
     if (!fileList?.length) {
@@ -90,6 +102,7 @@ export function UploadMediaModal({
         file,
         previewUrl,
         status: "queued",
+        progress: 0,
         error: null,
       });
     });
@@ -126,41 +139,65 @@ export function UploadMediaModal({
   }
 
   async function handleUpload() {
-    if (!queue.length) {
-      setToast("请先选择文件");
+    const pendingItems = queue.filter((item) => item.status !== "success");
+
+    if (!pendingItems.length) {
+      setToast("没有需要上传的文件");
       return;
     }
 
     setUploading(true);
+    setToast(null);
     let uploadedAny = false;
+    let successCount = 0;
+    let failedCount = 0;
 
-    for (const item of queue) {
-      setQueue((prev) =>
-        prev.map((row) => (row.id === item.id ? { ...row, status: "uploading", error: null } : row)),
-      );
+    for (const item of pendingItems) {
+      patchQueueItem(item.id, (row) => ({
+        ...row,
+        status: "uploading",
+        progress: 0,
+        error: null,
+      }));
 
       try {
-        await uploadEventMedia(eventId, item.file);
+        await uploadEventMedia(eventId, item.file, {
+          onProgress: (percent) => {
+            patchQueueItem(item.id, (row) => ({
+              ...row,
+              status: "uploading",
+              progress: percent,
+              error: null,
+            }));
+          },
+        });
         uploadedAny = true;
-        setQueue((prev) =>
-          prev.map((row) => (row.id === item.id ? { ...row, status: "success", error: null } : row)),
-        );
+        successCount += 1;
+        patchQueueItem(item.id, (row) => ({
+          ...row,
+          status: "success",
+          progress: 100,
+          error: null,
+        }));
       } catch (error) {
-        setQueue((prev) =>
-          prev.map((row) =>
-            row.id === item.id
-              ? {
-                  ...row,
-                  status: "error",
-                  error: error instanceof Error ? error.message : "上传失败",
-                }
-              : row,
-          ),
-        );
+        failedCount += 1;
+        patchQueueItem(item.id, (row) => ({
+          ...row,
+          status: "error",
+          error: error instanceof Error ? error.message : "上传失败",
+        }));
       }
     }
 
     setUploading(false);
+
+    if (successCount && !failedCount) {
+      setToast(`已完成 ${successCount} 个文件上传`);
+    } else if (successCount && failedCount) {
+      setToast(`成功 ${successCount} 个，失败 ${failedCount} 个`);
+    } else if (failedCount) {
+      setToast(`有 ${failedCount} 个文件上传失败`);
+    }
 
     if (uploadedAny) {
       await onUploaded();
@@ -168,21 +205,21 @@ export function UploadMediaModal({
   }
 
   return (
-    <div style={overlayStyle} onClick={onClose}>
-      <div style={modalStyle} onClick={(event) => event.stopPropagation()}>
-        <div style={headerStyle}>
+    <div style={overlayStyle(isMobile)} onClick={onClose}>
+      <div style={modalStyle(isMobile)} onClick={(event) => event.stopPropagation()}>
+        <div style={headerStyle(isMobile)}>
           <div>
             <div style={eyebrowStyle}>Media Upload</div>
-            <h2 style={titleStyle}>上传文件</h2>
+            <h2 style={titleStyle(isMobile)}>上传文件</h2>
             <p style={copyStyle}>{eventName || `活动 #${eventId}`}</p>
           </div>
-          <button type="button" style={closeButtonStyle} onClick={onClose}>
+          <button type="button" style={closeButtonStyle(isMobile)} onClick={onClose}>
             关闭
           </button>
         </div>
 
-        <div style={bodyStyle}>
-          <label style={dropzoneStyle}>
+        <div style={bodyStyle(isMobile)}>
+          <label style={dropzoneStyle(isMobile)}>
             <input
               type="file"
               multiple
@@ -192,7 +229,7 @@ export function UploadMediaModal({
                 event.currentTarget.value = "";
               }}
             />
-            <div style={dropTitleStyle}>选择图片或视频</div>
+            <div style={dropTitleStyle(isMobile)}>选择图片或视频</div>
             <div style={dropCopyStyle}>支持多次追加选择，上传成功后会自动刷新照片墙。</div>
           </label>
 
@@ -208,28 +245,31 @@ export function UploadMediaModal({
           <div style={queueStyle}>
             {!queue.length ? <div style={placeholderStyle}>当前还没有选择文件</div> : null}
             {queue.map((item) => (
-              <div key={item.id} style={queueItemStyle(item.status)}>
+              <div key={item.id} style={queueItemStyle(item.status, isMobile)}>
                 {item.previewUrl ? (
-                  <CachedImage src={item.previewUrl} alt={item.file.name} style={previewImageStyle} />
+                  <CachedImage src={item.previewUrl} alt={item.file.name} style={previewImageStyle(isMobile)} />
                 ) : (
-                  <div style={videoTileStyle}>VIDEO</div>
+                  <div style={videoTileStyle(isMobile)}>VIDEO</div>
                 )}
                 <div style={fileMetaStyle}>
-                  <div style={fileNameStyle}>{item.file.name}</div>
+                  <div style={fileHeaderRowStyle(isMobile)}>
+                    <div style={fileNameStyle(isMobile)}>{item.file.name}</div>
+                    <div style={statusStyle(item.status)}>{statusLabel(item.status)}</div>
+                  </div>
                   <div style={fileSubStyle}>
                     {(item.file.size / 1024 / 1024).toFixed(2)} MB
                     {item.error ? ` · ${item.error}` : ""}
                   </div>
-                </div>
-                <div style={statusStyle(item.status)}>
-                  {item.status === "queued" ? "待上传" : null}
-                  {item.status === "uploading" ? "上传中…" : null}
-                  {item.status === "success" ? "完成" : null}
-                  {item.status === "error" ? "失败" : null}
+                  <div style={progressRowStyle}>
+                    <div style={progressTrackStyle}>
+                      <div style={progressFillStyle(item.progress, item.status)} />
+                    </div>
+                    <div style={progressTextStyle(item.status)}>{item.progress}%</div>
+                  </div>
                 </div>
                 <button
                   type="button"
-                  style={removeButtonStyle}
+                  style={removeButtonStyle(isMobile)}
                   onClick={() => removeItem(item.id)}
                   disabled={uploading && item.status === "uploading"}
                 >
@@ -240,11 +280,16 @@ export function UploadMediaModal({
           </div>
         </div>
 
-        <div style={footerStyle}>
-          <button type="button" style={secondaryButtonStyle} onClick={onClose}>
+        <div style={footerStyle(isMobile)}>
+          <button type="button" style={secondaryButtonStyle(isMobile)} onClick={onClose}>
             取消
           </button>
-          <button type="button" style={primaryButtonStyle} disabled={uploading || !queue.length} onClick={() => void handleUpload()}>
+          <button
+            type="button"
+            style={primaryButtonStyle(isMobile)}
+            disabled={uploading || !queue.some((item) => item.status !== "success")}
+            onClick={() => void handleUpload()}
+          >
             {uploading ? "上传中…" : "开始上传"}
           </button>
         </div>
@@ -253,36 +298,50 @@ export function UploadMediaModal({
   );
 }
 
-const overlayStyle: CSSProperties = {
-  position: "fixed",
-  inset: 0,
-  zIndex: 1200,
-  background: "rgba(7, 12, 20, 0.6)",
-  display: "grid",
-  placeItems: "center",
-  padding: "24px",
-};
+function statusLabel(status: UploadQueueItem["status"]) {
+  if (status === "success") return "完成";
+  if (status === "error") return "失败";
+  if (status === "uploading") return "上传中";
+  return "待上传";
+}
 
-const modalStyle: CSSProperties = {
-  width: "min(920px, 100%)",
-  maxHeight: "90vh",
-  overflow: "hidden",
-  borderRadius: "var(--x-radius-lg)",
-  background: "var(--x-color-panel-strongest)",
-  border: "1px solid var(--x-color-line-soft)",
-  boxShadow: "0 24px 64px var(--x-color-shadow-strong)",
-  display: "grid",
-  gridTemplateRows: "auto minmax(0, 1fr) auto",
-};
+function overlayStyle(isMobile: boolean): CSSProperties {
+  return {
+    position: "fixed",
+    inset: 0,
+    zIndex: 1200,
+    background: "rgba(7, 12, 20, 0.6)",
+    display: "grid",
+    placeItems: "center",
+    padding: isMobile ? "10px" : "24px",
+  };
+}
 
-const headerStyle: CSSProperties = {
-  padding: "20px 22px",
-  display: "flex",
-  justifyContent: "space-between",
-  gap: "16px",
-  alignItems: "start",
-  borderBottom: "1px solid var(--x-color-line-soft)",
-};
+function modalStyle(isMobile: boolean): CSSProperties {
+  return {
+    width: "min(920px, 100%)",
+    maxHeight: isMobile ? "94vh" : "90vh",
+    overflow: "hidden",
+    borderRadius: "var(--x-radius-lg)",
+    background: "var(--x-color-panel-strongest)",
+    border: "1px solid var(--x-color-line-soft)",
+    boxShadow: "0 24px 64px var(--x-color-shadow-strong)",
+    display: "grid",
+    gridTemplateRows: "auto minmax(0, 1fr) auto",
+  };
+}
+
+function headerStyle(isMobile: boolean): CSSProperties {
+  return {
+    padding: isMobile ? "16px" : "20px 22px",
+    display: "flex",
+    justifyContent: "space-between",
+    gap: "16px",
+    alignItems: "start",
+    flexDirection: isMobile ? "column" : "row",
+    borderBottom: "1px solid var(--x-color-line-soft)",
+  };
+}
 
 const eyebrowStyle: CSSProperties = {
   fontSize: "12px",
@@ -291,39 +350,47 @@ const eyebrowStyle: CSSProperties = {
   color: "var(--x-color-ink-muted)",
 };
 
-const titleStyle: CSSProperties = {
-  margin: "8px 0 4px",
-  fontSize: "28px",
-  color: "var(--x-color-ink)",
-};
+function titleStyle(isMobile: boolean): CSSProperties {
+  return {
+    margin: "8px 0 4px",
+    fontSize: isMobile ? "22px" : "28px",
+    color: "var(--x-color-ink)",
+  };
+}
 
 const copyStyle: CSSProperties = {
   margin: 0,
   color: "var(--x-color-ink-muted)",
 };
 
-const bodyStyle: CSSProperties = {
-  padding: "20px 22px",
-  overflow: "auto",
-  display: "grid",
-  gap: "16px",
-};
+function bodyStyle(isMobile: boolean): CSSProperties {
+  return {
+    padding: isMobile ? "16px" : "20px 22px",
+    overflow: "auto",
+    display: "grid",
+    gap: "16px",
+  };
+}
 
-const dropzoneStyle: CSSProperties = {
-  display: "grid",
-  gap: "8px",
-  padding: "20px",
-  borderRadius: "var(--x-radius-md)",
-  border: "1px dashed var(--x-color-accent-border)",
-  background: "var(--x-color-accent-tint)",
-  cursor: "pointer",
-};
+function dropzoneStyle(isMobile: boolean): CSSProperties {
+  return {
+    display: "grid",
+    gap: "8px",
+    padding: isMobile ? "16px" : "20px",
+    borderRadius: "var(--x-radius-md)",
+    border: "1px dashed var(--x-color-accent-border)",
+    background: "var(--x-color-accent-tint)",
+    cursor: "pointer",
+  };
+}
 
-const dropTitleStyle: CSSProperties = {
-  fontSize: "18px",
-  fontWeight: 700,
-  color: "var(--x-color-accent-strong)",
-};
+function dropTitleStyle(isMobile: boolean): CSSProperties {
+  return {
+    fontSize: isMobile ? "16px" : "18px",
+    fontWeight: 700,
+    color: "var(--x-color-accent-strong)",
+  };
+}
 
 const dropCopyStyle: CSSProperties = {
   color: "var(--x-color-ink-muted)",
@@ -351,7 +418,7 @@ const queueStyle: CSSProperties = {
   gap: "12px",
 };
 
-function queueItemStyle(status: UploadQueueItem["status"]): CSSProperties {
+function queueItemStyle(status: UploadQueueItem["status"], isMobile: boolean): CSSProperties {
   const background =
     status === "error"
       ? "var(--x-color-danger-soft)"
@@ -366,55 +433,73 @@ function queueItemStyle(status: UploadQueueItem["status"]): CSSProperties {
         : "1px solid var(--x-color-line-soft)";
   return {
     display: "grid",
-    gridTemplateColumns: "72px minmax(0, 1fr) auto auto",
-    gap: "14px",
-    alignItems: "center",
-    padding: "12px",
+    gridTemplateColumns: isMobile ? "56px minmax(0, 1fr)" : "72px minmax(0, 1fr) auto",
+    gap: isMobile ? "10px" : "14px",
+    alignItems: isMobile ? "start" : "center",
+    padding: isMobile ? "10px" : "12px",
     borderRadius: "var(--x-radius-md)",
     background,
     border,
   };
 }
 
-const previewImageStyle: CSSProperties = {
-  width: "72px",
-  height: "72px",
-  objectFit: "cover",
-  borderRadius: "12px",
-  background: "var(--x-color-panel-alt)",
-};
+function previewImageStyle(isMobile: boolean): CSSProperties {
+  return {
+    width: isMobile ? "56px" : "72px",
+    height: isMobile ? "56px" : "72px",
+    objectFit: "cover",
+    borderRadius: "12px",
+    background: "var(--x-color-panel-alt)",
+  };
+}
 
-const videoTileStyle: CSSProperties = {
-  width: "72px",
-  height: "72px",
-  borderRadius: "12px",
-  background: "linear-gradient(135deg, var(--x-color-nav-start), var(--x-color-nav-end))",
-  color: "#fff",
-  display: "grid",
-  placeItems: "center",
-  fontSize: "12px",
-  fontWeight: 800,
-  letterSpacing: "0.08em",
-};
+function videoTileStyle(isMobile: boolean): CSSProperties {
+  return {
+    width: isMobile ? "56px" : "72px",
+    height: isMobile ? "56px" : "72px",
+    borderRadius: "12px",
+    background: "linear-gradient(135deg, var(--x-color-nav-start), var(--x-color-nav-end))",
+    color: "#fff",
+    display: "grid",
+    placeItems: "center",
+    fontSize: "12px",
+    fontWeight: 800,
+    letterSpacing: "0.08em",
+  };
+}
 
 const fileMetaStyle: CSSProperties = {
   minWidth: 0,
   display: "grid",
-  gap: "4px",
+  gap: "6px",
 };
 
-const fileNameStyle: CSSProperties = {
-  fontSize: "15px",
-  fontWeight: 700,
-  color: "var(--x-color-ink)",
-  whiteSpace: "nowrap",
-  overflow: "hidden",
-  textOverflow: "ellipsis",
-};
+function fileHeaderRowStyle(isMobile: boolean): CSSProperties {
+  return {
+    display: "flex",
+    justifyContent: "space-between",
+    alignItems: isMobile ? "flex-start" : "center",
+    gap: "8px",
+    flexDirection: isMobile ? "column" : "row",
+  };
+}
+
+function fileNameStyle(isMobile: boolean): CSSProperties {
+  return {
+    fontSize: isMobile ? "14px" : "15px",
+    fontWeight: 700,
+    color: "var(--x-color-ink)",
+    whiteSpace: isMobile ? "normal" : "nowrap",
+    overflow: "hidden",
+    textOverflow: "ellipsis",
+    wordBreak: "break-word",
+  };
+}
 
 const fileSubStyle: CSSProperties = {
   fontSize: "13px",
   color: "var(--x-color-ink-muted)",
+  wordBreak: "break-word",
 };
 
 function statusStyle(status: UploadQueueItem["status"]): CSSProperties {
@@ -427,22 +512,86 @@ function statusStyle(status: UploadQueueItem["status"]): CSSProperties {
           ? "var(--x-color-accent-strong)"
           : "var(--x-color-ink-muted)";
   return {
-    fontSize: "13px",
+    display: "inline-flex",
+    alignItems: "center",
+    justifyContent: "center",
+    padding: "6px 10px",
+    borderRadius: "999px",
+    fontSize: "12px",
     fontWeight: 700,
     color,
+    background:
+      status === "success"
+        ? "rgba(2, 122, 72, 0.1)"
+        : status === "error"
+          ? "rgba(180, 35, 24, 0.1)"
+          : status === "uploading"
+            ? "rgba(15, 118, 110, 0.12)"
+            : "rgba(148, 163, 184, 0.14)",
     whiteSpace: "nowrap",
   };
 }
 
-const removeButtonStyle: CSSProperties = {
-  padding: "10px 12px",
-  borderRadius: "999px",
-  border: "1px solid var(--x-color-danger-border)",
-  background: "var(--x-color-panel)",
-  color: "var(--x-color-danger)",
-  fontWeight: 700,
-  cursor: "pointer",
+const progressRowStyle: CSSProperties = {
+  display: "grid",
+  gridTemplateColumns: "minmax(0, 1fr) auto",
+  gap: "10px",
+  alignItems: "center",
 };
+
+const progressTrackStyle: CSSProperties = {
+  position: "relative",
+  height: "8px",
+  borderRadius: "999px",
+  overflow: "hidden",
+  background: "rgba(148, 163, 184, 0.18)",
+};
+
+function progressFillStyle(progress: number, status: UploadQueueItem["status"]): CSSProperties {
+  return {
+    width: `${Math.max(0, Math.min(progress, 100))}%`,
+    height: "100%",
+    borderRadius: "999px",
+    background:
+      status === "success"
+        ? "linear-gradient(90deg, var(--x-color-success), #34d399)"
+        : status === "error"
+          ? "linear-gradient(90deg, var(--x-color-danger), #fb7185)"
+          : "linear-gradient(90deg, var(--x-color-accent), var(--x-color-info))",
+    transition: "width 180ms ease",
+  };
+}
+
+function progressTextStyle(status: UploadQueueItem["status"]): CSSProperties {
+  return {
+    fontSize: "12px",
+    fontWeight: 700,
+    minWidth: "42px",
+    textAlign: "right",
+    color:
+      status === "success"
+        ? "var(--x-color-success)"
+        : status === "error"
+          ? "var(--x-color-danger)"
+          : status === "uploading"
+            ? "var(--x-color-accent-strong)"
+            : "var(--x-color-ink-muted)",
+  };
+}
+
+function removeButtonStyle(isMobile: boolean): CSSProperties {
+  return {
+    padding: "10px 12px",
+    borderRadius: "999px",
+    border: "1px solid var(--x-color-danger-border)",
+    background: "var(--x-color-panel)",
+    color: "var(--x-color-danger)",
+    fontWeight: 700,
+    cursor: "pointer",
+    gridColumn: isMobile ? "1 / -1" : undefined,
+    width: isMobile ? "100%" : undefined,
+  };
+}
 
 const placeholderStyle: CSSProperties = {
   padding: "18px",
@@ -452,35 +601,47 @@ const placeholderStyle: CSSProperties = {
   color: "var(--x-color-ink-muted)",
 };
 
-const footerStyle: CSSProperties = {
-  padding: "18px 22px",
-  display: "flex",
-  justifyContent: "flex-end",
-  gap: "12px",
-  borderTop: "1px solid var(--x-color-line-soft)",
-};
+function footerStyle(isMobile: boolean): CSSProperties {
+  return {
+    padding: isMobile ? "16px" : "18px 22px",
+    display: "flex",
+    justifyContent: "flex-end",
+    gap: "12px",
+    flexDirection: isMobile ? "column-reverse" : "row",
+    borderTop: "1px solid var(--x-color-line-soft)",
+  };
+}
 
-const secondaryButtonStyle: CSSProperties = {
-  padding: "12px 18px",
-  borderRadius: "999px",
-  border: "1px solid var(--x-color-line-soft)",
-  background: "var(--x-color-panel)",
-  color: "var(--x-color-ink)",
-  fontWeight: 700,
-  cursor: "pointer",
-};
+function secondaryButtonStyle(isMobile: boolean): CSSProperties {
+  return {
+    padding: "12px 18px",
+    borderRadius: "999px",
+    border: "1px solid var(--x-color-line-soft)",
+    background: "var(--x-color-panel)",
+    color: "var(--x-color-ink)",
+    fontWeight: 700,
+    cursor: "pointer",
+    width: isMobile ? "100%" : undefined,
+  };
+}
 
-const primaryButtonStyle: CSSProperties = {
-  padding: "12px 18px",
-  borderRadius: "999px",
-  border: "none",
-  background: "linear-gradient(135deg, var(--x-color-accent), var(--x-color-info))",
-  color: "#fff",
-  fontWeight: 700,
-  cursor: "pointer",
-};
+function primaryButtonStyle(isMobile: boolean): CSSProperties {
+  return {
+    padding: "12px 18px",
+    borderRadius: "999px",
+    border: "none",
+    background: "linear-gradient(135deg, var(--x-color-accent), var(--x-color-info))",
+    color: "#fff",
+    fontWeight: 700,
+    cursor: "pointer",
+    width: isMobile ? "100%" : undefined,
+  };
+}
 
-const closeButtonStyle: CSSProperties = {
-  ...secondaryButtonStyle,
-  padding: "10px 14px",
-};
+function closeButtonStyle(isMobile: boolean): CSSProperties {
+  return {
+    ...secondaryButtonStyle(isMobile),
+    padding: "10px 14px",
+    width: isMobile ? "100%" : undefined,
+  };
+}

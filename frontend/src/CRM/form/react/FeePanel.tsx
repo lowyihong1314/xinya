@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import type { CSSProperties } from "react";
 import heic2any from "heic2any";
 
+import { useUserState } from "../../../app/UserState";
 import { CachedImage } from "../../../components/CachedMedia";
 import { uploadFeeImage } from "./api";
 
@@ -40,6 +41,7 @@ type FeeInlineEditorProps = {
   buttonLabel: string;
   onSave: (payload: FeeDraft) => void;
   onDelete?: () => void;
+  isMobile: boolean;
   readOnly?: boolean;
   resetOnSave?: boolean;
   showCategory?: boolean;
@@ -158,13 +160,14 @@ export function FeePanel({
   categoryPlaceholder = "例如：儿童 / 成人",
   descriptionPlaceholder = "收费说明",
 }: FeePanelProps) {
+  const { isMobile } = useUserState();
   const resolvedLinkHref = linkHref || (formId ? `/api/form/pay_register/${formId}` : "");
 
   return (
-    <div style={sectionBodyStyle}>
+    <div style={sectionBodyStyle(isMobile)}>
       {resolvedLinkHref ? (
-        <div style={sectionInlineActionsStyle}>
-          <a href={resolvedLinkHref} target="_blank" rel="noreferrer" style={smallLinkButtonStyle}>
+        <div style={sectionInlineActionsStyle(isMobile)}>
+          <a href={resolvedLinkHref} target="_blank" rel="noreferrer" style={{ ...smallLinkButtonStyle, ...fillButtonStyle(isMobile) }}>
             {linkLabel}
           </a>
         </div>
@@ -173,6 +176,7 @@ export function FeePanel({
       {!readOnly ? (
         <FeeInlineEditor
           buttonLabel={addButtonLabel}
+          isMobile={isMobile}
           resetOnSave
           onSave={(payload) => onAdd(payload)}
           showCategory={showCategory}
@@ -196,6 +200,7 @@ export function FeePanel({
                 key={String(feeKey)}
                 initialValue={fee}
                 buttonLabel={saveButtonLabel}
+                isMobile={isMobile}
                 onSave={(payload) => onEdit(feeKey, payload)}
                 onDelete={() => onDelete(feeKey)}
                 readOnly={readOnly}
@@ -221,6 +226,7 @@ function FeeInlineEditor({
   buttonLabel,
   onSave,
   onDelete,
+  isMobile,
   readOnly = false,
   resetOnSave = false,
   showCategory = true,
@@ -273,13 +279,13 @@ function FeeInlineEditor({
   }
 
   return (
-    <div style={feeEditorCardStyle}>
-      <div style={feeEditorGridStyle}>
+    <div style={feeEditorCardStyle(isMobile)}>
+      <div style={feeEditorGridStyle(isMobile)}>
         {showCategory ? (
           <label style={fieldStyle}>
             <span style={fieldLabelStyle}>{categoryLabel}</span>
             <input
-              style={compactInputStyle}
+              style={compactInputStyle(isMobile)}
               value={draft.category}
               placeholder={categoryPlaceholder}
               disabled={readOnly}
@@ -291,7 +297,7 @@ function FeeInlineEditor({
         <label style={fieldStyle}>
           <span style={fieldLabelStyle}>金额</span>
           <input
-            style={compactInputStyle}
+            style={compactInputStyle(isMobile)}
             value={draft.amount}
             placeholder="金额"
             disabled={readOnly}
@@ -301,7 +307,7 @@ function FeeInlineEditor({
         <label style={fieldStyle}>
           <span style={fieldLabelStyle}>年龄起</span>
           <input
-            style={compactInputStyle}
+            style={compactInputStyle(isMobile)}
             value={draft.age_range_from || ""}
             placeholder="可空"
             disabled={readOnly}
@@ -311,7 +317,7 @@ function FeeInlineEditor({
         <label style={fieldStyle}>
           <span style={fieldLabelStyle}>年龄止</span>
           <input
-            style={compactInputStyle}
+            style={compactInputStyle(isMobile)}
             value={draft.age_range_to || ""}
             placeholder="可空"
             disabled={readOnly}
@@ -335,7 +341,7 @@ function FeeInlineEditor({
       {enableImageUpload ? (
         <div style={feeImageSectionStyle}>
           {uploadError ? <div style={errorBannerStyle}>{uploadError}</div> : null}
-          <div style={feeImageControlStyle}>
+          <div style={feeImageControlStyle(isMobile)}>
             <span style={fieldLabelStyle}>{imageLabel}</span>
             <input
               ref={fileInputRef}
@@ -356,16 +362,16 @@ function FeeInlineEditor({
         </div>
       ) : null}
 
-      <div style={feeActionRowStyle}>
+      <div style={feeActionRowStyle(isMobile)}>
         {readOnly ? (
           <span style={inlineNoteStyle}>只读</span>
         ) : (
           <>
-            <button type="button" style={smallSecondaryButtonStyle} onClick={handleSave}>
+            <button type="button" style={{ ...smallSecondaryButtonStyle, ...fillButtonStyle(isMobile) }} onClick={handleSave}>
               {buttonLabel}
             </button>
             {onDelete ? (
-              <button type="button" style={smallDangerButtonStyle} onClick={onDelete}>
+              <button type="button" style={{ ...smallDangerButtonStyle, ...fillButtonStyle(isMobile) }} onClick={onDelete}>
                 删除
               </button>
             ) : null}
@@ -376,8 +382,14 @@ function FeeInlineEditor({
   );
 }
 
-const sectionBodyStyle: CSSProperties = { display: "grid", gap: "12px" };
-const sectionInlineActionsStyle: CSSProperties = { display: "flex", justifyContent: "flex-end", gap: "10px", flexWrap: "wrap" };
+function sectionBodyStyle(isMobile: boolean): CSSProperties {
+  return { display: "grid", gap: isMobile ? "10px" : "12px" };
+}
+
+function sectionInlineActionsStyle(isMobile: boolean): CSSProperties {
+  return { display: "flex", justifyContent: isMobile ? "flex-start" : "flex-end", gap: "10px", flexWrap: "wrap" };
+}
+
 const stackStyle: CSSProperties = { display: "grid", gap: "10px" };
 const placeholderStyle: CSSProperties = { padding: "18px", borderRadius: "var(--x-radius-md)", background: "var(--x-color-panel-strong)", color: "var(--x-color-ink-muted)" };
 const linkButtonStyle: CSSProperties = { padding: "12px 18px", borderRadius: "999px", border: "1px solid var(--x-color-line-soft)", background: "var(--x-color-panel)", color: "var(--x-color-ink)", fontWeight: 700, cursor: "pointer", textDecoration: "none" };
@@ -389,13 +401,63 @@ const inlineNoteStyle: CSSProperties = { color: "var(--x-color-ink-muted)", font
 const fieldStyle: CSSProperties = { display: "grid", gap: "8px" };
 const fieldLabelStyle: CSSProperties = { fontSize: "13px", fontWeight: 700, color: "var(--x-color-ink-muted)" };
 const inputStyle: CSSProperties = { width: "100%", padding: "12px 14px", borderRadius: "12px", border: "1px solid var(--x-color-line-soft)", background: "var(--x-color-panel-strong)", color: "var(--x-color-ink)", boxSizing: "border-box" };
-const compactInputStyle: CSSProperties = { minWidth: "120px", padding: "10px 12px", borderRadius: "12px", border: "1px solid var(--x-color-line-soft)", background: "var(--x-color-panel-strong)", color: "var(--x-color-ink)" };
-const feeEditorCardStyle: CSSProperties = { display: "grid", gap: "14px", padding: "14px", borderRadius: "16px", border: "1px solid var(--x-color-line-soft)", background: "var(--x-color-panel-strong)" };
-const feeEditorGridStyle: CSSProperties = { display: "grid", gap: "12px", gridTemplateColumns: "repeat(auto-fit, minmax(150px, 1fr))" };
+function compactInputStyle(isMobile: boolean): CSSProperties {
+  return {
+    minWidth: isMobile ? "0" : "120px",
+    width: "100%",
+    padding: "10px 12px",
+    borderRadius: "12px",
+    border: "1px solid var(--x-color-line-soft)",
+    background: "var(--x-color-panel-strong)",
+    color: "var(--x-color-ink)",
+    boxSizing: "border-box",
+  };
+}
+
+function feeEditorCardStyle(isMobile: boolean): CSSProperties {
+  return {
+    display: "grid",
+    gap: isMobile ? "12px" : "14px",
+    padding: isMobile ? "12px" : "14px",
+    borderRadius: isMobile ? "14px" : "16px",
+    border: "1px solid var(--x-color-line-soft)",
+    background: "var(--x-color-panel-strong)",
+  };
+}
+
+function feeEditorGridStyle(isMobile: boolean): CSSProperties {
+  return {
+    display: "grid",
+    gap: "12px",
+    gridTemplateColumns: isMobile ? "1fr" : "repeat(auto-fit, minmax(150px, 1fr))",
+  };
+}
+
 const feeTextareaStyle: CSSProperties = { ...inputStyle, minHeight: "88px", resize: "vertical" };
 const feeImageSectionStyle: CSSProperties = { display: "grid", gap: "10px" };
-const feeImageControlStyle: CSSProperties = { display: "flex", alignItems: "center", gap: "10px", flexWrap: "wrap" };
+function feeImageControlStyle(isMobile: boolean): CSSProperties {
+  return {
+    display: "flex",
+    alignItems: isMobile ? "stretch" : "center",
+    gap: "10px",
+    flexWrap: "wrap",
+    flexDirection: isMobile ? "column" : "row",
+  };
+}
+
 const feeImagePreviewStyle: CSSProperties = { display: "inline-flex", width: "fit-content", textDecoration: "none" };
 const feeImageStyle: CSSProperties = { display: "block", width: "100%", maxWidth: "220px", maxHeight: "160px", objectFit: "cover", borderRadius: "14px", border: "1px solid var(--x-color-line-soft)", background: "var(--x-color-panel)" };
 const feeImageEmptyStyle: CSSProperties = { padding: "18px", borderRadius: "14px", border: "1px dashed var(--x-color-line-soft)", color: "var(--x-color-ink-muted)", fontSize: "13px", background: "var(--x-color-panel)" };
-const feeActionRowStyle: CSSProperties = { display: "flex", justifyContent: "flex-end", gap: "8px", flexWrap: "wrap" };
+function feeActionRowStyle(isMobile: boolean): CSSProperties {
+  return {
+    display: "flex",
+    justifyContent: isMobile ? "flex-start" : "flex-end",
+    gap: "8px",
+    flexWrap: "wrap",
+    flexDirection: isMobile ? "column" : "row",
+  };
+}
+
+function fillButtonStyle(isMobile: boolean): CSSProperties {
+  return isMobile ? { width: "100%", boxSizing: "border-box", textAlign: "center" } : {};
+}

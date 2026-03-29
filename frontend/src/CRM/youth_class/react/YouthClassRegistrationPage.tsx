@@ -289,7 +289,7 @@ export function YouthClassRegistrationPage() {
 
   if (!canReadYouthClass) {
     return (
-      <div style={pageStyle}>
+      <div style={pageStyle(isMobile)}>
         <section style={panelStyle(isMobile)}>
           <div style={errorStyle}>需要 `youth_class_read` 或 `youth_class_edit` 权限才能查看青少年班后台。</div>
         </section>
@@ -298,13 +298,13 @@ export function YouthClassRegistrationPage() {
   }
 
   return (
-    <div style={pageStyle}>
+    <div style={pageStyle(isMobile)}>
       {publicPageOpen ? (
         <section style={panelStyle(isMobile)}>
           <div style={sectionTitleRowStyle(isMobile)}>
             <div>
               <div style={eyebrowStyle}>CRM / 报名管理</div>
-              <h2 style={sectionTitleStyle()}>公开报名页</h2>
+              <h2 style={sectionTitleStyle(isMobile)}>公开报名页</h2>
             </div>
             <button type="button" style={secondaryButtonStyle} onClick={() => setPublicPageOpen(false)}>
               返回
@@ -321,18 +321,18 @@ export function YouthClassRegistrationPage() {
           <div style={panelStyle(isMobile)}>
             <div style={eyebrowStyle}>CRM / 报名管理</div>
             <h1 style={titleStyle(isMobile)}>青少年 & 青年佛学班</h1>
-            <p style={descStyle}>这里可以维护按年龄分段的报名费率、查看每位学员的付款入口、追踪付款截图并完成审核。</p>
+            <p style={descStyle(isMobile)}>这里可以维护按年龄分段的报名费率、查看每位学员的付款入口、追踪付款截图并完成审核。</p>
             <div style={statsRowStyle(isMobile)}>
-              <MetricCard label="报名总数" value={String(entries.length)} />
-              <MetricCard label="已付款" value={String(stats.paid)} />
-              <MetricCard label="处理中" value={String(stats.processing)} />
-              <MetricCard label="未提交付款" value={String(stats.noPayment)} />
+              <MetricCard label="报名总数" value={String(entries.length)} isMobile={isMobile} />
+              <MetricCard label="已付款" value={String(stats.paid)} isMobile={isMobile} />
+              <MetricCard label="处理中" value={String(stats.processing)} isMobile={isMobile} />
+              <MetricCard label="未提交付款" value={String(stats.noPayment)} isMobile={isMobile} />
             </div>
           </div>
 
           <div style={panelStyle(isMobile)}>
             <div style={sectionTitleRowStyle(isMobile)}>
-              <h2 style={sectionTitleStyle()}>公开报名页</h2>
+              <h2 style={sectionTitleStyle(isMobile)}>公开报名页</h2>
               <button type="button" style={secondaryButtonStyle} onClick={() => setPublicPageOpen(true)}>
                 打开公开报名页
               </button>
@@ -340,14 +340,14 @@ export function YouthClassRegistrationPage() {
             <div style={qrWrapStyle(isMobile)}>
               {qrDataUrl ? <CachedImage src={qrDataUrl} alt="报名二维码" style={qrImageStyle(isMobile)} /> : <div style={emptyStyle}>生成二维码中…</div>}
             </div>
-            <div style={urlBoxStyle}>{PUBLIC_URL}</div>
+            <div style={urlBoxStyle(isMobile)}>{PUBLIC_URL}</div>
           </div>
         </section>
       )}
 
       <section style={panelStyle(isMobile)}>
         <div style={sectionTitleRowStyle(isMobile)}>
-          <h2 style={sectionTitleStyle()}>年龄报名费率</h2>
+          <h2 style={sectionTitleStyle(isMobile)}>年龄报名费率</h2>
           <button type="button" style={refreshButtonStyle} onClick={() => void loadData()}>刷新</button>
         </div>
         {notice ? (
@@ -370,8 +370,8 @@ export function YouthClassRegistrationPage() {
           imageLabel="该费率付款二维码 / 付款资料"
           descriptionPlaceholder="例如：含教材 / 青年班报名费"
         />
-        <div style={settingsFooterStyle}>
-          <div style={amountHintStyle}>
+        <div style={settingsFooterStyle(isMobile)}>
+          <div style={amountHintStyle(isMobile)}>
             {settings.fees?.length
               ? `已配置 ${settings.fees.length} 条费率`
               : "尚未配置年龄费率"}
@@ -388,7 +388,7 @@ export function YouthClassRegistrationPage() {
 
       <section style={panelStyle(isMobile)}>
         <div style={sectionTitleRowStyle(isMobile)}>
-          <h2 style={sectionTitleStyle()}>学员付款工作台</h2>
+          <h2 style={sectionTitleStyle(isMobile)}>学员付款工作台</h2>
           <div style={mutedStyle}>每位学员都可以打开或复制专属付款链接，必要时重新发给他付款。</div>
         </div>
         {loading ? <div style={emptyStyle}>加载中…</div> : null}
@@ -396,10 +396,10 @@ export function YouthClassRegistrationPage() {
         {!loading && entries.length ? (
           <div style={entryListStyle}>
             {entries.map((entry) => (
-              <article key={entry.id} style={entryCardStyle}>
+              <article key={entry.id} style={entryCardStyle(isMobile)}>
                 <div style={entryHeaderStyle(isMobile)}>
                   <div style={entryTitleWrapStyle}>
-                    <div style={entryNameStyle}>{entry.chinese_name || "-"}</div>
+                    <div style={entryNameStyle(isMobile)}>{entry.chinese_name || "-"}</div>
                     <div style={entrySubStyle}>
                       {entry.english_name || "-"} · {entry.submitted_at || "-"}
                     </div>
@@ -408,12 +408,22 @@ export function YouthClassRegistrationPage() {
                     <span style={statusChipStyle(entry.status === "paid" ? "success" : entry.status === "reject" ? "danger" : "info")}>
                       {registrationStatusLabel(entry.status)}
                     </span>
-                    <button type="button" style={secondaryButtonStyle} onClick={() => entry.payment_url && window.open(entry.payment_url, "_blank", "noopener,noreferrer")}>
-                      打开付款页
-                    </button>
-                    <button type="button" style={secondaryButtonStyle} onClick={() => void handleCopyLink(entry.payment_url)}>
-                      复制付款链接
-                    </button>
+                    <div style={headerButtonGroupStyle(isMobile)}>
+                      <button
+                        type="button"
+                        style={{ ...secondaryButtonStyle, ...fillButtonStyle(isMobile) }}
+                        onClick={() => entry.payment_url && window.open(entry.payment_url, "_blank", "noopener,noreferrer")}
+                      >
+                        打开付款页
+                      </button>
+                      <button
+                        type="button"
+                        style={{ ...secondaryButtonStyle, ...fillButtonStyle(isMobile) }}
+                        onClick={() => void handleCopyLink(entry.payment_url)}
+                      >
+                        复制付款链接
+                      </button>
+                    </div>
                   </div>
                 </div>
 
@@ -454,16 +464,31 @@ export function YouthClassRegistrationPage() {
                             ) : (
                               <span style={mutedStyle}>没有截图</span>
                             )}
-                            <div style={paymentButtonGroupStyle()}>
+                            <div style={paymentButtonGroupStyle(isMobile)}>
                               {canEditYouthClass ? (
                                 <>
-                                  <button type="button" style={miniButtonStyle} disabled={isUpdating} onClick={() => void handlePaymentStatus(payment.id, "process")}>
+                                  <button
+                                    type="button"
+                                    style={{ ...miniButtonStyle, ...fillButtonStyle(isMobile) }}
+                                    disabled={isUpdating}
+                                    onClick={() => void handlePaymentStatus(payment.id, "process")}
+                                  >
                                     标记处理中
                                   </button>
-                                  <button type="button" style={miniSuccessButtonStyle} disabled={isUpdating} onClick={() => void handlePaymentStatus(payment.id, "checked")}>
+                                  <button
+                                    type="button"
+                                    style={{ ...miniSuccessButtonStyle, ...fillButtonStyle(isMobile) }}
+                                    disabled={isUpdating}
+                                    onClick={() => void handlePaymentStatus(payment.id, "checked")}
+                                  >
                                     审核通过
                                   </button>
-                                  <button type="button" style={miniDangerButtonStyle} disabled={isUpdating} onClick={() => void handlePaymentStatus(payment.id, "fail")}>
+                                  <button
+                                    type="button"
+                                    style={{ ...miniDangerButtonStyle, ...fillButtonStyle(isMobile) }}
+                                    disabled={isUpdating}
+                                    onClick={() => void handlePaymentStatus(payment.id, "fail")}
+                                  >
                                     退回付款
                                   </button>
                                 </>
@@ -488,11 +513,11 @@ export function YouthClassRegistrationPage() {
   );
 }
 
-function MetricCard({ label, value }: { label: string; value: string }) {
+function MetricCard({ label, value, isMobile }: { label: string; value: string; isMobile: boolean }) {
   return (
-    <div style={metricCardStyle}>
+    <div style={metricCardStyle(isMobile)}>
       <div style={metricLabelStyle}>{label}</div>
-      <div style={metricValueStyle}>{value}</div>
+      <div style={metricValueStyle(isMobile)}>{value}</div>
     </div>
   );
 }
@@ -506,11 +531,27 @@ function Fact({ label, value }: { label: string; value: string }) {
   );
 }
 
-const pageStyle: CSSProperties = { display: "grid", gap: "20px" };
+function pageStyle(isMobile: boolean): CSSProperties {
+  return { display: "grid", gap: isMobile ? "14px" : "20px" };
+}
+
 const eyebrowStyle: CSSProperties = { fontSize: "12px", letterSpacing: "0.14em", textTransform: "uppercase", color: "var(--x-color-ink-muted)" };
-const descStyle: CSSProperties = { margin: 0, lineHeight: 1.7, color: "var(--x-color-ink-muted)" };
+function descStyle(isMobile: boolean): CSSProperties {
+  return { margin: 0, lineHeight: isMobile ? 1.6 : 1.7, color: "var(--x-color-ink-muted)", fontSize: isMobile ? "13px" : "14px" };
+}
+
 const linkStyle: CSSProperties = { color: "var(--x-color-accent-strong)", textDecoration: "none", fontWeight: 700 };
-const urlBoxStyle: CSSProperties = { padding: "12px 14px", borderRadius: "14px", background: "var(--x-color-panel-strong)", border: "1px solid var(--x-color-line-soft)", wordBreak: "break-all", fontSize: "13px" };
+function urlBoxStyle(isMobile: boolean): CSSProperties {
+  return {
+    padding: isMobile ? "10px 12px" : "12px 14px",
+    borderRadius: isMobile ? "12px" : "14px",
+    background: "var(--x-color-panel-strong)",
+    border: "1px solid var(--x-color-line-soft)",
+    wordBreak: "break-all",
+    fontSize: isMobile ? "12px" : "13px",
+  };
+}
+
 const refreshButtonStyle: CSSProperties = { padding: "10px 16px", borderRadius: "999px", border: "1px solid var(--x-color-line-soft)", cursor: "pointer", background: "var(--x-color-panel-strong)", fontWeight: 700 };
 const errorStyle: CSSProperties = { padding: "14px 16px", borderRadius: "14px", background: "#fff1f2", border: "1px solid #fecdd3", color: "#b42318" };
 const successStyle: CSSProperties = { padding: "14px 16px", borderRadius: "14px", background: "#ecfdf3", border: "1px solid #abefc6", color: "#027a48" };
@@ -527,42 +568,79 @@ const mutedStyle: CSSProperties = { fontSize: "12px", color: "var(--x-color-ink-
 const feeImagePreviewStyle: CSSProperties = { display: "inline-flex", alignItems: "center", justifyContent: "center", width: "100%", maxWidth: "280px", minHeight: "180px", borderRadius: "18px", border: "1px solid var(--x-color-line-soft)", background: "white", overflow: "hidden" };
 const feeImageStyle: CSSProperties = { width: "100%", height: "100%", objectFit: "cover" };
 const emptyPreviewStyle: CSSProperties = { minHeight: "180px", width: "100%", maxWidth: "280px", display: "grid", placeItems: "center", borderRadius: "18px", border: "1px dashed var(--x-color-line-soft)", color: "var(--x-color-ink-muted)" };
-const amountHintStyle: CSSProperties = { fontSize: "15px", fontWeight: 700, color: "var(--x-color-accent-strong)" };
-const settingsFooterStyle: CSSProperties = { display: "flex", justifyContent: "space-between", alignItems: "center", gap: "14px", flexWrap: "wrap" };
+function amountHintStyle(isMobile: boolean): CSSProperties {
+  return { fontSize: isMobile ? "14px" : "15px", fontWeight: 700, color: "var(--x-color-accent-strong)" };
+}
+
+function settingsFooterStyle(isMobile: boolean): CSSProperties {
+  return {
+    display: "flex",
+    justifyContent: "space-between",
+    alignItems: isMobile ? "stretch" : "center",
+    gap: "14px",
+    flexWrap: "wrap",
+    flexDirection: isMobile ? "column" : "row",
+  };
+}
+
 const paymentListStyle: CSSProperties = { display: "grid", gap: "12px" };
 const entryListStyle: CSSProperties = { display: "grid", gap: "16px" };
 const factStyle: CSSProperties = { padding: "12px 14px", borderRadius: "14px", background: "var(--x-color-panel-strong)", border: "1px solid var(--x-color-line-soft)", display: "grid", gap: "4px" };
 const factLabelStyle: CSSProperties = { fontSize: "11px", letterSpacing: "0.08em", textTransform: "uppercase", color: "var(--x-color-ink-muted)" };
 const factValueStyle: CSSProperties = { fontSize: "14px", lineHeight: 1.55, wordBreak: "break-word", fontWeight: 700 };
-const entryCardStyle: CSSProperties = { padding: "18px", borderRadius: "22px", border: "1px solid var(--x-color-line-soft)", background: "linear-gradient(180deg, var(--x-color-panel), var(--x-color-panel-strong))", display: "grid", gap: "14px", boxShadow: "0 18px 36px var(--x-color-shadow-soft)" };
+function entryCardStyle(isMobile: boolean): CSSProperties {
+  return {
+    padding: isMobile ? "14px" : "18px",
+    borderRadius: isMobile ? "18px" : "22px",
+    border: "1px solid var(--x-color-line-soft)",
+    background: "linear-gradient(180deg, var(--x-color-panel), var(--x-color-panel-strong))",
+    display: "grid",
+    gap: isMobile ? "12px" : "14px",
+    boxShadow: "0 18px 36px var(--x-color-shadow-soft)",
+  };
+}
+
 const entryTitleWrapStyle: CSSProperties = { display: "grid", gap: "6px" };
-const entryNameStyle: CSSProperties = { fontSize: "18px", fontWeight: 800, lineHeight: 1.35 };
+function entryNameStyle(isMobile: boolean): CSSProperties {
+  return { fontSize: isMobile ? "16px" : "18px", fontWeight: 800, lineHeight: 1.35 };
+}
+
 const entrySubStyle: CSSProperties = { fontSize: "13px", color: "var(--x-color-ink-muted)" };
-const addressStyle: CSSProperties = { padding: "14px 16px", borderRadius: "16px", background: "rgba(255,255,255,0.78)", border: "1px solid var(--x-color-line-soft)", lineHeight: 1.7 };
-const proofLinkStyle: CSSProperties = { color: "var(--x-color-accent-strong)", textDecoration: "none", fontWeight: 700 };
+const addressStyle: CSSProperties = { padding: "14px 16px", borderRadius: "16px", background: "rgba(255,255,255,0.78)", border: "1px solid var(--x-color-line-soft)", lineHeight: 1.7, wordBreak: "break-word" };
+const proofLinkStyle: CSSProperties = { color: "var(--x-color-accent-strong)", textDecoration: "none", fontWeight: 700, wordBreak: "break-all" };
 const emptyInlineStyle: CSSProperties = { padding: "14px 16px", borderRadius: "16px", border: "1px dashed var(--x-color-line-soft)", color: "var(--x-color-ink-muted)" };
-const metricCardStyle: CSSProperties = { padding: "16px", borderRadius: "18px", background: "var(--x-color-panel-strong)", border: "1px solid var(--x-color-line-soft)" };
+function metricCardStyle(isMobile: boolean): CSSProperties {
+  return {
+    padding: isMobile ? "12px" : "16px",
+    borderRadius: isMobile ? "15px" : "18px",
+    background: "var(--x-color-panel-strong)",
+    border: "1px solid var(--x-color-line-soft)",
+  };
+}
+
 const metricLabelStyle: CSSProperties = { fontSize: "12px", color: "var(--x-color-ink-muted)", marginBottom: "8px" };
-const metricValueStyle: CSSProperties = { fontSize: "30px", fontWeight: 900 };
+function metricValueStyle(isMobile: boolean): CSSProperties {
+  return { fontSize: isMobile ? "24px" : "30px", fontWeight: 900 };
+}
 
 function heroStyle(isMobile: boolean): CSSProperties {
   return {
     display: "grid",
     gridTemplateColumns: isMobile ? "1fr" : "minmax(0, 1.15fr) minmax(320px, 0.85fr)",
-    gap: "18px",
+    gap: isMobile ? "14px" : "18px",
     alignItems: "start",
   };
 }
 
 function panelStyle(isMobile: boolean): CSSProperties {
   return {
-    padding: isMobile ? "16px" : "22px",
+    padding: isMobile ? "14px" : "22px",
     borderRadius: isMobile ? "18px" : "22px",
     background: "var(--x-color-panel)",
     border: "1px solid var(--x-color-line-soft)",
     boxShadow: "0 18px 36px var(--x-color-shadow-soft)",
     display: "grid",
-    gap: "16px",
+    gap: isMobile ? "14px" : "16px",
   };
 }
 
@@ -578,19 +656,19 @@ function iframeStyle(isMobile: boolean): CSSProperties {
 }
 
 function titleStyle(isMobile: boolean): CSSProperties {
-  return { margin: "6px 0 10px", fontSize: isMobile ? "24px" : "30px", lineHeight: 1.15 };
+  return { margin: "6px 0 10px", fontSize: isMobile ? "22px" : "30px", lineHeight: 1.15 };
 }
 
 function statsRowStyle(isMobile: boolean): CSSProperties {
-  return { display: "grid", gridTemplateColumns: isMobile ? "repeat(2, minmax(0, 1fr))" : "repeat(4, minmax(0, 1fr))", gap: "12px", marginTop: "8px" };
+  return { display: "grid", gridTemplateColumns: isMobile ? "repeat(2, minmax(0, 1fr))" : "repeat(4, minmax(0, 1fr))", gap: isMobile ? "10px" : "12px", marginTop: "8px" };
 }
 
 function sectionTitleRowStyle(isMobile: boolean): CSSProperties {
   return { display: "flex", justifyContent: "space-between", alignItems: isMobile ? "flex-start" : "center", gap: "12px", flexWrap: "wrap", flexDirection: isMobile ? "column" : "row" };
 }
 
-function sectionTitleStyle(): CSSProperties {
-  return { margin: 0, fontSize: "22px" };
+function sectionTitleStyle(isMobile: boolean): CSSProperties {
+  return { margin: 0, fontSize: isMobile ? "18px" : "22px" };
 }
 
 function qrWrapStyle(isMobile: boolean): CSSProperties {
@@ -618,7 +696,24 @@ function entryHeaderStyle(isMobile: boolean): CSSProperties {
 }
 
 function headerActionWrapStyle(isMobile: boolean): CSSProperties {
-  return { display: "flex", alignItems: "center", gap: "10px", flexWrap: "wrap", justifyContent: isMobile ? "flex-start" : "flex-end" };
+  return {
+    display: "flex",
+    alignItems: isMobile ? "stretch" : "center",
+    gap: isMobile ? "8px" : "10px",
+    flexWrap: "wrap",
+    justifyContent: isMobile ? "flex-start" : "flex-end",
+    flexDirection: isMobile ? "column" : "row",
+    width: isMobile ? "100%" : undefined,
+  };
+}
+
+function headerButtonGroupStyle(isMobile: boolean): CSSProperties {
+  return {
+    display: "grid",
+    gridTemplateColumns: isMobile ? "1fr" : "repeat(2, max-content)",
+    gap: "8px",
+    width: isMobile ? "100%" : "auto",
+  };
 }
 
 function entryInfoGridStyle(isMobile: boolean): CSSProperties {
@@ -627,8 +722,8 @@ function entryInfoGridStyle(isMobile: boolean): CSSProperties {
 
 function paymentRowStyle(isMobile: boolean, latest: boolean): CSSProperties {
   return {
-    padding: "14px",
-    borderRadius: "18px",
+    padding: isMobile ? "12px" : "14px",
+    borderRadius: isMobile ? "16px" : "18px",
     border: latest ? "1px solid rgba(15,118,110,0.22)" : "1px solid var(--x-color-line-soft)",
     background: latest ? "rgba(240,253,250,0.72)" : "rgba(255,255,255,0.82)",
     display: "grid",
@@ -637,15 +732,24 @@ function paymentRowStyle(isMobile: boolean, latest: boolean): CSSProperties {
 }
 
 function paymentMetaGridStyle(isMobile: boolean): CSSProperties {
-  return { display: "grid", gridTemplateColumns: isMobile ? "repeat(2, minmax(0, 1fr))" : "repeat(4, minmax(0, 1fr))", gap: "10px" };
+  return { display: "grid", gridTemplateColumns: isMobile ? "1fr" : "repeat(4, minmax(0, 1fr))", gap: "10px" };
 }
 
 function paymentActionBarStyle(isMobile: boolean): CSSProperties {
   return { display: "flex", justifyContent: "space-between", alignItems: isMobile ? "flex-start" : "center", gap: "12px", flexWrap: "wrap", flexDirection: isMobile ? "column" : "row" };
 }
 
-function paymentButtonGroupStyle(): CSSProperties {
-  return { display: "flex", gap: "8px", flexWrap: "wrap" };
+function paymentButtonGroupStyle(isMobile: boolean): CSSProperties {
+  return {
+    display: "grid",
+    gridTemplateColumns: isMobile ? "1fr" : "repeat(3, max-content)",
+    gap: "8px",
+    width: isMobile ? "100%" : "auto",
+  };
+}
+
+function fillButtonStyle(isMobile: boolean): CSSProperties {
+  return isMobile ? { width: "100%", boxSizing: "border-box", textAlign: "center" } : {};
 }
 
 function statusChipStyle(tone: "success" | "danger" | "info"): CSSProperties {

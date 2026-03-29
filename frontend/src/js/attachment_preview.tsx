@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useState } from "react";
 import { createRoot } from "react-dom/client";
 import heic2any from "heic2any";
 
@@ -185,6 +185,7 @@ function AttachmentPreviewModal({
   attachment: AttachmentRecord;
   onClose: () => void;
 }) {
+  const isMobile = typeof window !== "undefined" ? window.innerWidth <= 768 : false;
   const fileName = attachment.file_name || attachment.file_path || "附件预览";
   const fileUrl = getFileUrl(attachment);
   const [preview, setPreview] = useState<PreviewState>({
@@ -243,31 +244,27 @@ function AttachmentPreviewModal({
 
   const canToggleFit = preview.mode === "image" || preview.mode === "video";
 
-  const statusCopy = useMemo(() => {
-    if (preview.mode === "loading") {
-      return "附件载入中";
-    }
-    if (preview.mode === "error") {
-      return "预览失败";
-    }
-    if (preview.mode === "unsupported") {
-      return "暂不支持在线预览";
-    }
-    return "在线预览";
-  }, [preview.mode]);
+  const statusCopy =
+    preview.mode === "loading"
+      ? "附件载入中"
+      : preview.mode === "error"
+        ? "预览失败"
+        : preview.mode === "unsupported"
+          ? "暂不支持在线预览"
+          : "在线预览";
 
   return (
-    <div className="attachment-preview" style={overlayStyle} onClick={onClose}>
+    <div className="attachment-preview" style={overlayStyle(isMobile)} onClick={onClose}>
       <style>{`@keyframes xinya-preview-spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }`}</style>
       <div className="attachment-preview__shell" style={shellStyle} onClick={(event) => event.stopPropagation()}>
-        <div className="attachment-preview__panel" style={panelStyle}>
-          <header className="attachment-preview__header" style={headerStyle}>
-            <div className="attachment-preview__header-copy" style={headerCopyStyle}>
-              <div className="attachment-preview__badge" style={badgeStyle}>
+        <div className="attachment-preview__panel" style={panelStyle(isMobile)}>
+          <header className="attachment-preview__header" style={headerStyle(isMobile)}>
+            <div className="attachment-preview__header-copy" style={headerCopyStyle(isMobile)}>
+              <div className="attachment-preview__badge" style={badgeStyle(isMobile)}>
                 {preview.extLabel}
               </div>
               <div className="attachment-preview__title-wrap" style={titleWrapStyle}>
-                <div className="attachment-preview__title" style={titleStyle}>
+                <div className="attachment-preview__title" style={titleStyle(isMobile)}>
                   {fileName}
                 </div>
                 <div className="attachment-preview__subtitle" style={subtitleStyle}>
@@ -275,71 +272,45 @@ function AttachmentPreviewModal({
                 </div>
               </div>
             </div>
-            <div className="attachment-preview__actions" style={actionRowStyle}>
+            <div className="attachment-preview__actions" style={actionRowStyle(isMobile)}>
               {canToggleFit ? (
                 <button
                   className="attachment-preview__button"
                   type="button"
-                  style={secondaryButtonStyle}
+                  style={{ ...secondaryButtonStyle, ...actionButtonStyle(isMobile) }}
                   onClick={() => setFitMode((current) => (current === "contain" ? "cover" : "contain"))}
                 >
                   {fitMode === "contain" ? "铺满" : "适应"}
                 </button>
               ) : null}
               <a
-                className="attachment-preview__button attachment-preview__button--link"
-                href={preview.objectUrl || fileUrl}
-                target="_blank"
-                rel="noreferrer"
-                style={secondaryButtonStyle}
-              >
-                新窗口打开
-              </a>
-              <a
                 className="attachment-preview__button attachment-preview__button--download"
                 href={preview.objectUrl || fileUrl}
                 download={fileName}
-                style={secondaryButtonStyle}
+                style={{ ...secondaryButtonStyle, ...actionButtonStyle(isMobile) }}
               >
                 下载
               </a>
-              <button className="attachment-preview__button attachment-preview__button--close" type="button" style={primaryButtonStyle} onClick={onClose}>
+              <button
+                className="attachment-preview__button attachment-preview__button--close"
+                type="button"
+                style={{ ...primaryButtonStyle, ...actionButtonStyle(isMobile) }}
+                onClick={onClose}
+              >
                 关闭
               </button>
             </div>
           </header>
 
-          <div className="attachment-preview__body" style={bodyStyle}>
-            <div className="attachment-preview__viewer" style={viewerStyle}>
-              <PreviewSurface preview={preview} fileName={fileName} fitMode={fitMode} />
+          <div className="attachment-preview__body" style={bodyStyle(isMobile)}>
+            <div className="attachment-preview__viewer" style={viewerStyle(isMobile)}>
+              <PreviewSurface preview={preview} fileName={fileName} fitMode={fitMode} isMobile={isMobile} />
             </div>
-
-            <aside className="attachment-preview__sidebar" style={sidebarStyle}>
-              <div className="attachment-preview__meta-card" style={metaCardStyle}>
-                <div className="attachment-preview__meta-label" style={metaLabelStyle}>
-                  文件信息
-                </div>
-                <div className="attachment-preview__meta-list" style={metaListStyle}>
-                  <MetaRow label="名称" value={fileName} />
-                  <MetaRow label="类型" value={preview.mimeLabel} />
-                  <MetaRow label="大小" value={preview.sizeLabel} />
-                  <MetaRow label="路径" value={attachment.file_path} />
-                </div>
-              </div>
-
-              <div className="attachment-preview__meta-card" style={metaCardStyle}>
-                <div className="attachment-preview__meta-label" style={metaLabelStyle}>
-                  兼容说明
-                </div>
-                <div style={hintTextStyle}>
-                  HEIC 会先转换成 JPEG 预览。
-                  <br />
-                  PDF 使用内嵌文档查看。
-                  <br />
-                  MP4/视频使用原生播放器。
-                </div>
-              </div>
-            </aside>
+            <div className="attachment-preview__info" style={infoGridStyle(isMobile)}>
+              <InfoPill label="类型" value={preview.mimeLabel} />
+              <InfoPill label="大小" value={preview.sizeLabel} />
+              <InfoPill label="状态" value={statusCopy} />
+            </div>
           </div>
         </div>
       </div>
@@ -351,10 +322,12 @@ function PreviewSurface({
   preview,
   fileName,
   fitMode,
+  isMobile,
 }: {
   preview: PreviewState;
   fileName: string;
   fitMode: "contain" | "cover";
+  isMobile: boolean;
 }) {
   if (preview.mode === "loading") {
     return (
@@ -378,7 +351,7 @@ function PreviewSurface({
     return (
       <div className="attachment-preview__state attachment-preview__state--unsupported" style={stateStyle}>
         <div style={stateTitleStyle}>暂不支持在线预览这个格式</div>
-        <div style={stateTextStyle}>可以用右上角“新窗口打开”或“下载”继续处理。</div>
+        <div style={stateTextStyle}>可以直接下载后查看原文件。</div>
       </div>
     );
   }
@@ -391,7 +364,7 @@ function PreviewSurface({
           src={preview.objectUrl}
           alt={fileName}
           style={{
-            ...imageStyle,
+            ...imageStyle(isMobile),
             objectFit: fitMode,
           }}
         />
@@ -408,7 +381,7 @@ function PreviewSurface({
           controls
           playsInline
           style={{
-            ...videoStyle,
+            ...videoStyle(isMobile),
             objectFit: fitMode,
           }}
         />
@@ -418,33 +391,33 @@ function PreviewSurface({
 
   if (preview.mode === "audio") {
     return (
-      <div className="attachment-preview__audio-wrap" style={audioWrapStyle}>
+      <div className="attachment-preview__audio-wrap" style={audioWrapStyle(isMobile)}>
         <div style={stateTitleStyle}>{fileName}</div>
-        <audio className="attachment-preview__audio" src={preview.objectUrl} controls style={audioStyle} />
+        <audio className="attachment-preview__audio" src={preview.objectUrl} controls style={audioStyle(isMobile)} />
       </div>
     );
   }
 
   if (preview.mode === "text") {
     return (
-      <pre className="attachment-preview__text" style={textStyle}>
+      <pre className="attachment-preview__text" style={textStyle(isMobile)}>
         {preview.textContent}
       </pre>
     );
   }
 
   if (preview.mode === "pdf") {
-    return <iframe className="attachment-preview__frame" src={preview.objectUrl} title={fileName} style={frameStyle} />;
+    return <iframe className="attachment-preview__frame" src={preview.objectUrl} title={fileName} style={frameStyle(isMobile)} />;
   }
 
   return null;
 }
 
-function MetaRow({ label, value }: { label: string; value: string }) {
+function InfoPill({ label, value }: { label: string; value: string }) {
   return (
-    <div className="attachment-preview__meta-row" style={metaRowStyle}>
-      <div style={metaKeyStyle}>{label}</div>
-      <div style={metaValueStyle}>{value}</div>
+    <div className="attachment-preview__meta-row" style={infoPillStyle}>
+      <div style={infoLabelStyle}>{label}</div>
+      <div style={infoValueStyle}>{value}</div>
     </div>
   );
 }
@@ -467,18 +440,20 @@ export async function openPreviewModal(attachment: AttachmentRecord) {
   root.render(<AttachmentPreviewModal attachment={attachment} onClose={close} />);
 }
 
-const overlayStyle: CSSProperties = {
-  position: "fixed",
-  inset: 0,
-  zIndex: 10000,
-  background:
-    "radial-gradient(circle at top left, rgba(235, 200, 135, 0.18), transparent 28%), rgba(13, 16, 22, 0.84)",
-  backdropFilter: "blur(10px)",
-  display: "grid",
-  padding: "24px",
-  boxSizing: "border-box",
-  overflow: "hidden",
-};
+function overlayStyle(isMobile: boolean): CSSProperties {
+  return {
+    position: "fixed",
+    inset: 0,
+    zIndex: 10000,
+    background:
+      "radial-gradient(circle at top left, rgba(235, 200, 135, 0.18), transparent 28%), rgba(13, 16, 22, 0.84)",
+    backdropFilter: "blur(10px)",
+    display: "grid",
+    padding: isMobile ? "10px" : "24px",
+    boxSizing: "border-box",
+    overflow: "hidden",
+  };
+}
 
 const shellStyle: CSSProperties = {
   width: "100%",
@@ -487,50 +462,59 @@ const shellStyle: CSSProperties = {
   minHeight: 0,
 };
 
-const panelStyle: CSSProperties = {
-  width: "100%",
-  height: "100%",
-  maxHeight: "calc(100vh - 48px)",
-  display: "grid",
-  gridTemplateRows: "auto minmax(0, 1fr)",
-  borderRadius: "24px",
-  overflow: "hidden",
-  border: "1px solid rgba(255,255,255,0.12)",
-  background: "linear-gradient(180deg, rgba(22, 26, 34, 0.98), rgba(13, 16, 22, 0.98))",
-  boxShadow: "0 30px 80px rgba(0,0,0,0.4)",
-};
+function panelStyle(isMobile: boolean): CSSProperties {
+  return {
+    width: "100%",
+    height: "100%",
+    maxHeight: isMobile ? "calc(100vh - 20px)" : "calc(100vh - 48px)",
+    display: "grid",
+    gridTemplateRows: "auto minmax(0, 1fr)",
+    borderRadius: isMobile ? "18px" : "24px",
+    overflow: "hidden",
+    border: "1px solid rgba(255,255,255,0.12)",
+    background: "linear-gradient(180deg, rgba(22, 26, 34, 0.98), rgba(13, 16, 22, 0.98))",
+    boxShadow: "0 30px 80px rgba(0,0,0,0.4)",
+  };
+}
 
-const headerStyle: CSSProperties = {
-  display: "flex",
-  justifyContent: "space-between",
-  alignItems: "center",
-  gap: "14px",
-  flexWrap: "wrap",
-  padding: "18px 22px",
-  background: "linear-gradient(180deg, rgba(255,255,255,0.06), rgba(255,255,255,0.02))",
-  borderBottom: "1px solid rgba(255,255,255,0.08)",
-};
+function headerStyle(isMobile: boolean): CSSProperties {
+  return {
+    display: "flex",
+    justifyContent: "space-between",
+    alignItems: isMobile ? "stretch" : "center",
+    gap: isMobile ? "12px" : "14px",
+    flexWrap: "wrap",
+    flexDirection: isMobile ? "column" : "row",
+    padding: isMobile ? "14px" : "18px 22px",
+    background: "linear-gradient(180deg, rgba(255,255,255,0.06), rgba(255,255,255,0.02))",
+    borderBottom: "1px solid rgba(255,255,255,0.08)",
+  };
+}
 
-const headerCopyStyle: CSSProperties = {
-  display: "flex",
-  gap: "12px",
-  alignItems: "center",
-  minWidth: 0,
-};
+function headerCopyStyle(isMobile: boolean): CSSProperties {
+  return {
+    display: "flex",
+    gap: isMobile ? "10px" : "12px",
+    alignItems: isMobile ? "flex-start" : "center",
+    minWidth: 0,
+  };
+}
 
-const badgeStyle: CSSProperties = {
-  display: "grid",
-  placeItems: "center",
-  minWidth: "58px",
-  height: "40px",
-  padding: "0 12px",
-  borderRadius: "12px",
-  background: "linear-gradient(135deg, #c2902b, #f5d48d)",
-  color: "#2f2306",
-  fontWeight: 900,
-  fontSize: "12px",
-  letterSpacing: "0.08em",
-};
+function badgeStyle(isMobile: boolean): CSSProperties {
+  return {
+    display: "grid",
+    placeItems: "center",
+    minWidth: isMobile ? "52px" : "58px",
+    height: isMobile ? "36px" : "40px",
+    padding: "0 12px",
+    borderRadius: "12px",
+    background: "linear-gradient(135deg, #c2902b, #f5d48d)",
+    color: "#2f2306",
+    fontWeight: 900,
+    fontSize: "12px",
+    letterSpacing: "0.08em",
+  };
+}
 
 const titleWrapStyle: CSSProperties = {
   display: "grid",
@@ -538,26 +522,32 @@ const titleWrapStyle: CSSProperties = {
   minWidth: 0,
 };
 
-const titleStyle: CSSProperties = {
-  fontSize: "18px",
-  fontWeight: 800,
-  color: "#f6f7fb",
-  overflow: "hidden",
-  textOverflow: "ellipsis",
-  whiteSpace: "nowrap",
-};
+function titleStyle(isMobile: boolean): CSSProperties {
+  return {
+    fontSize: isMobile ? "16px" : "18px",
+    fontWeight: 800,
+    color: "#f6f7fb",
+    overflow: "hidden",
+    textOverflow: "ellipsis",
+    whiteSpace: isMobile ? "normal" : "nowrap",
+    wordBreak: "break-word",
+  };
+}
 
 const subtitleStyle: CSSProperties = {
   fontSize: "12px",
   color: "rgba(255,255,255,0.68)",
 };
 
-const actionRowStyle: CSSProperties = {
-  display: "flex",
-  gap: "8px",
-  flexWrap: "wrap",
-  alignItems: "center",
-};
+function actionRowStyle(isMobile: boolean): CSSProperties {
+  return {
+    display: "grid",
+    gap: "8px",
+    gridTemplateColumns: isMobile ? "repeat(2, minmax(0, 1fr))" : "repeat(3, max-content)",
+    alignItems: "center",
+    width: isMobile ? "100%" : "auto",
+  };
+}
 
 const secondaryButtonStyle: CSSProperties = {
   border: "1px solid rgba(255,255,255,0.12)",
@@ -577,25 +567,33 @@ const primaryButtonStyle: CSSProperties = {
   color: "#fff8e8",
 };
 
-const bodyStyle: CSSProperties = {
-  display: "grid",
-  gridTemplateColumns: "minmax(0, 1fr) 300px",
-  minHeight: 0,
-  maxHeight: "100%",
-  overflow: "hidden",
-};
+function actionButtonStyle(isMobile: boolean): CSSProperties {
+  return isMobile ? { width: "100%", boxSizing: "border-box", textAlign: "center" } : {};
+}
 
-const viewerStyle: CSSProperties = {
-  minWidth: 0,
-  minHeight: 0,
-  maxHeight: "100%",
-  padding: "20px",
-  display: "grid",
-  placeItems: "center",
-  overflow: "hidden",
-  background:
-    "linear-gradient(180deg, rgba(255,255,255,0.02), rgba(255,255,255,0.01)), radial-gradient(circle at center, rgba(255,255,255,0.04), transparent 64%)",
-};
+function bodyStyle(isMobile: boolean): CSSProperties {
+  return {
+    display: "grid",
+    gridTemplateRows: "minmax(0, 1fr) auto",
+    minHeight: 0,
+    maxHeight: "100%",
+    overflow: "hidden",
+  };
+}
+
+function viewerStyle(isMobile: boolean): CSSProperties {
+  return {
+    minWidth: 0,
+    minHeight: 0,
+    maxHeight: "100%",
+    padding: isMobile ? "12px" : "20px",
+    display: "grid",
+    placeItems: "center",
+    overflow: "hidden",
+    background:
+      "linear-gradient(180deg, rgba(255,255,255,0.02), rgba(255,255,255,0.01)), radial-gradient(circle at center, rgba(255,255,255,0.04), transparent 64%)",
+  };
+}
 
 const mediaStageStyle: CSSProperties = {
   width: "100%",
@@ -607,57 +605,36 @@ const mediaStageStyle: CSSProperties = {
   overflow: "hidden",
 };
 
-const sidebarStyle: CSSProperties = {
-  display: "grid",
-  alignContent: "start",
-  gap: "14px",
-  padding: "20px 20px 20px 0",
-  minHeight: 0,
-  overflow: "auto",
-};
+function infoGridStyle(isMobile: boolean): CSSProperties {
+  return {
+    display: "grid",
+    gridTemplateColumns: isMobile ? "1fr" : "repeat(3, minmax(0, 1fr))",
+    gap: "10px",
+    padding: isMobile ? "0 12px 12px" : "0 20px 20px",
+  };
+}
 
-const metaCardStyle: CSSProperties = {
+const infoPillStyle: CSSProperties = {
   display: "grid",
-  gap: "12px",
-  padding: "16px",
-  borderRadius: "18px",
+  gap: "4px",
+  padding: "12px 14px",
+  borderRadius: "16px",
   background: "rgba(255,255,255,0.04)",
   border: "1px solid rgba(255,255,255,0.08)",
 };
 
-const metaLabelStyle: CSSProperties = {
-  fontSize: "12px",
-  textTransform: "uppercase",
-  letterSpacing: "0.12em",
-  color: "rgba(255,255,255,0.5)",
-};
-
-const metaListStyle: CSSProperties = {
-  display: "grid",
-  gap: "10px",
-};
-
-const metaRowStyle: CSSProperties = {
-  display: "grid",
-  gap: "4px",
-};
-
-const metaKeyStyle: CSSProperties = {
+const infoLabelStyle: CSSProperties = {
   fontSize: "11px",
   color: "rgba(255,255,255,0.48)",
+  textTransform: "uppercase",
+  letterSpacing: "0.08em",
 };
 
-const metaValueStyle: CSSProperties = {
+const infoValueStyle: CSSProperties = {
   fontSize: "13px",
   lineHeight: 1.6,
   color: "#f6f7fb",
   wordBreak: "break-word",
-};
-
-const hintTextStyle: CSSProperties = {
-  fontSize: "13px",
-  lineHeight: 1.75,
-  color: "rgba(255,255,255,0.72)",
 };
 
 const stateStyle: CSSProperties = {
@@ -690,59 +667,72 @@ const spinnerStyle: CSSProperties = {
   animation: "xinya-preview-spin 0.9s linear infinite",
 };
 
-const imageStyle: CSSProperties = {
-  width: "100%",
-  height: "100%",
-  minWidth: 0,
-  minHeight: 0,
-  maxWidth: "100%",
-  maxHeight: "100%",
-  borderRadius: "18px",
-  background: "#0b0d11",
-};
+function imageStyle(isMobile: boolean): CSSProperties {
+  return {
+    width: "100%",
+    height: "100%",
+    minWidth: 0,
+    minHeight: 0,
+    maxWidth: "100%",
+    maxHeight: "100%",
+    borderRadius: isMobile ? "14px" : "18px",
+    background: "#0b0d11",
+  };
+}
 
-const videoStyle: CSSProperties = {
-  width: "100%",
-  height: "100%",
-  minWidth: 0,
-  minHeight: 0,
-  maxWidth: "100%",
-  maxHeight: "100%",
-  borderRadius: "18px",
-  background: "#000",
-};
+function videoStyle(isMobile: boolean): CSSProperties {
+  return {
+    width: "100%",
+    height: "100%",
+    minWidth: 0,
+    minHeight: 0,
+    maxWidth: "100%",
+    maxHeight: "100%",
+    borderRadius: isMobile ? "14px" : "18px",
+    background: "#000",
+  };
+}
 
-const frameStyle: CSSProperties = {
-  width: "100%",
-  height: "100%",
-  minHeight: 0,
-  border: "none",
-  borderRadius: "18px",
-  background: "#fff",
-};
+function frameStyle(isMobile: boolean): CSSProperties {
+  return {
+    width: "100%",
+    height: "100%",
+    minHeight: 0,
+    border: "none",
+    borderRadius: isMobile ? "14px" : "18px",
+    background: "#fff",
+  };
+}
 
-const textStyle: CSSProperties = {
-  width: "100%",
-  height: "100%",
-  minHeight: 0,
-  margin: 0,
-  overflow: "auto",
-  borderRadius: "18px",
-  padding: "18px",
-  boxSizing: "border-box",
-  background: "#0f1218",
-  color: "#f5f7fb",
-  fontSize: "13px",
-  lineHeight: 1.7,
-};
+function textStyle(isMobile: boolean): CSSProperties {
+  return {
+    width: "100%",
+    height: "100%",
+    minHeight: 0,
+    margin: 0,
+    overflow: "auto",
+    borderRadius: isMobile ? "14px" : "18px",
+    padding: isMobile ? "14px" : "18px",
+    boxSizing: "border-box",
+    background: "#0f1218",
+    color: "#f5f7fb",
+    fontSize: "13px",
+    lineHeight: 1.7,
+  };
+}
 
-const audioWrapStyle: CSSProperties = {
-  display: "grid",
-  gap: "16px",
-  justifyItems: "center",
-  width: "100%",
-};
+function audioWrapStyle(isMobile: boolean): CSSProperties {
+  return {
+    display: "grid",
+    gap: "16px",
+    justifyItems: "center",
+    width: "100%",
+    padding: isMobile ? "10px 0" : undefined,
+  };
+}
 
-const audioStyle: CSSProperties = {
-  width: "min(100%, 540px)",
-};
+function audioStyle(isMobile: boolean): CSSProperties {
+  return {
+    width: isMobile ? "100%" : "min(100%, 540px)",
+  };
+}

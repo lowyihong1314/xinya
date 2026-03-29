@@ -2,6 +2,7 @@ import { useMemo } from "react";
 import type { CSSProperties } from "react";
 import { useSearchParams } from "react-router-dom";
 
+import { useUserState } from "../../../app/UserState";
 import { ensureDesignTokens } from "../../../theme/designTokens";
 import { MembershipRegistrationPage } from "../../membership/react/MembershipRegistrationPage";
 import { YouthClassRegistrationPage } from "../../youth_class/react/YouthClassRegistrationPage";
@@ -24,6 +25,7 @@ function resolveSectionKey(value: string | null): RegistrationSectionKey {
 export function PermanentRegistrationPage() {
   ensureDesignTokens();
 
+  const { isMobile } = useUserState();
   const [searchParams, setSearchParams] = useSearchParams();
   const activeSection = useMemo(
     () => resolveSectionKey(searchParams.get("registration")),
@@ -38,27 +40,27 @@ export function PermanentRegistrationPage() {
   }
 
   return (
-    <div style={pageStyle}>
-      <section style={heroStyle}>
+    <div style={pageStyle(isMobile)}>
+      <section style={heroStyle(isMobile)}>
         <div style={eyebrowStyle}>CRM / 长期开放表格</div>
-        <h1 style={titleStyle}>长期开放表格</h1>
-        <p style={descStyle}>
+        <h1 style={titleStyle(isMobile)}>长期开放表格</h1>
+        <p style={descStyle(isMobile)}>
           把持续开放的报名入口集中在一起管理。这里目前收拢了会员升级 / 续费，以及青少年 & 青年佛学班两条长期流程。
         </p>
       </section>
 
-      <section style={sectionNavWrapStyle}>
-        <div style={sectionNavStyle}>
+      <section style={sectionNavWrapStyle(isMobile)}>
+        <div style={sectionNavStyle(isMobile)}>
           {SECTION_ITEMS.map((item) => {
             const active = activeSection === item.key;
             return (
               <button
                 key={item.key}
                 type="button"
-                style={sectionNavButtonStyle(active)}
+                style={sectionNavButtonStyle(active, isMobile)}
                 onClick={() => switchSection(item.key)}
               >
-                <span style={sectionNavLabelStyle}>{item.label}</span>
+                <span style={sectionNavLabelStyle(isMobile)}>{item.label}</span>
                 <span style={sectionNavHintStyle(active)}>{item.hint}</span>
               </button>
             );
@@ -74,19 +76,24 @@ export function PermanentRegistrationPage() {
   );
 }
 
-const pageStyle: CSSProperties = {
-  display: "grid",
-  gap: "18px",
-};
+function pageStyle(isMobile: boolean): CSSProperties {
+  return {
+    display: "grid",
+    gap: isMobile ? "14px" : "18px",
+    width: "100%",
+  };
+}
 
-const heroStyle: CSSProperties = {
-  padding: "22px 24px",
-  borderRadius: "24px",
-  background:
-    "linear-gradient(145deg, rgba(11,31,38,0.96), rgba(19,78,74,0.94) 58%, rgba(221,107,32,0.88) 120%)",
-  boxShadow: "0 22px 54px rgba(15,23,42,0.14)",
-  color: "white",
-};
+function heroStyle(isMobile: boolean): CSSProperties {
+  return {
+    padding: isMobile ? "18px 16px" : "22px 24px",
+    borderRadius: isMobile ? "20px" : "24px",
+    background:
+      "linear-gradient(145deg, rgba(11,31,38,0.96), rgba(19,78,74,0.94) 58%, rgba(221,107,32,0.88) 120%)",
+    boxShadow: "0 22px 54px rgba(15,23,42,0.14)",
+    color: "white",
+  };
+}
 
 const eyebrowStyle: CSSProperties = {
   fontSize: "12px",
@@ -95,43 +102,51 @@ const eyebrowStyle: CSSProperties = {
   opacity: 0.78,
 };
 
-const titleStyle: CSSProperties = {
-  margin: "10px 0 12px",
-  fontSize: "34px",
-  lineHeight: 1.05,
-};
+function titleStyle(isMobile: boolean): CSSProperties {
+  return {
+    margin: "10px 0 12px",
+    fontSize: isMobile ? "27px" : "34px",
+    lineHeight: 1.08,
+  };
+}
 
-const descStyle: CSSProperties = {
-  margin: 0,
-  maxWidth: "70ch",
-  lineHeight: 1.75,
-  opacity: 0.9,
-  fontSize: "14px",
-};
+function descStyle(isMobile: boolean): CSSProperties {
+  return {
+    margin: 0,
+    maxWidth: "70ch",
+    lineHeight: isMobile ? 1.6 : 1.75,
+    opacity: 0.9,
+    fontSize: isMobile ? "13px" : "14px",
+  };
+}
 
-const sectionNavWrapStyle: CSSProperties = {
-  position: "sticky",
-  top: "10px",
-  zIndex: 6,
-};
+function sectionNavWrapStyle(isMobile: boolean): CSSProperties {
+  return {
+    position: isMobile ? "static" : "sticky",
+    top: isMobile ? undefined : "10px",
+    zIndex: 6,
+  };
+}
 
-const sectionNavStyle: CSSProperties = {
-  display: "grid",
-  gridTemplateColumns: "repeat(2, minmax(0, 1fr))",
-  gap: "10px",
-  padding: "10px",
-  borderRadius: "22px",
-  background: "rgba(255,255,255,0.82)",
-  border: "1px solid rgba(216,223,235,0.85)",
-  boxShadow: "0 18px 40px rgba(15,23,42,0.08)",
-  backdropFilter: "blur(18px)",
-};
+function sectionNavStyle(isMobile: boolean): CSSProperties {
+  return {
+    display: "grid",
+    gridTemplateColumns: isMobile ? "1fr" : "repeat(2, minmax(0, 1fr))",
+    gap: isMobile ? "8px" : "10px",
+    padding: isMobile ? "8px" : "10px",
+    borderRadius: isMobile ? "18px" : "22px",
+    background: "rgba(255,255,255,0.82)",
+    border: "1px solid rgba(216,223,235,0.85)",
+    boxShadow: "0 18px 40px rgba(15,23,42,0.08)",
+    backdropFilter: "blur(18px)",
+  };
+}
 
-function sectionNavButtonStyle(active: boolean): CSSProperties {
+function sectionNavButtonStyle(active: boolean, isMobile: boolean): CSSProperties {
   return {
     border: "none",
-    borderRadius: "16px",
-    padding: "14px 16px",
+    borderRadius: isMobile ? "14px" : "16px",
+    padding: isMobile ? "12px 14px" : "14px 16px",
     cursor: "pointer",
     display: "grid",
     gap: "5px",
@@ -144,10 +159,12 @@ function sectionNavButtonStyle(active: boolean): CSSProperties {
   };
 }
 
-const sectionNavLabelStyle: CSSProperties = {
-  fontSize: "15px",
-  fontWeight: 800,
-};
+function sectionNavLabelStyle(isMobile: boolean): CSSProperties {
+  return {
+    fontSize: isMobile ? "14px" : "15px",
+    fontWeight: 800,
+  };
+}
 
 function sectionNavHintStyle(active: boolean): CSSProperties {
   return {
