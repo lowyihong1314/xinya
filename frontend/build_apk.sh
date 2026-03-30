@@ -9,7 +9,8 @@ export PATH=$JAVA_HOME/bin:$PATH
 cd "$(dirname "$0")"
 
 VERSION=$(date +%Y%m%d_%H%M)
-OUTPUT="apk/UTBA_BETA_${VERSION}.apk"
+APK_OUTPUT="apk/UTBA_BETA_${VERSION}.apk"
+AAB_OUTPUT="aab/UTBA_BETA_${VERSION}.aab"
 
 echo "==> [1/4] Building React bundle (APK mode)..."
 npm run build:apk
@@ -42,16 +43,22 @@ const densities = [
 echo "==> [3/4] Syncing to Android project..."
 npx cap sync android
 
-echo "==> [4/4] Building signed release APK..."
+echo "==> [4/4] Building signed release APK and AAB..."
 cd android
-./gradlew assembleRelease
+./gradlew assembleRelease bundleRelease
 cd ..
 
-echo "==> Copying APK..."
+echo "==> Copying release artifacts..."
 mkdir -p apk
-cp android/app/build/outputs/apk/release/app-release.apk "$OUTPUT"
+mkdir -p aab
+cp android/app/build/outputs/apk/release/app-release.apk "$APK_OUTPUT"
+cp android/app/build/outputs/bundle/release/app-release.aab "$AAB_OUTPUT"
 
 echo ""
-echo "Done!  $(ls -lh "$OUTPUT" | awk '{print $5, $9}')"
+echo "Done!"
+echo "APK: $(ls -lh "$APK_OUTPUT" | awk '{print $5, $9}')"
+echo "AAB: $(ls -lh "$AAB_OUTPUT" | awk '{print $5, $9}')"
 echo "Files in apk/:"
 ls -lht apk/*.apk 2>/dev/null | head -10
+echo "Files in aab/:"
+ls -lht aab/*.aab 2>/dev/null | head -10

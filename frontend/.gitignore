@@ -15,8 +15,9 @@ dist-ssr
 # APK build output (Vite → Capacitor)
 apk_dist/
 
-# Final APK binaries
+# Final Android release binaries
 apk/
+aab/
 
 # Capacitor local SDK path config
 android/local.properties
