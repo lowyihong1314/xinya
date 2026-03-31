@@ -3,6 +3,7 @@ from flask_login import login_required
 
 from app.auth import permission_required
 from . import services
+from .storage import serve_album_image
 
 
 music_bp = Blueprint("music_bp", __name__)
@@ -94,6 +95,16 @@ def replace_music(music_id):
 @permission_required("music_edit")
 def delete_music(music_id):
     return services.delete_music(music_id)
+
+
+@music_bp.route("/add_one_minute/<int:music_id>", methods=["POST"])
+def add_one_minute(music_id):
+    return services.add_one_minute(music_id)
+
+
+@music_bp.route("/album_cover/<path:filename>", methods=["GET"])
+def album_cover(filename):
+    return serve_album_image(filename)
 
 
 @music_bp.route("/playlists", methods=["GET"])

@@ -132,3 +132,11 @@ export async function replaceMusicFile(musicId: number, file: File) {
   });
   return parseJson<{ success?: boolean; music?: MusicRecord }>(response);
 }
+
+export async function addOneMinute(musicId: number) {
+  const response = await apiFetch(`/api/music/add_one_minute/${musicId}`, {
+    method: "POST",
+    credentials: "include",
+  });
+  return parseJson<{ success?: boolean; play_minutes?: number }>(response);
+}

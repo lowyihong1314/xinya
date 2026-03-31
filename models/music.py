@@ -14,6 +14,7 @@ class Music(db.Model):
     file_size = db.Column(db.BigInteger, nullable=False)
     duration = db.Column(db.Integer, nullable=True)
     cover_url = db.Column(db.String(255), nullable=True)
+    play_minutes = db.Column(db.Float, nullable=False, default=0.0)
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
 
     album = db.relationship('Album', back_populates='musics')
@@ -30,6 +31,7 @@ class Music(db.Model):
             "file_size": self.file_size,
             "duration": self.duration,
             "cover_url": self.cover_url,
+            "play_minutes": self.play_minutes,
             "created_at": self.created_at.isoformat()
         }
 
@@ -59,7 +61,8 @@ class Album(db.Model):
             "cover_url": self.cover_url,
             "release_date": self.release_date.isoformat() if self.release_date else None,
             "description": self.description,
-            "created_at": self.created_at.isoformat()
+            "created_at": self.created_at.isoformat(),
+            "album_total_minutes": sum(m.play_minutes for m in self.musics),
         }
         return data
 

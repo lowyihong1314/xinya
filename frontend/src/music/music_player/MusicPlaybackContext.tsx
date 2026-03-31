@@ -1,7 +1,8 @@
-import { createContext, useContext, useEffect, useMemo, useState } from "react";
+import { createContext, useContext, useEffect, useMemo, useRef, useState } from "react";
 import type { ReactNode } from "react";
 
 import type { AlbumRecord, MusicRecord } from "./types";
+import { addOneMinute } from "./api";
 
 type RepeatMode = "off" | "all" | "one";
 
@@ -118,6 +119,23 @@ export function MusicPlaybackProvider({ children }: { children: ReactNode }) {
     const next = buildStableShuffleIds(queueIds, currentMusicId);
     setShuffleQueueIds((current) => (current.join(",") === next.join(",") ? current : next));
   }, [queueIds, currentMusicId]);
+
+  // Track play minutes: call addOneMinute every 60s while a song is playing.
+  const playingMusicIdRef = useRef<number | null>(null);
+  useEffect(() => {
+    playingMusicIdRef.current = isPlaying ? currentMusicId : null;
+  }, [isPlaying, currentMusicId]);
+
+  useEffect(() => {
+    if (!isPlaying || !currentMusicId) return;
+    const timer = window.setInterval(() => {
+      const id = playingMusicIdRef.current;
+      if (id != null) {
+        void addOneMinute(id).catch(() => undefined);
+      }
+    }, 60_000);
+    return () => window.clearInterval(timer);
+  }, [isPlaying, currentMusicId]);
 
   useEffect(() => {
     if (!libraryMusics.length) {

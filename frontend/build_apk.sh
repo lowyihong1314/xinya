@@ -11,6 +11,25 @@ cd "$(dirname "$0")"
 VERSION=$(date +%Y%m%d_%H%M)
 APK_OUTPUT="apk/UTBA_BETA_${VERSION}.apk"
 AAB_OUTPUT="aab/UTBA_BETA_${VERSION}.aab"
+GRADLE_ARGS=()
+
+if [ -n "${VERSION_CODE:-}" ]; then
+  if ! [[ "$VERSION_CODE" =~ ^[0-9]+$ ]]; then
+    echo "ERROR: VERSION_CODE must be a positive integer"
+    exit 1
+  fi
+  GRADLE_ARGS+=("-PappVersionCode=$VERSION_CODE")
+fi
+
+if [ -n "${VERSION_NAME:-}" ]; then
+  GRADLE_ARGS+=("-PappVersionName=$VERSION_NAME")
+fi
+
+if [ ${#GRADLE_ARGS[@]} -gt 0 ]; then
+  echo "==> Using Android version settings..."
+  [ -n "${VERSION_CODE:-}" ] && echo "    versionCode=$VERSION_CODE"
+  [ -n "${VERSION_NAME:-}" ] && echo "    versionName=$VERSION_NAME"
+fi
 
 echo "==> [1/4] Building React bundle (APK mode)..."
 npm run build:apk
@@ -45,7 +64,7 @@ npx cap sync android
 
 echo "==> [4/4] Building signed release APK and AAB..."
 cd android
-./gradlew assembleRelease bundleRelease
+./gradlew assembleRelease bundleRelease "${GRADLE_ARGS[@]}"
 cd ..
 
 echo "==> Copying release artifacts..."
@@ -62,3 +81,7 @@ echo "Files in apk/:"
 ls -lht apk/*.apk 2>/dev/null | head -10
 echo "Files in aab/:"
 ls -lht aab/*.aab 2>/dev/null | head -10
+
+
+
+# VERSION_CODE=12 VERSION_NAME=1.2.3 ./frontend/build_apk.sh

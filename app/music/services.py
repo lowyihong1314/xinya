@@ -52,7 +52,8 @@ def upload_music(files, album_id, artist_id):
 
 
 def get_albums():
-    albums = Album.query.order_by(Album.created_at.desc()).all()
+    albums = Album.query.all()
+    albums.sort(key=lambda a: sum(m.play_minutes for m in a.musics), reverse=True)
     return jsonify([album.to_dict() for album in albums])
 
 
@@ -78,7 +79,7 @@ def upload_album_cover(album_id, file):
     save_path = os.path.join(ALBUM_IMAGE_DIR, filename)
     file.save(save_path)
 
-    album.cover_url = f"/static/album_image/{filename}"
+    album.cover_url = f"/api/music/album_cover/{filename}"
     db.session.commit()
     return jsonify({"success": True, "cover_url": album.cover_url})
 
@@ -393,3 +394,12 @@ def save_playlist_state(data):
     playlist_state.set_state(state)
     db.session.commit()
     return jsonify({"success": True, "playlist_state": playlist_state.to_dict()})
+
+
+def add_one_minute(music_id):
+    music = Music.query.get(music_id)
+    if not music:
+        return jsonify({"error": "Music not found"}), 404
+    music.play_minutes += 1.0
+    db.session.commit()
+    return jsonify({"success": True, "music_id": music_id, "play_minutes": music.play_minutes})

@@ -38,6 +38,8 @@ export function useMusicWorkspace() {
     currentMusicId,
     setLibraryMusics: setPlaybackLibraryMusics,
     setCurrentMusicId,
+    setQueue,
+    selectMusic,
     insertNext,
     appendToQueue,
   } = useMusicPlayback();
@@ -71,15 +73,21 @@ export function useMusicWorkspace() {
   const [editorMode, setEditorMode] = useState<EditorMode>(null);
   const [albumPage, setAlbumPage] = useState(1);
 
+  const allMusicsSorted = useMemo(
+    () => [...libraryMusics].sort((a, b) => (b.play_minutes ?? 0) - (a.play_minutes ?? 0)),
+    [libraryMusics],
+  );
+
   const filteredMusics = useMemo(() => {
+    const base = selectedAlbumId === null ? allMusicsSorted : musics;
     const query = search.trim().toLowerCase();
-    if (!query) return musics;
-    return musics.filter((music) => {
+    if (!query) return base;
+    return base.filter((music) => {
       const title = music.title?.toLowerCase() || "";
       const albumName = music.album?.name?.toLowerCase() || "";
       return title.includes(query) || albumName.includes(query);
     });
-  }, [musics, search]);
+  }, [musics, allMusicsSorted, selectedAlbumId, search]);
 
   const albumTrackCountMap = useMemo(() => {
     const next = new Map<number, number>();
@@ -350,7 +358,12 @@ export function useMusicWorkspace() {
   }
 
   function handleSelectTrack(musicId: number) {
-    insertNext(musicId);
+    if (selectedAlbumId === null) {
+      setQueue(allMusicsSorted);
+      selectMusic(musicId);
+    } else {
+      insertNext(musicId);
+    }
   }
 
   function handleQueueTrack(musicId: number) {

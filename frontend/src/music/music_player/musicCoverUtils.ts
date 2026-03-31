@@ -4,19 +4,20 @@ import type { AlbumRecord, MusicRecord } from "./types";
 /**
  * Default cover image shown when no album/track cover is available.
  */
-export const DEFAULT_COVER_URL = `${API_BASE}/static/album_image/defult.jpeg`;
+export const DEFAULT_COVER_URL = `${API_BASE}/api/music/album_cover/defult.jpeg`;
 
 /**
  * Builds the URL for an album cover image.
  *
  * cover_url in the database may be stored in different formats depending on
  * when it was uploaded:
- *   - Full relative path: "/static/album_image/3.jpg"
+ *   - API path:           "/api/music/album_cover/3.jpg"
+ *   - Legacy static path: "/static/album_image/3.jpg"
  *   - Filename only:      "3.jpg"
  *   - Absolute URL:       "https://..."
  *
  * This function always extracts just the filename and constructs a canonical
- * URL from the known static path, so it works regardless of the stored format.
+ * URL from the API path, so it works regardless of the stored format.
  */
 export function resolveAlbumCoverUrl(coverUrl?: string | null): string {
   if (!coverUrl) return DEFAULT_COVER_URL;
@@ -25,7 +26,7 @@ export function resolveAlbumCoverUrl(coverUrl?: string | null): string {
   // Extract filename from whatever path format is stored, then build canonical URL.
   const filename = coverUrl.split("/").pop();
   if (!filename) return DEFAULT_COVER_URL;
-  return `${API_BASE}/static/album_image/${filename}`;
+  return `${API_BASE}/api/music/album_cover/${filename}`;
 }
 
 function findTrackAlbum(musicId: number, musics: MusicRecord[], albums: AlbumRecord[]): AlbumRecord | null {

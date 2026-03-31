@@ -17,6 +17,7 @@ export type MusicRecord = {
   file_size?: number;
   duration?: number | null;
   cover_url?: string | null;
+  play_minutes?: number;
   created_at?: string;
   album?: AlbumRecord | null;
 };

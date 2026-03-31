@@ -11,7 +11,7 @@ from app.paths import DATA_ROOT, PROJECT_ROOT
 
 MUSIC_DIR = os.path.join(DATA_ROOT, "music")
 CACHE_DIR = os.path.join(MUSIC_DIR, "cache")
-ALBUM_IMAGE_DIR = os.path.join(PROJECT_ROOT, "static", "album_image")
+ALBUM_IMAGE_DIR = os.path.join(DATA_ROOT, "album_image")
 DEBUG_FORCE_TRANSCODE = False
 
 os.makedirs(MUSIC_DIR, exist_ok=True)
@@ -72,6 +72,15 @@ def delete_music_file(file_name):
     file_path = os.path.join(MUSIC_DIR, file_name)
     if os.path.exists(file_path):
         os.remove(file_path)
+
+
+def serve_album_image(filename):
+    safe_name = os.path.basename(filename)
+    file_path = os.path.join(ALBUM_IMAGE_DIR, safe_name)
+    if not os.path.exists(file_path):
+        return jsonify({"error": "图片不存在"}), 404
+    mime_type, _ = mimetypes.guess_type(file_path)
+    return send_file(file_path, mimetype=mime_type or "application/octet-stream")
 
 
 def delete_music_cache(music_id):
