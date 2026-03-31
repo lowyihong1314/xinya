@@ -129,22 +129,25 @@ public class NativeMediaCachePlugin extends Plugin {
         String hash = sha256(cacheKey);
         File metaFile = new File(cacheRoot, hash + ".json");
         JSONObject existingMeta = readMeta(metaFile);
+        File existingFile = existingMeta == null ? null : resolveDataFile(existingMeta);
 
-        if (!force && existingMeta != null) {
-            File existingFile = resolveDataFile(existingMeta);
-            if (existingFile != null && existingFile.exists()) {
-                return new CacheEntry(
-                    existingFile,
-                    existingMeta.optString("mimeType", ""),
-                    existingMeta.optLong("size", existingFile.length())
-                );
-            }
+        if (!force && canReuseExistingEntry(existingMeta, existingFile, sourceUrl)) {
+            return new CacheEntry(
+                existingFile,
+                existingMeta.optString("mimeType", ""),
+                existingMeta.optLong("size", existingFile.length())
+            );
+        }
+
+        if (existingMeta != null) {
+            deleteQuietly(existingFile);
+            deleteQuietly(metaFile);
         }
 
         DownloadResult download = downloadToTempFile(sourceUrl, hash);
         String extension = guessExtension(download.finalUrl, download.mimeType);
         File finalFile = new File(cacheRoot, hash + extension);
-        File previousFile = existingMeta == null ? null : resolveDataFile(existingMeta);
+        File previousFile = existingFile;
 
         if (finalFile.exists() && !finalFile.delete()) {
             throw new IllegalStateException("Unable to replace cached media file");
@@ -170,6 +173,21 @@ public class NativeMediaCachePlugin extends Plugin {
         writeMeta(metaFile, nextMeta);
 
         return new CacheEntry(finalFile, download.mimeType, finalFile.length());
+    }
+
+    private boolean canReuseExistingEntry(JSONObject meta, File existingFile, String sourceUrl) {
+        if (meta == null || existingFile == null || !existingFile.exists()) {
+            return false;
+        }
+
+        // The APK keeps this cache across app launches, so a stable cacheKey alone
+        // is not enough. If the real URL behind that key changes, we must refresh.
+        String cachedSourceUrl = meta.optString("sourceUrl", "").trim();
+        if (cachedSourceUrl.isEmpty()) {
+            return false;
+        }
+
+        return cachedSourceUrl.equals(sourceUrl);
     }
 
     private DownloadResult downloadToTempFile(String sourceUrl, String hash) throws Exception {

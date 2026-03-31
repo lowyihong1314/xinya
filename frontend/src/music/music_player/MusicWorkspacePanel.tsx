@@ -1,7 +1,8 @@
 import type { CSSProperties, RefObject } from "react";
 
 import { CachedImage } from "../../components/CachedMedia";
-import { resolveAlbumCoverUrl } from "./musicCoverUtils";
+import { buildMusicCoverCacheKey, resolveAlbumCoverUrl } from "./musicCoverUtils";
+import { formatMusicHeat } from "./musicHeatUtils";
 import type { AlbumRecord, MusicRecord } from "./types";
 import type { AlbumDraft, EditorMode, Toast, TrackDraft, WorkspaceScreen } from "./workspaceTypes";
 
@@ -238,6 +239,8 @@ function AlbumsScreen({
   onAlbumPageChange: (page: number) => void;
   albumTrackCount: (albumId: number) => number;
 }) {
+  const totalAlbumHeat = albums.reduce((sum, album) => sum + Number(album.album_total_minutes ?? 0), 0);
+
   return (
     <div style={screenStackStyle}>
       <section style={sectionCardStyle}>
@@ -272,18 +275,26 @@ function AlbumsScreen({
             <button type="button" style={albumCardStyle} onClick={() => void onOpenAlbumTracks(null)}>
               <div style={albumArtPlaceholderStyle}>全部</div>
               <div style={albumNameStyle}>全部歌曲</div>
-              <div style={albumMetaStyle}>{albums.reduce((sum, album) => sum + albumTrackCount(album.id), 0)} 首</div>
+              <div style={albumMetaStyle}>
+                {albums.reduce((sum, album) => sum + albumTrackCount(album.id), 0)} 首
+                {" · "}
+                {formatMusicHeat(totalAlbumHeat)}
+              </div>
             </button>
 
             {pagedAlbums.map((album) => (
               <article key={album.id} style={albumCardStyle}>
                 <button type="button" style={albumOpenButtonStyle} onClick={() => void onOpenAlbumTracks(album.id)}>
-                  <CachedImage src={resolveAlbumCoverUrl(album.cover_url)} cacheKey={`music-workspace-album:${album.id}`} alt={album.name} style={albumArtStyle} />
+                  <CachedImage src={resolveAlbumCoverUrl(album.cover_url)} cacheKey={buildMusicCoverCacheKey("workspace-album", album.id)} alt={album.name} style={albumArtStyle} />
                 </button>
                 <div style={albumCardBodyStyle}>
                   <div>
                     <div style={albumNameStyle}>{album.name}</div>
-                    <div style={albumMetaStyle}>{albumTrackCount(album.id)} 首歌曲</div>
+                    <div style={albumMetaStyle}>
+                      {albumTrackCount(album.id)} 首歌曲
+                      {" · "}
+                      {formatMusicHeat(album.album_total_minutes)}
+                    </div>
                   </div>
                   <div style={albumCardActionsStyle}>
                     <button type="button" style={ghostButtonStyle} onClick={() => void onOpenAlbumTracks(album.id)}>
@@ -428,7 +439,11 @@ function TracksScreen({
                   <span style={trackIndexStyle}>{String(index + 1).padStart(2, "0")}</span>
                   <span style={trackMainStyle}>
                     <span style={trackNameStyle}>{music.title}</span>
-                    <span style={trackMetaStyle}>{music.album?.name || albumName}</span>
+                    <span style={trackMetaStyle}>
+                      {music.album?.name || albumName}
+                      {" · "}
+                      {formatMusicHeat(music.play_minutes)}
+                    </span>
                   </span>
                 </button>
                 <button type="button" style={secondaryButtonStyle} onClick={() => onQueueTrack(music.id)}>
@@ -523,7 +538,7 @@ function EditorScreen({
         {canManage && editorMode === "album" ? (
           <div style={editorGridStyle(isMobile)}>
             <div style={previewCardStyle}>
-              <CachedImage src={resolveAlbumCoverUrl(selectedAlbumDetail?.cover_url)} cacheKey={selectedAlbumDetail ? `music-workspace-selected-album:${selectedAlbumDetail.id}` : undefined} alt={selectedAlbumDetail?.name ?? ""} style={albumArtStyle} />
+              <CachedImage src={resolveAlbumCoverUrl(selectedAlbumDetail?.cover_url)} cacheKey={selectedAlbumDetail ? buildMusicCoverCacheKey("workspace-selected-album", selectedAlbumDetail.id) : undefined} alt={selectedAlbumDetail?.name ?? ""} style={albumArtStyle} />
               <input
                 ref={coverInputRef}
                 type="file"
@@ -569,7 +584,7 @@ function EditorScreen({
         {canManage && editorMode === "track" ? (
           <div style={editorGridStyle(isMobile)}>
             <div style={previewCardStyle}>
-              <CachedImage src={resolveAlbumCoverUrl(editingMusicDetail?.cover_url)} cacheKey={editingMusicDetail ? `music-workspace-track:${editingMusicDetail.id}` : undefined} alt={editingMusicDetail?.title ?? ""} style={albumArtStyle} />
+              <CachedImage src={resolveAlbumCoverUrl(editingMusicDetail?.cover_url)} cacheKey={editingMusicDetail ? buildMusicCoverCacheKey("workspace-track", editingMusicDetail.id) : undefined} alt={editingMusicDetail?.title ?? ""} style={albumArtStyle} />
               <input
                 ref={replaceInputRef}
                 type="file"

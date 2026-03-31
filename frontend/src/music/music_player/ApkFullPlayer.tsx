@@ -3,7 +3,7 @@ import { useState } from "react";
 
 import { CachedImage } from "../../components/CachedMedia";
 import { useMusicPlayback } from "./MusicPlaybackContext";
-import { resolveTrackAlbumName, resolveTrackCoverUrl } from "./musicCoverUtils";
+import { buildMusicCoverCacheKey, resolveTrackAlbumName, resolveTrackCoverUrl } from "./musicCoverUtils";
 import { formatTime } from "./ApkAlbumComponents";
 import type { MusicRecord } from "./types";
 
@@ -87,7 +87,7 @@ export function FullPlayer({
           <div style={fullCoverStyle}>
             <CachedImage
               src={resolveTrackCoverUrl(music.id, libraryMusics, albums)}
-              cacheKey={`music-cover:full-player:${music.id}`}
+              cacheKey={buildMusicCoverCacheKey("apk-full-player", music.id)}
               alt={music.title}
               style={fullCoverImgStyle}
             />

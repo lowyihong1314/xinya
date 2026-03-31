@@ -1,6 +1,8 @@
 import { API_BASE } from "../../js/apiBase";
 import type { AlbumRecord, MusicRecord } from "./types";
 
+const MUSIC_COVER_CACHE_VERSION = "album-cover-api-v1";
+
 /**
  * Default cover image shown when no album/track cover is available.
  */
@@ -45,4 +47,8 @@ export function resolveTrackCoverUrl(musicId: number, musics: MusicRecord[], alb
 
 export function resolveTrackAlbumName(musicId: number, musics: MusicRecord[], albums: AlbumRecord[]): string {
   return findTrackAlbum(musicId, musics, albums)?.name ?? "";
+}
+
+export function buildMusicCoverCacheKey(scope: string, id: number | string): string {
+  return `music-cover:${MUSIC_COVER_CACHE_VERSION}:${scope}:${id}`;
 }

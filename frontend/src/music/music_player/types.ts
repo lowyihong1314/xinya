@@ -2,6 +2,7 @@ export type AlbumRecord = {
   id: number;
   name: string;
   cover_url?: string | null;
+  album_total_minutes?: number | null;
   description?: string | null;
   created_at?: string;
   music_list?: MusicRecord[];
@@ -17,7 +18,7 @@ export type MusicRecord = {
   file_size?: number;
   duration?: number | null;
   cover_url?: string | null;
-  play_minutes?: number;
+  play_minutes?: number | null;
   created_at?: string;
   album?: AlbumRecord | null;
 };

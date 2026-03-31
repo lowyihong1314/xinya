@@ -1,7 +1,8 @@
 import type { CSSProperties } from "react";
 
 import { CachedImage } from "../../components/CachedMedia";
-import { resolveAlbumCoverUrl } from "./musicCoverUtils";
+import { buildMusicCoverCacheKey, resolveAlbumCoverUrl } from "./musicCoverUtils";
+import { formatMusicHeat } from "./musicHeatUtils";
 import type { AlbumRecord, MusicRecord } from "./types";
 
 // ─── Shared utility ─────────────────────────────────────────────────────────
@@ -19,13 +20,17 @@ export function AlbumHero({ album, trackCount }: { album: AlbumRecord; trackCoun
       <div style={albumHeroCoverStyle}>
         <CachedImage
           src={resolveAlbumCoverUrl(album.cover_url)}
-          cacheKey={`music-apk-album-hero:${album.id}`}
+          cacheKey={buildMusicCoverCacheKey("apk-album-hero", album.id)}
           alt={album.name}
           style={{ width: "100%", height: "100%", objectFit: "cover" }}
         />
       </div>
       <div style={albumHeroNameStyle}>{album.name}</div>
-      <div style={albumHeroCountStyle}>{trackCount} 首歌曲</div>
+      <div style={albumHeroCountStyle}>
+        {trackCount} 首歌曲
+        {" · "}
+        {formatMusicHeat(album.album_total_minutes)}
+      </div>
     </div>
   );
 }
@@ -68,13 +73,17 @@ export function AlbumCard({
       <div style={albumCoverStyle}>
         <CachedImage
           src={resolveAlbumCoverUrl(album.cover_url)}
-          cacheKey={`music-apk-album-card:${album.id}`}
+          cacheKey={buildMusicCoverCacheKey("apk-album-card", album.id)}
           alt={album.name}
           style={albumCoverImgStyle}
         />
       </div>
       <div style={albumNameStyle}>{album.name}</div>
-      <div style={albumCountStyle}>{trackCount} 首</div>
+      <div style={albumCountStyle}>
+        {trackCount} 首
+        {" · "}
+        {formatMusicHeat(album.album_total_minutes)}
+      </div>
     </button>
   );
 }
@@ -116,14 +125,18 @@ export function AlbumListRow({
       <div style={albumListCoverStyle}>
         <CachedImage
           src={resolveAlbumCoverUrl(album.cover_url)}
-          cacheKey={`music-apk-album-row:${album.id}`}
+          cacheKey={buildMusicCoverCacheKey("apk-album-row", album.id)}
           alt={album.name}
           style={{ width: "100%", height: "100%", objectFit: "cover" }}
         />
       </div>
       <div style={albumListInfoStyle}>
         <span style={albumListNameStyle}>{album.name}</span>
-        <span style={albumListCountStyle}>{trackCount} 首</span>
+        <span style={albumListCountStyle}>
+          {trackCount} 首
+          {" · "}
+          {formatMusicHeat(album.album_total_minutes)}
+        </span>
       </div>
       <i className="fas fa-chevron-right" style={albumListChevronStyle} />
     </button>
@@ -193,7 +206,8 @@ export function TrackRow({
           <span style={trackTitleStyle(isActive)}>{track.title}</span>
           <span style={trackMetaStyle}>
             {showAlbum && (albumName || track.album?.name) ? `${albumName || track.album?.name}  ·  ` : ""}
-            {track.duration != null ? formatTime(track.duration) : ""}
+            {formatMusicHeat(track.play_minutes)}
+            {track.duration != null ? `  ·  ${formatTime(track.duration)}` : ""}
           </span>
         </div>
       </button>
