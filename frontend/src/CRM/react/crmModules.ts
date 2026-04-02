@@ -2,7 +2,7 @@ import { CCTVPage } from '../CCTV/CCTVPage';
 import { EventTablePage } from '../event/react/EventTablePage';
 import { FahuiPage } from '../fahui/FahuiPage';
 import { FormWorkspacePage } from '../form/react/FormWorkspacePage';
-import { PermanentRegistrationPage } from '../permanent_registration/react/PermanentRegistrationPage';
+import { LongOpenRegistrationFormPage } from '../long_open_registration_form/react/LongOpenRegistrationFormPage';
 import { UserControlPage } from '../user_control/react/UserControlPage';
 import { FinancePage } from '../Account/react/FinancePage';
 import { SongbookAdminPage } from '../changyou/react/SongbookAdminPage';
@@ -70,7 +70,7 @@ export const CRM_MODULES: CRMModuleSpec[] = [
     title: '长期开放表格',
     icon: 'fas fa-id-card-clip',
     description: '会员与青少年班等长期开放报名表格工作台。',
-    Component: PermanentRegistrationPage,
+    Component: LongOpenRegistrationFormPage,
   },
   {
     key: 'cctv',
@@ -96,6 +96,7 @@ export const CRM_MODULES: CRMModuleSpec[] = [
 ];
 
 export const DEFAULT_CRM_MODULE_KEY: CRMModuleKey = CRM_MODULES[0].key;
+export const LONG_OPEN_REGISTRATION_FORM_PATH = '/long_open_registration_form';
 
 const CRM_MODULE_ALIASES: Record<string, CRMModuleKey> = {
   membership_registration: 'permanent_registration',
@@ -112,31 +113,15 @@ export function getCRMModule(moduleKey?: string | null) {
   return CRM_MODULES.find((item) => item.key === resolvedKey) ?? CRM_MODULES[0];
 }
 
-export function getCRMModuleAliasSection(moduleKey?: string | null): string | null {
-  if (moduleKey === 'membership_registration') {
-    return 'membership';
-  }
-  if (moduleKey === 'youth_class_registration') {
-    return 'youth_class';
-  }
-  return null;
-}
-
 export function buildCRMModulePath(moduleKey?: string | null) {
-  return `/crm/${resolveCRMModuleKey(moduleKey)}`;
+  const resolvedKey = resolveCRMModuleKey(moduleKey);
+  if (resolvedKey === 'permanent_registration') {
+    return LONG_OPEN_REGISTRATION_FORM_PATH;
+  }
+  return `/crm/${resolvedKey}`;
 }
 
 export function buildCRMModuleHref(moduleKey?: string | null, sourceSearchParams?: URLSearchParams) {
-  const resolvedKey = resolveCRMModuleKey(moduleKey);
-  const nextParams = new URLSearchParams();
-  const aliasSection = getCRMModuleAliasSection(moduleKey);
-  const currentSection = sourceSearchParams?.get('registration');
-
-  if (resolvedKey === 'permanent_registration') {
-    const nextSection = aliasSection ?? (currentSection === 'youth_class' ? 'youth_class' : 'membership');
-    nextParams.set('registration', nextSection);
-  }
-
-  const search = nextParams.toString();
-  return search ? `${buildCRMModulePath(resolvedKey)}?${search}` : buildCRMModulePath(resolvedKey);
+  void sourceSearchParams;
+  return buildCRMModulePath(moduleKey);
 }

@@ -32,13 +32,13 @@ export function MembershipActionCard({
 }) {
   const title = isMember
     ? `下一次会员过期时间：${formatDateOnly(nextExpiryDate)}`
-    : "立刻填写报名升级会员";
+    : "立刻填写注册会员表格";
   const body = isMember
     ? "系统会直接为你生成一份续费付款链接，上传付款截图后即可进入审核。"
     : hasBoundNric
-      ? "会先打开独立的会员申请表，再进入会员付款页。"
+      ? "会直接打开会员注册表格，并尽量用你当前的 user_data 帮你预填。"
       : "升级会员前，请先回到“资料”页签补上 NRIC，系统会据此绑定你的成员档案。";
-  const actionLabel = isMember ? "直接续费" : "立刻填写报名升级会员";
+  const actionLabel = isMember ? "直接续费" : "立刻填写注册会员表格";
 
   return (
     <div style={cardStyle(isMember, isMobile)}>

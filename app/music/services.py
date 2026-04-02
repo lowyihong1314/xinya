@@ -2,10 +2,20 @@ import os
 
 from flask import jsonify
 from flask_login import current_user
+from sqlalchemy.orm import joinedload
 from werkzeug.utils import secure_filename
 
+from app.timezone import malaysia_now_naive
 from models import db
-from models.music import Album, Music, MusicQueue, Playlist, PlaylistState
+from models.music import (
+    Album,
+    Music,
+    MusicQueue,
+    MusicUserPlayMinute,
+    MusicUserPlayMinuteLog,
+    Playlist,
+    PlaylistState,
+)
 
 from .storage import (
     ALBUM_IMAGE_DIR,
@@ -400,6 +410,159 @@ def add_one_minute(music_id):
     music = Music.query.get(music_id)
     if not music:
         return jsonify({"error": "Music not found"}), 404
+
+    user_id = getattr(current_user, "id", None)
+    if not user_id:
+        return jsonify(
+            {
+                "success": True,
+                "ignored": True,
+                "music_id": music_id,
+                "play_minutes": music.play_minutes,
+            }
+        )
+
+    now = malaysia_now_naive()
+    user_play_minute = MusicUserPlayMinute.query.filter_by(
+        music_id=music_id,
+        user_id=user_id,
+    ).first()
+    if not user_play_minute:
+        user_play_minute = MusicUserPlayMinute(
+            music_id=music_id,
+            user_id=user_id,
+            play_minutes=0.0,
+            created_at=now,
+        )
+        db.session.add(user_play_minute)
+
+    minute_log = MusicUserPlayMinuteLog(
+        music_user_play_minute=user_play_minute,
+        created_at=now,
+    )
+    db.session.add(minute_log)
+
     music.play_minutes += 1.0
+    user_play_minute.play_minutes += 1.0
     db.session.commit()
-    return jsonify({"success": True, "music_id": music_id, "play_minutes": music.play_minutes})
+    return jsonify(
+        {
+            "success": True,
+            "music_id": music_id,
+            "user_id": user_id,
+            "play_minutes": music.play_minutes,
+            "played_at": now.isoformat(),
+        }
+    )
+
+
+def list_minute_logs(page, per_page, music_id=None, user_id=None):
+    page = max(1, int(page or 1))
+    per_page = min(max(1, int(per_page or 200)), 1000)
+
+    query = MusicUserPlayMinuteLog.query.options(
+        joinedload(MusicUserPlayMinuteLog.music_user_play_minute).joinedload(
+            MusicUserPlayMinute.music
+        ),
+        joinedload(MusicUserPlayMinuteLog.music_user_play_minute).joinedload(
+            MusicUserPlayMinute.user
+        ),
+    )
+
+    if music_id or user_id:
+        query = query.join(MusicUserPlayMinuteLog.music_user_play_minute)
+    if music_id:
+        query = query.filter(MusicUserPlayMinute.music_id == music_id)
+    if user_id:
+        query = query.filter(MusicUserPlayMinute.user_id == user_id)
+
+    pagination = query.order_by(
+        MusicUserPlayMinuteLog.created_at.desc(),
+        MusicUserPlayMinuteLog.id.desc(),
+    ).paginate(page=page, per_page=per_page)
+
+    items = []
+    for minute_log in pagination.items:
+        user_play_minute = minute_log.music_user_play_minute
+        user = user_play_minute.user if user_play_minute else None
+        music = user_play_minute.music if user_play_minute else None
+        items.append(
+            {
+                "id": minute_log.id,
+                "created_at": minute_log.created_at.isoformat()
+                if minute_log.created_at
+                else None,
+                "music_user_play_minute_id": user_play_minute.id
+                if user_play_minute
+                else None,
+                "music_id": music.id if music else None,
+                "music_title": music.title if music else None,
+                "user_id": user.id if user else None,
+                "username": user.username if user else None,
+                "display_name": user.display_name if user else None,
+            }
+        )
+
+    return jsonify(
+        {
+            "items": items,
+            "page": page,
+            "per_page": per_page,
+            "total_pages": pagination.pages,
+            "total": pagination.total,
+            "timezone": "Asia/Kuala_Lumpur",
+        }
+    )
+
+
+def get_last_played_music():
+    user_id = getattr(current_user, "id", None)
+    if not user_id:
+        return jsonify({"last_played": None, "timezone": "Asia/Kuala_Lumpur"})
+
+    latest_log = (
+        MusicUserPlayMinuteLog.query.join(MusicUserPlayMinuteLog.music_user_play_minute)
+        .options(
+            joinedload(MusicUserPlayMinuteLog.music_user_play_minute).joinedload(
+                MusicUserPlayMinute.music
+            ),
+            joinedload(MusicUserPlayMinuteLog.music_user_play_minute).joinedload(
+                MusicUserPlayMinute.user
+            ),
+        )
+        .filter(MusicUserPlayMinute.user_id == user_id)
+        .order_by(
+            MusicUserPlayMinuteLog.created_at.desc(),
+            MusicUserPlayMinuteLog.id.desc(),
+        )
+        .first()
+    )
+
+    if not latest_log:
+        return jsonify({"last_played": None, "timezone": "Asia/Kuala_Lumpur"})
+
+    user_play_minute = latest_log.music_user_play_minute
+    music = user_play_minute.music if user_play_minute else None
+    user = user_play_minute.user if user_play_minute else None
+
+    return jsonify(
+        {
+            "last_played": {
+                "music_user_play_minute_id": user_play_minute.id
+                if user_play_minute
+                else None,
+                "music_id": music.id if music else None,
+                "music_title": music.title if music else None,
+                "user_id": user.id if user else None,
+                "username": user.username if user else None,
+                "display_name": user.display_name if user else None,
+                "play_minutes": user_play_minute.play_minutes
+                if user_play_minute
+                else None,
+                "played_at": latest_log.created_at.isoformat()
+                if latest_log.created_at
+                else None,
+            },
+            "timezone": "Asia/Kuala_Lumpur",
+        }
+    )

@@ -18,6 +18,7 @@ export function CRMPage() {
   const searchParams = new URLSearchParams(location.search);
   const isMobileHome = isMobile && location.pathname === "/crm/home";
   const activeModule = CRM_MODULES.find((module) => location.pathname === buildCRMModulePath(module.key)) ?? null;
+  const loginRedirectPath = `${location.pathname}${location.search}`;
 
   if (!isAuthenticated) {
     return (
@@ -27,7 +28,7 @@ export function CRMPage() {
           <h1 style={gateTitleStyle}>请先登录后台</h1>
           <p style={gateBodyStyle}>CRM 入口已经切到 React Router，模块切换和状态同步现在由 React 负责。</p>
           <div style={gateActionsStyle}>
-            <button type="button" style={primaryButtonStyle} onClick={() => openLogin("/crm")}>
+            <button type="button" style={primaryButtonStyle} onClick={() => openLogin(loginRedirectPath || "/crm")}>
               打开登录框
             </button>
           </div>

@@ -1,11 +1,10 @@
-import { useMemo } from "react";
+import { useState } from "react";
 import type { CSSProperties } from "react";
-import { useSearchParams } from "react-router-dom";
 
 import { useUserState } from "../../../app/UserState";
 import { ensureDesignTokens } from "../../../theme/designTokens";
-import { MembershipRegistrationPage } from "../../membership/react/MembershipRegistrationPage";
-import { YouthClassRegistrationPage } from "../../youth_class/react/YouthClassRegistrationPage";
+import { MembershipRegistrationPage } from "./MembershipRegistrationPage";
+import { YouthClassRegistrationPage } from "./YouthClassRegistrationPage";
 
 type RegistrationSectionKey = "membership" | "youth_class";
 
@@ -15,28 +14,21 @@ const SECTION_ITEMS: Array<{
   hint: string;
 }> = [
   { key: "membership", label: "会员", hint: "升级 / 续费 / 年费审核" },
-  { key: "youth_class", label: "青少年 & 青年佛学班", hint: "常年开放课程报名与收费" },
+  { key: "youth_class", label: "青少年佛学班", hint: "13-17 岁常年开放课程报名与收费" },
 ];
 
 function resolveSectionKey(value: string | null): RegistrationSectionKey {
   return value === "youth_class" ? "youth_class" : "membership";
 }
 
-export function PermanentRegistrationPage() {
+export function LongOpenRegistrationFormPage() {
   ensureDesignTokens();
 
   const { isMobile } = useUserState();
-  const [searchParams, setSearchParams] = useSearchParams();
-  const activeSection = useMemo(
-    () => resolveSectionKey(searchParams.get("registration")),
-    [searchParams],
-  );
+  const [activeSection, setActiveSection] = useState<RegistrationSectionKey>(() => resolveSectionKey(null));
 
   function switchSection(section: RegistrationSectionKey) {
-    const nextParams = new URLSearchParams(searchParams);
-    nextParams.set("crm", "permanent_registration");
-    nextParams.set("registration", section);
-    setSearchParams(nextParams);
+    setActiveSection(section);
   }
 
   return (
@@ -45,7 +37,7 @@ export function PermanentRegistrationPage() {
         <div style={eyebrowStyle}>CRM / 长期开放表格</div>
         <h1 style={titleStyle(isMobile)}>长期开放表格</h1>
         <p style={descStyle(isMobile)}>
-          把持续开放的报名入口集中在一起管理。这里目前收拢了会员升级 / 续费，以及青少年 & 青年佛学班两条长期流程。
+          把持续开放的报名入口集中在一起管理。公开入口现在只有一个，系统会按年龄把 13-17 岁分到青少年佛学班，把 18 岁以上分到会员报名。
         </p>
       </section>
 

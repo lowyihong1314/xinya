@@ -35,6 +35,26 @@ export function AlbumHero({ album, trackCount }: { album: AlbumRecord; trackCoun
   );
 }
 
+export function AllSongsHero({
+  trackCount,
+  totalMinutes,
+}: {
+  trackCount: number;
+  totalMinutes: number;
+}) {
+  return (
+    <div style={albumHeroStyle}>
+      <div style={albumHeroPlaceholderStyle}>全部</div>
+      <div style={albumHeroNameStyle}>全部歌曲</div>
+      <div style={albumHeroCountStyle}>
+        {trackCount} 首歌曲
+        {" · "}
+        {formatMusicHeat(totalMinutes)}
+      </div>
+    </div>
+  );
+}
+
 const albumHeroStyle: CSSProperties = {
   display: "flex", flexDirection: "column", alignItems: "center",
   padding: "20px 24px 16px", gap: 8,
@@ -55,6 +75,14 @@ const albumHeroNameStyle: CSSProperties = {
 
 const albumHeroCountStyle: CSSProperties = {
   fontSize: 13, color: "var(--x-color-ink-muted)",
+};
+
+const albumHeroPlaceholderStyle: CSSProperties = {
+  ...albumHeroCoverStyle,
+  color: "rgba(255,255,255,0.9)",
+  fontSize: 26,
+  fontWeight: 800,
+  letterSpacing: "0.08em",
 };
 
 // ─── AlbumCard ───────────────────────────────────────────────────────────────
@@ -88,6 +116,28 @@ export function AlbumCard({
   );
 }
 
+export function AllSongsCard({
+  trackCount,
+  totalMinutes,
+  onSelect,
+}: {
+  trackCount: number;
+  totalMinutes: number;
+  onSelect: () => void;
+}) {
+  return (
+    <button style={albumCardStyle} onClick={onSelect}>
+      <div style={allSongsCoverStyle}>全部</div>
+      <div style={albumNameStyle}>全部歌曲</div>
+      <div style={albumCountStyle}>
+        {trackCount} 首
+        {" · "}
+        {formatMusicHeat(totalMinutes)}
+      </div>
+    </button>
+  );
+}
+
 const albumCardStyle: CSSProperties = {
   display: "flex", flexDirection: "column", gap: 6,
   border: "none", background: "transparent",
@@ -98,6 +148,14 @@ const albumCoverStyle: CSSProperties = {
   width: "100%", aspectRatio: "1", borderRadius: 14,
   background: "linear-gradient(135deg, var(--x-color-nav-start), var(--x-color-nav-end))",
   display: "flex", alignItems: "center", justifyContent: "center", overflow: "hidden",
+};
+
+const allSongsCoverStyle: CSSProperties = {
+  ...albumCoverStyle,
+  color: "rgba(255,255,255,0.9)",
+  fontSize: 22,
+  fontWeight: 800,
+  letterSpacing: "0.08em",
 };
 
 const albumCoverImgStyle: CSSProperties = { width: "100%", height: "100%", objectFit: "cover" };

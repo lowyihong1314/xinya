@@ -1,7 +1,9 @@
 import json
 from datetime import datetime
 
+from app.timezone import malaysia_now_naive
 from models import db
+
 
 class Music(db.Model):
     __tablename__ = 'music'
@@ -19,6 +21,11 @@ class Music(db.Model):
 
     album = db.relationship('Album', back_populates='musics')
     artist = db.relationship('Artist', back_populates='musics')
+    user_play_minutes = db.relationship(
+        'MusicUserPlayMinute',
+        back_populates='music',
+        cascade='all, delete-orphan',
+    )
 
     def to_dict(self):
         return {
@@ -39,6 +46,68 @@ class Music(db.Model):
         data = self.to_dict()
         data["album"] = self.album.to_dict() if self.album else None
         return data
+
+
+class MusicUserPlayMinute(db.Model):
+    __tablename__ = 'music_user_play_minute'
+    __table_args__ = (
+        db.UniqueConstraint('music_id', 'user_id', name='uq_music_user_play_minute_music_user'),
+    )
+
+    id = db.Column(db.Integer, primary_key=True)
+    music_id = db.Column(db.Integer, db.ForeignKey('music.id'), nullable=False, index=True)
+    user_id = db.Column(db.Integer, db.ForeignKey('user_data.id'), nullable=False, index=True)
+    play_minutes = db.Column(db.Float, nullable=False, default=0.0)
+    created_at = db.Column(db.DateTime, default=malaysia_now_naive, nullable=False)
+
+    minute_logs = db.relationship(
+        'MusicUserPlayMinuteLog',
+        back_populates='music_user_play_minute',
+        cascade='all, delete-orphan',
+        order_by='MusicUserPlayMinuteLog.created_at.asc(), MusicUserPlayMinuteLog.id.asc()',
+    )
+
+    music = db.relationship('Music', back_populates='user_play_minutes')
+    user = db.relationship('User', backref='music_user_play_minutes')
+
+    def to_dict(self):
+        return {
+            "id": self.id,
+            "music_id": self.music_id,
+            "user_id": self.user_id,
+            "play_minutes": self.play_minutes,
+            "created_at": self.created_at.isoformat() if self.created_at else None,
+            "minute_log_count": len(self.minute_logs) if self.minute_logs is not None else None,
+        }
+
+
+class MusicUserPlayMinuteLog(db.Model):
+    __tablename__ = 'music_user_play_minute_log'
+
+    id = db.Column(db.Integer, primary_key=True)
+    music_user_play_minute_id = db.Column(
+        db.Integer,
+        db.ForeignKey('music_user_play_minute.id'),
+        nullable=False,
+        index=True,
+    )
+    created_at = db.Column(db.DateTime, default=malaysia_now_naive, nullable=False, index=True)
+
+    music_user_play_minute = db.relationship(
+        'MusicUserPlayMinute',
+        back_populates='minute_logs',
+    )
+
+    def to_dict(self):
+        parent = self.music_user_play_minute
+        return {
+            "id": self.id,
+            "music_user_play_minute_id": self.music_user_play_minute_id,
+            "music_id": parent.music_id if parent else None,
+            "user_id": parent.user_id if parent else None,
+            "created_at": self.created_at.isoformat() if self.created_at else None,
+        }
+
 
 class Album(db.Model):
     __tablename__ = 'album'

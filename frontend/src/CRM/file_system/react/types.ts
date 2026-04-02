@@ -57,7 +57,7 @@ export type FileDetail = {
 
 export type TrashRow = {
   id: number;
-  file_id: number;
+  file_id?: number | null;
   path: string;
   size: number;
   deleted_at?: string | null;

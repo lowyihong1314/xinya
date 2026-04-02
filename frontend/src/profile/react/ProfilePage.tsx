@@ -219,6 +219,70 @@ function formatDateTime(value: string | null | undefined) {
   });
 }
 
+function getMalaysiaToday() {
+  const formatter = new Intl.DateTimeFormat("en-CA", {
+    timeZone: "Asia/Kuala_Lumpur",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  });
+  const parts = formatter.formatToParts(new Date());
+  const partMap = Object.fromEntries(parts.map((part) => [part.type, part.value]));
+  return {
+    year: Number(partMap.year || "0"),
+    month: Number(partMap.month || "0"),
+    day: Number(partMap.day || "0"),
+  };
+}
+
+function calcAgeFromNric(nric: string | null | undefined) {
+  const digits = String(nric || "").replace(/\D/g, "");
+  if (digits.length < 6) {
+    return null;
+  }
+
+  const yy = Number(digits.slice(0, 2));
+  const mm = Number(digits.slice(2, 4));
+  const dd = Number(digits.slice(4, 6));
+  if (!Number.isFinite(yy) || !Number.isFinite(mm) || !Number.isFinite(dd)) {
+    return null;
+  }
+
+  const today = getMalaysiaToday();
+  const currentYY = today.year % 100;
+  const year = yy > currentYY ? 1900 + yy : 2000 + yy;
+  const dob = new Date(Date.UTC(year, mm - 1, dd));
+  if (
+    Number.isNaN(dob.getTime()) ||
+    dob.getUTCFullYear() !== year ||
+    dob.getUTCMonth() !== mm - 1 ||
+    dob.getUTCDate() !== dd
+  ) {
+    return null;
+  }
+
+  let age = today.year - year;
+  if (today.month < mm || (today.month === mm && today.day < dd)) {
+    age -= 1;
+  }
+  return age >= 0 && age <= 120 ? age : null;
+}
+
+function contactLabelsForAge(age: number | null) {
+  if (age != null && age > 18) {
+    return {
+      name: "紧急联络人",
+      phone: "紧急联络人电话",
+      summary: "紧急联络人",
+    };
+  }
+  return {
+    name: "家长 1",
+    phone: "家长 1 电话",
+    summary: "家长",
+  };
+}
+
 function paymentStatusLabel(status: string | null | undefined) {
   if (status === "checked") return "已确认付款";
   if (status === "fail") return "付款被退回";
@@ -374,6 +438,8 @@ export function ProfilePage() {
   const latestFootprint = pickLatestFootprint(registrations, youthItems);
   const nextMembershipExpiry = profileUser?.member_renewals?.[0]?.renewal_date ?? null;
   const hasBoundNric = Boolean(profileUser?.NRIC);
+  const profileAge = useMemo(() => calcAgeFromNric(profileUser?.NRIC), [profileUser?.NRIC]);
+  const contactLabels = useMemo(() => contactLabelsForAge(profileAge), [profileAge]);
 
   if (loadingUser) {
     return (
@@ -474,7 +540,7 @@ export function ProfilePage() {
         setError("请先在资料页填写并保存 NRIC，再继续会员升级申请。");
         return;
       }
-      window.open(`${window.location.origin}/template/membership-application`, "_blank", "noopener,noreferrer");
+      window.open(`${window.location.origin}/template/long-open-registration-form?preferred=membership&source=profile`, "_blank", "noopener,noreferrer");
       return;
     }
 
@@ -581,6 +647,12 @@ export function ProfilePage() {
               wideOnMobile
             />
             <HeroMetric
+              label="年龄"
+              value={profileAge != null ? `${profileAge}` : "未识别"}
+              hint="按 NRIC 自动判断"
+              isMobile={isMobile}
+            />
+            <HeroMetric
               label="足迹总数"
               value={String(footprintSummary.total_count ?? 0)}
               hint="活动与课程"
@@ -633,6 +705,7 @@ export function ProfilePage() {
                 <InfoRow label="显示名称" value={profileUser.display_name || profileUser.username} isMobile={isMobile} />
                 <InfoRow label="姓名" value={profileUser.name_NRIC || "未填写"} isMobile={isMobile} />
                 <InfoRow label="NRIC" value={profileUser.NRIC || "未绑定"} isMobile={isMobile} />
+                <InfoRow label="年龄" value={profileAge != null ? `${profileAge} 岁` : "未识别"} isMobile={isMobile} />
                 <InfoRow label="成员档案" value={footprints.member?.display_name || "尚未生成"} isMobile={isMobile} />
               </div>
               <div style={featureCardFooterStyle}>
@@ -668,9 +741,15 @@ export function ProfilePage() {
                 {FIELD_GROUPS.flatMap((group) =>
                   group.fields.map((field) => {
                     const filled = Boolean(String(formValues[field.key] || "").trim());
+                    const fieldLabel =
+                      field.key === "parent_1"
+                        ? contactLabels.name
+                        : field.key === "parent_1_phone"
+                          ? contactLabels.phone
+                          : field.label;
                     return (
                       <div key={field.key} style={checkItemStyle(filled)}>
-                        <span>{field.label}</span>
+                        <span>{fieldLabel}</span>
                         <strong>{filled ? "已填写" : "待补充"}</strong>
                       </div>
                     );
@@ -702,19 +781,31 @@ export function ProfilePage() {
                   </div>
                 </div>
                 <div style={groupFieldGridStyle(isMobile)}>
-                  {group.fields.map((field) => (
-                    <label
-                      key={field.key}
-                      style={field.type === "textarea" ? wideFieldStyle : fieldStyle}
-                    >
-                      <span style={fieldLabelStyle}>{field.label}</span>
-                      <FieldControl
-                        field={field}
-                        value={formValues[field.key]}
-                        onChange={(value) => updateField(field.key, value)}
-                      />
-                    </label>
-                  ))}
+                  {group.fields.map((field) => {
+                    const fieldLabel =
+                      field.key === "parent_1"
+                        ? contactLabels.name
+                        : field.key === "parent_1_phone"
+                          ? contactLabels.phone
+                          : field.label;
+
+                    return (
+                      <label
+                        key={field.key}
+                        style={field.type === "textarea" ? wideFieldStyle : fieldStyle}
+                      >
+                        <span style={fieldLabelStyle}>{fieldLabel}</span>
+                        <FieldControl
+                          field={{
+                            ...field,
+                            label: fieldLabel,
+                          }}
+                          value={formValues[field.key]}
+                          onChange={(value) => updateField(field.key, value)}
+                        />
+                      </label>
+                    );
+                  })}
                 </div>
               </section>
             ))}
@@ -784,7 +875,7 @@ export function ProfilePage() {
 
               {youthItems.length ? (
                 <div style={footprintSectionStyle}>
-                  <div style={sectionSubtitleStyle}>青少年 & 青年佛学班</div>
+                  <div style={sectionSubtitleStyle}>青少年佛学班</div>
                   <div style={footprintListStyle}>
                     {youthItems.map((item) => (
                       <YouthFootprintCard key={`youth-${item.id}`} item={item} />
@@ -862,7 +953,9 @@ export function ProfilePage() {
                 <InfoRow label="密码状态" value={profileUser.has_password ? "已设置" : "未设置"} isMobile={isMobile} />
                 <InfoRow label="Email" value={profileUser.email || "未填写"} isMobile={isMobile} />
                 <InfoRow label="Phone" value={profileUser.phone || "未填写"} isMobile={isMobile} />
-                <InfoRow label="Guardian" value={profileUser.parent_1 || "未填写"} isMobile={isMobile} />
+                <InfoRow label="年龄" value={profileAge != null ? `${profileAge} 岁` : "未识别"} isMobile={isMobile} />
+                <InfoRow label={contactLabels.summary} value={profileUser.parent_1 || "未填写"} isMobile={isMobile} />
+                <InfoRow label={contactLabels.phone} value={profileUser.parent_1_phone || "未填写"} isMobile={isMobile} />
               </div>
             </article>
 

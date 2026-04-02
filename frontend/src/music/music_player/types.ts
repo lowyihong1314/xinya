@@ -23,6 +23,42 @@ export type MusicRecord = {
   album?: AlbumRecord | null;
 };
 
+export type MinuteLogRecord = {
+  id: number;
+  created_at?: string | null;
+  music_user_play_minute_id?: number | null;
+  music_id?: number | null;
+  music_title?: string | null;
+  user_id?: number | null;
+  username?: string | null;
+  display_name?: string | null;
+};
+
+export type MinuteLogsResponse = {
+  items?: MinuteLogRecord[];
+  page?: number;
+  per_page?: number;
+  total?: number;
+  total_pages?: number;
+  timezone?: string;
+};
+
+export type LastPlayedMusicRecord = {
+  music_user_play_minute_id?: number | null;
+  music_id?: number | null;
+  music_title?: string | null;
+  user_id?: number | null;
+  username?: string | null;
+  display_name?: string | null;
+  play_minutes?: number | null;
+  played_at?: string | null;
+};
+
+export type LastPlayedMusicResponse = {
+  last_played?: LastPlayedMusicRecord | null;
+  timezone?: string;
+};
+
 export type PlaylistRecord = {
   id: number;
   name: string;

@@ -111,7 +111,11 @@ class FileHistory(db.Model):
 class FileTrash(db.Model):
     __tablename__ = 'file_trash'
     id = db.Column(db.Integer, primary_key=True)
-    file_id = db.Column(db.Integer, db.ForeignKey('files.id'), nullable=False)
+    file_id = db.Column(
+        db.Integer,
+        db.ForeignKey('files.id', ondelete='SET NULL'),
+        nullable=True,
+    )
     owner_id = db.Column(db.Integer, db.ForeignKey('user_data.id'), nullable=False)
     deleted_by = db.Column(db.Integer, db.ForeignKey('user_data.id'), nullable=False)
     deleted_at = db.Column(db.DateTime, default=datetime.utcnow)

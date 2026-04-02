@@ -33,7 +33,7 @@
 
 ## Shared dependencies
 
-- `FeePanel.tsx` is reused by `frontend/src/CRM/membership/react` and `frontend/src/CRM/youth_class/react`.
+- `FeePanel.tsx` is reused by the long-open registration workspace under `frontend/src/CRM/long_open_registration_form/react`.
 - `useFormWorkspace.ts` still calls the legacy `open_parental_form` helper from `static/js/form/parental/modal.js`.
 - `useFormRealtime.ts` is a reserved hook for future live-refresh support and currently keeps the integration point isolated.
 

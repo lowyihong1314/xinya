@@ -444,10 +444,25 @@ def get_membership_context():
     return membership.get_membership_context()
 
 
+@user_control_bp.get("/membership/public-context")
+def get_membership_public_context():
+    return membership.get_public_membership_context()
+
+
+@user_control_bp.get("/membership/registration-route")
+def get_membership_registration_route():
+    return membership.get_long_open_registration_route(request.args.get("nric"))
+
+
 @user_control_bp.post("/membership/upgrade")
 @login_required
 def submit_membership_upgrade():
     return membership.submit_membership_upgrade(request.get_json(silent=True) or {})
+
+
+@user_control_bp.post("/membership/public-upgrade")
+def submit_membership_public_upgrade():
+    return membership.submit_public_membership_upgrade(request.get_json(silent=True) or {})
 
 
 @user_control_bp.post("/membership/renew")
@@ -457,13 +472,11 @@ def start_membership_renewal():
 
 
 @user_control_bp.get("/membership/payment/<token>")
-@login_required
 def get_membership_payment_context(token):
     return membership.get_membership_payment_context(token)
 
 
 @user_control_bp.post("/membership/payment/<token>/submit")
-@login_required
 def submit_membership_payment(token):
     return membership.submit_membership_payment(token, request.form, request.files.get("proof_image"))
 

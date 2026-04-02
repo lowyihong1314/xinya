@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 
+import { hasUserPermission } from "../../app/permissions";
 import { useUserState } from "../../app/UserState";
 import {
   createAlbum,
@@ -10,13 +11,24 @@ import {
   fetchAlbum,
   fetchAlbums,
   fetchMusicDetail,
+  fetchMinuteLogs,
   fetchMusicList,
   replaceMusicFile,
   uploadAlbumCover,
   uploadMusic,
 } from "./api";
+import {
+  countUniqueListeners,
+  groupMinuteLogsIntoSessions,
+  sumSessionMinutes,
+} from "./listeningActivity";
 import { useMusicPlayback } from "./MusicPlaybackContext";
-import type { AlbumRecord, MusicRecord, PlaylistRecord } from "./types";
+import type {
+  AlbumRecord,
+  MinuteLogRecord,
+  MusicRecord,
+  PlaylistRecord,
+} from "./types";
 import {
   EMPTY_ALBUM_DRAFT,
   EMPTY_PLAYLIST_DRAFT,
@@ -43,7 +55,8 @@ export function useMusicWorkspace() {
     insertNext,
     appendToQueue,
   } = useMusicPlayback();
-  const canManage = Boolean(user?.username);
+  const canManage = hasUserPermission(user, "music_edit");
+  const canViewListening = canManage;
 
   const fileInputRef = useRef<HTMLInputElement | null>(null);
   const coverInputRef = useRef<HTMLInputElement | null>(null);
@@ -66,6 +79,9 @@ export function useMusicWorkspace() {
   const [uploadingMusicState, setUploadingMusicState] = useState(false);
   const [replacingFile, setReplacingFile] = useState(false);
   const [toast, setToast] = useState<Toast>(null);
+  const [minuteLogs, setMinuteLogs] = useState<MinuteLogRecord[]>([]);
+  const [listeningLoading, setListeningLoading] = useState(false);
+  const [listeningTimezone, setListeningTimezone] = useState("Asia/Kuala_Lumpur");
   const [newAlbumName, setNewAlbumName] = useState("");
   const [albumDraft, setAlbumDraft] = useState<AlbumDraft>(EMPTY_ALBUM_DRAFT);
   const [trackDraft, setTrackDraft] = useState<TrackDraft>(EMPTY_TRACK_DRAFT);
@@ -98,6 +114,47 @@ export function useMusicWorkspace() {
     return next;
   }, [libraryMusics]);
 
+  const listeningSessions = useMemo(
+    () => groupMinuteLogsIntoSessions(minuteLogs),
+    [minuteLogs],
+  );
+
+  const listeningSummary = useMemo(
+    () => ({
+      totalMinutes: sumSessionMinutes(listeningSessions),
+      uniqueListeners: countUniqueListeners(listeningSessions),
+    }),
+    [listeningSessions],
+  );
+
+  const visibleListeningSessions = useMemo(() => {
+    let next = listeningSessions;
+
+    if (screen === "tracks" && selectedAlbumId !== null) {
+      const visibleMusicIds = new Set(musics.map((music) => music.id));
+      next = next.filter(
+        (session) =>
+          session.music_id != null && visibleMusicIds.has(session.music_id),
+      );
+    }
+
+    const query = search.trim().toLowerCase();
+    if (query) {
+      next = next.filter((session) =>
+        [
+          session.music_title || "",
+          session.display_name || "",
+          session.username || "",
+        ]
+          .join(" ")
+          .toLowerCase()
+          .includes(query),
+      );
+    }
+
+    return next.slice(0, 12);
+  }, [listeningSessions, musics, screen, search, selectedAlbumId]);
+
   const totalAlbumPages = Math.max(1, Math.ceil(albums.length / ALBUMS_PER_PAGE));
   const pagedAlbums = useMemo(() => {
     const start = (albumPage - 1) * ALBUMS_PER_PAGE;
@@ -117,6 +174,41 @@ export function useMusicWorkspace() {
     const timer = window.setTimeout(() => setToast(null), 3200);
     return () => window.clearTimeout(timer);
   }, [toast]);
+
+  useEffect(() => {
+    if (!canViewListening) {
+      setMinuteLogs([]);
+      setListeningLoading(false);
+      return;
+    }
+
+    let cancelled = false;
+    setListeningLoading(true);
+
+    void fetchMinuteLogs({ perPage: 240 })
+      .then((payload) => {
+        if (cancelled) return;
+        setMinuteLogs(payload.items || []);
+        setListeningTimezone(payload.timezone || "Asia/Kuala_Lumpur");
+      })
+      .catch((error) => {
+        if (!cancelled) {
+          setToast({
+            type: "error",
+            text: error instanceof Error ? error.message : "读取听歌记录失败",
+          });
+        }
+      })
+      .finally(() => {
+        if (!cancelled) {
+          setListeningLoading(false);
+        }
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [canViewListening]);
 
   async function loadInitial() {
     setLoading(true);
@@ -146,8 +238,6 @@ export function useMusicWorkspace() {
             : null;
       if (preferredCurrentId != null) {
         setCurrentMusicId(preferredCurrentId);
-      } else if (allMusics.length) {
-        setCurrentMusicId(allMusics[0].id);
       }
     } catch (error) {
       setToast({ type: "error", text: error instanceof Error ? error.message : "载入音乐资料失败" });
@@ -159,11 +249,21 @@ export function useMusicWorkspace() {
   async function refreshWorkspace(options?: { preserveScreen?: boolean }) {
     setRefreshing(true);
     try {
-      const [albumList, musicListPayload] = await Promise.all([fetchAlbums(), fetchMusicList()]);
+      const responses = await Promise.all([
+        fetchAlbums(),
+        fetchMusicList(),
+        canViewListening ? fetchMinuteLogs({ perPage: 240 }) : Promise.resolve(null),
+      ]);
+      const [albumList, musicListPayload, minuteLogPayload] = responses;
       const allMusics = musicListPayload.musics || [];
       setAlbums(albumList);
       setLibraryMusics(allMusics);
       setPlaybackLibraryMusics(allMusics);
+
+      if (minuteLogPayload) {
+        setMinuteLogs(minuteLogPayload.items || []);
+        setListeningTimezone(minuteLogPayload.timezone || "Asia/Kuala_Lumpur");
+      }
 
       if (selectedAlbumId) {
         const album = await fetchAlbum(selectedAlbumId);
@@ -184,7 +284,7 @@ export function useMusicWorkspace() {
       }
 
       if (currentMusicId && !allMusics.some((music) => music.id === currentMusicId)) {
-        setCurrentMusicId(allMusics[0]?.id || null);
+        setCurrentMusicId(null);
       }
 
       if (options?.preserveScreen !== true) {
@@ -448,9 +548,15 @@ export function useMusicWorkspace() {
       trackDraft,
       playlistDraft,
       playlists,
+      canViewListening,
       toast,
       loading,
       refreshing,
+      listeningLoading,
+      listeningTimezone,
+      listeningSummary,
+      listeningSessions,
+      visibleListeningSessions,
       savingAlbum,
       savingTrack,
       uploadingMusic: uploadingMusicState,

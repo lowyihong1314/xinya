@@ -22,7 +22,7 @@ class MembershipRegistration(db.Model):
     user_id = db.Column(
         db.Integer,
         db.ForeignKey("user_data.id", ondelete="CASCADE", onupdate="CASCADE"),
-        nullable=False,
+        nullable=True,
         index=True,
     )
     nric_asset_id = db.Column(
@@ -37,6 +37,7 @@ class MembershipRegistration(db.Model):
         unique=True,
         default=lambda: secrets.token_urlsafe(24),
     )
+    requested_username = db.Column(db.String(255), nullable=True)
     status = db.Column(
         db.Enum("paid", "process", "reject", name="membership_registration_status_enum"),
         nullable=False,
@@ -121,7 +122,8 @@ class MembershipRegistration(db.Model):
             "registration_type": self.registration_type,
             "user_id": self.user_id,
             "user_name": user_display_name,
-            "username": getattr(self.user, "username", None),
+            "username": getattr(self.user, "username", None) or self.requested_username,
+            "requested_username": self.requested_username,
             "nric_asset_id": self.nric_asset_id,
             "regis_member_id": self.nric_asset_id,
             "nric": live_nric,

@@ -1,6 +1,8 @@
 import type { CSSProperties, RefObject } from "react";
 
 import { CachedImage } from "../../components/CachedMedia";
+import { ListeningActivityChart } from "./ListeningActivityChart";
+import { type ListeningSessionRecord } from "./listeningActivity";
 import { buildMusicCoverCacheKey, resolveAlbumCoverUrl } from "./musicCoverUtils";
 import { formatMusicHeat } from "./musicHeatUtils";
 import type { AlbumRecord, MusicRecord } from "./types";
@@ -27,6 +29,14 @@ type MusicWorkspacePanelProps = {
   albumDraft: AlbumDraft;
   trackDraft: TrackDraft;
   toast: Toast;
+  canViewListening: boolean;
+  listeningLoading: boolean;
+  listeningTimezone: string;
+  listeningSummary: {
+    totalMinutes: number;
+    uniqueListeners: number;
+  };
+  listeningSessions: ListeningSessionRecord[];
   savingAlbum: boolean;
   savingTrack: boolean;
   uploadingMusic: boolean;
@@ -83,6 +93,11 @@ export function MusicWorkspacePanel(props: MusicWorkspacePanelProps) {
     albumDraft,
     trackDraft,
     toast,
+    canViewListening,
+    listeningLoading,
+    listeningTimezone,
+    listeningSummary,
+    listeningSessions,
     savingAlbum,
     savingTrack,
     uploadingMusic,
@@ -123,12 +138,18 @@ export function MusicWorkspacePanel(props: MusicWorkspacePanelProps) {
         <div style={headerCopyStyle}>
           <div style={eyebrowStyle}>Music Workspace</div>
           <h1 style={titleStyle}>佛曲资料库</h1>
-          <p style={subtitleStyle}>右侧工作区拆成三层：全部专辑、歌曲列表、专辑管理 / 歌曲编辑。</p>
+          <p style={subtitleStyle}>音乐库、歌曲编辑和最近听歌记录都集中在这里。</p>
         </div>
         <div style={headerMetaStyle}>
           {refreshing ? <span style={chipStyle("info")}>同步中</span> : null}
           <span style={chipStyle("neutral")}>{albums.length} 张专辑</span>
           <span style={chipStyle("neutral")}>{musics.length} 首当前歌曲</span>
+          {canViewListening ? (
+            <>
+              <span style={chipStyle("neutral")}>{listeningSummary.uniqueListeners} 位听众</span>
+              <span style={chipStyle("neutral")}>{listeningSummary.totalMinutes} 分钟收听</span>
+            </>
+          ) : null}
         </div>
       </header>
 
@@ -144,6 +165,11 @@ export function MusicWorkspacePanel(props: MusicWorkspacePanelProps) {
           totalAlbumPages={totalAlbumPages}
           newAlbumName={newAlbumName}
           canManage={canManage}
+          canViewListening={canViewListening}
+          listeningLoading={listeningLoading}
+          listeningTimezone={listeningTimezone}
+          listeningSummary={listeningSummary}
+          listeningSessions={listeningSessions}
           onChangeNewAlbumName={onChangeNewAlbumName}
           onCreateAlbum={onCreateAlbum}
           onOpenAlbumTracks={onOpenAlbumTracks}
@@ -204,6 +230,7 @@ export function MusicWorkspacePanel(props: MusicWorkspacePanelProps) {
           onReplaceSelected={onReplaceSelected}
         />
       ) : null}
+
     </section>
   );
 }
@@ -217,6 +244,11 @@ function AlbumsScreen({
   totalAlbumPages,
   newAlbumName,
   canManage,
+  canViewListening,
+  listeningLoading,
+  listeningTimezone,
+  listeningSummary,
+  listeningSessions,
   onChangeNewAlbumName,
   onCreateAlbum,
   onOpenAlbumTracks,
@@ -232,6 +264,14 @@ function AlbumsScreen({
   totalAlbumPages: number;
   newAlbumName: string;
   canManage: boolean;
+  canViewListening: boolean;
+  listeningLoading: boolean;
+  listeningTimezone: string;
+  listeningSummary: {
+    totalMinutes: number;
+    uniqueListeners: number;
+  };
+  listeningSessions: ListeningSessionRecord[];
   onChangeNewAlbumName: (value: string) => void;
   onCreateAlbum: () => Promise<void>;
   onOpenAlbumTracks: (albumId: number | null) => Promise<void>;
@@ -243,6 +283,18 @@ function AlbumsScreen({
 
   return (
     <div style={screenStackStyle}>
+      {canViewListening ? (
+        <ListeningActivityChart
+          isMobile={isMobile}
+          title="最近听歌记录"
+          subtitle={`默认收起，展开后按歌曲总分钟看 bar chart；悬停 bar 才显示谁听了几分钟。${listeningSummary.uniqueListeners} 位听众累计 ${listeningSummary.totalMinutes} 分钟。`}
+          timezone={listeningTimezone}
+          loading={listeningLoading}
+          sessions={listeningSessions}
+          emptyText="暂时还没有收听记录。"
+        />
+      ) : null}
+
       <section style={sectionCardStyle}>
         <div style={sectionHeaderStyle}>
           <div>

@@ -161,8 +161,7 @@
         });
         const payload = await response.json().catch(() => ({}));
         if (!response.ok || payload.status !== "success") {
-          const message = response.status === 401 ? "请先登录后再打开会员付款页。" : (payload.message || "读取付款资料失败");
-          throw new Error(message);
+          throw new Error(payload.message || "读取付款资料失败");
         }
 
         const registration = payload.registration || {};

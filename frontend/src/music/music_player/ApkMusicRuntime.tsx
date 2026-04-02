@@ -39,15 +39,13 @@ export function ApkMusicRuntime() {
   }, [handleTrackEnded, setCurrentMusicId, setIsPlayingState, isPlaying]);
 
   // Refs to avoid stale closure issues inside effects.
-  const orderedQueueRef = useRef<MusicRecord[]>([]);
   const currentMusicIdRef = useRef<number | null>(null);
   const repeatModeRef = useRef(repeatMode);
-  useEffect(() => { orderedQueueRef.current = orderedQueue; }, [orderedQueue]);
   useEffect(() => { currentMusicIdRef.current = currentMusicId; }, [currentMusicId]);
   useEffect(() => { repeatModeRef.current = repeatMode; }, [repeatMode]);
 
   // Refs for session tracking.
-  const lastSentAutoplayKeyRef = useRef(0);
+  const lastSyncedPlaylistRef = useRef({ autoplayKey: 0, signature: "" });
   const hasSeenPlaybackSessionRef = useRef(false);
   const loadedLibraryForSessionRef = useRef(false);
 
@@ -107,17 +105,22 @@ export function ApkMusicRuntime() {
   // ExoPlayer.  ExoPlayer then auto-advances, handles notification controls,
   // and fires trackChanged events back to JS for UI sync.
   //
-  // Fires when autoplayKey bumps (user picked a track) or repeatMode changes.
+  // Fires when autoplayKey bumps (user picked a track). We also watch the queue
+  // signature so if shuffle/order state settles one render later, native still
+  // receives the full playlist instead of getting stuck with a single track.
   useEffect(() => {
     if (!IS_APK || !currentMusic || autoplayKey <= 0) return;
-    if (autoplayKey === lastSentAutoplayKeyRef.current) return;
+    const tracks = orderedQueue.length > 0 ? orderedQueue : [currentMusic];
+    const signature = tracks.map((music) => music.id).join(",");
+    if (!signature) return;
 
-    lastSentAutoplayKeyRef.current = autoplayKey;
+    const lastSync = lastSyncedPlaylistRef.current;
+    if (autoplayKey === lastSync.autoplayKey && signature === lastSync.signature) return;
 
-    const queue = orderedQueueRef.current;
     const curId = currentMusicIdRef.current;
-    const tracks = queue.length > 0 ? queue : [currentMusic];
     const startIndex = Math.max(0, tracks.findIndex((m) => m.id === curId));
+    const syncAutoplayKey = autoplayKey;
+    const syncSignature = signature;
 
     void NativeMusic.ready()
       .then(() =>
@@ -126,19 +129,22 @@ export function ApkMusicRuntime() {
             id: m.id,
             url: `${API_BASE}/api/music/download/${m.id}`,
             title: m.title,
-            album: resolveTrackAlbumName(m.id, libraryMusics, albums),
+            album: resolveTrackAlbumName(m.id, libraryMusics, albums) || "全部歌曲",
             coverUrl: resolveTrackCoverUrl(m.id, libraryMusics, albums),
           })),
           startIndex,
           repeatMode: repeatModeRef.current,
         }),
       )
-      .then(() => callbacksRef.current.setIsPlayingState(true))
+      .then(() => {
+        lastSyncedPlaylistRef.current = { autoplayKey: syncAutoplayKey, signature: syncSignature };
+        callbacksRef.current.setIsPlayingState(true);
+      })
       .catch((e) => {
         callbacksRef.current.setIsPlayingState(false);
         console.error("NativeMusic.setPlaylist failed", e);
       });
-  }, [albums, autoplayKey, currentMusic, libraryMusics]);
+  }, [albums, autoplayKey, currentMusic, libraryMusics, orderedQueue]);
 
   // ── Sync repeat mode change to running native player ───────────────────────
   useEffect(() => {

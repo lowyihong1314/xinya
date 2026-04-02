@@ -123,6 +123,49 @@ def add_default_permission(file_obj, user_id):
     db.session.add(FilePermission(file_id=file_obj.id, user_id=user_id, permission="read_write"))
 
 
+def _find_permission_template_file(logical_path, exclude_file_id=None):
+    parent_path = os.path.dirname(logical_path.rstrip("/")) or "/"
+    prefix = "" if parent_path == "/" else f"{parent_path}/"
+    query = File.query.filter(File.is_folder.is_(False))
+
+    if parent_path == "/":
+        query = query.filter(File.path.like("/%"))
+    else:
+        query = query.filter(File.path.like(f"{prefix}%"))
+
+    if exclude_file_id is not None:
+        query = query.filter(File.id != exclude_file_id)
+
+    candidates = query.order_by(File.created_at.asc(), File.id.asc()).all()
+    for candidate in candidates:
+        rel_path = candidate.path.lstrip("/") if parent_path == "/" else candidate.path[len(prefix) :]
+        if rel_path and "/" not in rel_path:
+            return candidate
+    return None
+
+
+def add_inherited_or_default_permissions(file_obj, user_id):
+    template_file = _find_permission_template_file(file_obj.path, exclude_file_id=file_obj.id)
+    if not template_file:
+        add_default_permission(file_obj, user_id)
+        return
+
+    template_permissions = FilePermission.query.filter_by(file_id=template_file.id).all()
+    if not template_permissions:
+        add_default_permission(file_obj, user_id)
+        return
+
+    for permission in template_permissions:
+        db.session.add(
+            FilePermission(
+                file_id=file_obj.id,
+                user_id=permission.user_id,
+                department_id=permission.department_id,
+                permission=permission.permission,
+            )
+        )
+
+
 def get_view_histories(user_id, file_id=None, limit=100):
     query = ViewHistory.query
     if file_id:
@@ -406,7 +449,7 @@ def upload_entries(files, relative_paths, folder_location, user_id):
         )
         db.session.add(db_file)
         db.session.flush()
-        add_default_permission(db_file, user_id)
+        add_inherited_or_default_permissions(db_file, user_id)
         add_history(db_file.id, user_id, "upload", new_path=logical_path)
         uploaded.append({"file_id": db_file.id, "path": logical_path, "type": "file"})
 
@@ -617,6 +660,10 @@ def move_to_trash(file_obj, deleted_by):
 
     if abs_path.exists():
         shutil.move(str(abs_path), str(trash_path(trash_entry.id)))
+
+    # Once the snapshot is in trash, it should no longer depend on the live
+    # `files` row, otherwise deleting that row can trip FK constraints.
+    trash_entry.file_id = None
 
     _delete_related_records([item.id for item in subtree_files])
     for subtree_file in sorted(subtree_files, key=lambda item: len(item.path), reverse=True):

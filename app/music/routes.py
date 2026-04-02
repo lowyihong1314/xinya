@@ -102,6 +102,24 @@ def add_one_minute(music_id):
     return services.add_one_minute(music_id)
 
 
+@music_bp.route("/minute_logs", methods=["GET"])
+@login_required
+@permission_required("music_edit")
+def list_minute_logs():
+    return services.list_minute_logs(
+        request.args.get("page", 1, type=int),
+        request.args.get("per_page", 200, type=int),
+        request.args.get("music_id", type=int),
+        request.args.get("user_id", type=int),
+    )
+
+
+@music_bp.route("/last_played", methods=["GET"])
+@login_required
+def get_last_played_music():
+    return services.get_last_played_music()
+
+
 @music_bp.route("/album_cover/<path:filename>", methods=["GET"])
 def album_cover(filename):
     return serve_album_image(filename)

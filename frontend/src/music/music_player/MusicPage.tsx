@@ -31,6 +31,11 @@ export function MusicPage() {
           albumDraft={state.albumDraft}
           trackDraft={state.trackDraft}
           toast={state.toast}
+          canViewListening={state.canViewListening}
+          listeningLoading={state.listeningLoading}
+          listeningTimezone={state.listeningTimezone}
+          listeningSummary={state.listeningSummary}
+          listeningSessions={state.listeningSessions}
           savingAlbum={state.savingAlbum}
           savingTrack={state.savingTrack}
           uploadingMusic={state.uploadingMusic}

@@ -1,4 +1,9 @@
-import type { AlbumRecord, MusicRecord } from "./types";
+import type {
+  AlbumRecord,
+  LastPlayedMusicResponse,
+  MinuteLogsResponse,
+  MusicRecord,
+} from "./types";
 import { apiFetch } from "../../js/apiFetch";
 
 async function parseJson<T>(response: Response): Promise<T> {
@@ -51,6 +56,32 @@ export async function fetchMusicList() {
 export async function fetchMusicDetail(musicId: number) {
   const response = await apiFetch(`/api/music/detail/${musicId}`, { credentials: "include" });
   return parseJson<MusicRecord>(response);
+}
+
+export async function fetchMinuteLogs(params?: {
+  page?: number;
+  perPage?: number;
+  musicId?: number | null;
+  userId?: number | null;
+}) {
+  const search = new URLSearchParams();
+  if (params?.page) search.set("page", String(params.page));
+  if (params?.perPage) search.set("per_page", String(params.perPage));
+  if (params?.musicId != null) search.set("music_id", String(params.musicId));
+  if (params?.userId != null) search.set("user_id", String(params.userId));
+
+  const response = await apiFetch(
+    `/api/music/minute_logs${search.size ? `?${search.toString()}` : ""}`,
+    { credentials: "include" },
+  );
+  return parseJson<MinuteLogsResponse>(response);
+}
+
+export async function fetchLastPlayedMusic() {
+  const response = await apiFetch("/api/music/last_played", {
+    credentials: "include",
+  });
+  return parseJson<LastPlayedMusicResponse>(response);
 }
 
 export async function createAlbum(name: string) {
@@ -138,5 +169,11 @@ export async function addOneMinute(musicId: number) {
     method: "POST",
     credentials: "include",
   });
-  return parseJson<{ success?: boolean; play_minutes?: number }>(response);
+  return parseJson<{
+    success?: boolean;
+    ignored?: boolean;
+    user_id?: number;
+    play_minutes?: number;
+    played_at?: string;
+  }>(response);
 }

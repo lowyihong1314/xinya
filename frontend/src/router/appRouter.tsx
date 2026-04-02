@@ -1,6 +1,9 @@
 import { createHashRouter, Navigate, useParams } from "react-router-dom";
 
+import { LongOpenRegistrationFormPage } from "../CRM/long_open_registration_form/react/LongOpenRegistrationFormPage";
+import { CRMPage } from "../CRM/react/CRMPage";
 import { crmRoute } from "../CRM/react/routes";
+import { LONG_OPEN_REGISTRATION_FORM_PATH } from "../CRM/react/crmModules";
 import { HomeAlbumPage } from "../album/react/HomeAlbumPage";
 import { EventDetailPage } from "../album/react/EventDetailPage";
 import { ImageDetailPageRoute } from "../album/react/ImageDetailPage";
@@ -45,6 +48,11 @@ export const appRouter = createHashRouter([
       { path: "info", element: <Navigate to="/info/history" replace /> },
       { path: "info/:section", element: <InfoPage /> },
       crmRoute,
+      {
+        path: LONG_OPEN_REGISTRATION_FORM_PATH.replace(/^\//, ""),
+        element: <CRMPage />,
+        children: [{ index: true, element: <LongOpenRegistrationFormPage /> }],
+      },
       { path: "profile", element: <Navigate to="/profile/overview" replace /> },
       { path: "profile/:section", element: <ProfilePage /> },
       musicRoute,

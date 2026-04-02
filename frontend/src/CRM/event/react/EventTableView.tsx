@@ -24,6 +24,8 @@ export function EventTableView(props: {
   selectedEvent: EventRecord | null;
   selectedEventId: number | null;
   query: string;
+  selectedType: string;
+  eventTypeOptions: Array<{ value: string; label: string }>;
   page: number;
   totalPages: number;
   loading: boolean;
@@ -35,6 +37,7 @@ export function EventTableView(props: {
   realtimeEnabled: boolean;
   imageUrl: string | null;
   onQueryChange: (value: string) => void;
+  onTypeChange: (value: string) => void;
   onPageChange: (page: number) => void;
   onSelectEvent: (eventId: number) => void;
   onRefresh: () => void;
@@ -221,12 +224,25 @@ export function EventTableView(props: {
 
       <div style={layoutStyle(isMobile)}>
         <aside style={sidebarStyle(isMobile)}>
-          <input
-            placeholder="搜索活动名称 / 地点 / 类型 / 对象 / 筹备团队"
-            value={props.query}
-            onChange={(event) => props.onQueryChange(event.target.value)}
-            style={searchStyle}
-          />
+          <div style={searchControlsStyle(isMobile)}>
+            <input
+              placeholder="搜索活动名称 / 地点 / 对象 / 筹备团队"
+              value={props.query}
+              onChange={(event) => props.onQueryChange(event.target.value)}
+              style={searchStyle}
+            />
+            <select
+              value={props.selectedType}
+              onChange={(event) => props.onTypeChange(event.target.value)}
+              style={searchSelectStyle}
+            >
+              {props.eventTypeOptions.map((option) => (
+                <option key={option.value} value={option.value}>
+                  {option.label}
+                </option>
+              ))}
+            </select>
+          </div>
           {!props.loading ? (
             <div style={resultsMetaStyle}>
               <span>搜索结果 {props.totalResults}</span>
@@ -811,7 +827,23 @@ function sidebarStyle(isMobile: boolean): CSSProperties {
 }
 
 const searchStyle: CSSProperties = {
-  width: "100%",
+  minHeight: "46px",
+  padding: "12px 14px",
+  borderRadius: "var(--x-radius-sm)",
+  border: "1px solid var(--x-color-line)",
+  background: "var(--x-color-panel)",
+  boxSizing: "border-box",
+  fontSize: "14px",
+};
+
+const searchControlsStyle = (isMobile: boolean): CSSProperties => ({
+  display: "grid",
+  gridTemplateColumns: isMobile ? "1fr" : "minmax(0, 1fr) 140px",
+  gap: "10px",
+  alignItems: "stretch",
+});
+
+const searchSelectStyle: CSSProperties = {
   minHeight: "46px",
   padding: "12px 14px",
   borderRadius: "var(--x-radius-sm)",

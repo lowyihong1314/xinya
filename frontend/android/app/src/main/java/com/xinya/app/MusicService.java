@@ -50,6 +50,7 @@ public class MusicService extends Service {
     private static final String CHANNEL_ID = "xinya_music";
     private static final int NOTIFICATION_ID = 1042;
     private static final String TAG = "MusicService";
+    private static final String DEFAULT_ALBUM_LABEL = "全部歌曲";
 
     // Album art target size — Samsung One UI reliably displays up to 512×512.
     private static final int ART_MAX_PX = 512;
@@ -71,7 +72,7 @@ public class MusicService extends Service {
             this.id = id;
             this.url = url != null ? url : "";
             this.title = title != null ? title : "";
-            this.album = album != null ? album : "";
+            this.album = album != null && !album.trim().isEmpty() ? album : DEFAULT_ALBUM_LABEL;
             this.coverUrl = coverUrl != null ? coverUrl : "";
         }
     }

@@ -4,7 +4,12 @@ import { Navigate, useLocation } from "react-router-dom";
 import { useUserState } from "../../app/UserState";
 import { CRMPage } from "./CRMPage";
 import { CRMHomePage } from "./CRMHomePage";
-import { CRM_MODULES, DEFAULT_CRM_MODULE_KEY, buildCRMModuleHref } from "./crmModules";
+import {
+  CRM_MODULES,
+  DEFAULT_CRM_MODULE_KEY,
+  LONG_OPEN_REGISTRATION_FORM_PATH,
+  buildCRMModuleHref,
+} from "./crmModules";
 
 function CRMEntryRedirect() {
   const location = useLocation();
@@ -29,17 +34,21 @@ export const crmRoute: RouteObject = {
   children: [
     { index: true, element: <CRMEntryRedirect /> },
     { path: "home", element: <CRMHomePage /> },
-    ...CRM_MODULES.map((module) => ({
+    ...CRM_MODULES.filter((module) => module.key !== "permanent_registration").map((module) => ({
       path: module.key,
       element: <module.Component />,
     })),
     {
+      path: "permanent_registration",
+      element: <Navigate to={LONG_OPEN_REGISTRATION_FORM_PATH} replace />,
+    },
+    {
       path: "membership_registration",
-      element: <Navigate to={buildCRMModuleHref("membership_registration")} replace />,
+      element: <Navigate to={LONG_OPEN_REGISTRATION_FORM_PATH} replace />,
     },
     {
       path: "youth_class_registration",
-      element: <Navigate to={buildCRMModuleHref("youth_class_registration")} replace />,
+      element: <Navigate to={LONG_OPEN_REGISTRATION_FORM_PATH} replace />,
     },
     { path: "*", element: <CRMEntryRedirect /> },
   ],

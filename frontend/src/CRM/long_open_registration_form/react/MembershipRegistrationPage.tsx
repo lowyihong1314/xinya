@@ -11,7 +11,7 @@ import {
   summarizeFee,
 } from "../../form/react/FeePanel";
 
-const APPLICATION_URL = `${window.location.origin}/template/membership-application`;
+const APPLICATION_URL = `${window.location.origin}/template/long-open-registration-form`;
 
 type PaymentRecord = {
   id: number;
@@ -42,6 +42,7 @@ type Entry = {
   user_id?: number | null;
   user_name?: string | null;
   username?: string | null;
+  requested_username?: string | null;
   nric_asset_id?: number | null;
   regis_member_id?: number | null;
   nric?: string | null;
@@ -57,8 +58,6 @@ type Entry = {
   dharma_name?: string | null;
   emergency_contact_name?: string | null;
   emergency_contact_phone?: string | null;
-  guardian_name?: string | null;
-  guardian_phone?: string | null;
   recommender_name?: string | null;
   membership_role?: string | null;
   selected_fee?: FeeOptionRecord | null;
@@ -288,7 +287,7 @@ export function MembershipRegistrationPage() {
           <div style={sectionTitleRowStyle(isMobile)}>
             <div>
               <div style={eyebrowStyle}>CRM / 会员</div>
-              <h2 style={sectionTitleStyle(isMobile)}>用户入口</h2>
+              <h2 style={sectionTitleStyle(isMobile)}>统一公开报名页</h2>
             </div>
             <button type="button" style={secondaryButtonStyle} onClick={() => setApplicationPageOpen(false)}>
               返回
@@ -296,7 +295,7 @@ export function MembershipRegistrationPage() {
           </div>
           <iframe
             src={APPLICATION_URL}
-            title="会员申请页"
+            title="统一公开报名页"
             style={iframeStyle(isMobile)}
           />
         </section>
@@ -304,8 +303,8 @@ export function MembershipRegistrationPage() {
         <section style={heroStyle(isMobile)}>
           <div style={panelStyle(isMobile)}>
             <div style={eyebrowStyle}>CRM / 会员</div>
-            <h1 style={titleStyle(isMobile)}>会员升级与续费</h1>
-            <p style={descStyle(isMobile)}>这里可以设置按年龄分段的会员费率、上传付款二维码、查看申请资料，并在付款截图提交后完成审核生效。</p>
+            <h1 style={titleStyle(isMobile)}>会员报名与续费</h1>
+            <p style={descStyle(isMobile)}>这里可以设置会员费率、查看公开会员报名资料，并在付款截图提交后完成审核。公开报名通过后会直接写入 `user_data`，但不会自动设置密码。</p>
             <div style={statsRowStyle(isMobile)}>
               <MetricCard label="升级申请" value={String(stats.upgrades)} isMobile={isMobile} />
               <MetricCard label="续费申请" value={String(stats.renewals)} isMobile={isMobile} />
@@ -316,12 +315,12 @@ export function MembershipRegistrationPage() {
 
           <div style={panelStyle(isMobile)}>
             <div style={sectionTitleRowStyle(isMobile)}>
-              <h2 style={sectionTitleStyle(isMobile)}>用户入口</h2>
+              <h2 style={sectionTitleStyle(isMobile)}>统一公开报名页</h2>
               <button type="button" style={secondaryButtonStyle} onClick={() => setApplicationPageOpen(true)}>
-                打开会员申请页
+                打开统一公开报名页
               </button>
             </div>
-            <div style={emptyPreviewStyle}>会员申请入口来自 Profile 的 Actions 按钮；这里保留直达链接方便后台测试。</div>
+            <div style={emptyPreviewStyle}>公开报名入口现在和青少年佛学班合并成一张表单；系统会按年龄分流到会员或青少年佛学班。</div>
             <div style={urlBoxStyle(isMobile)}>{APPLICATION_URL}</div>
           </div>
         </section>
@@ -362,7 +361,7 @@ export function MembershipRegistrationPage() {
       <section style={panelStyle(isMobile)}>
         <div style={sectionTitleRowStyle(isMobile)}>
           <h2 style={sectionTitleStyle(isMobile)}>会员申请工作台</h2>
-          <div style={mutedStyle}>审核通过后会自动把用户标记为会员，并写入新的续费到期日。</div>
+          <div style={mutedStyle}>审核通过后会自动把用户标记为会员；公开报名如果还没有账号，也会在这里直接写入新的 `user_data`。</div>
         </div>
         {loading ? <div style={emptyStyle}>加载中…</div> : null}
         {!loading && !entries.length ? <div style={emptyStyle}>还没有会员申请或续费记录。</div> : null}
@@ -372,9 +371,9 @@ export function MembershipRegistrationPage() {
               <article key={entry.id} style={entryCardStyle(isMobile)}>
                 <div style={entryHeaderStyle(isMobile)}>
                   <div style={entryTitleWrapStyle}>
-                    <div style={entryNameStyle(isMobile)}>{entry.user_name || entry.username || `用户 #${entry.user_id}`}</div>
+                    <div style={entryNameStyle(isMobile)}>{entry.user_name || entry.username || entry.requested_username || `申请 #${entry.id}`}</div>
                     <div style={entrySubStyle}>
-                      {registrationTypeLabel(entry.registration_type)} · {entry.submitted_at || "-"}
+                      {registrationTypeLabel(entry.registration_type)} · {entry.submitted_at || "-"}{entry.username ? ` · @${entry.username}` : ""}
                     </div>
                   </div>
                   <div style={headerActionWrapStyle(isMobile)}>
@@ -402,6 +401,7 @@ export function MembershipRegistrationPage() {
 
                 <div style={entryInfoGridStyle(isMobile)}>
                   <Fact label="NRIC" value={entry.nric || "-"} />
+                  <Fact label="Username" value={entry.username || entry.requested_username || "-"} />
                   <Fact label="加入身份" value={entry.membership_role || "-"} />
                   <Fact label="下一次到期日" value={entry.target_expiry_date || "-"} />
                   <Fact label="适用费用" value={entry.selected_fee ? summarizeFee(entry.selected_fee) : "未匹配费率"} />
@@ -412,7 +412,6 @@ export function MembershipRegistrationPage() {
                   <Fact label="籍贯 / 职业" value={`${entry.ancestral_home || "-"} / ${entry.occupation || "-"}`} />
                   <Fact label="是否皈依" value={boolLabel(entry.refuge_taken)} />
                   <Fact label="紧急联络人" value={`${entry.emergency_contact_name || "-"} / ${entry.emergency_contact_phone || "-"}`} />
-                  <Fact label="监护人" value={entry.guardian_name ? `${entry.guardian_name} / ${entry.guardian_phone || "-"}` : "不需要 / 未填写"} />
                 </div>
 
                 <div style={detailGridStyle(isMobile)}>

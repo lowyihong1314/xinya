@@ -94,7 +94,9 @@ export function FullPlayer({
           </div>
           <div style={fullMetaStyle}>
             <div style={fullTitleStyle}>{music.title}</div>
-            <div style={fullAlbumStyle}>{resolveTrackAlbumName(music.id, libraryMusics, albums)}</div>
+            <div style={fullAlbumStyle}>
+              {resolveTrackAlbumName(music.id, libraryMusics, albums) || "全部歌曲"}
+            </div>
           </div>
           <div style={fullProgressWrapStyle}>
             <input

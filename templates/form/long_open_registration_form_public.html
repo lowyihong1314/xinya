@@ -1,0 +1,597 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>长期开放报名入口</title>
+  <style>
+    :root{--bg:#f5f8fb;--panel:#fff;--line:#d8e1ee;--text:#172b4d;--muted:#52606d;--accent:#0f766e;--accent-2:#1d4ed8;--ok:#027a48;--bad:#b42318;--warn:#b54708}
+    *{box-sizing:border-box}body{margin:0;font-family:Inter,Arial,"PingFang SC","Microsoft Yahei",sans-serif;background:linear-gradient(180deg,#eef6ff,var(--bg));color:var(--text)}
+    .wrap{max-width:980px;margin:0 auto;padding:28px 18px 48px}.hero,.panel{background:var(--panel);border:1px solid var(--line);border-radius:24px;box-shadow:0 16px 40px rgba(15,23,42,.08)}
+    .hero{padding:28px;margin-bottom:18px}.panel{padding:24px;display:grid;gap:18px}.eyebrow{font-size:12px;letter-spacing:.14em;text-transform:uppercase;color:var(--muted)}h1{margin:8px 0 12px;font-size:34px}h2{margin:0;font-size:24px}p{margin:0;line-height:1.75;color:var(--muted)}
+    .grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:14px}.fact{padding:14px 16px;border:1px solid var(--line);border-radius:16px;background:#fbfdff}
+    .fact .label{font-size:11px;letter-spacing:.08em;text-transform:uppercase;color:var(--muted)}.fact .value{margin-top:6px;font-size:15px;font-weight:700;line-height:1.5;word-break:break-word}
+    label{display:grid;gap:8px;font-size:14px;font-weight:600}input,select,textarea{width:100%;border:1px solid var(--line);border-radius:14px;padding:12px 13px;font-size:14px;background:#fff}textarea{min-height:108px;resize:vertical}
+    .row{display:flex;gap:12px;flex-wrap:wrap;align-items:center}.btn{border:none;border-radius:999px;padding:13px 20px;font-size:14px;font-weight:700;cursor:pointer}
+    .btn-primary{color:#fff;background:linear-gradient(135deg,var(--accent),var(--accent-2))}.btn-secondary{background:#eef2ff;color:var(--text)}.btn-link{display:inline-flex;align-items:center;justify-content:center;padding:11px 16px;border-radius:999px;text-decoration:none;background:#eef6ff;color:#1d4ed8;font-weight:700}
+    .notice{padding:14px 16px;border-radius:14px;border:1px solid;display:none}.ok{background:#ecfdf3;color:var(--ok);border-color:#abefc6}.bad{background:#fff1f2;color:var(--bad);border-color:#fecdd3}.warn{background:#fff7ed;color:var(--warn);border-color:#fed7aa}.soft{background:#eef6ff;color:#1d4ed8;border-color:#bfdbfe}
+    .hidden{display:none!important}.muted{font-size:13px;color:var(--muted)}.section-title{font-size:13px;letter-spacing:.08em;text-transform:uppercase;color:var(--muted);font-weight:800}
+    .route-chip{display:inline-flex;align-items:center;padding:8px 12px;border-radius:999px;background:#eef6ff;color:#1d4ed8;font-size:12px;font-weight:800}.route-chip.warn{background:#fff7ed;color:var(--warn)}.route-chip.bad{background:#fff1f2;color:var(--bad)}
+    .helper{padding:14px 16px;border-radius:16px;border:1px solid var(--line);background:#f8fbff;color:var(--muted);line-height:1.7}
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <section class="hero">
+      <div class="eyebrow">UTBA / Long Open Registration</div>
+      <h1>长期开放报名入口</h1>
+      <p>公开报名入口现在只保留一个。系统会先根据 `NRIC` 判断年龄：13-17 岁进入青少年佛学班，18 岁以上进入会员报名。</p>
+    </section>
+
+    <div id="notice" class="notice"></div>
+
+    <section class="panel">
+      <div class="section-title">入口判断</div>
+      <div class="grid">
+        <label>NRIC *
+          <input id="nric-input" placeholder="如：010203101234" />
+        </label>
+        <div class="fact">
+          <div class="label">年龄判断</div>
+          <div id="age-value" class="value">-</div>
+        </div>
+        <div class="fact">
+          <div class="label">系统分流</div>
+          <div id="route-value" class="value">请先填写 NRIC</div>
+        </div>
+      </div>
+      <div class="row">
+        <span id="route-chip" class="route-chip hidden">等待判断</span>
+        <span id="route-message" class="muted">系统会用年龄帮你决定当前要填写的报名表。</span>
+      </div>
+      <div id="current-user-box" class="helper hidden"></div>
+      <div id="existing-box" class="helper hidden">
+        <div id="existing-value"></div>
+        <div id="existing-actions" class="row" style="margin-top:12px"></div>
+      </div>
+    </section>
+
+    <form id="membership-form" class="panel hidden">
+      <div class="section-title">会员报名表</div>
+      <h2>注册会员</h2>
+      <p>审批通过后，系统会直接把这份会员资料写进 `user_data`，但不会设置密码；也就是说账号先建好，暂时还不能登录。</p>
+
+      <div class="grid">
+        <label>Username *
+          <input name="username" required />
+        </label>
+        <label>姓名 *
+          <input name="display_name" required placeholder="例如：张三 / Chen San" />
+        </label>
+        <label>加入身份 *
+          <select name="membership_role" required>
+            <option value="">请选择</option>
+          </select>
+        </label>
+        <label>Facebook 个人主页链接 *
+          <input name="facebook_profile_url" required placeholder="https://facebook.com/your.profile" />
+        </label>
+        <label>籍贯 *
+          <input name="ancestral_home" required />
+        </label>
+        <label>职业 *
+          <input name="occupation" required />
+        </label>
+        <label>是否皈依 *
+          <select name="refuge_taken" required>
+            <option value="">请选择</option>
+            <option value="true">是</option>
+            <option value="false">否</option>
+          </select>
+        </label>
+        <label>推荐人
+          <select name="recommender_user_id">
+            <option value="">系统暂无可选会员推荐人</option>
+          </select>
+        </label>
+      </div>
+
+      <label>NRIC_address *
+        <textarea name="nric_address" required></textarea>
+      </label>
+
+      <div id="refuge-grid" class="grid hidden">
+        <label>皈依年份 *
+          <input name="refuge_year" inputmode="numeric" />
+        </label>
+        <label>皈依证明法师 *
+          <input name="refuge_master" />
+        </label>
+        <label>法名
+          <input name="dharma_name" />
+        </label>
+      </div>
+
+      <div class="grid">
+        <label>紧急联络人姓名 *
+          <input name="emergency_contact_name" required />
+        </label>
+        <label>紧急联络人联络号码 *
+          <input name="emergency_contact_phone" required />
+        </label>
+      </div>
+
+      <div class="row">
+        <button id="membership-submit" class="btn btn-primary" type="submit">提交会员报名</button>
+        <button class="btn btn-secondary" type="reset">重置</button>
+      </div>
+      <div id="membership-username-note" class="muted hidden">当前是已登录账号，username 已从你的 user_data 自动带入。</div>
+    </form>
+
+    <form id="youth-form" class="panel hidden">
+      <div class="section-title">青少年佛学班报名表</div>
+      <h2>青少年佛学班</h2>
+      <p>13-17 岁会进入这张表单；18 岁以上会自动改走会员报名。</p>
+
+      <div class="grid">
+        <label>中文名 *
+          <input name="chinese_name" required />
+        </label>
+        <label>英文名 *
+          <input name="english_name" required />
+        </label>
+        <label>性别 *
+          <select name="gender" required>
+            <option value="">请选择</option>
+            <option value="男">男</option>
+            <option value="女">女</option>
+          </select>
+        </label>
+        <label>手机号码 *
+          <input name="phone" required />
+        </label>
+      </div>
+
+      <label>住家地址 *
+        <textarea name="address" required></textarea>
+      </label>
+
+      <div class="grid">
+        <label>紧急联络人名字 *
+          <input name="emergency_contact_name" required />
+        </label>
+        <label>紧急联络号码 *
+          <input name="emergency_contact_phone" required />
+        </label>
+        <label>关系 *
+          <input name="emergency_contact_relation" required />
+        </label>
+      </div>
+
+      <div class="row">
+        <button id="youth-submit" class="btn btn-primary" type="submit">提交青少年佛学班报名</button>
+        <button class="btn btn-secondary" type="reset">重置</button>
+      </div>
+    </form>
+  </div>
+
+  <script>
+    const params = new URLSearchParams(window.location.search);
+    const preferred = params.get("preferred") || "";
+    const source = params.get("source") || "";
+
+    const notice = document.getElementById("notice");
+    const nricInput = document.getElementById("nric-input");
+    const ageValue = document.getElementById("age-value");
+    const routeValue = document.getElementById("route-value");
+    const routeChip = document.getElementById("route-chip");
+    const routeMessage = document.getElementById("route-message");
+    const currentUserBox = document.getElementById("current-user-box");
+    const existingBox = document.getElementById("existing-box");
+    const existingValue = document.getElementById("existing-value");
+    const existingActions = document.getElementById("existing-actions");
+
+    const membershipForm = document.getElementById("membership-form");
+    const youthForm = document.getElementById("youth-form");
+    const membershipSubmit = document.getElementById("membership-submit");
+    const youthSubmit = document.getElementById("youth-submit");
+    const refugeGrid = document.getElementById("refuge-grid");
+    const refugeSelect = membershipForm.querySelector('select[name="refuge_taken"]');
+    const refugeYear = membershipForm.querySelector('input[name="refuge_year"]');
+    const refugeMaster = membershipForm.querySelector('input[name="refuge_master"]');
+    const roleSelect = membershipForm.querySelector('select[name="membership_role"]');
+    const recommenderSelect = membershipForm.querySelector('select[name="recommender_user_id"]');
+    const usernameInput = membershipForm.querySelector('input[name="username"]');
+    const displayNameInput = membershipForm.querySelector('input[name="display_name"]');
+    const membershipUsernameNote = document.getElementById("membership-username-note");
+
+    let pageContext = null;
+    let routeState = { target: null, age: null, target_label: null };
+
+    function showNotice(message, cls) {
+      notice.className = `notice ${cls}`;
+      notice.style.display = "block";
+      notice.textContent = message;
+    }
+
+    function hideNotice() {
+      notice.style.display = "none";
+    }
+
+    function registrationStatusLabel(status) {
+      if (status === "paid") return "已提交付款";
+      if (status === "reject") return "已退回";
+      return "处理中";
+    }
+
+    function toggleRefugeSection() {
+      const enabled = refugeSelect.value === "true";
+      refugeGrid.classList.toggle("hidden", !enabled);
+      refugeYear.required = enabled;
+      refugeMaster.required = enabled;
+    }
+
+    function setRouteChip(label, cls) {
+      if (!label) {
+        routeChip.classList.add("hidden");
+        routeChip.textContent = "";
+        routeChip.className = "route-chip hidden";
+        return;
+      }
+      routeChip.className = `route-chip ${cls || ""}`.trim();
+      routeChip.classList.remove("hidden");
+      routeChip.textContent = label;
+    }
+
+    function renderExistingRegistration(registration) {
+      existingActions.innerHTML = "";
+      if (!registration) {
+        existingBox.classList.add("hidden");
+        existingValue.textContent = "";
+        return;
+      }
+
+      existingBox.classList.remove("hidden");
+      existingValue.textContent = `最近一次会员申请：${registrationStatusLabel(registration.status)} · ${registration.submitted_at || "-"}${registration.username ? ` · @${registration.username}` : ""}`;
+
+      if (registration.payment_url) {
+        const openButton = document.createElement("a");
+        openButton.href = registration.payment_url;
+        openButton.target = "_blank";
+        openButton.rel = "noreferrer";
+        openButton.className = "btn-link";
+        openButton.textContent = "打开付款页";
+        existingActions.appendChild(openButton);
+      }
+    }
+
+    function fillMembershipFormFromRegistration(registration) {
+      if (!registration) return;
+      membershipForm.elements.facebook_profile_url.value = registration.facebook_profile_url || "";
+      membershipForm.elements.nric_address.value = registration.nric_address || "";
+      membershipForm.elements.ancestral_home.value = registration.ancestral_home || "";
+      membershipForm.elements.occupation.value = registration.occupation || "";
+      membershipForm.elements.refuge_taken.value = String(Boolean(registration.refuge_taken));
+      membershipForm.elements.refuge_year.value = registration.refuge_year || "";
+      membershipForm.elements.refuge_master.value = registration.refuge_master || "";
+      membershipForm.elements.dharma_name.value = registration.dharma_name || "";
+      membershipForm.elements.emergency_contact_name.value = registration.emergency_contact_name || "";
+      membershipForm.elements.emergency_contact_phone.value = registration.emergency_contact_phone || "";
+      membershipForm.elements.membership_role.value = registration.membership_role || "";
+      membershipForm.elements.recommender_user_id.value = registration.recommender_user_id || "";
+      if (!displayNameInput.value) {
+        displayNameInput.value = registration.user_name || "";
+      }
+      if (!usernameInput.value) {
+        usernameInput.value = registration.username || "";
+      }
+      toggleRefugeSection();
+    }
+
+    function fillMembershipFormFromContext(context) {
+      const user = context?.user || {};
+      const member = context?.member || {};
+      if (!displayNameInput.value) {
+        displayNameInput.value = member.name_nric || user.display_name || user.username || "";
+      }
+      if (!usernameInput.value) {
+        usernameInput.value = user.username || "";
+      }
+      if (!nricInput.value && member.nric) {
+        nricInput.value = member.nric;
+      }
+      if (user.username) {
+        usernameInput.readOnly = true;
+        membershipUsernameNote.classList.remove("hidden");
+      }
+    }
+
+    function fillYouthFormFromContext(context) {
+      const user = context?.user || {};
+      const member = context?.member || {};
+      if (!youthForm.elements.chinese_name.value) {
+        youthForm.elements.chinese_name.value = user.display_name || member.name_nric || "";
+      }
+      if (!nricInput.value && member.nric) {
+        nricInput.value = member.nric;
+      }
+    }
+
+    function renderCurrentUser(context) {
+      const user = context?.user || null;
+      const member = context?.member || null;
+      if (!user) {
+        currentUserBox.classList.add("hidden");
+        currentUserBox.textContent = "";
+        return;
+      }
+
+      currentUserBox.classList.remove("hidden");
+      currentUserBox.textContent = `当前已登录：${user.display_name || user.username || "当前用户"}${user.username ? ` · @${user.username}` : ""}${member?.nric ? ` · NRIC ${member.nric}` : ""}${user.has_password ? "" : " · 目前这份 user_data 还没有密码"}`;
+    }
+
+    function renderRoleOptions(context) {
+      roleSelect.innerHTML = '<option value="">请选择</option>';
+      (context?.role_options || []).forEach((item) => {
+        const option = document.createElement("option");
+        option.value = item;
+        option.textContent = item;
+        roleSelect.appendChild(option);
+      });
+    }
+
+    function renderRecommenders(context) {
+      recommenderSelect.innerHTML = "";
+      const recommenders = context?.recommenders || [];
+      const option = document.createElement("option");
+      option.value = "";
+      option.textContent = recommenders.length ? "请选择推荐人" : "系统暂无可选会员推荐人";
+      recommenderSelect.appendChild(option);
+      recommenders.forEach((item) => {
+        const node = document.createElement("option");
+        node.value = String(item.id);
+        node.textContent = item.label || item.username || `成员 #${item.id}`;
+        recommenderSelect.appendChild(node);
+      });
+    }
+
+    function applyRouteState(nextRoute) {
+      routeState = nextRoute || { target: null, age: null, target_label: null };
+      ageValue.textContent = routeState.age != null ? `${routeState.age} 岁` : "-";
+      routeValue.textContent = routeState.target_label || "请先填写 NRIC";
+      routeMessage.textContent = nextRoute?.message || "系统会用年龄帮你决定当前要填写的报名表。";
+
+      if (!nextRoute || !nextRoute.target) {
+        setRouteChip("", "");
+        membershipForm.classList.add("hidden");
+        youthForm.classList.add("hidden");
+        return;
+      }
+
+      if (nextRoute.target === "membership") {
+        setRouteChip("当前走会员报名", "");
+        membershipForm.classList.remove("hidden");
+        youthForm.classList.add("hidden");
+        renderExistingRegistration(pageContext?.latest_upgrade || null);
+        return;
+      }
+
+      if (nextRoute.target === "youth_class") {
+        setRouteChip("当前走青少年佛学班", "");
+        membershipForm.classList.add("hidden");
+        youthForm.classList.remove("hidden");
+        existingBox.classList.add("hidden");
+        return;
+      }
+
+      setRouteChip("当前不可报名", nextRoute.target === "ineligible" ? "warn" : "bad");
+      membershipForm.classList.add("hidden");
+      youthForm.classList.add("hidden");
+      existingBox.classList.add("hidden");
+    }
+
+    async function loadPublicContext() {
+      try {
+        const response = await fetch("/api/user_control/membership/public-context", {
+          credentials: "include",
+        });
+        const payload = await response.json().catch(() => ({}));
+        if (!response.ok || payload.status !== "success") {
+          throw new Error(payload.message || "读取报名资料失败");
+        }
+
+        pageContext = payload.context || {};
+        renderCurrentUser(pageContext);
+        renderRoleOptions(pageContext);
+        renderRecommenders(pageContext);
+        fillMembershipFormFromContext(pageContext);
+        fillYouthFormFromContext(pageContext);
+        fillMembershipFormFromRegistration(pageContext.latest_upgrade || null);
+
+        if (pageContext.member?.nric) {
+          await refreshRoute();
+          return;
+        }
+
+        if (preferred === "membership") {
+          routeValue.textContent = "会员报名";
+          routeMessage.textContent = source === "profile"
+            ? "当前入口来自 Profile，系统会尽量用你的 user_data 预填会员报名表。"
+            : "请输入 NRIC 后，系统会再次确认这次是否应该走会员报名。";
+          membershipForm.classList.remove("hidden");
+        } else if (preferred === "youth_class") {
+          routeValue.textContent = "青少年佛学班";
+          routeMessage.textContent = "请输入 NRIC 后，系统会再次确认是否符合青少年佛学班资格。";
+          youthForm.classList.remove("hidden");
+        }
+      } catch (error) {
+        showNotice(error instanceof Error ? error.message : "读取报名资料失败", "bad");
+      }
+    }
+
+    let routeTimer = null;
+    async function refreshRoute() {
+      const nric = (nricInput.value || "").trim();
+      if (!nric) {
+        applyRouteState(null);
+        return;
+      }
+
+      try {
+        const response = await fetch(`/api/user_control/membership/registration-route?nric=${encodeURIComponent(nric)}`, {
+          credentials: "include",
+        });
+        const payload = await response.json().catch(() => ({}));
+        if (!response.ok || payload.status !== "success") {
+          throw new Error(payload.message || "年龄判断失败");
+        }
+        applyRouteState(payload);
+      } catch (error) {
+        applyRouteState({ target: "invalid", target_label: "无法判断", age: null, message: error instanceof Error ? error.message : "年龄判断失败" });
+      }
+    }
+
+    function scheduleRouteRefresh() {
+      if (routeTimer) {
+        clearTimeout(routeTimer);
+      }
+      routeTimer = setTimeout(() => {
+        void refreshRoute();
+      }, 220);
+    }
+
+    refugeSelect.addEventListener("change", toggleRefugeSection);
+    nricInput.addEventListener("input", scheduleRouteRefresh);
+    nricInput.addEventListener("change", () => {
+      void refreshRoute();
+    });
+    nricInput.addEventListener("blur", () => {
+      void refreshRoute();
+    });
+
+    membershipForm.addEventListener("reset", () => {
+      setTimeout(() => {
+        toggleRefugeSection();
+        fillMembershipFormFromContext(pageContext || {});
+      }, 0);
+    });
+
+    youthForm.addEventListener("reset", () => {
+      setTimeout(() => {
+        fillYouthFormFromContext(pageContext || {});
+      }, 0);
+    });
+
+    membershipForm.addEventListener("submit", async (event) => {
+      event.preventDefault();
+      hideNotice();
+
+      if (routeState.target === "youth_class") {
+        showNotice("当前年龄会走青少年佛学班，请填写下面那张表单。", "warn");
+        return;
+      }
+
+      const payload = {
+        username: membershipForm.elements.username.value,
+        display_name: membershipForm.elements.display_name.value,
+        nric: nricInput.value,
+        facebook_profile_url: membershipForm.elements.facebook_profile_url.value,
+        nric_address: membershipForm.elements.nric_address.value,
+        ancestral_home: membershipForm.elements.ancestral_home.value,
+        occupation: membershipForm.elements.occupation.value,
+        refuge_taken: membershipForm.elements.refuge_taken.value,
+        refuge_year: membershipForm.elements.refuge_year.value,
+        refuge_master: membershipForm.elements.refuge_master.value,
+        dharma_name: membershipForm.elements.dharma_name.value,
+        emergency_contact_name: membershipForm.elements.emergency_contact_name.value,
+        emergency_contact_phone: membershipForm.elements.emergency_contact_phone.value,
+        recommender_user_id: membershipForm.elements.recommender_user_id.value,
+        membership_role: membershipForm.elements.membership_role.value,
+      };
+
+      membershipSubmit.disabled = true;
+      membershipSubmit.textContent = "提交中…";
+      try {
+        const response = await fetch("/api/user_control/membership/public-upgrade", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          credentials: "include",
+          body: JSON.stringify(payload),
+        });
+        const data = await response.json().catch(() => ({}));
+        if (!response.ok || data.status !== "success") {
+          throw new Error(data.message || "提交失败");
+        }
+
+        showNotice(data.message || "会员报名已保存。", "ok");
+        if (data.payment_url) {
+          setTimeout(() => {
+            window.location.href = data.payment_url;
+          }, 1800);
+          return;
+        }
+        await loadPublicContext();
+      } catch (error) {
+        showNotice(error instanceof Error ? error.message : "提交失败", "bad");
+      } finally {
+        membershipSubmit.disabled = false;
+        membershipSubmit.textContent = "提交会员报名";
+      }
+    });
+
+    youthForm.addEventListener("submit", async (event) => {
+      event.preventDefault();
+      hideNotice();
+
+      if (routeState.target !== "youth_class") {
+        showNotice("当前年龄不走青少年佛学班，请先让系统重新判断 NRIC。", routeState.target === "membership" ? "warn" : "bad");
+        return;
+      }
+
+      const payload = {
+        chinese_name: youthForm.elements.chinese_name.value,
+        english_name: youthForm.elements.english_name.value,
+        nric: nricInput.value,
+        address: youthForm.elements.address.value,
+        gender: youthForm.elements.gender.value,
+        phone: youthForm.elements.phone.value,
+        emergency_contact_name: youthForm.elements.emergency_contact_name.value,
+        emergency_contact_phone: youthForm.elements.emergency_contact_phone.value,
+        emergency_contact_relation: youthForm.elements.emergency_contact_relation.value,
+      };
+
+      youthSubmit.disabled = true;
+      youthSubmit.textContent = "提交中…";
+      try {
+        const response = await fetch("/api/form/youth-class-registration/submit", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(payload),
+        });
+        const data = await response.json().catch(() => ({}));
+        if (!response.ok || data.status !== "success") {
+          throw new Error(data.message || "提交失败，请稍后再试");
+        }
+
+        showNotice(data.payment_required && data.payment_url ? "报名成功，稍后将前往付款页。" : "报名成功。", "ok");
+        if (data.payment_required && data.payment_url) {
+          setTimeout(() => {
+            window.location.href = data.payment_url;
+          }, 1800);
+          return;
+        }
+        youthForm.reset();
+        await loadPublicContext();
+      } catch (error) {
+        showNotice(error instanceof Error ? error.message : "提交失败，请稍后再试", "bad");
+      } finally {
+        youthSubmit.disabled = false;
+        youthSubmit.textContent = "提交青少年佛学班报名";
+      }
+    });
+
+    toggleRefugeSection();
+    void loadPublicContext();
+  </script>
+</body>
+</html>

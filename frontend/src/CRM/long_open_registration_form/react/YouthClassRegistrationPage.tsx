@@ -14,7 +14,7 @@ import {
   summarizeFee,
 } from "../../form/react/FeePanel";
 
-const PUBLIC_URL = `${window.location.origin}/template/youth-class-registration`;
+const PUBLIC_URL = `${window.location.origin}/template/long-open-registration-form`;
 
 type PaymentRecord = {
   id: number;
@@ -301,18 +301,18 @@ export function YouthClassRegistrationPage() {
     <div style={pageStyle(isMobile)}>
       {publicPageOpen ? (
         <section style={panelStyle(isMobile)}>
-          <div style={sectionTitleRowStyle(isMobile)}>
-            <div>
-              <div style={eyebrowStyle}>CRM / 报名管理</div>
-              <h2 style={sectionTitleStyle(isMobile)}>公开报名页</h2>
-            </div>
+            <div style={sectionTitleRowStyle(isMobile)}>
+              <div>
+                <div style={eyebrowStyle}>CRM / 报名管理</div>
+                <h2 style={sectionTitleStyle(isMobile)}>统一公开报名页</h2>
+              </div>
             <button type="button" style={secondaryButtonStyle} onClick={() => setPublicPageOpen(false)}>
               返回
             </button>
           </div>
           <iframe
             src={PUBLIC_URL}
-            title="青少年班公开报名页"
+            title="统一公开报名页"
             style={iframeStyle(isMobile)}
           />
         </section>
@@ -320,8 +320,8 @@ export function YouthClassRegistrationPage() {
         <section style={heroStyle(isMobile)}>
           <div style={panelStyle(isMobile)}>
             <div style={eyebrowStyle}>CRM / 报名管理</div>
-            <h1 style={titleStyle(isMobile)}>青少年 & 青年佛学班</h1>
-            <p style={descStyle(isMobile)}>这里可以维护按年龄分段的报名费率、查看每位学员的付款入口、追踪付款截图并完成审核。</p>
+            <h1 style={titleStyle(isMobile)}>青少年佛学班</h1>
+            <p style={descStyle(isMobile)}>这里维护 13-17 岁青少年佛学班的报名费率、查看每位学员的付款入口，并追踪付款截图与审核状态。</p>
             <div style={statsRowStyle(isMobile)}>
               <MetricCard label="报名总数" value={String(entries.length)} isMobile={isMobile} />
               <MetricCard label="已付款" value={String(stats.paid)} isMobile={isMobile} />
@@ -332,13 +332,13 @@ export function YouthClassRegistrationPage() {
 
           <div style={panelStyle(isMobile)}>
             <div style={sectionTitleRowStyle(isMobile)}>
-              <h2 style={sectionTitleStyle(isMobile)}>公开报名页</h2>
+              <h2 style={sectionTitleStyle(isMobile)}>统一公开报名页</h2>
               <button type="button" style={secondaryButtonStyle} onClick={() => setPublicPageOpen(true)}>
-                打开公开报名页
+                打开统一公开报名页
               </button>
             </div>
             <div style={qrWrapStyle(isMobile)}>
-              {qrDataUrl ? <CachedImage src={qrDataUrl} alt="报名二维码" style={qrImageStyle(isMobile)} /> : <div style={emptyStyle}>生成二维码中…</div>}
+              {qrDataUrl ? <CachedImage src={qrDataUrl} alt="统一公开报名二维码" style={qrImageStyle(isMobile)} /> : <div style={emptyStyle}>生成二维码中…</div>}
             </div>
             <div style={urlBoxStyle(isMobile)}>{PUBLIC_URL}</div>
           </div>
@@ -364,11 +364,11 @@ export function YouthClassRegistrationPage() {
           onDelete={handleDeleteFee}
           addButtonLabel="添加费率"
           saveButtonLabel="保存费率"
-          emptyText="还没有费率。可以先加一条所有年龄的通用费用，或直接拆成 13-18 / 18-25。"
+          emptyText="还没有费率。可以先加一条青少年通用费用，或直接拆成不同年龄段。"
           showCategory={false}
           enableImageUpload
           imageLabel="该费率付款二维码 / 付款资料"
-          descriptionPlaceholder="例如：含教材 / 青年班报名费"
+          descriptionPlaceholder="例如：含教材 / 青少年佛学班报名费"
         />
         <div style={settingsFooterStyle(isMobile)}>
           <div style={amountHintStyle(isMobile)}>
@@ -429,7 +429,7 @@ export function YouthClassRegistrationPage() {
 
                 <div style={entryInfoGridStyle(isMobile)}>
                   <Fact label="NRIC" value={entry.nric || "-"} />
-                  <Fact label="年龄 / 组别" value={`${entry.age ?? "-"} 岁 / ${entry.category || "-"}`} />
+                  <Fact label="年龄 / 组别" value={`${entry.age ?? "-"} 岁 / ${entry.category || "青少年"}`} />
                   <Fact label="适用费用" value={entry.selected_fee ? summarizeFee(entry.selected_fee) : "未匹配费率"} />
                   <Fact label="手机号码" value={entry.phone || "-"} />
                 </div>

@@ -1,8 +1,9 @@
 import { createContext, useContext, useEffect, useMemo, useRef, useState } from "react";
 import type { ReactNode } from "react";
 
+import { useUserState } from "../../app/UserState";
 import type { AlbumRecord, MusicRecord } from "./types";
-import { addOneMinute } from "./api";
+import { addOneMinute, fetchLastPlayedMusic } from "./api";
 
 type RepeatMode = "off" | "all" | "one";
 
@@ -43,6 +44,7 @@ const CURRENT_STORAGE_KEY = "xinya.music.current.id";
 const MusicPlaybackContext = createContext<MusicPlaybackContextValue | null>(null);
 
 export function MusicPlaybackProvider({ children }: { children: ReactNode }) {
+  const { isAuthenticated, loadingUser } = useUserState();
   const [albums, setAlbums] = useState<AlbumRecord[]>([]);
   const [libraryMusics, setLibraryMusics] = useState<MusicRecord[]>([]);
   const [queueIds, setQueueIds] = useState<number[]>([]);
@@ -54,6 +56,7 @@ export function MusicPlaybackProvider({ children }: { children: ReactNode }) {
   const [repeatMode, setRepeatMode] = useState<RepeatMode>("off");
   const [autoplayKey, setAutoplayKey] = useState(0);
   const [restoredState, setRestoredState] = useState(false);
+  const attemptedRemoteRestoreRef = useRef(false);
 
   const musicMap = useMemo(() => new Map(libraryMusics.map((music) => [music.id, music])), [libraryMusics]);
   const queue = useMemo(
@@ -150,9 +153,70 @@ export function MusicPlaybackProvider({ children }: { children: ReactNode }) {
       return;
     }
     if (currentMusicId && !musicMap.has(currentMusicId)) {
-      setCurrentMusicIdState(filteredQueueIds[0] ?? libraryMusics[0]?.id ?? null);
+      setCurrentMusicIdState(filteredQueueIds[0] ?? null);
     }
   }, [libraryMusics, musicMap, currentMusicId, queueIds]);
+
+  useEffect(() => {
+    if (!restoredState || loadingUser) {
+      return;
+    }
+    if (!isAuthenticated) {
+      attemptedRemoteRestoreRef.current = false;
+      return;
+    }
+    if (!libraryMusics.length) {
+      return;
+    }
+    if (queueIds.length || currentMusicId != null || hasPlaybackSession) {
+      attemptedRemoteRestoreRef.current = true;
+      return;
+    }
+    if (attemptedRemoteRestoreRef.current) {
+      return;
+    }
+
+    attemptedRemoteRestoreRef.current = true;
+    let cancelled = false;
+
+    void fetchLastPlayedMusic()
+      .then((payload) => {
+        if (cancelled) {
+          return;
+        }
+        const musicId = payload.last_played?.music_id;
+        if (musicId == null || !musicMap.has(musicId)) {
+          return;
+        }
+
+        const orderedAllSongIds = [...libraryMusics]
+          .sort(
+            (a, b) =>
+              (Number(b.play_minutes ?? 0) - Number(a.play_minutes ?? 0)) ||
+              a.title.localeCompare(b.title, "zh-Hans-CN"),
+          )
+          .map((music) => music.id);
+
+        setQueueIds(normalizeQueue(orderedAllSongIds));
+        setCurrentMusicIdState(musicId);
+        setHasPlaybackSession(true);
+        setAutoplayKey((value) => value + 1);
+      })
+      .catch(() => undefined);
+
+    return () => {
+      cancelled = true;
+    };
+  }, [
+    currentMusicId,
+    hasPlaybackSession,
+    isAuthenticated,
+    libraryMusics,
+    loadingUser,
+    musicMap,
+    queueIds.length,
+    restoredState,
+  ]);
 
   function normalizeQueue(nextIds: number[]) {
     return Array.from(new Set(nextIds)).filter((id) => musicMap.has(id));

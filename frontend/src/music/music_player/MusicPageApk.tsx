@@ -1,20 +1,34 @@
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import type { CSSProperties } from "react";
 
+import { hasUserPermission } from "../../app/permissions";
+import { useUserState } from "../../app/UserState";
 import { CachedImage } from "../../components/CachedMedia";
-import { fetchAlbums, fetchMusicList } from "./api";
-import { AlbumCard, AlbumHero, AlbumListRow, TrackRow } from "./ApkAlbumComponents";
+import { fetchAlbums, fetchMinuteLogs, fetchMusicList } from "./api";
+import {
+  AlbumCard,
+  AlbumHero,
+  AlbumListRow,
+  AllSongsCard,
+  AllSongsHero,
+  TrackRow,
+} from "./ApkAlbumComponents";
 import { FullPlayer } from "./ApkFullPlayer";
+import {
+  groupMinuteLogsIntoSessions,
+} from "./listeningActivity";
+import { ListeningActivityChart } from "./ListeningActivityChart";
 import { useMusicPlayback } from "./MusicPlaybackContext";
 import { resolveTrackAlbumName, resolveTrackCoverUrl } from "./musicCoverUtils";
 import { NativeMusic } from "./nativeMusicPlugin";
-import type { AlbumRecord, MusicRecord } from "./types";
+import type { AlbumRecord, MinuteLogRecord, MusicRecord } from "./types";
 
 type ApkScreen = "albums" | "tracks";
 
 // ─── Main page ───────────────────────────────────────────────────────────────
 
 export function MusicPageApk() {
+  const { user, loadingUser } = useUserState();
   const {
     albums,
     libraryMusics,
@@ -41,7 +55,11 @@ export function MusicPageApk() {
 
   const [screen, setScreen] = useState<ApkScreen>("albums");
   const [selectedAlbum, setSelectedAlbum] = useState<AlbumRecord | null>(null);
+  const [showAllSongs, setShowAllSongs] = useState(false);
   const [loading, setLoading] = useState(true);
+  const [listeningLoading, setListeningLoading] = useState(false);
+  const [minuteLogs, setMinuteLogs] = useState<MinuteLogRecord[]>([]);
+  const [listeningTimezone, setListeningTimezone] = useState("Asia/Kuala_Lumpur");
   const [showFullPlayer, setShowFullPlayer] = useState(false);
   const [progress, setProgress] = useState(0);
   const [duration, setDuration] = useState(0);
@@ -51,6 +69,7 @@ export function MusicPageApk() {
   const savedScrollRef = useRef(0);
   const pendingScrollRestoreRef = useRef(false);
   const shouldInspectNative = hasPlaybackSession || autoplayKey > 0 || Boolean(currentMusic);
+  const canViewListening = hasUserPermission(user, "music_edit");
 
   useEffect(() => {
     Promise.all([fetchAlbums(), fetchMusicList()])
@@ -60,6 +79,39 @@ export function MusicPageApk() {
       })
       .finally(() => setLoading(false));
   }, [setAlbums, setLibraryMusics]);
+
+  useEffect(() => {
+    if (loadingUser) return;
+    if (!canViewListening) {
+      setMinuteLogs([]);
+      setListeningLoading(false);
+      return;
+    }
+
+    let cancelled = false;
+    setListeningLoading(true);
+
+    void fetchMinuteLogs({ perPage: 240 })
+      .then((payload) => {
+        if (cancelled) return;
+        setMinuteLogs(payload.items || []);
+        setListeningTimezone(payload.timezone || "Asia/Kuala_Lumpur");
+      })
+      .catch((error) => {
+        if (!cancelled) {
+          console.error("APK minute logs bootstrap failed", error);
+        }
+      })
+      .finally(() => {
+        if (!cancelled) {
+          setListeningLoading(false);
+        }
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [canViewListening, loadingUser]);
 
   useEffect(() => {
     if (currentMusic) { setDuration(currentMusic.duration ?? 0); return; }
@@ -95,9 +147,10 @@ export function MusicPageApk() {
     }
   });
 
-  function openAlbum(album: AlbumRecord) {
+  function openAlbum(album: AlbumRecord | null) {
     savedScrollRef.current = scrollContainerRef.current?.scrollTop ?? 0;
     setSelectedAlbum(album);
+    setShowAllSongs(album == null);
     setScreen("tracks");
   }
 
@@ -107,7 +160,27 @@ export function MusicPageApk() {
   }
 
   const allMusics = libraryMusics;
-  const albumTracks = selectedAlbum ? allMusics.filter((m) => m.album_id === selectedAlbum.id) : [];
+  const allMusicsSorted = useMemo(
+    () => [...allMusics].sort((a, b) => (b.play_minutes ?? 0) - (a.play_minutes ?? 0)),
+    [allMusics],
+  );
+  const albumTracks = showAllSongs
+    ? allMusicsSorted
+    : selectedAlbum
+      ? allMusics.filter((m) => m.album_id === selectedAlbum.id)
+      : [];
+  const listeningSessions = useMemo(
+    () => groupMinuteLogsIntoSessions(minuteLogs),
+    [minuteLogs],
+  );
+  const totalAlbumMinutes = useMemo(
+    () =>
+      albums.reduce(
+        (sum, album) => sum + Number(album.album_total_minutes ?? 0),
+        0,
+      ),
+    [albums],
+  );
   const albumNameByMusicId = useMemo(() => {
     const albumById = new Map(albums.map((album) => [album.id, album.name]));
     return new Map(
@@ -137,7 +210,7 @@ export function MusicPageApk() {
           <div style={{ width: 44 }} />
         )}
         <span style={headerTitleStyle} title={screen === "tracks" ? (selectedAlbum?.name ?? "") : ""}>
-          {screen === "tracks" ? (selectedAlbum?.name ?? "专辑") : "音乐"}
+          {screen === "tracks" ? (showAllSongs ? "全部歌曲" : selectedAlbum?.name ?? "专辑") : "音乐"}
         </span>
         <div style={{ width: 44 }} />
       </div>
@@ -168,10 +241,17 @@ export function MusicPageApk() {
 
         ) : screen === "tracks" ? (
           albumTracks.length === 0 ? (
-            <div style={emptyStyle}>此专辑暂无歌曲</div>
+            <div style={emptyStyle}>{showAllSongs ? "当前列表暂无歌曲" : "此专辑暂无歌曲"}</div>
           ) : (
             <>
-              <AlbumHero album={selectedAlbum!} trackCount={albumTracks.length} />
+              {showAllSongs ? (
+                <AllSongsHero
+                  trackCount={albumTracks.length}
+                  totalMinutes={totalAlbumMinutes}
+                />
+              ) : (
+                <AlbumHero album={selectedAlbum!} trackCount={albumTracks.length} />
+              )}
               <div style={trackListStyle}>
                 {albumTracks.map((track, index) => (
                   <TrackRow
@@ -181,6 +261,8 @@ export function MusicPageApk() {
                     isActive={currentMusic?.id === track.id}
                     isPlaying={isPlaying && currentMusic?.id === track.id}
                     inQueue={queue.some((q) => q.id === track.id)}
+                    showAlbum={showAllSongs}
+                    albumName={albumNameByMusicId.get(track.id) ?? "全部歌曲"}
                     onSelect={() => handleSelectTrack(track, albumTracks, setQueue, selectMusic, setDuration)}
                     onAddToQueue={() => appendToQueue(track.id)}
                   />
@@ -238,19 +320,39 @@ export function MusicPageApk() {
 
         ) : (
           /* Albums grid */
-          albums.length === 0 ? (
+          albums.length === 0 && allMusics.length === 0 ? (
             <div style={emptyStyle}>暂无专辑</div>
           ) : (
-            <div style={albumGridStyle}>
-              {albums.map((album) => (
-                <AlbumCard
-                  key={album.id}
-                  album={album}
-                  trackCount={allMusics.filter((m) => m.album_id === album.id).length}
-                  onSelect={() => openAlbum(album)}
+            <>
+              {canViewListening ? (
+                <div style={listeningChartWrapStyle}>
+                  <ListeningActivityChart
+                    isMobile
+                    title="最近听歌记录"
+                    subtitle="默认收起，展开后按歌曲总分钟看 bar chart；点到 bar 时会显示谁听了几分钟。"
+                    timezone={listeningTimezone}
+                    loading={listeningLoading}
+                    sessions={listeningSessions}
+                    emptyText="暂时还没有可显示的收听记录。"
+                  />
+                </div>
+              ) : null}
+              <div style={albumGridStyle}>
+                <AllSongsCard
+                  trackCount={allMusics.length}
+                  totalMinutes={totalAlbumMinutes}
+                  onSelect={() => openAlbum(null)}
                 />
-              ))}
-            </div>
+                {albums.map((album) => (
+                  <AlbumCard
+                    key={album.id}
+                    album={album}
+                    trackCount={allMusics.filter((m) => m.album_id === album.id).length}
+                    onSelect={() => openAlbum(album)}
+                  />
+                ))}
+              </div>
+            </>
           )
         )}
       </div>
@@ -268,7 +370,7 @@ export function MusicPageApk() {
           </div>
           <div style={miniInfoStyle}>
             <span style={miniTitleStyle}>{currentMusic.title}</span>
-            <span style={miniSubStyle}>{resolveTrackAlbumName(currentMusic.id, allMusics, albums)}</span>
+            <span style={miniSubStyle}>{resolveTrackAlbumName(currentMusic.id, allMusics, albums) || "全部歌曲"}</span>
           </div>
           <div style={miniControlsStyle} onClick={(e) => e.stopPropagation()}>
             <button style={miniIconBtnStyle} onClick={() => playRelative(-1)}>
@@ -423,6 +525,10 @@ const albumGridStyle: CSSProperties = {
 const trackListStyle: CSSProperties = { display: "flex", flexDirection: "column" };
 
 const searchResultsStyle: CSSProperties = { padding: "4px 0 16px" };
+
+const listeningChartWrapStyle: CSSProperties = {
+  padding: "6px 14px 16px",
+};
 
 const sectionHeaderStyle: CSSProperties = {
   display: "flex", alignItems: "center", gap: 8,

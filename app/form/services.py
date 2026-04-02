@@ -1871,7 +1871,7 @@ def submit_youth_class_registration(payload):
 
     category, eligible = _youth_class_category_from_age(age)
     if not eligible:
-        return jsonify({"status": "error", "message": f"年龄 {age} 岁，不符合青少年/青年佛学班报名资格"}), 400
+        return jsonify({"status": "error", "message": f"年龄 {age} 岁，不符合青少年佛学班报名资格"}), 400
 
     try:
         member = _get_or_create_member_by_nric(nric, name_nric=english_name)
@@ -2099,8 +2099,6 @@ def update_youth_class_payment_status(payment_id, data):
 def _youth_class_category_from_age(age):
     if 13 <= age <= 17:
         return "青少年", True
-    if 18 <= age <= 40:
-        return "青年", True
     return "不符合资格", False
 
 

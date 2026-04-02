@@ -18,6 +18,8 @@ export function EventTablePage() {
       selectedEvent={state.selectedEvent}
       selectedEventId={state.selectedEventId}
       query={state.query}
+      selectedType={state.selectedType}
+      eventTypeOptions={state.eventTypeOptions}
       page={state.page}
       totalPages={state.totalPages}
       loading={state.loading}
@@ -31,6 +33,7 @@ export function EventTablePage() {
       isMobile={isMobile}
       canEditEvent={canEditEvent}
       onQueryChange={actions.setQuery}
+      onTypeChange={actions.setSelectedType}
       onPageChange={actions.setPage}
       onSelectEvent={actions.setSelectedEventId}
       onRefresh={() => void actions.loadEvents()}

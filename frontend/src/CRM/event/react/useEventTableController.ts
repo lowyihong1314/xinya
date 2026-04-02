@@ -9,10 +9,13 @@ import { useEventTableRealtime } from "./useEventTableRealtime";
 
 type Toast = { type: "success" | "error"; text: string } | null;
 const PAGE_SIZE = 6;
+const ALL_EVENT_TYPE_FILTER = "__all__";
+const BLANK_EVENT_TYPE_FILTER = "__blank__";
 
 export function useEventTableController() {
   const { events, loading, error, refreshEvents } = useEventData();
   const [query, setQuery] = useState("");
+  const [selectedType, setSelectedType] = useState(ALL_EVENT_TYPE_FILTER);
   const [page, setPage] = useState(1);
   const [selectedEventId, setSelectedEventId] = useState<number | null>(null);
   const [saving, setSaving] = useState(false);
@@ -53,13 +56,46 @@ export function useEventTableController() {
     },
   });
 
+  const eventTypeOptions = useMemo(() => {
+    const values = Array.from(
+      new Set(
+        events
+          .map((event) => String(event.type || "").trim())
+          .filter(Boolean),
+      ),
+    ).sort((a, b) => a.localeCompare(b, "zh-Hans-CN"));
+
+    const hasBlank = events.some((event) => !String(event.type || "").trim());
+    return [
+      { value: ALL_EVENT_TYPE_FILTER, label: "全部类型" },
+      ...(hasBlank ? [{ value: BLANK_EVENT_TYPE_FILTER, label: "未设置类型" }] : []),
+      ...values.map((value) => ({ value, label: value })),
+    ];
+  }, [events]);
+
+  useEffect(() => {
+    if (eventTypeOptions.some((option) => option.value === selectedType)) {
+      return;
+    }
+    setSelectedType(ALL_EVENT_TYPE_FILTER);
+  }, [eventTypeOptions, selectedType]);
+
   const filteredEvents = useMemo(() => {
     const keyword = query.trim().toLowerCase();
-    if (!keyword) {
-      return events;
-    }
-
     return events.filter((event) => {
+      const eventType = String(event.type || "").trim();
+      const typeMatched =
+        selectedType === ALL_EVENT_TYPE_FILTER
+          ? true
+          : selectedType === BLANK_EVENT_TYPE_FILTER
+            ? !eventType
+            : eventType === selectedType;
+      if (!typeMatched) {
+        return false;
+      }
+      if (!keyword) {
+        return true;
+      }
       const organizerText = (event.organizers || [])
         .map((organizer) => organizer.display_name || organizer.username || "")
         .join(" ")
@@ -74,7 +110,7 @@ export function useEventTableController() {
         organizerText.includes(keyword)
       );
     });
-  }, [events, query]);
+  }, [events, query, selectedType]);
 
   const totalPages = useMemo(
     () => Math.max(1, Math.ceil(filteredEvents.length / PAGE_SIZE)),
@@ -88,7 +124,7 @@ export function useEventTableController() {
 
   useEffect(() => {
     setPage(1);
-  }, [query]);
+  }, [query, selectedType]);
 
   useEffect(() => {
     setPage((prev) => Math.min(prev, totalPages));
@@ -262,6 +298,8 @@ export function useEventTableController() {
       selectedEvent,
       selectedEventId,
       query,
+      selectedType,
+      eventTypeOptions,
       page,
       totalPages,
       loading,
@@ -275,6 +313,7 @@ export function useEventTableController() {
     },
     actions: {
       setQuery,
+      setSelectedType,
       setPage,
       setSelectedEventId,
       loadEvents: refreshEvents,
