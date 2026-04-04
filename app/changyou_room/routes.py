@@ -56,8 +56,6 @@ def _serialize_room(room_id: str, data: dict):
     projection_page_count = int(data.get("projection_page_count") or 0) or 0
     marker_index_raw = data.get("marker_index")
     marker_index = int(marker_index_raw) if marker_index_raw not in (None, "") else None
-    notification_message = (data.get("notification_message") or "").strip() or None
-    notification_updated_at = int(data.get("notification_updated_at") or 0) or None
 
     projection = None
     if projection_content or projection_blocks or projection_page_count:
@@ -68,13 +66,6 @@ def _serialize_room(room_id: str, data: dict):
             "content": projection_content,
             "blocks": projection_blocks,
             "marker_index": marker_index,
-        }
-
-    notification = None
-    if notification_message:
-        notification = {
-            "message": notification_message,
-            "updated_at": notification_updated_at,
         }
 
     return {
@@ -89,7 +80,6 @@ def _serialize_room(room_id: str, data: dict):
         "editor_user_id": editor_user_id,
         "playback_url": f"/changyou-room/{quote(room_id)}",
         "projection": projection,
-        "notification": notification,
     }
 
 
@@ -118,7 +108,6 @@ def _build_room_current_payload(room: dict):
             "room": room,
             "entry": None,
             "projection": room.get("projection"),
-            "notification": room.get("notification"),
         }
 
     entry = SongbookEntry.query.get(song_entry_id)
@@ -127,7 +116,6 @@ def _build_room_current_payload(room: dict):
             "room": room,
             "entry": None,
             "projection": room.get("projection"),
-            "notification": room.get("notification"),
         }
 
     content = entry.content
@@ -164,7 +152,6 @@ def _build_room_current_payload(room: dict):
         "room": room,
         "entry": entry_data,
         "projection": projection,
-        "notification": room.get("notification"),
     }
 
 
@@ -174,6 +161,26 @@ def _emit_room_update(payload: dict):
     if not room_id:
         return
     socket_broker.emit("changyou_room_update", payload, room=_socket_room(room_id))
+
+
+def _build_notification_payload(kind: str, content: str):
+    normalized_kind = "qr" if kind == "qr" else "text"
+    return {
+        "kind": normalized_kind,
+        "content": content,
+        "updated_at": _now_ts(),
+    }
+
+
+def _emit_room_notification(room_id: str, notification: dict):
+    socket_broker.emit(
+        "changyou_room_notification",
+        {
+            "room_id": room_id,
+            "notification": notification,
+        },
+        room=_socket_room(room_id),
+    )
 
 
 @changyou_room_bp.get("/list")
@@ -214,8 +221,6 @@ def create_room():
         "projection_content": "",
         "projection_blocks": "",
         "marker_index": "",
-        "notification_message": "",
-        "notification_updated_at": "",
     }
     redis_client.hset(_room_key(room_id), mapping=payload)
     redis_client.expire(_room_key(room_id), ROOM_TTL_SECONDS)
@@ -354,19 +359,22 @@ def notify_room(room_id):
         return jsonify({"error": "只有创建者可以控制房间"}), 403
 
     data = request.get_json() or {}
-    message = str(data.get("message") or "").strip()
-    if len(message) > 140:
-        message = message[:140].rstrip()
+    kind = str(data.get("kind") or "text").strip().lower()
+    content = str(data.get("content") or data.get("message") or "").strip()
+    if kind not in {"text", "qr"}:
+        return jsonify({"error": "通知类型不支持"}), 400
+    if not content:
+        return jsonify({"error": "通知内容不能为空"}), 400
+    if kind == "text" and len(content) > 140:
+        content = content[:140].rstrip()
+    if kind == "qr" and len(content) > 1200:
+        content = content[:1200].rstrip()
 
-    redis_client.hset(_room_key(room_id), mapping={
-        "notification_message": message,
-        "notification_updated_at": str(_now_ts()) if message else "",
-    })
+    redis_client.hdel(_room_key(room_id), "notification_message", "notification_updated_at")
     redis_client.expire(_room_key(room_id), ROOM_TTL_SECONDS)
-    room = _fetch_room(room_id)
-    payload = _build_room_current_payload(room)
-    _emit_room_update(payload)
-    return jsonify({"success": True, **payload})
+    notification = _build_notification_payload(kind, content)
+    _emit_room_notification(room_id, notification)
+    return jsonify({"success": True, "notification": notification})
 
 
 @changyou_room_bp.get("/room/<room_id>/current")

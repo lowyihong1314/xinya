@@ -20,7 +20,8 @@ export type ChangyouRoomProjection = {
 };
 
 export type ChangyouRoomNotification = {
-  message: string;
+  kind: "text" | "qr";
+  content: string;
   updated_at?: number | null;
 };
 
@@ -37,7 +38,6 @@ export type ChangyouRoom = {
   playback_url?: string;
   role?: "controller" | "player";
   projection?: ChangyouRoomProjection | null;
-  notification?: ChangyouRoomNotification | null;
 };
 
 async function parseJson<T>(response: Response): Promise<T> {
@@ -72,7 +72,6 @@ export async function fetchChangyouRoomCurrent(roomId: string) {
     room: ChangyouRoom;
     entry: SongbookEntry | null;
     projection?: ChangyouRoomProjection | null;
-    notification?: ChangyouRoomNotification | null;
   }>(response);
 }
 
@@ -111,7 +110,6 @@ export async function projectChangyouRoomPage(
     room: ChangyouRoom;
     entry: SongbookEntry | null;
     projection?: ChangyouRoomProjection | null;
-    notification?: ChangyouRoomNotification | null;
   }>(response);
 }
 
@@ -127,11 +125,10 @@ export async function updateChangyouRoomMarker(roomId: string, payload: { marker
     room: ChangyouRoom;
     entry: SongbookEntry | null;
     projection?: ChangyouRoomProjection | null;
-    notification?: ChangyouRoomNotification | null;
   }>(response);
 }
 
-export async function notifyChangyouRoom(roomId: string, payload: { message: string }) {
+export async function notifyChangyouRoom(roomId: string, payload: { kind: "text" | "qr"; content: string }) {
   const response = await apiFetch(`/api/changyou_room/room/${roomId}/notify`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
@@ -140,9 +137,6 @@ export async function notifyChangyouRoom(roomId: string, payload: { message: str
   });
   return parseJson<{
     success: boolean;
-    room: ChangyouRoom;
-    entry: SongbookEntry | null;
-    projection?: ChangyouRoomProjection | null;
-    notification?: ChangyouRoomNotification | null;
+    notification: ChangyouRoomNotification;
   }>(response);
 }

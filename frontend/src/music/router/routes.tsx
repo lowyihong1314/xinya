@@ -5,6 +5,7 @@ import { IS_APK } from "../../js/apiBase";
 import { ChangyouDetailPage } from "../changyou/react/ChangyouDetailPage";
 import { ChangyouPage } from "../changyou/react/ChangyouPage";
 import { ChangyouRoomPage } from "../changyou/react/room/ChangyouRoomPage";
+import { ChangyouRoomPublicAppPage } from "../changyou/react/room/ChangyouRoomPublicPage";
 import { MusicPage } from "../music_player/MusicPage";
 import { MusicPageApk } from "../music_player/MusicPageApk";
 
@@ -17,6 +18,7 @@ export const musicRoute: RouteObject = {
     { path: "changyou", element: <ChangyouPage /> },
     { path: "changyou/:entryId", element: <ChangyouDetailPage /> },
     { path: "changyou/room", element: <ChangyouRoomPage /> },
+    { path: "changyou/room/player/:roomId", element: <ChangyouRoomPublicAppPage /> },
     { path: "changyou/room/:roomId", element: <ChangyouRoomPage /> },
   ],
 };

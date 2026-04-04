@@ -1,9 +1,12 @@
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
+import QRCode from "qrcode";
+import { useNavigate, useParams } from "react-router-dom";
 
+import { CHANGYOU_ROOM_PATH } from "../../../router/paths";
 import { ensureProjectionBlocks, splitBlocksForDoublePage, type LyricProjectionBlock } from "../projection";
 import type { SongbookEntry } from "../types";
 import { connectChangyouRoom } from "./socket";
-import { fetchChangyouRoomCurrent, type ChangyouRoom } from "./api";
+import { fetchChangyouRoomCurrent, type ChangyouRoom, type ChangyouRoomNotification } from "./api";
 
 const FONT_SIZE_STORAGE_KEY = "xinya.changyou.room.fontSize";
 const LAYOUT_MODE_STORAGE_KEY = "xinya.changyou.room.layoutMode";
@@ -14,7 +17,6 @@ const CONTENT_WIDTH_STORAGE_KEY = "xinya.changyou.room.contentWidth";
 const COLUMN_GAP_STORAGE_KEY = "xinya.changyou.room.columnGap";
 const MARGIN_TOP_STORAGE_KEY = "xinya.changyou.room.marginTop";
 const TEXT_GLOW_STORAGE_KEY = "xinya.changyou.room.textGlow";
-const SENTENCE_WINDOW_STORAGE_KEY = "xinya.changyou.room.v2.maxSentenceCount";
 
 const DEFAULT_FONT_SIZE = 26;
 const MIN_FONT_SIZE = 20;
@@ -31,23 +33,13 @@ const MAX_LINE_HEIGHT = 2.3;
 const DEFAULT_COLUMN_GAP = 28;
 const MIN_COLUMN_GAP = 12;
 const MAX_COLUMN_GAP = 80;
-const NOTIFICATION_TOAST_DURATION_MS = 3000;
+const TEXT_NOTIFICATION_DURATION_MS = 5000;
+const QR_NOTIFICATION_DURATION_MS = 12000;
 
 type LayoutMode = "single" | "double";
 type BackgroundThemeKey = "midnight" | "obsidian" | "paper" | "forest" | "sunset";
 type ContentWidthMode = "focus" | "balanced" | "full";
 type TextGlowLevel = "off" | "soft" | "strong";
-type ChangyouRoomPublicVariant = "default" | "v2";
-
-const SENTENCE_WINDOW_OPTIONS = ["full", "3", "6", "9", "12"] as const;
-type SentenceWindowMode = (typeof SENTENCE_WINDOW_OPTIONS)[number];
-
-const SENTENCE_WINDOW_LIMITS: Record<Exclude<SentenceWindowMode, "full">, number> = {
-  "3": 3,
-  "6": 6,
-  "9": 9,
-  "12": 12,
-};
 
 const BACKGROUND_THEMES: Record<BackgroundThemeKey, { label: string; page: string; overlay: string; textColor: string }> = {
   midnight: {
@@ -105,30 +97,6 @@ const TEXT_GLOW_PRESETS: Record<TextGlowLevel, { label: string; textShadow: stri
   },
 };
 
-type SinglePageSentenceItem = {
-  text: string;
-  blockIndex: number | null;
-};
-
-function buildSinglePageSentenceItems(blocks: LyricProjectionBlock[], fallbackContent: string): SinglePageSentenceItem[] {
-  const lyricSentences = blocks
-    .map((block, blockIndex) => {
-      const text = block.text.trim();
-      if (!text) return null;
-      return {
-        text,
-        blockIndex,
-      } satisfies SinglePageSentenceItem;
-    })
-    .filter((item): item is SinglePageSentenceItem => Boolean(item));
-  if (lyricSentences.length) return lyricSentences;
-
-  return splitIntoBlocks(fallbackContent)
-    .map((lines) => lines.join("\n").trim())
-    .filter(Boolean)
-    .map((text) => ({ text, blockIndex: null }));
-}
-
 function readStoredChoice<T extends string>(storageKey: string, options: readonly T[], fallback: T) {
   if (typeof window === "undefined") return fallback;
   const saved = window.localStorage.getItem(storageKey);
@@ -170,67 +138,6 @@ function estimateLineWeight(line: string) {
   return Math.max(1, Math.ceil(width / 24));
 }
 
-function splitIntoBlocks(content: string) {
-  const lines = content.split(/\r?\n/);
-  const blocks: string[][] = [];
-  let current: string[] = [];
-
-  const pushCurrent = () => {
-    if (!current.length) return;
-    blocks.push(current);
-    current = [];
-  };
-
-  for (const line of lines) {
-    const trimmed = line.trim();
-    if (!trimmed) {
-      current.push(line);
-      pushCurrent();
-      continue;
-    }
-    if (isSectionBoundary(line) && current.length) {
-      pushCurrent();
-    }
-    current.push(line);
-  }
-
-  pushCurrent();
-  return blocks.filter((block) => block.some((line) => line.trim()));
-}
-
-function buildDoublePageContent(content: string) {
-  const blocks = splitIntoBlocks(content);
-  if (blocks.length <= 1) {
-    return { left: content, right: "" };
-  }
-
-  const weights = blocks.map((block) => block.reduce((sum, line) => sum + estimateLineWeight(line), 0));
-  const totalWeight = weights.reduce((sum, weight) => sum + weight, 0);
-  let cumulative = 0;
-  let bestIndex = 1;
-  let bestScore = Number.POSITIVE_INFINITY;
-
-  for (let index = 1; index < blocks.length; index += 1) {
-    cumulative += weights[index - 1];
-    const leftWeight = cumulative;
-    const rightWeight = totalWeight - cumulative;
-    if (leftWeight <= 0 || rightWeight <= 0) continue;
-
-    const imbalance = Math.abs(leftWeight - rightWeight);
-    const blockBalancePenalty = Math.abs(index - blocks.length / 2) * 0.35;
-    const score = imbalance + blockBalancePenalty;
-    if (score < bestScore) {
-      bestScore = score;
-      bestIndex = index;
-    }
-  }
-
-  return {
-    left: blocks.slice(0, bestIndex).map((block) => block.join("\n")).join("\n"),
-    right: blocks.slice(bestIndex).map((block) => block.join("\n")).join("\n"),
-  };
-}
-
 function buildTextBlockStyle(options: {
   fontSize: number;
   lineHeight: number;
@@ -256,20 +163,127 @@ function buildTextBlockStyle(options: {
   };
 }
 
+function ProjectionColumn(props: {
+  blocks: LyricProjectionBlock[];
+  projectionBlocks: LyricProjectionBlock[];
+  activeMarkerIndex: number | null;
+  backgroundThemeKey: BackgroundThemeKey;
+  baseStyle: ReturnType<typeof buildTextBlockStyle>;
+}) {
+  const columnRef = useRef<HTMLDivElement | null>(null);
+  const [haloFrame, setHaloFrame] = useState({ top: 0, height: 0, visible: false });
+
+  useLayoutEffect(() => {
+    if (typeof window === "undefined") return;
+    const columnNode = columnRef.current;
+    if (!columnNode) return;
+
+    let frame = 0;
+    let resizeObserver: ResizeObserver | null = null;
+
+    const updateHalo = () => {
+      const activeNode = columnNode.querySelector('[data-projection-active="true"]') as HTMLDivElement | null;
+      if (!activeNode) {
+        setHaloFrame((current) => (current.visible ? { ...current, visible: false } : current));
+        return;
+      }
+
+      const columnRect = columnNode.getBoundingClientRect();
+      const activeRect = activeNode.getBoundingClientRect();
+      const nextTop = Math.max(activeRect.top - columnRect.top - 18, 0);
+      const nextHeight = activeRect.height + 36;
+      setHaloFrame({ top: nextTop, height: nextHeight, visible: true });
+    };
+
+    const scheduleUpdate = () => {
+      window.cancelAnimationFrame(frame);
+      frame = window.requestAnimationFrame(updateHalo);
+    };
+
+    scheduleUpdate();
+    if (typeof ResizeObserver !== "undefined") {
+      resizeObserver = new ResizeObserver(scheduleUpdate);
+      resizeObserver.observe(columnNode);
+      const activeNode = columnNode.querySelector('[data-projection-active="true"]') as HTMLDivElement | null;
+      if (activeNode) {
+        resizeObserver.observe(activeNode);
+      }
+    }
+    window.addEventListener("resize", scheduleUpdate);
+
+    return () => {
+      window.cancelAnimationFrame(frame);
+      resizeObserver?.disconnect();
+      window.removeEventListener("resize", scheduleUpdate);
+    };
+  }, [props.activeMarkerIndex, props.baseStyle.fontSize, props.baseStyle.lineHeight, props.blocks]);
+
+  return (
+    <div ref={columnRef} style={projectionColumnStyle}>
+      <div style={projectionCursorHaloStyle(haloFrame.top, haloFrame.height, haloFrame.visible, props.backgroundThemeKey)} />
+      {props.blocks.map((block, index) => {
+        const globalIndex = props.projectionBlocks.findIndex((item) => item.id === block.id);
+        const active = block.highlightable && props.activeMarkerIndex === globalIndex;
+        return (
+          <div
+            key={block.id || `${block.label}-${index}`}
+            data-projection-active={active ? "true" : undefined}
+            style={projectionBlockShellStyle(active, props.backgroundThemeKey)}
+          >
+            <pre style={projectionTextStyle(props.baseStyle, active)}>{block.text}</pre>
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
+type ChangyouRoomPublicPageProps = {
+  roomId: string;
+  embeddedInApp?: boolean;
+  showBackButton?: boolean;
+  onBack?: () => void;
+};
+
+export function ChangyouRoomPublicAppPage() {
+  const navigate = useNavigate();
+  const { roomId } = useParams();
+
+  if (!roomId) {
+    const fallbackTheme = BACKGROUND_THEMES.midnight;
+    return <div style={stateShellStyle(fallbackTheme.page, fallbackTheme.textColor)}>房间不存在。</div>;
+  }
+
+  return (
+    <ChangyouRoomPublicPage
+      roomId={roomId}
+      embeddedInApp
+      showBackButton
+      onBack={() => {
+        if (typeof window !== "undefined" && window.history.length > 1) {
+          navigate(-1);
+          return;
+        }
+        navigate(CHANGYOU_ROOM_PATH);
+      }}
+    />
+  );
+}
+
 export function ChangyouRoomPublicPage({
   roomId,
-  variant = "default",
-}: {
-  roomId: string;
-  variant?: ChangyouRoomPublicVariant;
-}) {
+  embeddedInApp = false,
+  showBackButton = false,
+  onBack,
+}: ChangyouRoomPublicPageProps) {
   const [room, setRoom] = useState<ChangyouRoom | null>(null);
   const [entry, setEntry] = useState<SongbookEntry | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [settingsHintVisible, setSettingsHintVisible] = useState(false);
-  const [notificationToast, setNotificationToast] = useState<{ message: string; updatedAt: number } | null>(null);
+  const [activeNotification, setActiveNotification] = useState<ChangyouRoomNotification | null>(null);
+  const [notificationQrDataUrl, setNotificationQrDataUrl] = useState("");
   const [songTitleCollapsed, setSongTitleCollapsed] = useState(false);
   const [layoutMode, setLayoutMode] = useState<LayoutMode>(() =>
     readStoredChoice(LAYOUT_MODE_STORAGE_KEY, ["single", "double"], "single"),
@@ -298,14 +312,7 @@ export function ChangyouRoomPublicPage({
   const [textGlowLevel, setTextGlowLevel] = useState<TextGlowLevel>(() =>
     readStoredChoice(TEXT_GLOW_STORAGE_KEY, ["off", "soft", "strong"], "soft"),
   );
-  const [sentenceWindowMode, setSentenceWindowMode] = useState<SentenceWindowMode>(() =>
-    readStoredChoice(SENTENCE_WINDOW_STORAGE_KEY, SENTENCE_WINDOW_OPTIONS, "full"),
-  );
-  const anchoredSentenceRef = useRef<HTMLDivElement | null>(null);
-  const [anchoredSentenceHeight, setAnchoredSentenceHeight] = useState(0);
-  const previousAnchoredSentenceIndexRef = useRef<number | null>(null);
-  const [windowMotionOffset, setWindowMotionOffset] = useState(0);
-  const [windowMotionReady, setWindowMotionReady] = useState(false);
+  const [roomUpdateTick, setRoomUpdateTick] = useState(0);
 
   useEffect(() => {
     let cancelled = false;
@@ -337,6 +344,12 @@ export function ChangyouRoomPublicPage({
     socket.on("changyou_room_update", (payload) => {
       setRoom((current) => (current ? { ...current, ...payload.room } : payload.room || current));
       setEntry(payload.entry || null);
+      setRoomUpdateTick((value) => value + 1);
+    });
+    socket.on("changyou_room_notification", (payload) => {
+      const nextNotification = payload?.notification as ChangyouRoomNotification | undefined;
+      if (!nextNotification?.content) return;
+      setActiveNotification(nextNotification);
     });
     return () => {
       socket.disconnect();
@@ -349,6 +362,17 @@ export function ChangyouRoomPublicPage({
       document.title = "唱游房间";
     };
   }, []);
+
+  useEffect(() => {
+    if (!embeddedInApp) return;
+    const navbar = document.getElementById("base_navbar");
+    if (!navbar) return;
+    const previousDisplay = navbar.style.display;
+    navbar.style.display = "none";
+    return () => {
+      navbar.style.display = previousDisplay;
+    };
+  }, [embeddedInApp]);
 
   useEffect(() => {
     if (typeof window === "undefined") return;
@@ -396,11 +420,6 @@ export function ChangyouRoomPublicPage({
   }, [textGlowLevel]);
 
   useEffect(() => {
-    if (typeof window === "undefined") return;
-    window.localStorage.setItem(SENTENCE_WINDOW_STORAGE_KEY, sentenceWindowMode);
-  }, [sentenceWindowMode]);
-
-  useEffect(() => {
     if (loading || error) return;
     setSettingsHintVisible(true);
     const timer = window.setTimeout(() => {
@@ -417,21 +436,47 @@ export function ChangyouRoomPublicPage({
   }, [settingsOpen]);
 
   useEffect(() => {
-    const nextNotification = room?.notification;
-    if (!nextNotification?.message || !nextNotification.updated_at) return;
-    setNotificationToast({
-      message: nextNotification.message,
-      updatedAt: nextNotification.updated_at,
-    });
+    if (!activeNotification) {
+      setNotificationQrDataUrl("");
+      return;
+    }
+    if (activeNotification.kind !== "qr") {
+      setNotificationQrDataUrl("");
+      return;
+    }
+
+    let cancelled = false;
+    QRCode.toDataURL(activeNotification.content, {
+      margin: 1,
+      width: 960,
+    })
+      .then((dataUrl) => {
+        if (!cancelled) {
+          setNotificationQrDataUrl(dataUrl);
+        }
+      })
+      .catch(() => {
+        if (!cancelled) {
+          setNotificationQrDataUrl("");
+        }
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [activeNotification]);
+
+  useEffect(() => {
+    if (!activeNotification?.updated_at) return;
+    const duration = activeNotification.kind === "qr" ? QR_NOTIFICATION_DURATION_MS : TEXT_NOTIFICATION_DURATION_MS;
     const timer = window.setTimeout(() => {
-      setNotificationToast((current) =>
-        current?.updatedAt === nextNotification.updated_at ? null : current,
+      setActiveNotification((current) =>
+        current?.updated_at === activeNotification.updated_at ? null : current,
       );
-    }, NOTIFICATION_TOAST_DURATION_MS);
+    }, duration);
     return () => {
       window.clearTimeout(timer);
     };
-  }, [room?.notification?.message, room?.notification?.updated_at]);
+  }, [activeNotification]);
 
   const backgroundTheme = BACKGROUND_THEMES[backgroundThemeKey];
   const widthPreset = CONTENT_WIDTH_PRESETS[contentWidthMode];
@@ -457,59 +502,6 @@ export function ChangyouRoomPublicPage({
     [projectionBlocks],
   );
   const activeMarkerIndex = room?.projection?.marker_index ?? null;
-  const singlePageSentenceItems = useMemo(
-    () => buildSinglePageSentenceItems(projectionBlocks, projectionSourceContent),
-    [projectionBlocks, projectionSourceContent],
-  );
-  const anchoredSentenceIndex = useMemo(() => {
-    if (!singlePageSentenceItems.length) return -1;
-    if (activeMarkerIndex == null) return 0;
-    const firstMatchedSentenceIndex = singlePageSentenceItems.findIndex((item) => item.blockIndex === activeMarkerIndex);
-    return firstMatchedSentenceIndex >= 0 ? firstMatchedSentenceIndex : 0;
-  }, [activeMarkerIndex, singlePageSentenceItems]);
-  const windowedSentenceGroups = useMemo(() => {
-    if (anchoredSentenceIndex < 0 || !singlePageSentenceItems.length) {
-      return {
-        leading: [] as string[],
-        anchored: "",
-        trailing: [] as string[],
-      };
-    }
-    if (sentenceWindowMode === "full") {
-      return {
-        leading: [] as string[],
-        anchored: singlePageSentenceItems[anchoredSentenceIndex]?.text || "",
-        trailing: singlePageSentenceItems.slice(anchoredSentenceIndex + 1).map((item) => item.text),
-      };
-    }
-
-    const limit = SENTENCE_WINDOW_LIMITS[sentenceWindowMode];
-    const anchored = singlePageSentenceItems[anchoredSentenceIndex]?.text || "";
-    const contextSlots = Math.max(limit - (anchored ? 1 : 0), 0);
-    let leadingCount = anchoredSentenceIndex > 0 && contextSlots > 0 ? 1 : 0;
-    const nextCount = Math.max(singlePageSentenceItems.length - anchoredSentenceIndex - 1, 0);
-    const trailingCount = Math.min(nextCount, Math.max(contextSlots - leadingCount, 0));
-    const remainingContextSlots = contextSlots - leadingCount - trailingCount;
-    if (remainingContextSlots > 0) {
-      leadingCount += Math.min(Math.max(anchoredSentenceIndex - leadingCount, 0), remainingContextSlots);
-    }
-    const leading = singlePageSentenceItems
-      .slice(Math.max(0, anchoredSentenceIndex - leadingCount), anchoredSentenceIndex)
-      .map((item) => item.text);
-    const trailing = singlePageSentenceItems
-      .slice(anchoredSentenceIndex + 1, anchoredSentenceIndex + 1 + trailingCount)
-      .map((item) => item.text);
-
-    return {
-      leading,
-      anchored,
-      trailing,
-    };
-  }, [anchoredSentenceIndex, sentenceWindowMode, singlePageSentenceItems]);
-  const useSentenceWindowMode = variant === "v2" && layoutMode === "single" && sentenceWindowMode !== "full" && anchoredSentenceIndex >= 0;
-  const leadingSentences = windowedSentenceGroups.leading;
-  const anchoredSentence = windowedSentenceGroups.anchored;
-  const trailingSentences = windowedSentenceGroups.trailing;
 
   const singleBlockStyle = buildTextBlockStyle({
     fontSize,
@@ -525,79 +517,36 @@ export function ChangyouRoomPublicPage({
   });
 
   useEffect(() => {
-    if (!useSentenceWindowMode) {
-      setAnchoredSentenceHeight(0);
-      return;
-    }
-    const node = anchoredSentenceRef.current;
-    if (!node) return;
+    if (!roomUpdateTick) return;
+    if (typeof window === "undefined") return;
 
-    const updateHeight = () => {
-      setAnchoredSentenceHeight(node.getBoundingClientRect().height || 0);
-    };
-
-    updateHeight();
-    const resizeObserver = typeof ResizeObserver !== "undefined" ? new ResizeObserver(updateHeight) : null;
-    resizeObserver?.observe(node);
-    window.addEventListener("resize", updateHeight);
-    return () => {
-      resizeObserver?.disconnect();
-      window.removeEventListener("resize", updateHeight);
-    };
-  }, [anchoredSentence, fontSize, lineHeight, useSentenceWindowMode, widthPreset.maxWidth]);
-
-  useLayoutEffect(() => {
-    if (!useSentenceWindowMode || anchoredSentenceIndex < 0) {
-      previousAnchoredSentenceIndexRef.current = anchoredSentenceIndex;
-      setWindowMotionOffset(0);
-      setWindowMotionReady(false);
-      return;
-    }
-
-    const previousIndex = previousAnchoredSentenceIndexRef.current;
-    previousAnchoredSentenceIndexRef.current = anchoredSentenceIndex;
-    if (previousIndex == null || previousIndex < 0 || previousIndex === anchoredSentenceIndex) {
-      setWindowMotionOffset(0);
-      setWindowMotionReady(false);
-      return;
-    }
-
-    const nextOffset = anchoredSentenceIndex > previousIndex ? 42 : -42;
     let frameA = 0;
     let frameB = 0;
-    setWindowMotionReady(false);
-    setWindowMotionOffset(nextOffset);
-    frameA = window.requestAnimationFrame(() => {
-      frameB = window.requestAnimationFrame(() => {
-        setWindowMotionReady(true);
-        setWindowMotionOffset(0);
+    let settleTimer = 0;
+
+    const centerActiveProjectionBlock = () => {
+      const activeNode = document.querySelector('[data-projection-active="true"]') as HTMLElement | null;
+      if (!activeNode) return;
+
+      const rect = activeNode.getBoundingClientRect();
+      const targetTop = window.scrollY + rect.top + (rect.height / 2) - (window.innerHeight / 2);
+      window.scrollTo({
+        top: Math.max(0, targetTop),
+        behavior: "smooth",
       });
+    };
+
+    frameA = window.requestAnimationFrame(() => {
+      frameB = window.requestAnimationFrame(centerActiveProjectionBlock);
     });
+    settleTimer = window.setTimeout(centerActiveProjectionBlock, 220);
 
     return () => {
       window.cancelAnimationFrame(frameA);
       window.cancelAnimationFrame(frameB);
+      window.clearTimeout(settleTimer);
     };
-  }, [anchoredSentenceIndex, useSentenceWindowMode]);
-
-  function renderProjectionColumn(blocks: LyricProjectionBlock[], baseStyle: ReturnType<typeof buildTextBlockStyle>) {
-    return (
-      <div style={projectionColumnStyle}>
-        {blocks.map((block, index) => {
-          const globalIndex = projectionBlocks.findIndex((item) => item.id === block.id);
-          const active = block.highlightable && activeMarkerIndex === globalIndex;
-          return (
-            <div
-              key={block.id || `${block.label}-${index}`}
-              style={projectionBlockShellStyle(active, backgroundThemeKey)}
-            >
-              <pre style={projectionTextStyle(baseStyle)}>{block.text}</pre>
-            </div>
-          );
-        })}
-      </div>
-    );
-  }
+  }, [roomUpdateTick, layoutMode, activeMarkerIndex, fontSize, lineHeight]);
 
   function resetDisplaySettings() {
     setLayoutMode("single");
@@ -609,7 +558,6 @@ export function ChangyouRoomPublicPage({
     setLineHeight(DEFAULT_LINE_HEIGHT);
     setColumnGap(DEFAULT_COLUMN_GAP);
     setTextGlowLevel("soft");
-    setSentenceWindowMode("full");
   }
 
   if (loading) {
@@ -638,32 +586,43 @@ export function ChangyouRoomPublicPage({
           82% { opacity: 1; transform: translateX(0) scale(1); }
           100% { opacity: 0; transform: translateX(12px) scale(0.96); }
         }
-        @keyframes changyou-room-notification-pop {
-          0% { opacity: 0; transform: translate3d(-18px, -14px, 0) scale(0.92); }
-          12% { opacity: 1; transform: translate3d(0, 0, 0) scale(1.03); }
-          20% { opacity: 1; transform: translate3d(0, 0, 0) scale(1); }
-          78% { opacity: 1; transform: translate3d(0, 0, 0) scale(1); }
-          100% { opacity: 0; transform: translate3d(0, -14px, 0) scale(0.97); }
+        @keyframes changyou-room-notification-enter {
+          0% { opacity: 0; transform: translate3d(0, 22px, 0) scale(0.94); }
+          65% { opacity: 1; transform: translate3d(0, -4px, 0) scale(1.02); }
+          100% { opacity: 1; transform: translate3d(0, 0, 0) scale(1); }
         }
-        @keyframes changyou-room-marker-enter {
-          0% { transform: scale(0.96); opacity: 0.6; }
-          60% { transform: scale(1.032); opacity: 1; }
-          100% { transform: scale(1.024); opacity: 1; }
-        }
-        @keyframes changyou-room-sentence-switch {
-          0% { opacity: 0; transform: scale(0.988); }
-          100% { opacity: 1; transform: scale(1); }
-        }
-        @keyframes changyou-room-sentence-focus {
+        @keyframes changyou-room-cursor-aura {
           0%, 100% { filter: brightness(1) saturate(1); }
-          50% { filter: brightness(1.08) saturate(1.18); }
+          50% { filter: brightness(1.16) saturate(1.22); }
         }
       `}</style>
       <div style={ambientGlowStyle(backgroundTheme.overlay)} />
-      {notificationToast ? (
-        <div style={notificationToastWrapStyle}>
-          <div key={notificationToast.updatedAt} style={notificationToastStyle(backgroundThemeKey)}>
-            {notificationToast.message}
+      {showBackButton && onBack ? (
+        <button type="button" onClick={onBack} style={appBackButtonStyle(backgroundThemeKey)}>
+          ← 返回
+        </button>
+      ) : null}
+      {activeNotification ? (
+        <div style={notificationOverlayStyle}>
+          <div
+            key={activeNotification.updated_at || activeNotification.content}
+            style={notificationModalStyle(backgroundThemeKey)}
+          >
+            {activeNotification.kind === "qr" ? (
+              <div style={notificationQrLayoutStyle}>
+                <div style={notificationQrTitleStyle}>扫码查看</div>
+                <div style={notificationQrFrameStyle(backgroundThemeKey)}>
+                  {notificationQrDataUrl ? (
+                    <img src={notificationQrDataUrl} alt="notification qr code" style={notificationQrImageStyle} />
+                  ) : (
+                    <div style={notificationQrPlaceholderStyle}>QR</div>
+                  )}
+                </div>
+                <div style={notificationQrContentStyle(backgroundThemeKey)}>{activeNotification.content}</div>
+              </div>
+            ) : (
+              <div style={notificationTextContentStyle}>{activeNotification.content}</div>
+            )}
           </div>
         </div>
       ) : null}
@@ -720,25 +679,6 @@ export function ChangyouRoomPublicPage({
                 </button>
               </div>
             </div>
-
-            {variant === "v2" && layoutMode === "single" ? (
-              <div style={settingsGroupStyle}>
-                <div style={settingsTitleStyle}>窗口卡片数</div>
-                <div style={settingsCaptionStyle}>焦点卡片固定在中线，并跟随当前标记段同步切换</div>
-                <div style={sentenceWindowGridStyle}>
-                  {SENTENCE_WINDOW_OPTIONS.map((option) => (
-                    <button
-                      key={option}
-                      type="button"
-                      onClick={() => setSentenceWindowMode(option)}
-                      style={modeButtonStyle(sentenceWindowMode === option)}
-                    >
-                      {option}
-                    </button>
-                  ))}
-                </div>
-              </div>
-            ) : null}
 
             <div style={settingsGroupStyle}>
               <div style={settingsTitleStyle}>背景主题</div>
@@ -851,58 +791,32 @@ export function ChangyouRoomPublicPage({
       ) : layoutMode === "double" ? (
         <div style={contentShellStyle(widthPreset.maxWidth, outerPadding, marginTop)}>
           <div style={doublePageStyle(columnGap, outerPadding, marginTop)}>
-            {renderProjectionColumn(doubleProjectionBlocks.left, doubleBlockStyle)}
-            {renderProjectionColumn(doubleProjectionBlocks.right, doubleBlockStyle)}
-          </div>
-        </div>
-      ) : useSentenceWindowMode ? (
-        <div style={contentShellStyle(widthPreset.maxWidth, outerPadding, marginTop)}>
-          <div style={sentenceWindowShellStyle(outerPadding, marginTop)}>
-            <div style={sentenceMotionLayerStyle(windowMotionOffset, windowMotionReady)}>
-              {leadingSentences.length ? (
-                <div style={sentenceLeadWrapStyle(anchoredSentenceHeight)}>
-                  <div style={sentenceLeadListStyle}>
-                    {leadingSentences.map((sentence, index) => (
-                      <div
-                        key={`${sentence}-${index}-lead`}
-                        style={sentenceTrailCardStyle(backgroundThemeKey, singleBlockStyle)}
-                      >
-                        {sentence}
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              ) : null}
-              <div style={sentenceAnchorWrapStyle}>
-                <div
-                  key={anchoredSentence}
-                  ref={anchoredSentenceRef}
-                  style={sentenceAnchorCardStyle(backgroundThemeKey, singleBlockStyle)}
-                >
-                  {anchoredSentence}
-                </div>
-              </div>
-              {trailingSentences.length ? (
-                <div style={sentenceTrailWrapStyle(anchoredSentenceHeight)}>
-                  <div style={sentenceTrailListStyle}>
-                    {trailingSentences.map((sentence, index) => (
-                      <div
-                        key={`${sentence}-${index}`}
-                        style={sentenceTrailCardStyle(backgroundThemeKey, singleBlockStyle)}
-                      >
-                        {sentence}
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              ) : null}
-            </div>
+            <ProjectionColumn
+              blocks={doubleProjectionBlocks.left}
+              projectionBlocks={projectionBlocks}
+              activeMarkerIndex={activeMarkerIndex}
+              backgroundThemeKey={backgroundThemeKey}
+              baseStyle={doubleBlockStyle}
+            />
+            <ProjectionColumn
+              blocks={doubleProjectionBlocks.right}
+              projectionBlocks={projectionBlocks}
+              activeMarkerIndex={activeMarkerIndex}
+              backgroundThemeKey={backgroundThemeKey}
+              baseStyle={doubleBlockStyle}
+            />
           </div>
         </div>
       ) : (
         <div style={contentShellStyle(widthPreset.maxWidth, outerPadding, marginTop)}>
           <div style={singlePageStyle(outerPadding, marginTop, singleBlockStyle)}>
-            {renderProjectionColumn(projectionBlocks, singleBlockStyle)}
+            <ProjectionColumn
+              blocks={projectionBlocks}
+              projectionBlocks={projectionBlocks}
+              activeMarkerIndex={activeMarkerIndex}
+              backgroundThemeKey={backgroundThemeKey}
+              baseStyle={singleBlockStyle}
+            />
           </div>
         </div>
       )}
@@ -973,34 +887,142 @@ const settingsWrapStyle = {
   gap: "10px",
 };
 
-const notificationToastWrapStyle = {
+const appBackButtonStyle = (backgroundThemeKey: BackgroundThemeKey) => ({
   position: "fixed" as const,
   top: "16px",
   left: "16px",
-  zIndex: 5,
+  zIndex: 6,
+  display: "inline-flex",
+  alignItems: "center",
+  gap: "8px",
+  padding: "12px 16px",
+  borderRadius: "999px",
+  border:
+    backgroundThemeKey === "paper"
+      ? "1px solid rgba(217,119,6,0.18)"
+      : "1px solid rgba(148,163,184,0.24)",
+  background:
+    backgroundThemeKey === "paper"
+      ? "rgba(255,251,235,0.92)"
+      : "rgba(15,23,42,0.78)",
+  color: backgroundThemeKey === "paper" ? "#111827" : "#f8fafc",
+  fontWeight: 900,
+  boxShadow: "0 18px 36px rgba(2,6,23,0.24)",
+  backdropFilter: "blur(14px)",
+  cursor: "pointer",
+});
+
+const notificationOverlayStyle = {
+  position: "fixed" as const,
+  inset: 0,
+  zIndex: 8,
+  display: "grid",
+  placeItems: "center",
+  padding: "20px",
+  background: "rgba(2,6,23,0.34)",
+  backdropFilter: "blur(10px)",
   pointerEvents: "none" as const,
 };
 
-const notificationToastStyle = (backgroundThemeKey: BackgroundThemeKey) => ({
-  minWidth: "220px",
-  maxWidth: "min(420px, calc(100vw - 92px))",
-  padding: "14px 18px",
-  borderRadius: "18px",
+const notificationModalStyle = (backgroundThemeKey: BackgroundThemeKey) => ({
+  width: "min(60vw, calc(100vw - 40px))",
+  minWidth: "min(720px, calc(100vw - 40px))",
+  minHeight: "60vh",
+  maxHeight: "min(60vh, calc(100vh - 40px))",
+  padding: "28px 32px",
+  borderRadius: "32px",
+  display: "grid",
+  placeItems: "center",
   background:
     backgroundThemeKey === "paper"
-      ? "rgba(255,251,235,0.96)"
-      : "rgba(15,23,42,0.92)",
+      ? "linear-gradient(180deg, rgba(255,251,235,0.98) 0%, rgba(255,247,237,0.96) 100%)"
+      : "linear-gradient(180deg, rgba(15,23,42,0.96) 0%, rgba(8,47,73,0.94) 100%)",
   color: backgroundThemeKey === "paper" ? "#111827" : "#f8fafc",
   border:
     backgroundThemeKey === "paper"
-      ? "1px solid rgba(217,119,6,0.16)"
-      : "1px solid rgba(45,212,191,0.22)",
-  boxShadow: "0 20px 44px rgba(2,6,23,0.28)",
-  fontSize: "16px",
-  fontWeight: 900,
-  lineHeight: 1.6,
-  animation: `changyou-room-notification-pop ${NOTIFICATION_TOAST_DURATION_MS}ms cubic-bezier(0.22, 1, 0.36, 1) forwards`,
+      ? "1px solid rgba(217,119,6,0.22)"
+      : "1px solid rgba(45,212,191,0.26)",
+  boxShadow:
+    backgroundThemeKey === "paper"
+      ? "0 36px 80px rgba(120,53,15,0.18)"
+      : "0 44px 96px rgba(2,6,23,0.44), 0 0 42px rgba(45,212,191,0.08)",
+  animation: "changyou-room-notification-enter 420ms cubic-bezier(0.22, 1, 0.36, 1) forwards",
   willChange: "transform, opacity",
+  overflow: "hidden" as const,
+  boxSizing: "border-box" as const,
+});
+
+const notificationTextContentStyle = {
+  width: "100%",
+  textAlign: "center" as const,
+  whiteSpace: "pre-wrap" as const,
+  wordBreak: "break-word" as const,
+  fontSize: "clamp(34px, 4.8vw, 76px)",
+  lineHeight: 1.18,
+  fontWeight: 900,
+  letterSpacing: "0.01em",
+};
+
+const notificationQrLayoutStyle = {
+  width: "100%",
+  height: "100%",
+  display: "grid",
+  justifyItems: "center" as const,
+  alignContent: "center" as const,
+  gap: "18px",
+};
+
+const notificationQrTitleStyle = {
+  fontSize: "clamp(28px, 3.4vw, 54px)",
+  lineHeight: 1.1,
+  fontWeight: 900,
+  letterSpacing: "0.04em",
+};
+
+const notificationQrFrameStyle = (backgroundThemeKey: BackgroundThemeKey) => ({
+  width: "min(34vw, 42vh, 520px)",
+  height: "min(34vw, 42vh, 520px)",
+  minWidth: "220px",
+  minHeight: "220px",
+  display: "grid",
+  placeItems: "center",
+  padding: "18px",
+  borderRadius: "28px",
+  background: "#ffffff",
+  boxShadow:
+    backgroundThemeKey === "paper"
+      ? "0 24px 54px rgba(120,53,15,0.16)"
+      : "0 24px 60px rgba(15,23,42,0.36)",
+});
+
+const notificationQrImageStyle = {
+  width: "100%",
+  height: "100%",
+  objectFit: "contain" as const,
+  display: "block",
+};
+
+const notificationQrPlaceholderStyle = {
+  fontSize: "42px",
+  fontWeight: 900,
+  color: "#111827",
+};
+
+const notificationQrContentStyle = (backgroundThemeKey: BackgroundThemeKey) => ({
+  maxWidth: "100%",
+  padding: "12px 16px",
+  borderRadius: "18px",
+  background:
+    backgroundThemeKey === "paper"
+      ? "rgba(255,255,255,0.78)"
+      : "rgba(255,255,255,0.08)",
+  color: "inherit",
+  fontSize: "clamp(16px, 1.6vw, 24px)",
+  lineHeight: 1.5,
+  fontWeight: 700,
+  textAlign: "center" as const,
+  wordBreak: "break-all" as const,
+  overflowWrap: "anywhere" as const,
 });
 
 const songTitleDockWrapStyle = {
@@ -1168,12 +1190,6 @@ const threeColumnButtonGridStyle = {
   gap: "10px",
 };
 
-const sentenceWindowGridStyle = {
-  display: "grid",
-  gridTemplateColumns: "repeat(5, minmax(0, 1fr))",
-  gap: "8px",
-};
-
 const swatchGridStyle = {
   display: "grid",
   gridTemplateColumns: "repeat(2, minmax(0, 1fr))",
@@ -1260,133 +1276,6 @@ const singlePageStyle = (outerPadding: number, marginTop: number, _baseStyle: Re
   maxWidth: "100%",
 });
 
-const sentenceWindowShellStyle = (outerPadding: number, marginTop: number) => ({
-  position: "relative" as const,
-  minHeight: `calc(100vh - ${(outerPadding * 2) + marginTop}px)`,
-  width: "100%",
-  maxWidth: "100%",
-  overflow: "hidden" as const,
-});
-
-const sentenceAnchorWrapStyle = {
-  position: "absolute" as const,
-  left: 0,
-  right: 0,
-  top: "50%",
-  transform: "translateY(-50%)",
-  zIndex: 2,
-  transition: "transform 420ms cubic-bezier(0.22, 1, 0.36, 1)",
-};
-
-const sentenceMotionLayerStyle = (windowMotionOffset: number, windowMotionReady: boolean) => ({
-  position: "absolute" as const,
-  inset: 0,
-  transform: `translate3d(0, ${windowMotionOffset}px, 0)`,
-  opacity: windowMotionOffset === 0 ? 1 : 0.985,
-  transition: windowMotionReady
-    ? "transform 420ms cubic-bezier(0.22, 1, 0.36, 1), opacity 420ms cubic-bezier(0.22, 1, 0.36, 1)"
-    : "none",
-  willChange: "transform, opacity",
-});
-
-const sentenceLeadWrapStyle = (anchoredSentenceHeight: number) => ({
-  position: "absolute" as const,
-  left: 0,
-  right: 0,
-  bottom: `calc(50% + ${Math.max((anchoredSentenceHeight / 2) + 22, 30)}px)`,
-  zIndex: 1,
-  transition: "bottom 420ms cubic-bezier(0.22, 1, 0.36, 1)",
-});
-
-const sentenceAnchorCardStyle = (
-  backgroundThemeKey: BackgroundThemeKey,
-  baseStyle: ReturnType<typeof buildTextBlockStyle>,
-) => {
-  const baseFontSize = Number.parseFloat(baseStyle.fontSize) || DEFAULT_FONT_SIZE;
-  const emphasizedFontSize = Math.max(baseFontSize + 10, Math.round(baseFontSize * 1.34));
-  const emphasizedLineHeight = typeof baseStyle.lineHeight === "number" ? Math.max(1.22, baseStyle.lineHeight - 0.32) : 1.4;
-  const inheritedTextShadow = baseStyle.textShadow && baseStyle.textShadow !== "none" ? `${baseStyle.textShadow}, ` : "";
-
-  return {
-    ...projectionTextStyle(baseStyle),
-    fontSize: `${emphasizedFontSize}px`,
-    lineHeight: emphasizedLineHeight,
-    tabSize: 4,
-    MozTabSize: 4,
-    wordBreak: "normal" as const,
-    overflowWrap: "normal" as const,
-    letterSpacing: baseFontSize >= 34 ? "0.01em" : "0.018em",
-    padding: "22px 26px",
-    borderRadius: "28px",
-    background:
-      backgroundThemeKey === "paper"
-        ? "linear-gradient(135deg, rgba(255,251,235,0.98) 0%, rgba(255,247,237,0.94) 100%)"
-        : "linear-gradient(135deg, rgba(250,204,21,0.18) 0%, rgba(15,23,42,0.82) 22%, rgba(8,47,73,0.76) 100%)",
-    border:
-      backgroundThemeKey === "paper"
-        ? "1px solid rgba(217,119,6,0.34)"
-        : "1px solid rgba(250,204,21,0.34)",
-    boxShadow:
-      backgroundThemeKey === "paper"
-        ? "0 22px 52px rgba(120,53,15,0.14), 0 0 0 1px rgba(251,191,36,0.16) inset"
-        : "0 26px 60px rgba(2,6,23,0.44), 0 0 0 1px rgba(250,204,21,0.18) inset, 0 0 34px rgba(250,204,21,0.22)",
-    textShadow:
-      backgroundThemeKey === "paper"
-        ? `${inheritedTextShadow}0 1px 0 rgba(255,255,255,0.9), 0 0 16px rgba(245,158,11,0.2)`
-        : `${inheritedTextShadow}0 0 16px rgba(250,204,21,0.26), 0 0 34px rgba(250,204,21,0.16), 0 6px 20px rgba(15,23,42,0.46)`,
-    backdropFilter: "blur(14px)",
-    fontWeight: 900,
-    animation:
-      "changyou-room-sentence-switch 0.32s cubic-bezier(0.22, 1, 0.36, 1), changyou-room-sentence-focus 2.6s ease-in-out infinite",
-    willChange: "filter, transform",
-  };
-};
-
-const sentenceTrailWrapStyle = (anchoredSentenceHeight: number) => ({
-  position: "absolute" as const,
-  left: 0,
-  right: 0,
-  top: "50%",
-  transform: `translateY(${Math.max((anchoredSentenceHeight / 2) + 22, 30)}px)`,
-  zIndex: 1,
-  transition: "transform 420ms cubic-bezier(0.22, 1, 0.36, 1)",
-});
-
-const sentenceLeadListStyle = {
-  display: "grid",
-  gap: "12px",
-  paddingTop: "28px",
-};
-
-const sentenceTrailListStyle = {
-  display: "grid",
-  gap: "12px",
-  paddingBottom: "28px",
-};
-
-const sentenceTrailCardStyle = (
-  backgroundThemeKey: BackgroundThemeKey,
-  baseStyle: ReturnType<typeof buildTextBlockStyle>,
-) => ({
-  ...projectionTextStyle(baseStyle),
-  tabSize: 4,
-  MozTabSize: 4,
-  wordBreak: "normal" as const,
-  overflowWrap: "normal" as const,
-  padding: "10px 14px",
-  borderRadius: "18px",
-  background:
-    backgroundThemeKey === "paper"
-      ? "rgba(255,255,255,0.78)"
-      : "rgba(15,23,42,0.2)",
-  border:
-    backgroundThemeKey === "paper"
-      ? "1px solid rgba(217,119,6,0.1)"
-      : "1px solid rgba(148,163,184,0.16)",
-  opacity: 0.74,
-  filter: "saturate(0.88)",
-});
-
 const doublePageStyle = (columnGap: number, outerPadding: number, marginTop: number) => ({
   minHeight: `calc(100vh - ${(outerPadding * 2) + marginTop}px)`,
   display: "grid",
@@ -1396,43 +1285,90 @@ const doublePageStyle = (columnGap: number, outerPadding: number, marginTop: num
 });
 
 const projectionColumnStyle = {
+  position: "relative" as const,
   display: "grid",
-  gap: "6px",
+  gap: "12px",
   alignContent: "start" as const,
+  overflow: "visible" as const,
 };
 
+const projectionCursorHaloStyle = (
+  top: number,
+  height: number,
+  visible: boolean,
+  backgroundThemeKey: BackgroundThemeKey,
+) => ({
+  position: "absolute" as const,
+  left: "-18px",
+  right: "-10px",
+  top: `${top}px`,
+  height: `${height}px`,
+  borderRadius: "28px",
+  background:
+    backgroundThemeKey === "paper"
+      ? "radial-gradient(circle at 14% 50%, rgba(245,158,11,0.26), transparent 54%), linear-gradient(90deg, rgba(251,191,36,0.16) 0%, rgba(255,247,237,0.14) 44%, rgba(255,247,237,0) 100%)"
+      : "radial-gradient(circle at 12% 50%, rgba(250,204,21,0.3), transparent 56%), linear-gradient(90deg, rgba(250,204,21,0.16) 0%, rgba(34,211,238,0.12) 42%, rgba(15,23,42,0) 100%)",
+  opacity: visible ? 1 : 0,
+  filter: "blur(18px)",
+  boxShadow:
+    backgroundThemeKey === "paper"
+      ? "0 0 34px rgba(245,158,11,0.16)"
+      : "0 0 42px rgba(250,204,21,0.22)",
+  transition: "top 520ms cubic-bezier(0.22, 1, 0.36, 1), height 320ms cubic-bezier(0.22, 1, 0.36, 1), opacity 220ms ease",
+  pointerEvents: "none" as const,
+  zIndex: 0,
+  animation: visible ? "changyou-room-cursor-aura 2.4s ease-in-out infinite" : undefined,
+});
+
 const projectionBlockShellStyle = (active: boolean, backgroundThemeKey: BackgroundThemeKey) => ({
-  borderRadius: "12px",
-  padding: "0",
+  borderRadius: active ? "24px" : "12px",
+  padding: active ? "14px 18px 14px 22px" : "0",
   border: "none",
+  position: "relative" as const,
+  zIndex: active ? 2 : 1,
   background:
     backgroundThemeKey === "paper"
       ? active
-        ? "rgba(255,247,237,0.52)"
+        ? "rgba(255,251,235,0.88)"
         : "transparent"
       : active
-        ? "rgba(250,204,21,0.1)"
+        ? "rgba(15,23,42,0.24)"
         : "transparent",
   boxShadow:
     backgroundThemeKey === "paper"
       ? active
-        ? "0 0 24px rgba(217,119,6,0.14)"
+        ? "0 0 0 1px rgba(245,158,11,0.12)"
         : "none"
       : active
-        ? "0 0 28px rgba(250,204,21,0.22)"
+        ? "0 0 0 1px rgba(250,204,21,0.12)"
         : "none",
-  animation: active ? "changyou-room-marker-enter 0.4s cubic-bezier(0.34, 1.56, 0.64, 1) forwards" : undefined,
-  transition: "background 0.3s ease, box-shadow 0.3s ease, transform 0.3s ease",
-  transformOrigin: "left center",
-  willChange: active ? "transform" : undefined,
+  transition: "padding 260ms cubic-bezier(0.22, 1, 0.36, 1), border-radius 260ms ease, background 220ms ease, box-shadow 220ms ease",
+  overflow: "visible" as const,
 });
 
-const projectionTextStyle = (baseStyle: ReturnType<typeof buildTextBlockStyle>) => ({
-  ...baseStyle,
-  margin: 0,
-  width: "100%",
-  maxWidth: "100%",
-});
+const projectionTextStyle = (baseStyle: ReturnType<typeof buildTextBlockStyle>, active = false) => {
+  const baseFontSize = Number.parseFloat(baseStyle.fontSize) || DEFAULT_FONT_SIZE;
+  const activeFontSize = Math.max(baseFontSize + 8, Math.round(baseFontSize * 1.3));
+  return {
+    ...baseStyle,
+    margin: 0,
+    width: "100%",
+    maxWidth: "100%",
+    fontSize: active ? `${activeFontSize}px` : baseStyle.fontSize,
+    lineHeight:
+      active && typeof baseStyle.lineHeight === "number"
+        ? Math.max(1.18, baseStyle.lineHeight - 0.12)
+        : baseStyle.lineHeight,
+    fontWeight: active ? 900 : undefined,
+    minHeight:
+      active && typeof baseStyle.lineHeight === "number"
+        ? `${Math.round((activeFontSize * baseStyle.lineHeight) + 18)}px`
+        : undefined,
+    transition: "font-size 260ms cubic-bezier(0.22, 1, 0.36, 1), line-height 260ms cubic-bezier(0.22, 1, 0.36, 1), min-height 260ms cubic-bezier(0.22, 1, 0.36, 1)",
+    position: "relative" as const,
+    zIndex: 1,
+  };
+};
 
 const stateShellStyle = (background: string, textColor: string) => ({
   minHeight: "100vh",

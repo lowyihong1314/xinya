@@ -4,12 +4,13 @@ import QRCode from "qrcode";
 import { useNavigate } from "react-router-dom";
 
 import { useUserState } from "../../../../app/UserState";
+import { IS_APK } from "../../../../js/apiBase";
 import { ensureDesignTokens } from "../../../../theme/designTokens";
 import {
   CHANGYOU_ROOM_PATH,
   getChangyouPublicRoomPath,
-  getChangyouPublicRoomV2Path,
   getChangyouRoomPath,
+  getChangyouRoomPlayerPath,
 } from "../../../router/paths";
 import { buildProjectionBlocks, ensureProjectionBlocks, splitBlocksForDoublePage, type LyricProjectionBlock } from "../projection";
 import { fetchSongbookEntries, fetchSongbookEntry } from "../api";
@@ -34,6 +35,7 @@ const MIN_FONT_SIZE = 14;
 const MAX_FONT_SIZE = 30;
 const SONG_CARD_BATCH_DESKTOP = 18;
 const SONG_CARD_BATCH_MOBILE = 10;
+const APK_PUBLIC_ROOM_BASE_URL = "http://utbabuddha.com";
 
 type ChordFamily = "original" | "C" | "D" | "E" | "F" | "G" | "A" | "B";
 type ControllerPage = "songs" | "projection" | "control";
@@ -337,23 +339,25 @@ export function ChangyouRoomController({ roomId }: { roomId: string }) {
     };
   }, [roomId]);
 
-  const publicRoomUrl = useMemo(() => {
+  const publicRoomAppPath = useMemo(() => {
     if (!room) return "";
-    const roomPath = room.playback_url || getChangyouPublicRoomPath(room.room_id);
-    return new URL(roomPath, window.location.origin).toString();
+    return getChangyouRoomPlayerPath(room.room_id);
   }, [room]);
-  const publicRoomV2Url = useMemo(() => {
+
+  const publicRoomExternalUrl = useMemo(() => {
     if (!room) return "";
-    return new URL(getChangyouPublicRoomV2Path(room.room_id), window.location.origin).toString();
+    const roomPath = IS_APK ? getChangyouPublicRoomPath(room.room_id) : room.playback_url || getChangyouPublicRoomPath(room.room_id);
+    const originBase = IS_APK ? APK_PUBLIC_ROOM_BASE_URL : window.location.origin;
+    return new URL(roomPath, originBase).toString();
   }, [room]);
 
   useEffect(() => {
-    if (!publicRoomUrl) {
+    if (!publicRoomExternalUrl) {
       setQrDataUrl("");
       return;
     }
-    QRCode.toDataURL(publicRoomUrl).then(setQrDataUrl).catch(() => setQrDataUrl(""));
-  }, [publicRoomUrl]);
+    QRCode.toDataURL(publicRoomExternalUrl).then(setQrDataUrl).catch(() => setQrDataUrl(""));
+  }, [publicRoomExternalUrl]);
 
   const renderedContent = useMemo(
     () => transformChordContent(selectedEntry?.content || "", chordFamily),
@@ -541,9 +545,27 @@ export function ChangyouRoomController({ roomId }: { roomId: string }) {
     setNotifying(true);
     setError("");
     try {
-      const response = await notifyChangyouRoom(roomId, { message: notificationValue.trim() });
-      setRoom(response.room);
-      setProjectedEntry(response.entry || null);
+      await notifyChangyouRoom(roomId, {
+        kind: "text",
+        content: notificationValue.trim(),
+      });
+      setNotificationValue("");
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "推送通知失败");
+    } finally {
+      setNotifying(false);
+    }
+  }
+
+  async function handleNotifyQr() {
+    if (!roomId || !room || !notificationValue.trim()) return;
+    setNotifying(true);
+    setError("");
+    try {
+      await notifyChangyouRoom(roomId, {
+        kind: "qr",
+        content: notificationValue.trim(),
+      });
       setNotificationValue("");
     } catch (err) {
       setError(err instanceof Error ? err.message : "推送通知失败");
@@ -553,13 +575,13 @@ export function ChangyouRoomController({ roomId }: { roomId: string }) {
   }
 
   function handleOpenPublicRoom() {
-    if (!publicRoomUrl) return;
-    window.open(publicRoomUrl, "_blank", "noopener,noreferrer");
-  }
-
-  function handleOpenPublicRoomV2() {
-    if (!publicRoomV2Url) return;
-    window.open(publicRoomV2Url, "_blank", "noopener,noreferrer");
+    if (IS_APK) {
+      if (!publicRoomAppPath) return;
+      navigate(publicRoomAppPath);
+      return;
+    }
+    if (!publicRoomExternalUrl) return;
+    window.open(publicRoomExternalUrl, "_blank", "noopener,noreferrer");
   }
 
   useEffect(() => {
@@ -619,11 +641,13 @@ export function ChangyouRoomController({ roomId }: { roomId: string }) {
             ← 返回房间列表
           </button>
           <div style={topBarActionsStyle}>
-            <button type="button" onClick={handleOpenPublicRoom} style={ghostButtonStyle} disabled={!publicRoomUrl}>
-              window.open 公开页
-            </button>
-            <button type="button" onClick={handleOpenPublicRoomV2} style={ghostButtonStyle} disabled={!publicRoomV2Url}>
-              window.open_v2
+            <button
+              type="button"
+              onClick={handleOpenPublicRoom}
+              style={ghostButtonStyle}
+              disabled={!(IS_APK ? publicRoomAppPath : publicRoomExternalUrl)}
+            >
+              播放歌词端
             </button>
             <label style={togglePillStyle}>
               <input
@@ -683,11 +707,13 @@ export function ChangyouRoomController({ roomId }: { roomId: string }) {
                       >
                         {roomPickerOpen ? "收起房间切换" : "切换房间"}
                       </button>
-                      <button type="button" onClick={handleOpenPublicRoom} style={primaryButtonStyle} disabled={!publicRoomUrl}>
-                        window.open
-                      </button>
-                      <button type="button" onClick={handleOpenPublicRoomV2} style={secondaryButtonStyle} disabled={!publicRoomV2Url}>
-                        window.open_v2
+                      <button
+                        type="button"
+                        onClick={handleOpenPublicRoom}
+                        style={primaryButtonStyle}
+                        disabled={!(IS_APK ? publicRoomAppPath : publicRoomExternalUrl)}
+                      >
+                        {IS_APK ? "进入播放页" : "打开公开页"}
                       </button>
                     </div>
                   </div>
@@ -907,7 +933,7 @@ export function ChangyouRoomController({ roomId }: { roomId: string }) {
                       <input
                         value={notificationValue}
                         onChange={(event) => setNotificationValue(event.target.value)}
-                        placeholder="公开页左上角消息"
+                        placeholder="输入通知文本或 QR 内容"
                         style={notifyInputCompactStyle}
                       />
                       <button
@@ -917,6 +943,14 @@ export function ChangyouRoomController({ roomId }: { roomId: string }) {
                         disabled={notifying || !notificationValue.trim()}
                       >
                         {notifying ? "推送中..." : "推通知"}
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => void handleNotifyQr()}
+                        style={smallSecondaryButtonStyle}
+                        disabled={notifying || !notificationValue.trim()}
+                      >
+                        {notifying ? "推送中..." : "推 QR"}
                       </button>
                     </div>
                   </div>

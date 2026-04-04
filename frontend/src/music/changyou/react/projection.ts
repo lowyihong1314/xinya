@@ -85,10 +85,6 @@ function getBlockLabel(lines: string[]) {
   return fallback.length > 20 ? `${fallback.slice(0, 20)}...` : fallback;
 }
 
-<<<<<<< HEAD
-function createBlock(lines: string[], index: number): LyricProjectionBlock {
-  const highlightable = lines.some((line) => isLyricLine(line));
-=======
 function isFallbackHighlightableLine(line: string) {
   const trimmed = line.trim();
   return Boolean(trimmed) && !isSectionBoundary(trimmed);
@@ -101,7 +97,6 @@ function inferBlockHighlightable(lines: string[]) {
 
 function createBlock(lines: string[], index: number): LyricProjectionBlock {
   const highlightable = inferBlockHighlightable(lines);
->>>>>>> 7410128 (update changyou)
   return {
     id: `block-${index}`,
     lines,
@@ -163,11 +158,6 @@ export function buildProjectionBlocks(content: string) {
       const blockLines = [...pendingHeading, line];
       pendingHeading = [];
       let cursor = index + 1;
-<<<<<<< HEAD
-      while (cursor < lines.length && isLyricLine(lines[cursor])) {
-        blockLines.push(lines[cursor]);
-        cursor += 1;
-=======
       let collectedLyricLines = false;
       while (cursor < lines.length) {
         const nextLine = lines[cursor];
@@ -185,7 +175,6 @@ export function buildProjectionBlocks(content: string) {
           continue;
         }
         break;
->>>>>>> 7410128 (update changyou)
       }
       pushBlock(blockLines);
       index = cursor - 1;
@@ -207,10 +196,6 @@ export function buildProjectionBlocks(content: string) {
     }
 
     if (pendingHeading.length) {
-<<<<<<< HEAD
-      pushBlock([...pendingHeading, line]);
-      pendingHeading = [];
-=======
       const blockLines = [...pendingHeading, line];
       pendingHeading = [];
       let cursor = index + 1;
@@ -223,7 +208,6 @@ export function buildProjectionBlocks(content: string) {
       }
       pushBlock(blockLines);
       index = cursor - 1;
->>>>>>> 7410128 (update changyou)
       continue;
     }
 
@@ -251,13 +235,7 @@ export function ensureProjectionBlocks(blocks: ProjectionBlockLike[] | null | un
         const lines = normalizedLines.length ? normalizedLines : normalizedText ? normalizedText.split(/\r?\n/) : [];
         const text = normalizedText || lines.join("\n");
         if (!text.trim()) return null;
-<<<<<<< HEAD
-        const highlightable = typeof block.highlightable === "boolean"
-          ? block.highlightable
-          : lines.some((line) => isLyricLine(line));
-=======
         const highlightable = block.highlightable === true || inferBlockHighlightable(lines);
->>>>>>> 7410128 (update changyou)
         const weight =
           typeof block.weight === "number" && Number.isFinite(block.weight) && block.weight > 0
             ? block.weight
@@ -292,11 +270,7 @@ export function ensureProjectionBlocks(blocks: ProjectionBlockLike[] | null | un
         lines,
         text: fallbackContent,
         label: getBlockLabel(lines),
-<<<<<<< HEAD
-        highlightable: lines.some((line) => isLyricLine(line)),
-=======
         highlightable: inferBlockHighlightable(lines),
->>>>>>> 7410128 (update changyou)
         weight: Math.max(1, lines.reduce((sum, line) => sum + estimateLineWeight(line), 0)),
       },
     ];
