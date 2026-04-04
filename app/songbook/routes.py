@@ -8,7 +8,7 @@ from flask import Blueprint, jsonify, request
 from flask_login import current_user, login_required
 from sqlalchemy import or_
 
-from app.auth import permission_required
+from app.auth import get_current_user_permissions, permission_required
 from models import db
 from models.songbook import SongbookEntry, normalize_song_text
 from models.songbook_user_edit import SongbookUserEdit
@@ -22,6 +22,15 @@ META_RE = re.compile(
     r"原调[:：]\s*(?P<original>[^\s]+)?\s*选调[:：]\s*(?P<selected>[^\s]+)?\s*BPM[:：]\s*(?P<bpm>[^\s|]+)?\s*(?P<time>\|[^|]+\|)?"
 )
 SKIP_HEADINGS = {"目录", "Chord"}
+
+
+def _current_user_can_view_unpublished():
+    if not current_user.is_authenticated:
+        return False
+    try:
+        return "music_edit" in get_current_user_permissions(current_user)
+    except Exception:
+        return False
 
 
 def _serialize_entry(entry, include_content=False):
@@ -208,6 +217,8 @@ def _query_entries(include_unpublished=False):
 @songbook_bp.get("/list")
 def list_songbook_entries():
     include_unpublished = str(request.args.get("include_unpublished") or "").lower() in {"1", "true", "yes"}
+    if include_unpublished and not _current_user_can_view_unpublished():
+        return jsonify({"error": "没有权限查看未发布歌曲"}), 403
     entries = _query_entries(include_unpublished=include_unpublished).all()
     return jsonify({"entries": [_apply_version(entry, include_content=False) for entry in entries]})
 
@@ -215,7 +226,10 @@ def list_songbook_entries():
 @songbook_bp.get("/entry/<int:entry_id>")
 def get_songbook_entry(entry_id):
     entry = SongbookEntry.query.get_or_404(entry_id)
-    if not entry.published and not request.args.get("include_unpublished"):
+    include_unpublished = str(request.args.get("include_unpublished") or "").lower() in {"1", "true", "yes"}
+    if include_unpublished and not _current_user_can_view_unpublished():
+        return jsonify({"error": "没有权限查看未发布歌曲"}), 403
+    if not entry.published and not include_unpublished:
         return jsonify({"error": "歌曲不存在"}), 404
     editor_user_id = request.args.get("editor_user_id", type=int)
     version_kind = request.args.get("version_kind", type=str)

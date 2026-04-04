@@ -41,7 +41,7 @@ export function ChangyouPage() {
   ensureDesignTokens();
 
   const navigate = useNavigate();
-  const { isAuthenticated, loadingUser, openLogin, isMobile } = useUserState();
+  const { isMobile } = useUserState();
   const [query, setQuery] = useState("");
   const [variant, setVariant] = useState<"" | "C" | "G">("");
   const [entries, setEntries] = useState<SongbookEntry[]>([]);
@@ -50,17 +50,10 @@ export function ChangyouPage() {
   const [page, setPage] = useState(1);
 
   useEffect(() => {
-    if (!loadingUser && !isAuthenticated) {
-      openLogin();
-    }
-  }, [loadingUser, isAuthenticated, openLogin]);
-
-  useEffect(() => {
     setPage(1);
   }, [query, variant]);
 
   useEffect(() => {
-    if (!isAuthenticated) return;
     let cancelled = false;
     setLoading(true);
     setError("");
@@ -75,7 +68,7 @@ export function ChangyouPage() {
     return () => {
       cancelled = true;
     };
-  }, [isAuthenticated, query, variant]);
+  }, [query, variant]);
 
   const totalPages = Math.max(1, Math.ceil(entries.length / PAGE_SIZE));
   const safePage = Math.min(page, totalPages);
@@ -100,9 +93,6 @@ export function ChangyouPage() {
       setPage(safePage);
     }
   }, [page, safePage]);
-
-  if (loadingUser) return <div style={stateStyle}>加载中…</div>;
-  if (!isAuthenticated) return <div style={stateStyle}>请先登录后再访问唱游页面。</div>;
 
   return (
     <div style={pageStyle}>

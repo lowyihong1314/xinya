@@ -1,4 +1,28 @@
 import { apiFetch } from "../../../../js/apiFetch";
+import type { SongbookEntry } from "../types";
+
+export type ChangyouRoomProjectionBlock = {
+  id: string;
+  lines: string[];
+  text: string;
+  label: string;
+  highlightable: boolean;
+  weight: number;
+};
+
+export type ChangyouRoomProjection = {
+  page_index: number;
+  page_count: number;
+  page_label?: string | null;
+  content: string;
+  blocks: ChangyouRoomProjectionBlock[];
+  marker_index?: number | null;
+};
+
+export type ChangyouRoomNotification = {
+  message: string;
+  updated_at?: number | null;
+};
 
 export type ChangyouRoom = {
   room_id: string;
@@ -12,6 +36,8 @@ export type ChangyouRoom = {
   editor_user_id?: number | null;
   playback_url?: string;
   role?: "controller" | "player";
+  projection?: ChangyouRoomProjection | null;
+  notification?: ChangyouRoomNotification | null;
 };
 
 async function parseJson<T>(response: Response): Promise<T> {
@@ -42,7 +68,12 @@ export async function fetchChangyouRoom(roomId: string) {
 
 export async function fetchChangyouRoomCurrent(roomId: string) {
   const response = await apiFetch(`/api/changyou_room/room/${roomId}/current`, { credentials: 'include' });
-  return parseJson<{ room: ChangyouRoom; entry: any }>(response);
+  return parseJson<{
+    room: ChangyouRoom;
+    entry: SongbookEntry | null;
+    projection?: ChangyouRoomProjection | null;
+    notification?: ChangyouRoomNotification | null;
+  }>(response);
 }
 
 export async function pushChangyouRoomSong(roomId: string, payload: { song_entry_id: number; version_kind: 'base' | 'user'; editor_user_id?: number | null }) {
@@ -52,5 +83,66 @@ export async function pushChangyouRoomSong(roomId: string, payload: { song_entry
     credentials: 'include',
     body: JSON.stringify(payload),
   });
-  return parseJson<{ success: boolean; room: ChangyouRoom; entry: any }>(response);
+  return parseJson<{ success: boolean; room: ChangyouRoom; entry: SongbookEntry | null }>(response);
+}
+
+export async function projectChangyouRoomPage(
+  roomId: string,
+  payload: {
+    song_entry_id: number;
+    version_kind: 'base' | 'user';
+    editor_user_id?: number | null;
+    page_index: number;
+    page_count: number;
+    page_label?: string | null;
+    content: string;
+    blocks: ChangyouRoomProjectionBlock[];
+    marker_index?: number | null;
+  },
+) {
+  const response = await apiFetch(`/api/changyou_room/room/${roomId}/project`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    credentials: 'include',
+    body: JSON.stringify(payload),
+  });
+  return parseJson<{
+    success: boolean;
+    room: ChangyouRoom;
+    entry: SongbookEntry | null;
+    projection?: ChangyouRoomProjection | null;
+    notification?: ChangyouRoomNotification | null;
+  }>(response);
+}
+
+export async function updateChangyouRoomMarker(roomId: string, payload: { marker_index?: number | null }) {
+  const response = await apiFetch(`/api/changyou_room/room/${roomId}/marker`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    credentials: 'include',
+    body: JSON.stringify(payload),
+  });
+  return parseJson<{
+    success: boolean;
+    room: ChangyouRoom;
+    entry: SongbookEntry | null;
+    projection?: ChangyouRoomProjection | null;
+    notification?: ChangyouRoomNotification | null;
+  }>(response);
+}
+
+export async function notifyChangyouRoom(roomId: string, payload: { message: string }) {
+  const response = await apiFetch(`/api/changyou_room/room/${roomId}/notify`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    credentials: 'include',
+    body: JSON.stringify(payload),
+  });
+  return parseJson<{
+    success: boolean;
+    room: ChangyouRoom;
+    entry: SongbookEntry | null;
+    projection?: ChangyouRoomProjection | null;
+    notification?: ChangyouRoomNotification | null;
+  }>(response);
 }

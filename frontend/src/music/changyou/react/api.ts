@@ -17,10 +17,11 @@ export async function fetchSongbookEntries(query = "", variant = "") {
   return parseJson<{ entries: SongbookEntry[] }>(response);
 }
 
-export async function fetchSongbookEntry(entryId: number, options?: { versionKind?: "base" | "user"; editorUserId?: number | null }) {
+export async function fetchSongbookEntry(entryId: number, options?: { versionKind?: "base" | "user"; editorUserId?: number | null; includeUnpublished?: boolean }) {
   const search = new URLSearchParams();
   if (options?.versionKind) search.set("version_kind", options.versionKind);
   if (options?.editorUserId) search.set("editor_user_id", String(options.editorUserId));
+  if (options?.includeUnpublished) search.set("include_unpublished", "1");
   const suffix = search.toString() ? `?${search.toString()}` : "";
   const response = await apiFetch(`/api/songbook/entry/${entryId}${suffix}`, { credentials: "include" });
   return parseJson<{ entry: SongbookEntry }>(response);

@@ -134,7 +134,7 @@ export function ChangyouDetailPage() {
 
   const navigate = useNavigate();
   const { entryId } = useParams();
-  const { isAuthenticated, loadingUser, openLogin, isMobile } = useUserState();
+  const { isMobile } = useUserState();
   const [entry, setEntry] = useState<SongbookEntry | null>(null);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -156,10 +156,6 @@ export function ChangyouDetailPage() {
     const saved = window.localStorage.getItem(CHORD_FAMILY_STORAGE_KEY) as ChordFamily | null;
     return saved && CHORD_FAMILY_OPTIONS.includes(saved) ? saved : "original";
   });
-
-  useEffect(() => {
-    if (!loadingUser && !isAuthenticated) openLogin();
-  }, [loadingUser, isAuthenticated, openLogin]);
 
   useEffect(() => {
     if (typeof window !== "undefined") {
@@ -202,7 +198,7 @@ export function ChangyouDetailPage() {
   }
 
   useEffect(() => {
-    if (!isAuthenticated || !entryId) return;
+    if (!entryId) return;
     let cancelled = false;
     setLoading(true);
     setError("");
@@ -219,7 +215,7 @@ export function ChangyouDetailPage() {
     return () => {
       cancelled = true;
     };
-  }, [entryId, isAuthenticated]);
+  }, [entryId]);
 
   const renderedContent = useMemo(() => {
     const source = editing ? editorValue : entry?.content || "";
@@ -282,9 +278,6 @@ export function ChangyouDetailPage() {
       setLoading(false);
     }
   }
-
-  if (loadingUser) return <div style={stateStyle}>加载中…</div>;
-  if (!isAuthenticated) return <div style={stateStyle}>请先登录后再访问唱游页面。</div>;
 
   return (
     <div style={pageStyle(hideNav)}>

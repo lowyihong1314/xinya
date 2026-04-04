@@ -59,7 +59,7 @@ export function SongbookAdminPage() {
       return;
     }
     let cancelled = false;
-    fetchSongbookEntry(selected.id)
+    fetchSongbookEntry(selected.id, { includeUnpublished: true })
       .then((response) => {
         if (!cancelled) {
           setDraft({ ...response.entry, content: response.entry.content || "" });

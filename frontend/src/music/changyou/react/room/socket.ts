@@ -1,6 +1,6 @@
-import { io, type Socket } from 'socket.io-client';
+import { io, type Socket } from "socket.io-client";
 
-const SOCKET_ORIGIN = 'https://utbabuddha.com';
+const SOCKET_ORIGIN = "https://utbabuddha.com";
 
 function getChangyouSocketRoom(roomId: string) {
   return `changyou:${roomId}`;
@@ -12,11 +12,11 @@ function getSocketOrigin() {
 
 export function connectChangyouRoom(roomId: string) {
   const socket: Socket = io(getSocketOrigin(), {
-    withCredentials: true,
-    transports: ['websocket', 'polling'],
+    withCredentials: false,
+    transports: ["websocket", "polling"],
   });
-  const join = () => socket.emit('join_room', { room: getChangyouSocketRoom(roomId) });
-  socket.on('connect', join);
+  const join = () => socket.emit("join_room", { room: getChangyouSocketRoom(roomId) });
+  socket.on("connect", join);
   if (socket.connected) join();
   return socket;
 }

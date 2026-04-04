@@ -49,9 +49,17 @@ export default defineConfig(({ command, mode }) => {
           outDir: "../static/vite",
           emptyOutDir: true,
           rollupOptions: {
-            input: path.resolve(__dirname, "./main.tsx"),
+            input: {
+              app: path.resolve(__dirname, "./main.tsx"),
+              changyouRoom: path.resolve(__dirname, "./changyouRoomMain.tsx"),
+            },
             output: {
-              entryFileNames: "init.js",
+              entryFileNames: (chunkInfo) => {
+                if (chunkInfo.name === "app") return "init.js";
+                if (chunkInfo.name === "changyouRoom") return "changyou-room.js";
+                return "assets/[name]-[hash].js";
+              },
+              chunkFileNames: "assets/[name]-[hash].js",
               assetFileNames: "assets/[name]-[hash][extname]",
             },
           },
