@@ -22,6 +22,9 @@ def register_web_routes(app):
     def changyou_room_public(room_id):
         return render_template("changyou_room_public.html", room_id=room_id)
 
+    @app.route("/changyou-room-v2/<room_id>")
+    def changyou_room_public_v2(room_id):
+        return render_template("changyou_room_public_v2.html", room_id=room_id)
 
     @app.route("/template/long-open-registration-form")
     def long_open_registration_form_template():

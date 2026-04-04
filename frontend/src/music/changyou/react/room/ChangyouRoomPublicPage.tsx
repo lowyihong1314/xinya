@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 
 import { ensureProjectionBlocks, splitBlocksForDoublePage, type LyricProjectionBlock } from "../projection";
 import type { SongbookEntry } from "../types";
@@ -14,6 +14,7 @@ const CONTENT_WIDTH_STORAGE_KEY = "xinya.changyou.room.contentWidth";
 const COLUMN_GAP_STORAGE_KEY = "xinya.changyou.room.columnGap";
 const MARGIN_TOP_STORAGE_KEY = "xinya.changyou.room.marginTop";
 const TEXT_GLOW_STORAGE_KEY = "xinya.changyou.room.textGlow";
+const SENTENCE_WINDOW_STORAGE_KEY = "xinya.changyou.room.v2.maxSentenceCount";
 
 const DEFAULT_FONT_SIZE = 26;
 const MIN_FONT_SIZE = 20;
@@ -36,6 +37,17 @@ type LayoutMode = "single" | "double";
 type BackgroundThemeKey = "midnight" | "obsidian" | "paper" | "forest" | "sunset";
 type ContentWidthMode = "focus" | "balanced" | "full";
 type TextGlowLevel = "off" | "soft" | "strong";
+type ChangyouRoomPublicVariant = "default" | "v2";
+
+const SENTENCE_WINDOW_OPTIONS = ["full", "3", "6", "9", "12"] as const;
+type SentenceWindowMode = (typeof SENTENCE_WINDOW_OPTIONS)[number];
+
+const SENTENCE_WINDOW_LIMITS: Record<Exclude<SentenceWindowMode, "full">, number> = {
+  "3": 3,
+  "6": 6,
+  "9": 9,
+  "12": 12,
+};
 
 const BACKGROUND_THEMES: Record<BackgroundThemeKey, { label: string; page: string; overlay: string; textColor: string }> = {
   midnight: {
@@ -92,6 +104,30 @@ const TEXT_GLOW_PRESETS: Record<TextGlowLevel, { label: string; textShadow: stri
     textShadow: "0 4px 18px rgba(15,23,42,0.38), 0 0 28px rgba(248,250,252,0.08)",
   },
 };
+
+type SinglePageSentenceItem = {
+  text: string;
+  blockIndex: number | null;
+};
+
+function buildSinglePageSentenceItems(blocks: LyricProjectionBlock[], fallbackContent: string): SinglePageSentenceItem[] {
+  const lyricSentences = blocks
+    .map((block, blockIndex) => {
+      const text = block.text.trim();
+      if (!text) return null;
+      return {
+        text,
+        blockIndex,
+      } satisfies SinglePageSentenceItem;
+    })
+    .filter((item): item is SinglePageSentenceItem => Boolean(item));
+  if (lyricSentences.length) return lyricSentences;
+
+  return splitIntoBlocks(fallbackContent)
+    .map((lines) => lines.join("\n").trim())
+    .filter(Boolean)
+    .map((text) => ({ text, blockIndex: null }));
+}
 
 function readStoredChoice<T extends string>(storageKey: string, options: readonly T[], fallback: T) {
   if (typeof window === "undefined") return fallback;
@@ -220,7 +256,13 @@ function buildTextBlockStyle(options: {
   };
 }
 
-export function ChangyouRoomPublicPage({ roomId }: { roomId: string }) {
+export function ChangyouRoomPublicPage({
+  roomId,
+  variant = "default",
+}: {
+  roomId: string;
+  variant?: ChangyouRoomPublicVariant;
+}) {
   const [room, setRoom] = useState<ChangyouRoom | null>(null);
   const [entry, setEntry] = useState<SongbookEntry | null>(null);
   const [loading, setLoading] = useState(true);
@@ -256,6 +298,14 @@ export function ChangyouRoomPublicPage({ roomId }: { roomId: string }) {
   const [textGlowLevel, setTextGlowLevel] = useState<TextGlowLevel>(() =>
     readStoredChoice(TEXT_GLOW_STORAGE_KEY, ["off", "soft", "strong"], "soft"),
   );
+  const [sentenceWindowMode, setSentenceWindowMode] = useState<SentenceWindowMode>(() =>
+    readStoredChoice(SENTENCE_WINDOW_STORAGE_KEY, SENTENCE_WINDOW_OPTIONS, "full"),
+  );
+  const anchoredSentenceRef = useRef<HTMLDivElement | null>(null);
+  const [anchoredSentenceHeight, setAnchoredSentenceHeight] = useState(0);
+  const previousAnchoredSentenceIndexRef = useRef<number | null>(null);
+  const [windowMotionOffset, setWindowMotionOffset] = useState(0);
+  const [windowMotionReady, setWindowMotionReady] = useState(false);
 
   useEffect(() => {
     let cancelled = false;
@@ -346,6 +396,11 @@ export function ChangyouRoomPublicPage({ roomId }: { roomId: string }) {
   }, [textGlowLevel]);
 
   useEffect(() => {
+    if (typeof window === "undefined") return;
+    window.localStorage.setItem(SENTENCE_WINDOW_STORAGE_KEY, sentenceWindowMode);
+  }, [sentenceWindowMode]);
+
+  useEffect(() => {
     if (loading || error) return;
     setSettingsHintVisible(true);
     const timer = window.setTimeout(() => {
@@ -402,6 +457,59 @@ export function ChangyouRoomPublicPage({ roomId }: { roomId: string }) {
     [projectionBlocks],
   );
   const activeMarkerIndex = room?.projection?.marker_index ?? null;
+  const singlePageSentenceItems = useMemo(
+    () => buildSinglePageSentenceItems(projectionBlocks, projectionSourceContent),
+    [projectionBlocks, projectionSourceContent],
+  );
+  const anchoredSentenceIndex = useMemo(() => {
+    if (!singlePageSentenceItems.length) return -1;
+    if (activeMarkerIndex == null) return 0;
+    const firstMatchedSentenceIndex = singlePageSentenceItems.findIndex((item) => item.blockIndex === activeMarkerIndex);
+    return firstMatchedSentenceIndex >= 0 ? firstMatchedSentenceIndex : 0;
+  }, [activeMarkerIndex, singlePageSentenceItems]);
+  const windowedSentenceGroups = useMemo(() => {
+    if (anchoredSentenceIndex < 0 || !singlePageSentenceItems.length) {
+      return {
+        leading: [] as string[],
+        anchored: "",
+        trailing: [] as string[],
+      };
+    }
+    if (sentenceWindowMode === "full") {
+      return {
+        leading: [] as string[],
+        anchored: singlePageSentenceItems[anchoredSentenceIndex]?.text || "",
+        trailing: singlePageSentenceItems.slice(anchoredSentenceIndex + 1).map((item) => item.text),
+      };
+    }
+
+    const limit = SENTENCE_WINDOW_LIMITS[sentenceWindowMode];
+    const anchored = singlePageSentenceItems[anchoredSentenceIndex]?.text || "";
+    const contextSlots = Math.max(limit - (anchored ? 1 : 0), 0);
+    let leadingCount = anchoredSentenceIndex > 0 && contextSlots > 0 ? 1 : 0;
+    const nextCount = Math.max(singlePageSentenceItems.length - anchoredSentenceIndex - 1, 0);
+    const trailingCount = Math.min(nextCount, Math.max(contextSlots - leadingCount, 0));
+    const remainingContextSlots = contextSlots - leadingCount - trailingCount;
+    if (remainingContextSlots > 0) {
+      leadingCount += Math.min(Math.max(anchoredSentenceIndex - leadingCount, 0), remainingContextSlots);
+    }
+    const leading = singlePageSentenceItems
+      .slice(Math.max(0, anchoredSentenceIndex - leadingCount), anchoredSentenceIndex)
+      .map((item) => item.text);
+    const trailing = singlePageSentenceItems
+      .slice(anchoredSentenceIndex + 1, anchoredSentenceIndex + 1 + trailingCount)
+      .map((item) => item.text);
+
+    return {
+      leading,
+      anchored,
+      trailing,
+    };
+  }, [anchoredSentenceIndex, sentenceWindowMode, singlePageSentenceItems]);
+  const useSentenceWindowMode = variant === "v2" && layoutMode === "single" && sentenceWindowMode !== "full" && anchoredSentenceIndex >= 0;
+  const leadingSentences = windowedSentenceGroups.leading;
+  const anchoredSentence = windowedSentenceGroups.anchored;
+  const trailingSentences = windowedSentenceGroups.trailing;
 
   const singleBlockStyle = buildTextBlockStyle({
     fontSize,
@@ -415,6 +523,62 @@ export function ChangyouRoomPublicPage({ roomId }: { roomId: string }) {
     textColor,
     textShadow: textGlow,
   });
+
+  useEffect(() => {
+    if (!useSentenceWindowMode) {
+      setAnchoredSentenceHeight(0);
+      return;
+    }
+    const node = anchoredSentenceRef.current;
+    if (!node) return;
+
+    const updateHeight = () => {
+      setAnchoredSentenceHeight(node.getBoundingClientRect().height || 0);
+    };
+
+    updateHeight();
+    const resizeObserver = typeof ResizeObserver !== "undefined" ? new ResizeObserver(updateHeight) : null;
+    resizeObserver?.observe(node);
+    window.addEventListener("resize", updateHeight);
+    return () => {
+      resizeObserver?.disconnect();
+      window.removeEventListener("resize", updateHeight);
+    };
+  }, [anchoredSentence, fontSize, lineHeight, useSentenceWindowMode, widthPreset.maxWidth]);
+
+  useLayoutEffect(() => {
+    if (!useSentenceWindowMode || anchoredSentenceIndex < 0) {
+      previousAnchoredSentenceIndexRef.current = anchoredSentenceIndex;
+      setWindowMotionOffset(0);
+      setWindowMotionReady(false);
+      return;
+    }
+
+    const previousIndex = previousAnchoredSentenceIndexRef.current;
+    previousAnchoredSentenceIndexRef.current = anchoredSentenceIndex;
+    if (previousIndex == null || previousIndex < 0 || previousIndex === anchoredSentenceIndex) {
+      setWindowMotionOffset(0);
+      setWindowMotionReady(false);
+      return;
+    }
+
+    const nextOffset = anchoredSentenceIndex > previousIndex ? 42 : -42;
+    let frameA = 0;
+    let frameB = 0;
+    setWindowMotionReady(false);
+    setWindowMotionOffset(nextOffset);
+    frameA = window.requestAnimationFrame(() => {
+      frameB = window.requestAnimationFrame(() => {
+        setWindowMotionReady(true);
+        setWindowMotionOffset(0);
+      });
+    });
+
+    return () => {
+      window.cancelAnimationFrame(frameA);
+      window.cancelAnimationFrame(frameB);
+    };
+  }, [anchoredSentenceIndex, useSentenceWindowMode]);
 
   function renderProjectionColumn(blocks: LyricProjectionBlock[], baseStyle: ReturnType<typeof buildTextBlockStyle>) {
     return (
@@ -445,6 +609,7 @@ export function ChangyouRoomPublicPage({ roomId }: { roomId: string }) {
     setLineHeight(DEFAULT_LINE_HEIGHT);
     setColumnGap(DEFAULT_COLUMN_GAP);
     setTextGlowLevel("soft");
+    setSentenceWindowMode("full");
   }
 
   if (loading) {
@@ -484,6 +649,14 @@ export function ChangyouRoomPublicPage({ roomId }: { roomId: string }) {
           0% { transform: scale(0.96); opacity: 0.6; }
           60% { transform: scale(1.032); opacity: 1; }
           100% { transform: scale(1.024); opacity: 1; }
+        }
+        @keyframes changyou-room-sentence-switch {
+          0% { opacity: 0; transform: scale(0.988); }
+          100% { opacity: 1; transform: scale(1); }
+        }
+        @keyframes changyou-room-sentence-focus {
+          0%, 100% { filter: brightness(1) saturate(1); }
+          50% { filter: brightness(1.08) saturate(1.18); }
         }
       `}</style>
       <div style={ambientGlowStyle(backgroundTheme.overlay)} />
@@ -547,6 +720,25 @@ export function ChangyouRoomPublicPage({ roomId }: { roomId: string }) {
                 </button>
               </div>
             </div>
+
+            {variant === "v2" && layoutMode === "single" ? (
+              <div style={settingsGroupStyle}>
+                <div style={settingsTitleStyle}>窗口卡片数</div>
+                <div style={settingsCaptionStyle}>焦点卡片固定在中线，并跟随当前标记段同步切换</div>
+                <div style={sentenceWindowGridStyle}>
+                  {SENTENCE_WINDOW_OPTIONS.map((option) => (
+                    <button
+                      key={option}
+                      type="button"
+                      onClick={() => setSentenceWindowMode(option)}
+                      style={modeButtonStyle(sentenceWindowMode === option)}
+                    >
+                      {option}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            ) : null}
 
             <div style={settingsGroupStyle}>
               <div style={settingsTitleStyle}>背景主题</div>
@@ -661,6 +853,50 @@ export function ChangyouRoomPublicPage({ roomId }: { roomId: string }) {
           <div style={doublePageStyle(columnGap, outerPadding, marginTop)}>
             {renderProjectionColumn(doubleProjectionBlocks.left, doubleBlockStyle)}
             {renderProjectionColumn(doubleProjectionBlocks.right, doubleBlockStyle)}
+          </div>
+        </div>
+      ) : useSentenceWindowMode ? (
+        <div style={contentShellStyle(widthPreset.maxWidth, outerPadding, marginTop)}>
+          <div style={sentenceWindowShellStyle(outerPadding, marginTop)}>
+            <div style={sentenceMotionLayerStyle(windowMotionOffset, windowMotionReady)}>
+              {leadingSentences.length ? (
+                <div style={sentenceLeadWrapStyle(anchoredSentenceHeight)}>
+                  <div style={sentenceLeadListStyle}>
+                    {leadingSentences.map((sentence, index) => (
+                      <div
+                        key={`${sentence}-${index}-lead`}
+                        style={sentenceTrailCardStyle(backgroundThemeKey, singleBlockStyle)}
+                      >
+                        {sentence}
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              ) : null}
+              <div style={sentenceAnchorWrapStyle}>
+                <div
+                  key={anchoredSentence}
+                  ref={anchoredSentenceRef}
+                  style={sentenceAnchorCardStyle(backgroundThemeKey, singleBlockStyle)}
+                >
+                  {anchoredSentence}
+                </div>
+              </div>
+              {trailingSentences.length ? (
+                <div style={sentenceTrailWrapStyle(anchoredSentenceHeight)}>
+                  <div style={sentenceTrailListStyle}>
+                    {trailingSentences.map((sentence, index) => (
+                      <div
+                        key={`${sentence}-${index}`}
+                        style={sentenceTrailCardStyle(backgroundThemeKey, singleBlockStyle)}
+                      >
+                        {sentence}
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              ) : null}
+            </div>
           </div>
         </div>
       ) : (
@@ -932,6 +1168,12 @@ const threeColumnButtonGridStyle = {
   gap: "10px",
 };
 
+const sentenceWindowGridStyle = {
+  display: "grid",
+  gridTemplateColumns: "repeat(5, minmax(0, 1fr))",
+  gap: "8px",
+};
+
 const swatchGridStyle = {
   display: "grid",
   gridTemplateColumns: "repeat(2, minmax(0, 1fr))",
@@ -1016,6 +1258,133 @@ const singlePageStyle = (outerPadding: number, marginTop: number, _baseStyle: Re
   minHeight: `calc(100vh - ${(outerPadding * 2) + marginTop}px)`,
   width: "100%",
   maxWidth: "100%",
+});
+
+const sentenceWindowShellStyle = (outerPadding: number, marginTop: number) => ({
+  position: "relative" as const,
+  minHeight: `calc(100vh - ${(outerPadding * 2) + marginTop}px)`,
+  width: "100%",
+  maxWidth: "100%",
+  overflow: "hidden" as const,
+});
+
+const sentenceAnchorWrapStyle = {
+  position: "absolute" as const,
+  left: 0,
+  right: 0,
+  top: "50%",
+  transform: "translateY(-50%)",
+  zIndex: 2,
+  transition: "transform 420ms cubic-bezier(0.22, 1, 0.36, 1)",
+};
+
+const sentenceMotionLayerStyle = (windowMotionOffset: number, windowMotionReady: boolean) => ({
+  position: "absolute" as const,
+  inset: 0,
+  transform: `translate3d(0, ${windowMotionOffset}px, 0)`,
+  opacity: windowMotionOffset === 0 ? 1 : 0.985,
+  transition: windowMotionReady
+    ? "transform 420ms cubic-bezier(0.22, 1, 0.36, 1), opacity 420ms cubic-bezier(0.22, 1, 0.36, 1)"
+    : "none",
+  willChange: "transform, opacity",
+});
+
+const sentenceLeadWrapStyle = (anchoredSentenceHeight: number) => ({
+  position: "absolute" as const,
+  left: 0,
+  right: 0,
+  bottom: `calc(50% + ${Math.max((anchoredSentenceHeight / 2) + 22, 30)}px)`,
+  zIndex: 1,
+  transition: "bottom 420ms cubic-bezier(0.22, 1, 0.36, 1)",
+});
+
+const sentenceAnchorCardStyle = (
+  backgroundThemeKey: BackgroundThemeKey,
+  baseStyle: ReturnType<typeof buildTextBlockStyle>,
+) => {
+  const baseFontSize = Number.parseFloat(baseStyle.fontSize) || DEFAULT_FONT_SIZE;
+  const emphasizedFontSize = Math.max(baseFontSize + 10, Math.round(baseFontSize * 1.34));
+  const emphasizedLineHeight = typeof baseStyle.lineHeight === "number" ? Math.max(1.22, baseStyle.lineHeight - 0.32) : 1.4;
+  const inheritedTextShadow = baseStyle.textShadow && baseStyle.textShadow !== "none" ? `${baseStyle.textShadow}, ` : "";
+
+  return {
+    ...projectionTextStyle(baseStyle),
+    fontSize: `${emphasizedFontSize}px`,
+    lineHeight: emphasizedLineHeight,
+    tabSize: 4,
+    MozTabSize: 4,
+    wordBreak: "normal" as const,
+    overflowWrap: "normal" as const,
+    letterSpacing: baseFontSize >= 34 ? "0.01em" : "0.018em",
+    padding: "22px 26px",
+    borderRadius: "28px",
+    background:
+      backgroundThemeKey === "paper"
+        ? "linear-gradient(135deg, rgba(255,251,235,0.98) 0%, rgba(255,247,237,0.94) 100%)"
+        : "linear-gradient(135deg, rgba(250,204,21,0.18) 0%, rgba(15,23,42,0.82) 22%, rgba(8,47,73,0.76) 100%)",
+    border:
+      backgroundThemeKey === "paper"
+        ? "1px solid rgba(217,119,6,0.34)"
+        : "1px solid rgba(250,204,21,0.34)",
+    boxShadow:
+      backgroundThemeKey === "paper"
+        ? "0 22px 52px rgba(120,53,15,0.14), 0 0 0 1px rgba(251,191,36,0.16) inset"
+        : "0 26px 60px rgba(2,6,23,0.44), 0 0 0 1px rgba(250,204,21,0.18) inset, 0 0 34px rgba(250,204,21,0.22)",
+    textShadow:
+      backgroundThemeKey === "paper"
+        ? `${inheritedTextShadow}0 1px 0 rgba(255,255,255,0.9), 0 0 16px rgba(245,158,11,0.2)`
+        : `${inheritedTextShadow}0 0 16px rgba(250,204,21,0.26), 0 0 34px rgba(250,204,21,0.16), 0 6px 20px rgba(15,23,42,0.46)`,
+    backdropFilter: "blur(14px)",
+    fontWeight: 900,
+    animation:
+      "changyou-room-sentence-switch 0.32s cubic-bezier(0.22, 1, 0.36, 1), changyou-room-sentence-focus 2.6s ease-in-out infinite",
+    willChange: "filter, transform",
+  };
+};
+
+const sentenceTrailWrapStyle = (anchoredSentenceHeight: number) => ({
+  position: "absolute" as const,
+  left: 0,
+  right: 0,
+  top: "50%",
+  transform: `translateY(${Math.max((anchoredSentenceHeight / 2) + 22, 30)}px)`,
+  zIndex: 1,
+  transition: "transform 420ms cubic-bezier(0.22, 1, 0.36, 1)",
+});
+
+const sentenceLeadListStyle = {
+  display: "grid",
+  gap: "12px",
+  paddingTop: "28px",
+};
+
+const sentenceTrailListStyle = {
+  display: "grid",
+  gap: "12px",
+  paddingBottom: "28px",
+};
+
+const sentenceTrailCardStyle = (
+  backgroundThemeKey: BackgroundThemeKey,
+  baseStyle: ReturnType<typeof buildTextBlockStyle>,
+) => ({
+  ...projectionTextStyle(baseStyle),
+  tabSize: 4,
+  MozTabSize: 4,
+  wordBreak: "normal" as const,
+  overflowWrap: "normal" as const,
+  padding: "10px 14px",
+  borderRadius: "18px",
+  background:
+    backgroundThemeKey === "paper"
+      ? "rgba(255,255,255,0.78)"
+      : "rgba(15,23,42,0.2)",
+  border:
+    backgroundThemeKey === "paper"
+      ? "1px solid rgba(217,119,6,0.1)"
+      : "1px solid rgba(148,163,184,0.16)",
+  opacity: 0.74,
+  filter: "saturate(0.88)",
 });
 
 const doublePageStyle = (columnGap: number, outerPadding: number, marginTop: number) => ({

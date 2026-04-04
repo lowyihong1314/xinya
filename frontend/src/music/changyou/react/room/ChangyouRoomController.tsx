@@ -5,7 +5,12 @@ import { useNavigate } from "react-router-dom";
 
 import { useUserState } from "../../../../app/UserState";
 import { ensureDesignTokens } from "../../../../theme/designTokens";
-import { CHANGYOU_ROOM_PATH, getChangyouPublicRoomPath, getChangyouRoomPath } from "../../../router/paths";
+import {
+  CHANGYOU_ROOM_PATH,
+  getChangyouPublicRoomPath,
+  getChangyouPublicRoomV2Path,
+  getChangyouRoomPath,
+} from "../../../router/paths";
 import { buildProjectionBlocks, ensureProjectionBlocks, splitBlocksForDoublePage, type LyricProjectionBlock } from "../projection";
 import { fetchSongbookEntries, fetchSongbookEntry } from "../api";
 import { connectChangyouRoom } from "./socket";
@@ -337,6 +342,10 @@ export function ChangyouRoomController({ roomId }: { roomId: string }) {
     const roomPath = room.playback_url || getChangyouPublicRoomPath(room.room_id);
     return new URL(roomPath, window.location.origin).toString();
   }, [room]);
+  const publicRoomV2Url = useMemo(() => {
+    if (!room) return "";
+    return new URL(getChangyouPublicRoomV2Path(room.room_id), window.location.origin).toString();
+  }, [room]);
 
   useEffect(() => {
     if (!publicRoomUrl) {
@@ -548,6 +557,11 @@ export function ChangyouRoomController({ roomId }: { roomId: string }) {
     window.open(publicRoomUrl, "_blank", "noopener,noreferrer");
   }
 
+  function handleOpenPublicRoomV2() {
+    if (!publicRoomV2Url) return;
+    window.open(publicRoomV2Url, "_blank", "noopener,noreferrer");
+  }
+
   useEffect(() => {
     const handleKeyDown = (event: KeyboardEvent) => {
       const target = event.target as HTMLElement | null;
@@ -607,6 +621,9 @@ export function ChangyouRoomController({ roomId }: { roomId: string }) {
           <div style={topBarActionsStyle}>
             <button type="button" onClick={handleOpenPublicRoom} style={ghostButtonStyle} disabled={!publicRoomUrl}>
               window.open 公开页
+            </button>
+            <button type="button" onClick={handleOpenPublicRoomV2} style={ghostButtonStyle} disabled={!publicRoomV2Url}>
+              window.open_v2
             </button>
             <label style={togglePillStyle}>
               <input
@@ -668,6 +685,9 @@ export function ChangyouRoomController({ roomId }: { roomId: string }) {
                       </button>
                       <button type="button" onClick={handleOpenPublicRoom} style={primaryButtonStyle} disabled={!publicRoomUrl}>
                         window.open
+                      </button>
+                      <button type="button" onClick={handleOpenPublicRoomV2} style={secondaryButtonStyle} disabled={!publicRoomV2Url}>
+                        window.open_v2
                       </button>
                     </div>
                   </div>
