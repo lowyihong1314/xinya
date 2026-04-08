@@ -83,7 +83,7 @@ export function EventTableView(props: {
       <header style={headerStyle}>
         <div>
           <div style={eyebrowStyle}>Event Table</div>
-          <h3 style={titleStyle}>活动管理</h3>
+          <h3 style={titleStyle}>创建活动</h3>
         </div>
         <div style={headerActionsStyle}>
           {canEditEvent ? (
@@ -99,17 +99,7 @@ export function EventTableView(props: {
               新建活动
             </button>
           ) : null}
-          <label style={toggleStyle}>
-            <input
-              type="checkbox"
-              checked={props.realtimeEnabled}
-              onChange={(event) => props.onToggleRealtime(event.target.checked)}
-            />
-            <span>预留实时更新</span>
-          </label>
-          <button type="button" style={secondaryButtonStyle} onClick={props.onRefresh}>
-            刷新
-          </button>
+
         </div>
       </header>
 

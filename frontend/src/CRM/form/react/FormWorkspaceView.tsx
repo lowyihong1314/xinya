@@ -142,20 +142,9 @@ export function FormWorkspaceView(props: {
       <header style={headerStyle}>
         <div>
           <div style={eyebrowStyle}>Form Workspace</div>
-          <h3 style={titleStyle}>报名表管理</h3>
+          <h3 style={titleStyle}>创建报名表格</h3>
         </div>
         <div style={headerActionsStyle}>
-          <label style={toggleStyle}>
-            <input
-              type="checkbox"
-              checked={props.realtimeEnabled}
-              onChange={(event) => props.onToggleRealtime(event.target.checked)}
-            />
-            <span>预留实时更新</span>
-          </label>
-          <button type="button" style={secondaryButtonStyle} onClick={props.onRefresh}>
-            刷新
-          </button>
           {props.canEditForms ? (
             <button type="button" style={primaryButtonStyle} onClick={props.onOpenCreate}>
               创建报名表
@@ -371,12 +360,19 @@ export function FormWorkspaceView(props: {
                 />
               </CollapsibleSection>
 
-              <CollapsibleSection
-                eyebrow="Extra Fields"
-                title="扩展字段"
-                collapsed={collapsedSections.extraFields}
-                onToggle={() => toggleSection("extraFields")}
-              >
+                <CollapsibleSection
+                  eyebrow="Extra Fields"
+                  title={
+                    <span style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
+                      <span>扩展字段</span>
+                      <small style={{ color: "#6b7280", fontSize: 12, fontWeight: 400 }}>
+                        中文名, 手机号码, IC NAME, IC NO, AGE 这些字段已经是默认存在
+                      </small>
+                    </span>
+                  }
+                  collapsed={collapsedSections.extraFields}
+                  onToggle={() => toggleSection("extraFields")}
+                >
                 <ExtraFieldPanel
                   fields={props.extraFields}
                   readOnly={!props.canEditForms}
@@ -436,7 +432,7 @@ function CollapsibleSection({
   children,
 }: {
   eyebrow: string;
-  title: string;
+  title: React.ReactNode;
   collapsed: boolean;
   onToggle: () => void;
   actions?: ReactNode;

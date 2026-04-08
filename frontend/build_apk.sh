@@ -34,30 +34,85 @@ fi
 echo "==> [1/4] Building React bundle (APK mode)..."
 npm run build:apk
 
-echo "==> [2/4] Generating app icons from logo..."
-node -e "
+echo "==> [2/4] Generating Android launcher icons from logo..."
+node <<'NODE'
 const sharp = require('sharp');
 const path = require('path');
 const fs = require('fs');
-const SRC = '../static/images/logo/log222o.png';
-const RES = 'android/app/src/main/res';
-const densities = [
-  { dir: 'mipmap-mdpi',    size: 48  },
-  { dir: 'mipmap-hdpi',    size: 72  },
-  { dir: 'mipmap-xhdpi',   size: 96  },
-  { dir: 'mipmap-xxhdpi',  size: 144 },
+
+const SRC = path.resolve('../static/images/logo/log222o.png');
+const RES = path.resolve('android/app/src/main/res');
+const LEGACY_DENSITIES = [
+  { dir: 'mipmap-mdpi', size: 48 },
+  { dir: 'mipmap-hdpi', size: 72 },
+  { dir: 'mipmap-xhdpi', size: 96 },
+  { dir: 'mipmap-xxhdpi', size: 144 },
   { dir: 'mipmap-xxxhdpi', size: 192 },
 ];
+const ADAPTIVE_DENSITIES = [
+  { dir: 'mipmap-mdpi', size: 108 },
+  { dir: 'mipmap-hdpi', size: 162 },
+  { dir: 'mipmap-xhdpi', size: 216 },
+  { dir: 'mipmap-xxhdpi', size: 324 },
+  { dir: 'mipmap-xxxhdpi', size: 432 },
+];
+const ICON_BACKGROUND = '#FFFFFF';
+
+const adaptiveIconXml = `<?xml version="1.0" encoding="utf-8"?>
+<adaptive-icon xmlns:android="http://schemas.android.com/apk/res/android">
+    <background android:drawable="@color/ic_launcher_background" />
+    <foreground android:drawable="@mipmap/ic_launcher_foreground" />
+</adaptive-icon>
+`;
+
 (async () => {
-  for (const { dir, size } of densities) {
+  if (!fs.existsSync(SRC)) {
+    throw new Error(`Logo file not found: ${SRC}`);
+  }
+
+  for (const { dir, size } of LEGACY_DENSITIES) {
     const dest = path.join(RES, dir);
     fs.mkdirSync(dest, { recursive: true });
-    const buf = await sharp(SRC).resize(size, size, { fit: 'contain' }).png().toBuffer();
+    const buf = await sharp(SRC)
+      .resize(size, size, { fit: 'contain' })
+      .png()
+      .toBuffer();
+
     fs.writeFileSync(path.join(dest, 'ic_launcher.png'), buf);
     fs.writeFileSync(path.join(dest, 'ic_launcher_round.png'), buf);
   }
-})();
-"
+
+  for (const { dir, size } of ADAPTIVE_DENSITIES) {
+    const dest = path.join(RES, dir);
+    fs.mkdirSync(dest, { recursive: true });
+    const buf = await sharp(SRC)
+      .resize(size, size, { fit: 'contain', background: { r: 0, g: 0, b: 0, alpha: 0 } })
+      .png()
+      .toBuffer();
+
+    fs.writeFileSync(path.join(dest, 'ic_launcher_foreground.png'), buf);
+  }
+
+  const adaptiveDir = path.join(RES, 'mipmap-anydpi-v26');
+  const valuesDir = path.join(RES, 'values');
+  fs.mkdirSync(adaptiveDir, { recursive: true });
+  fs.mkdirSync(valuesDir, { recursive: true });
+
+  fs.writeFileSync(path.join(adaptiveDir, 'ic_launcher.xml'), adaptiveIconXml);
+  fs.writeFileSync(path.join(adaptiveDir, 'ic_launcher_round.xml'), adaptiveIconXml);
+  fs.writeFileSync(
+    path.join(valuesDir, 'ic_launcher_background.xml'),
+    `<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <color name="ic_launcher_background">${ICON_BACKGROUND}</color>
+</resources>
+`
+  );
+})().catch((error) => {
+  console.error(error);
+  process.exit(1);
+});
+NODE
 
 echo "==> [3/4] Syncing to Android project..."
 npx cap sync android

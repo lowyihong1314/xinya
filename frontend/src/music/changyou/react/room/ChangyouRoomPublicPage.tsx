@@ -19,7 +19,7 @@ const MARGIN_TOP_STORAGE_KEY = "xinya.changyou.room.marginTop";
 const TEXT_GLOW_STORAGE_KEY = "xinya.changyou.room.textGlow";
 
 const DEFAULT_FONT_SIZE = 26;
-const MIN_FONT_SIZE = 20;
+const MIN_FONT_SIZE = 4;
 const MAX_FONT_SIZE = 56;
 const DEFAULT_OUTER_PADDING = 0;
 const MIN_OUTER_PADDING = 0;

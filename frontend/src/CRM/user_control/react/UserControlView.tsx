@@ -104,9 +104,7 @@ export function UserControlView(props: {
             </button>
           ) : (
             <>
-              <button type="button" style={secondaryButtonStyle} onClick={props.onRefresh}>
-                刷新
-              </button>
+
               <button type="button" style={primaryButtonStyle} onClick={props.onOpenNewUser}>
                 新增用户
               </button>

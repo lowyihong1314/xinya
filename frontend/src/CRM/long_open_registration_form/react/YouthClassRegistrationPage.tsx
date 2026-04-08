@@ -348,7 +348,6 @@ export function YouthClassRegistrationPage() {
       <section style={panelStyle(isMobile)}>
         <div style={sectionTitleRowStyle(isMobile)}>
           <h2 style={sectionTitleStyle(isMobile)}>年龄报名费率</h2>
-          <button type="button" style={refreshButtonStyle} onClick={() => void loadData()}>刷新</button>
         </div>
         {notice ? (
           <div style={notice.tone === "success" ? successStyle : errorStyle}>

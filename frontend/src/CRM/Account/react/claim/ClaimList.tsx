@@ -143,9 +143,7 @@ export function ClaimList({
           <div className="claim-list__pagination claim-list__pagination--top" style={paginationRowTopStyle}>
             <div className="claim-list__pagination-actions" style={paginationActionsStyle}>
               <span style={chipStyle}>{scopeLabel}</span>
-              <button type="button" style={buttonSecondaryStyle} onClick={onRefresh}>
-                刷新
-              </button>
+
               {canCreate ? (
                 <button type="button" style={buttonPrimaryStyle} onClick={onCreate}>
                   新建申请

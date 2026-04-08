@@ -329,7 +329,6 @@ export function MembershipRegistrationPage() {
       <section style={panelStyle(isMobile)}>
         <div style={sectionTitleRowStyle(isMobile)}>
           <h2 style={sectionTitleStyle(isMobile)}>会员年龄费率</h2>
-          <button type="button" style={refreshButtonStyle} onClick={() => void loadData()}>刷新</button>
         </div>
         {notice ? <div style={notice.tone === "success" ? successStyle : errorStyle}>{notice.text}</div> : null}
         {error ? <div style={errorStyle}>{error}</div> : null}

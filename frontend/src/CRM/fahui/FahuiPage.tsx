@@ -181,9 +181,7 @@ export function FahuiPage() {
           <h1 style={styles.title}>法会付款管理</h1>
           <p style={styles.subtitle}>按付款人、电话或祈福者检索，右键执行审核和删除操作。</p>
         </div>
-        <button type="button" style={styles.refreshButton} onClick={() => void loadPayments()}>
-          刷新数据
-        </button>
+
       </div>
 
       <div style={{ ...styles.toolbar, flexDirection: isMobile ? "column" : "row" }}>

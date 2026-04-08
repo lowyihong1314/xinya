@@ -134,9 +134,7 @@ export function PaymentVoucherModal({
                 <button type="button" style={secondaryButtonStyle} onClick={() => window.open(payload.share_url, "_blank")}>
                   打开签名页
                 </button>
-                <button type="button" style={secondaryButtonStyle} onClick={() => void loadVoucher()}>
-                  刷新状态
-                </button>
+
                 <button
                   type="button"
                   style={payload.is_signed ? primaryButtonStyle : disabledButtonStyle}

@@ -56,9 +56,7 @@ export function HomeAlbumPage() {
             ▶
           </button>
         </div>
-        <button type="button" style={secondaryButtonStyle} onClick={() => void refreshEvents()}>
-          刷新活动
-        </button>
+
       </section>
 
       {error ? <div style={errorBannerStyle}>{error}</div> : null}

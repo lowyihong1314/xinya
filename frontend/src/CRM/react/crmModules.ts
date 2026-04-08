@@ -39,7 +39,7 @@ export const CRM_MODULES: CRMModuleSpec[] = [
   },
   {
     key: 'event_table',
-    title: '活动表格',
+    title: '创建活动',
     icon: 'fas fa-table',
     description: '查看和管理活动主表数据。',
     Component: EventTablePage,
@@ -60,7 +60,7 @@ export const CRM_MODULES: CRMModuleSpec[] = [
   },
   {
     key: 'register',
-    title: '报名',
+    title: '创建报名表格',
     icon: 'fas fa-clipboard-list',
     description: '表单报名、注册与记录查询。',
     Component: FormWorkspacePage,

@@ -19,8 +19,50 @@ type EventPickerResponse = {
   error?: string;
 };
 
+function getCurrentMonthKey() {
+  const now = new Date();
+  return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}`;
+}
+
+function shiftMonthKey(monthKey: string, offset: number) {
+  const match = monthKey.match(/^(\d{4})-(\d{2})$/);
+  if (!match) {
+    return getCurrentMonthKey();
+  }
+
+  const nextDate = new Date(Number(match[1]), Number(match[2]) - 1 + offset, 1);
+  return `${nextDate.getFullYear()}-${String(nextDate.getMonth() + 1).padStart(2, "0")}`;
+}
+
+function normalizeMonthKey(value?: string) {
+  const text = String(value || "").trim();
+  if (!text) {
+    return "";
+  }
+
+  const match = text.match(/^(\d{4})[-/](\d{1,2})/);
+  if (!match) {
+    return "";
+  }
+
+  return `${match[1]}-${match[2].padStart(2, "0")}`;
+}
+
+function getEventMonthKey(event: EventPickerRecord) {
+  return normalizeMonthKey(event.date || event.datetime);
+}
+
+function formatMonthLabel(monthKey: string) {
+  if (!monthKey) {
+    return "未设置日期";
+  }
+
+  const [year, month] = monthKey.split("-");
+  return `${year}年${Number(month)}月`;
+}
+
 async function fetchEvents() {
-  const response = await apiFetch("/api/event_data/get_all_event", {
+  const response = await apiFetch("/api/event_data/get_all_event_sort", {
     credentials: "include",
   });
   const payload = (await response.json().catch(() => ({}))) as EventPickerResponse;
@@ -104,6 +146,8 @@ function EventPickerModal({
   const [events, setEvents] = useState<EventPickerRecord[]>([]);
   const [selected, setSelected] = useState<EventPickerRecord | null>(null);
   const [query, setQuery] = useState("");
+  const currentMonthKey = getCurrentMonthKey();
+  const [monthFilter, setMonthFilter] = useState(() => getCurrentMonthKey());
   const [page, setPage] = useState(0);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
@@ -137,18 +181,23 @@ function EventPickerModal({
 
   const filteredEvents = useMemo(() => {
     const keyword = query.trim().toLowerCase();
-    if (!keyword) {
-      return events;
-    }
-
     return events.filter((event) => {
+      const eventMonthKey = getEventMonthKey(event) || "unknown";
+      if (eventMonthKey !== monthFilter) {
+        return false;
+      }
+
+      if (!keyword) {
+        return true;
+      }
+
       const text = [event.event_name, event.purpose, event.date, event.datetime]
         .filter(Boolean)
         .join(" ")
         .toLowerCase();
       return text.includes(keyword);
     });
-  }, [events, query]);
+  }, [events, monthFilter, query]);
 
   const pageSize = 8;
   const totalPages = Math.max(1, Math.ceil(filteredEvents.length / pageSize));
@@ -184,8 +233,51 @@ function EventPickerModal({
           style={searchInputStyle}
         />
 
-        <div style={selectionInfoStyle}>
-          {selected ? `已选择：${selected.event_name || ""} #${selected.id}` : "未选择活动"}
+        <div style={monthFilterSectionStyle}>
+          <div style={monthFilterLabelStyle}>月份筛选</div>
+          <div style={monthNavigatorStyle}>
+            <button
+              type="button"
+              style={monthFilterButtonStyle}
+              onClick={() => {
+                setMonthFilter((current) => shiftMonthKey(current, -1));
+                setPage(0);
+              }}
+            >
+              上个月
+            </button>
+            <button
+              type="button"
+              style={{
+                ...monthFilterButtonStyle,
+                ...(monthFilter === currentMonthKey ? monthFilterButtonActiveStyle : null),
+              }}
+              onClick={() => {
+                setMonthFilter(currentMonthKey);
+                setPage(0);
+              }}
+            >
+              这个月
+            </button>
+            <button
+              type="button"
+              style={monthFilterButtonStyle}
+              onClick={() => {
+                setMonthFilter((current) => shiftMonthKey(current, 1));
+                setPage(0);
+              }}
+            >
+              下个月
+            </button>
+            <div style={monthCurrentLabelStyle}>{formatMonthLabel(monthFilter)}</div>
+          </div>
+        </div>
+
+        <div style={infoRowStyle}>
+          <div style={selectionInfoStyle}>
+            {selected ? `已选择：${selected.event_name || ""} #${selected.id}` : "未选择活动"}
+          </div>
+          <div style={resultInfoStyle}>{`显示 ${filteredEvents.length} / ${events.length} 个活动`}</div>
         </div>
 
         {loading ? <div style={stateStyle}>加载中…</div> : null}
@@ -308,10 +400,65 @@ const searchInputStyle = {
 };
 
 const selectionInfoStyle = {
-  marginTop: "12px",
-  marginBottom: "12px",
   fontSize: "13px",
   color: "#475569",
+  fontWeight: 700,
+};
+
+const monthFilterSectionStyle = {
+  marginTop: "12px",
+};
+
+const monthFilterLabelStyle = {
+  marginBottom: "8px",
+  fontSize: "12px",
+  fontWeight: 700,
+  color: "#475569",
+};
+
+const monthNavigatorStyle = {
+  display: "flex",
+  flexWrap: "wrap" as const,
+  gap: "8px",
+  alignItems: "center",
+};
+
+const monthFilterButtonStyle = {
+  padding: "9px 14px",
+  borderRadius: "999px",
+  border: "1px solid rgba(148, 163, 184, 0.32)",
+  background: "#fff",
+  color: "#334155",
+  fontWeight: 700,
+  cursor: "pointer",
+};
+
+const monthFilterButtonActiveStyle = {
+  border: "1px solid rgba(37, 99, 235, 0.28)",
+  background: "linear-gradient(135deg, rgba(37,99,235,0.12), rgba(79,70,229,0.16))",
+  color: "#1d4ed8",
+};
+
+const monthCurrentLabelStyle = {
+  padding: "9px 4px",
+  fontSize: "13px",
+  fontWeight: 800,
+  color: "#0f172a",
+};
+
+const infoRowStyle = {
+  display: "flex",
+  justifyContent: "space-between",
+  alignItems: "center",
+  gap: "12px",
+  flexWrap: "wrap" as const,
+  marginTop: "12px",
+  marginBottom: "12px",
+};
+
+const resultInfoStyle = {
+  fontSize: "12px",
+  color: "#64748b",
   fontWeight: 700,
 };
 
