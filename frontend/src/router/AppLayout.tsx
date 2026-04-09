@@ -1,11 +1,8 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef } from "react";
 import type { CSSProperties } from "react";
 import { Outlet, useLocation, useNavigate } from "react-router-dom";
 
 import { useUserState } from "../app/UserState";
-import { API_BASE, IS_APK } from "../js/apiBase";
-import { musicPlayerController } from "../music/music_player/MusicPlayerController";
-import { useMusicPlayback } from "../music/music_player/MusicPlaybackContext";
 import { CHANGYOU_PATH, MUSIC_PLAYER_PATH, MUSIC_ROOT_PATH } from "../music/router/paths";
 import { ensureDesignTokens } from "../theme/designTokens";
 import { NAV_ITEMS, pageKeyFromPath, resolveLegacyPath } from "./routeConfig";
@@ -30,86 +27,9 @@ export function AppLayout() {
 
   const location = useLocation();
   const navigate = useNavigate();
-  const { user, isMobile } = useUserState();
-  const {
-    currentMusic,
-    currentMusicId,
-    queue,
-    isPlaying,
-    hasPlaybackSession,
-    shuffleEnabled,
-    repeatMode,
-    autoplayKey,
-    toggleShuffle,
-    cycleRepeatMode,
-    playRelative,
-    handleTrackEnded,
-    playFromQueue,
-    removeFromQueue,
-    clearQueue,
-    dismissPlayer,
-    setIsPlayingState,
-  } = useMusicPlayback();
-  const [floatingMinimized, setFloatingMinimized] = useState(true);
+  const { user } = useUserState();
   const lastPrimaryPathRef = useRef("/");
   const isInsideMusicRouter = location.pathname.startsWith(MUSIC_ROOT_PATH);
-
-  useEffect(() => {
-    return () => {
-      musicPlayerController.destroy();
-    };
-  }, []);
-
-  useEffect(() => {
-    musicPlayerController.sync({
-      currentMusic,
-      currentMusicId,
-      queue,
-      audioSrc: currentMusic ? `${API_BASE}/api/music/download/${currentMusic.id}` : null,
-      isPlaying,
-      hasPlaybackSession,
-      hasQueue: queue.length > 0,
-      shuffleEnabled,
-      repeatMode,
-      isMobile,
-      minimized: floatingMinimized,
-      autoplayKey,
-      onToggleShuffle: toggleShuffle,
-      onCycleRepeat: cycleRepeatMode,
-      onPrev: () => playRelative(-1),
-      onNext: () => playRelative(1),
-      onDismiss: dismissPlayer,
-      onExpand: () => setFloatingMinimized(false),
-      onMinimize: () => setFloatingMinimized(true),
-      onPlayFromQueue: playFromQueue,
-      onRemoveFromQueue: removeFromQueue,
-      onClearQueue: clearQueue,
-      onEnded: handleTrackEnded,
-      onPlayStateChange: setIsPlayingState,
-      audioDisabled: IS_APK,
-      hidden: IS_APK,
-    });
-  }, [
-    currentMusic,
-    currentMusicId,
-    isPlaying,
-    hasPlaybackSession,
-    queue,
-    shuffleEnabled,
-    repeatMode,
-    autoplayKey,
-    isMobile,
-    floatingMinimized,
-    toggleShuffle,
-    cycleRepeatMode,
-    playRelative,
-    playFromQueue,
-    removeFromQueue,
-    clearQueue,
-    dismissPlayer,
-    handleTrackEnded,
-    setIsPlayingState,
-  ]);
 
   useEffect(() => {
     if (!isInsideMusicRouter) {

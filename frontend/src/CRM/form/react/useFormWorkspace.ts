@@ -52,9 +52,10 @@ function normalizeFieldSwitches(form: FormRecord | null): FormRecord | null {
   };
 }
 
-export function useFormWorkspace(options?: { enabled?: boolean; canEditMembers?: boolean }) {
+export function useFormWorkspace(options?: { enabled?: boolean; canEditMembers?: boolean; preferredFormId?: number | null }) {
   const enabled = options?.enabled ?? true;
   const canEditMembers = options?.canEditMembers ?? true;
+  const preferredFormId = options?.preferredFormId ?? null;
   const [forms, setForms] = useState<FormRecord[]>([]);
   const [selectedFormId, setSelectedFormId] = useState<number | null>(null);
   const [selectedForm, setSelectedForm] = useState<FormRecord | null>(null);
@@ -78,8 +79,8 @@ export function useFormWorkspace(options?: { enabled?: boolean; canEditMembers?:
       return;
     }
 
-    void loadForms();
-  }, [enabled]);
+    void loadForms(preferredFormId);
+  }, [enabled, preferredFormId]);
 
   useEffect(() => {
     if (!toast) {

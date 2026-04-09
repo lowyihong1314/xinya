@@ -26,6 +26,10 @@ def register_web_routes(app):
     def changyou_room_public_v2(room_id):
         return redirect(f"/changyou-room/{room_id}")
 
+    @app.route("/music-portal")
+    def music_portal():
+        return render_template("music_portal.html")
+
     @app.route("/template/long-open-registration-form")
     def long_open_registration_form_template():
         return render_template("form/long_open_registration_form_public.html")

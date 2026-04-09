@@ -1,3 +1,5 @@
+import { useNavigate } from "react-router-dom";
+
 import { ensureDesignTokens } from "../../../theme/designTokens";
 import { useUserState } from "../../../app/UserState";
 import { useEventTableController } from "./useEventTableController";
@@ -8,6 +10,7 @@ export function EventTablePage() {
   ensureDesignTokens();
 
   const { isMobile, user } = useUserState();
+  const navigate = useNavigate();
   const { state, actions } = useEventTableController();
   const canEditEvent = hasUserPermission(user, "event_edit");
 
@@ -17,6 +20,7 @@ export function EventTablePage() {
       totalResults={state.filteredEvents.length}
       selectedEvent={state.selectedEvent}
       selectedEventId={state.selectedEventId}
+      selectedEventForm={state.selectedEventForm}
       query={state.query}
       selectedType={state.selectedType}
       eventTypeOptions={state.eventTypeOptions}
@@ -46,6 +50,7 @@ export function EventTablePage() {
       onUploadAttachment={(file) => void actions.uploadAttachment(file)}
       onRemoveAttachment={(fileId) => void actions.removeAttachment(fileId)}
       onDeleteEvent={() => void actions.removeSelectedEvent()}
+      onOpenFormContent={(formId) => navigate(`/crm/register?form_id=${formId}`)}
     />
   );
 }

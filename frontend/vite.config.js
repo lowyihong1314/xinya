@@ -52,11 +52,13 @@ export default defineConfig(({ command, mode }) => {
             input: {
               app: path.resolve(__dirname, "./main.tsx"),
               changyouRoom: path.resolve(__dirname, "./changyouRoomMain.tsx"),
+              musicPortal: path.resolve(__dirname, "./musicPortalMain.tsx"),
             },
             output: {
               entryFileNames: (chunkInfo) => {
                 if (chunkInfo.name === "app") return "init.js";
                 if (chunkInfo.name === "changyouRoom") return "changyou-room.js";
+                if (chunkInfo.name === "musicPortal") return "music-portal.js";
                 return "assets/[name]-[hash].js";
               },
               chunkFileNames: "assets/[name]-[hash].js",

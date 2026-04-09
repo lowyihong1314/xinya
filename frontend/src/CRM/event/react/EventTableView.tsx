@@ -4,6 +4,7 @@ import { CachedImage } from "../../../components/CachedMedia";
 import { openPreviewModal } from "../../../js/attachment_preview";
 import { openBrochurePreviewModal } from "../../../event/shared/brochurePreview";
 import type { EventCreatePayload, EventMutationPayload, EventRecord } from "./types";
+import type { FormRecord } from "../../form/react/types";
 
 type Toast = { type: "success" | "error"; text: string } | null;
 type CreateDraft = {
@@ -23,6 +24,7 @@ export function EventTableView(props: {
   totalResults: number;
   selectedEvent: EventRecord | null;
   selectedEventId: number | null;
+  selectedEventForm: FormRecord | null;
   query: string;
   selectedType: string;
   eventTypeOptions: Array<{ value: string; label: string }>;
@@ -50,6 +52,7 @@ export function EventTableView(props: {
   onUploadAttachment: (file: File) => void;
   onRemoveAttachment: (fileId: number) => void;
   onDeleteEvent: () => void;
+  onOpenFormContent: (formId: number) => void;
 }) {
   const isMobile = props.isMobile ?? false;
   const canEditEvent = props.canEditEvent ?? false;
@@ -381,6 +384,43 @@ export function EventTableView(props: {
                     textarea
                     wide
                   />
+                  <label style={wideFieldStyle}>
+                    <span style={fieldLabelStyle}>报名表格</span>
+                    <div style={attachmentCardStyle}>
+                      <div style={attachmentMetaWrapStyle}>
+                        <div style={attachmentTitleStyle}>
+                          {props.selectedEventForm?.title || "该活动没有报名表格"}
+                        </div>
+                        <div style={attachmentSubtitleStyle}>
+                          {props.selectedEventForm
+                            ? `报名表格 ID #${props.selectedEventForm.id}`
+                            : "当前活动还没有绑定对应的报名表格。"}
+                        </div>
+                      </div>
+                      <div style={attachmentActionRowStyle}>
+                        {props.selectedEventForm ? (
+                          <>
+                            <button
+                              type="button"
+                              style={secondaryButtonStyle}
+                              onClick={() => props.onOpenFormContent(props.selectedEventForm!.id)}
+                            >
+                              查看报名内容
+                            </button>
+                            <button
+                              type="button"
+                              style={secondaryButtonStyle}
+                              onClick={() => window.open(`/api/form/index/${props.selectedEventForm?.id}`, "_blank", "noopener,noreferrer")}
+                            >
+                              打开报名表格
+                            </button>
+                          </>
+                        ) : (
+                          <span style={inlineNoteStyle}>该活动没有报名表格</span>
+                        )}
+                      </div>
+                    </div>
+                  </label>
                   <label style={wideFieldStyle}>
                     <span style={fieldLabelStyle}>简章文件</span>
                     <div style={attachmentCardStyle}>

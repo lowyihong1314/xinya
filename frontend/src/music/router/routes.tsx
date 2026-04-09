@@ -6,8 +6,8 @@ import { ChangyouDetailPage } from "../changyou/react/ChangyouDetailPage";
 import { ChangyouPage } from "../changyou/react/ChangyouPage";
 import { ChangyouRoomPage } from "../changyou/react/room/ChangyouRoomPage";
 import { ChangyouRoomPublicAppPage } from "../changyou/react/room/ChangyouRoomPublicPage";
-import { MusicPage } from "../music_player/MusicPage";
-import { MusicPageApk } from "../music_player/MusicPageApk";
+import { MusicPage } from "../music_player/ui/web/MusicPage";
+import { MusicPageApk } from "../music_player/apk/MusicPageApk";
 
 export const musicRoute: RouteObject = {
   path: "music",

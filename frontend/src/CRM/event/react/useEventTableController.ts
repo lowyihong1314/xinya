@@ -3,6 +3,8 @@ import { startTransition, useEffect, useMemo, useState } from "react";
 import { smartImageURL } from "../../../js/get_img";
 import { useEventData } from "../../../event/shared/EventDataContext";
 import { select_users_modal } from "../../select_users_modal";
+import { fetchForms } from "../../form/react/api";
+import type { FormRecord } from "../../form/react/types";
 import { createEvent, deleteEvent, deleteEventFile, saveEvent, uploadEventBrochure, uploadEventFile } from "./api";
 import type { EventCreatePayload, EventMutationPayload, EventRecord } from "./types";
 import { useEventTableRealtime } from "./useEventTableRealtime";
@@ -25,6 +27,7 @@ export function useEventTableController() {
   const [toast, setToast] = useState<Toast>(null);
   const [realtimeEnabled, setRealtimeEnabled] = useState(false);
   const [imageUrl, setImageUrl] = useState<string | null>(null);
+  const [forms, setForms] = useState<FormRecord[]>([]);
 
   useEffect(() => {
     setSelectedEventId((prev) => prev ?? events[0]?.id ?? null);
@@ -48,6 +51,10 @@ export function useEventTableController() {
   useEffect(() => {
     void loadSelectedImage();
   }, [selectedEventId, events]);
+
+  useEffect(() => {
+    void loadLinkedForms();
+  }, []);
 
   useEventTableRealtime({
     enabled: realtimeEnabled,
@@ -134,6 +141,17 @@ export function useEventTableController() {
     () => events.find((event) => event.id === selectedEventId) ?? null,
     [events, selectedEventId],
   );
+  const selectedEventForm = useMemo(() => {
+    if (!selectedEvent) {
+      return null;
+    }
+    return (
+      forms.find((form) =>
+        form.event_id === selectedEvent.id
+        || form.event?.id === selectedEvent.id
+        || Boolean(form.events?.some((event) => event.id === selectedEvent.id))) ?? null
+    );
+  }, [forms, selectedEvent]);
 
   async function loadSelectedImage() {
     const next = events.find((event) => event.id === selectedEventId);
@@ -146,6 +164,16 @@ export function useEventTableController() {
       setImageUrl(url || null);
     } catch {
       setImageUrl(null);
+    }
+  }
+
+  async function loadLinkedForms() {
+    try {
+      const payload = await fetchForms();
+      setForms(Array.isArray(payload.forms) ? payload.forms : []);
+    } catch (error) {
+      console.warn("Failed to load linked registration forms", error);
+      setForms([]);
     }
   }
 
@@ -297,6 +325,7 @@ export function useEventTableController() {
       pagedEvents,
       selectedEvent,
       selectedEventId,
+      selectedEventForm,
       query,
       selectedType,
       eventTypeOptions,
@@ -316,7 +345,9 @@ export function useEventTableController() {
       setSelectedType,
       setPage,
       setSelectedEventId,
-      loadEvents: refreshEvents,
+      loadEvents: async () => {
+        await Promise.all([refreshEvents(), loadLinkedForms()]);
+      },
       updateEvent,
       createNewEvent,
       removeSelectedEvent,

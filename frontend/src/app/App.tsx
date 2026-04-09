@@ -2,18 +2,21 @@ import { RouterProvider } from "react-router-dom";
 
 import { UserStateProvider } from "./UserState";
 import { EventDataProvider } from "../event/shared/EventDataContext";
-import { ApkMusicRuntime } from "../music/music_player/ApkMusicRuntime";
-import { MusicPlaybackProvider } from "../music/music_player/MusicPlaybackContext";
+import { IS_APK } from "../js/apiBase";
+import { MusicPlaybackProvider } from "../music/music_player/logic/MusicPlaybackContext";
 import { appRouter } from "../router/appRouter";
 
 export function App({ initialIsMobile = false }: { initialIsMobile?: boolean }) {
   return (
     <UserStateProvider initialIsMobile={initialIsMobile}>
       <EventDataProvider>
-        <MusicPlaybackProvider>
-          <ApkMusicRuntime />
+        {IS_APK ? (
           <RouterProvider router={appRouter} />
-        </MusicPlaybackProvider>
+        ) : (
+          <MusicPlaybackProvider>
+            <RouterProvider router={appRouter} />
+          </MusicPlaybackProvider>
+        )}
       </EventDataProvider>
     </UserStateProvider>
   );

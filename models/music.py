@@ -5,6 +5,19 @@ from app.timezone import malaysia_now_naive
 from models import db
 
 
+REMOTE_ALBUM_COVER_ROOT = "https://utbabuddha.com/api/music/album_cover"
+
+
+def _resolve_remote_album_cover_url(cover_url):
+    raw = str(cover_url or "").strip()
+    if not raw:
+        return None
+    filename = raw.split("#", 1)[0].split("?", 1)[0].rstrip("/").split("/")[-1]
+    if not filename:
+        return None
+    return f"{REMOTE_ALBUM_COVER_ROOT}/{filename}"
+
+
 class Music(db.Model):
     __tablename__ = 'music'
     id = db.Column(db.Integer, primary_key=True)
@@ -128,6 +141,7 @@ class Album(db.Model):
             "name": self.name,
             "artist_id": self.artist_id,
             "cover_url": self.cover_url,
+            "image": _resolve_remote_album_cover_url(self.cover_url),
             "release_date": self.release_date.isoformat() if self.release_date else None,
             "description": self.description,
             "created_at": self.created_at.isoformat(),

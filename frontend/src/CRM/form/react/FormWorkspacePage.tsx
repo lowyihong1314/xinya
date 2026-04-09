@@ -1,3 +1,5 @@
+import { useSearchParams } from "react-router-dom";
+
 import { ensureDesignTokens } from "../../../theme/designTokens";
 import { useUserState } from "../../../app/UserState";
 import { getUserPermissionNames } from "../../../app/permissions";
@@ -8,6 +10,7 @@ export function FormWorkspacePage() {
   ensureDesignTokens();
 
   const { user, isMobile } = useUserState();
+  const [searchParams] = useSearchParams();
   const permissionNames = getUserPermissionNames(user);
   const canReadForms =
     permissionNames.has("form_read") ||
@@ -15,9 +18,15 @@ export function FormWorkspacePage() {
     permissionNames.has("member_detail");
   const canEditForms = permissionNames.has("form_edit");
   const canViewMemberDetail = canEditForms || permissionNames.has("member_detail");
+  const rawPreferredFormId = searchParams.get("form_id");
+  const preferredFormId =
+    rawPreferredFormId && Number.isFinite(Number(rawPreferredFormId))
+      ? Number(rawPreferredFormId)
+      : null;
   const { state, actions } = useFormWorkspace({
     enabled: canReadForms,
     canEditMembers: canEditForms,
+    preferredFormId,
   });
 
   return (

@@ -96,11 +96,32 @@ public class MusicService extends Service {
     private int currentTrackId = -1;
     private boolean isForeground = false;
     private final Handler mainHandler = new Handler(Looper.getMainLooper());
+    private String baseUrl = "";
 
     // Album art cache — keeps last downloaded bitmap + its URL.
     private Bitmap currentArtBitmap = null;
     private String lastFetchedCoverUrl = null;
     private final ExecutorService coverFetchExecutor = Executors.newSingleThreadExecutor();
+    private final ExecutorService playbackMetricExecutor = Executors.newSingleThreadExecutor();
+    private final Runnable playbackMinuteReporter = new Runnable() {
+        @Override
+        public void run() {
+            if (player == null || !player.isPlaying() || currentTrackId <= 0 || baseUrl == null || baseUrl.isEmpty()) {
+                return;
+            }
+            final int musicId = currentTrackId;
+            final String targetUrl = NativeMusicRepository.normalizeBaseUrl(baseUrl) + "/api/music/add_one_minute/" + musicId;
+            final String cookie = CookieManager.getInstance().getCookie(targetUrl);
+            playbackMetricExecutor.execute(() -> {
+                try {
+                    NativeMusicRepository.addOneMinute(baseUrl, cookie, musicId);
+                } catch (Exception e) {
+                    Log.w(TAG, "addOneMinute failed: " + e.getMessage());
+                }
+            });
+            mainHandler.postDelayed(this, 60_000);
+        }
+    };
 
     // ── Lifecycle ────────────────────────────────────────────────────────────
 
@@ -124,6 +145,8 @@ public class MusicService extends Service {
     @Override
     public void onDestroy() {
         coverFetchExecutor.shutdown();
+        playbackMetricExecutor.shutdown();
+        mainHandler.removeCallbacks(playbackMinuteReporter);
         recycleBitmap();
         if (player != null) { player.release(); player = null; }
         if (mediaSession != null) { mediaSession.release(); mediaSession = null; }
@@ -146,6 +169,7 @@ public class MusicService extends Service {
             @Override
             public void onPlaybackStateChanged(int state) {
                 updatePlaybackState();
+                updatePlaybackMinuteReporting();
                 updateNotification();
                 if (state == Player.STATE_ENDED && eventCallback != null) {
                     eventCallback.emit("trackEnded", new JSObject());
@@ -155,6 +179,7 @@ public class MusicService extends Service {
             @Override
             public void onIsPlayingChanged(boolean isPlaying) {
                 updatePlaybackState();
+                updatePlaybackMinuteReporting();
                 updateNotification();
                 emitPlayStateChanged(isPlaying);
             }
@@ -170,6 +195,7 @@ public class MusicService extends Service {
                     currentTrackId = item.id;
                 }
                 updatePlaybackState();
+                updatePlaybackMinuteReporting();
                 updateNotification();
                 emitTrackChanged();
             }
@@ -182,26 +208,12 @@ public class MusicService extends Service {
 
             @Override
             public void onSkipToNext() {
-                runOnPlayerThread(() -> {
-                    if (player == null) return;
-                    if (player.hasNextMediaItem()) {
-                        player.seekToNextMediaItem();
-                        player.play();
-                    }
-                });
+                skipToNext();
             }
 
             @Override
             public void onSkipToPrevious() {
-                runOnPlayerThread(() -> {
-                    if (player == null) return;
-                    if (player.getCurrentPosition() > 3_000) {
-                        player.seekTo(0);
-                    } else if (player.hasPreviousMediaItem()) {
-                        player.seekToPreviousMediaItem();
-                        player.play();
-                    }
-                });
+                skipToPrevious();
             }
 
             @Override
@@ -215,7 +227,23 @@ public class MusicService extends Service {
 
     public void setEventCallback(EventCallback callback) { eventCallback = callback; }
 
+    public void setBaseUrl(String baseUrl) {
+        this.baseUrl = NativeMusicRepository.normalizeBaseUrl(baseUrl);
+        runOnPlayerThread(this::updatePlaybackMinuteReporting);
+    }
+
     public void setPlaylist(List<PlaylistItem> items, int startIndex, int exoRepeatMode) {
+        loadPlaylist(items, startIndex, exoRepeatMode, false, 0L, true);
+    }
+
+    public void loadPlaylist(
+        List<PlaylistItem> items,
+        int startIndex,
+        int exoRepeatMode,
+        boolean shuffleEnabled,
+        long positionMs,
+        boolean playWhenReady
+    ) {
         runOnPlayerThread(() -> {
             if (items == null || items.isEmpty()) return;
             playlist = new ArrayList<>(items);
@@ -234,9 +262,18 @@ public class MusicService extends Service {
             int safeStart = Math.max(0, Math.min(startIndex, items.size() - 1));
             player.setMediaSource(concat);
             player.setRepeatMode(exoRepeatMode);
-            player.seekToDefaultPosition(safeStart);
+            player.setShuffleModeEnabled(shuffleEnabled);
             player.prepare();
-            player.play();
+            player.seekToDefaultPosition(safeStart);
+            if (positionMs > 0) {
+                player.seekTo(safeStart, Math.max(positionMs, 0L));
+            }
+            player.setPlayWhenReady(playWhenReady);
+            if (playWhenReady) {
+                player.play();
+            } else {
+                player.pause();
+            }
 
             PlaylistItem start = items.get(safeStart);
             currentTitle = start.title;
@@ -245,6 +282,7 @@ public class MusicService extends Service {
             currentTrackId = start.id;
 
             updatePlaybackState();
+            updatePlaybackMinuteReporting();
             updateNotification();
         });
     }
@@ -274,6 +312,7 @@ public class MusicService extends Service {
         runOnPlayerThread(() -> {
             if (player != null) player.pause();
             updatePlaybackState();
+            updatePlaybackMinuteReporting();
             updateNotification();
         });
     }
@@ -282,6 +321,7 @@ public class MusicService extends Service {
         runOnPlayerThread(() -> {
             if (player != null) player.play();
             updatePlaybackState();
+            updatePlaybackMinuteReporting();
             updateNotification();
         });
     }
@@ -296,6 +336,7 @@ public class MusicService extends Service {
             currentTrackId = -1;
             recycleBitmap();
             updatePlaybackState();
+            updatePlaybackMinuteReporting();
             emitPlayStateChanged(false);
             if (isForeground) { stopForeground(true); isForeground = false; }
             if (notificationManager != null) notificationManager.cancel(NOTIFICATION_ID);
@@ -328,6 +369,46 @@ public class MusicService extends Service {
     }
 
     public int getCurrentTrackId() { return currentTrackId; }
+
+    public int getCurrentMediaIndex() {
+        return callOnPlayerThread(() -> player == null ? -1 : player.getCurrentMediaItemIndex(), -1);
+    }
+
+    public void setShuffleEnabled(boolean enabled) {
+        runOnPlayerThread(() -> {
+            if (player != null) {
+                player.setShuffleModeEnabled(enabled);
+            }
+        });
+    }
+
+    public boolean isShuffleEnabled() {
+        return callOnPlayerThread(() -> player != null && player.getShuffleModeEnabled(), false);
+    }
+
+    public void skipToNext() {
+        runOnPlayerThread(() -> {
+            if (player == null) return;
+            if (player.hasNextMediaItem()) {
+                player.seekToNextMediaItem();
+                player.play();
+            }
+        });
+    }
+
+    public void skipToPrevious() {
+        runOnPlayerThread(() -> {
+            if (player == null) return;
+            if (player.getCurrentPosition() > 3_000) {
+                player.seekTo(0);
+                return;
+            }
+            if (player.hasPreviousMediaItem()) {
+                player.seekToPreviousMediaItem();
+                player.play();
+            }
+        });
+    }
 
     // ── Notification ─────────────────────────────────────────────────────────
 
@@ -625,6 +706,18 @@ public class MusicService extends Service {
 
     private void ensureForeground() {
         promoteNotification(buildFallbackNotification());
+    }
+
+    private void updatePlaybackMinuteReporting() {
+        if (Looper.myLooper() != Looper.getMainLooper()) {
+            mainHandler.post(this::updatePlaybackMinuteReporting);
+            return;
+        }
+        mainHandler.removeCallbacks(playbackMinuteReporter);
+        if (player == null || !player.isPlaying() || currentTrackId <= 0 || baseUrl == null || baseUrl.isEmpty()) {
+            return;
+        }
+        mainHandler.postDelayed(playbackMinuteReporter, 60_000);
     }
 
     private void promoteNotification(Notification notification) {

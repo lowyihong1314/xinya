@@ -34,7 +34,7 @@ fi
 echo "==> [1/4] Building React bundle (APK mode)..."
 npm run build:apk
 
-echo "==> [2/4] Generating Android launcher icons from logo..."
+echo "==> [2/4] Generating Android launcher icons and splash logo from logo..."
 node <<'NODE'
 const sharp = require('sharp');
 const path = require('path');
@@ -42,6 +42,7 @@ const fs = require('fs');
 
 const SRC = path.resolve('../static/images/logo/log222o.png');
 const RES = path.resolve('android/app/src/main/res');
+const SPLASH_DRAWABLE_DIR = path.join(RES, 'drawable-nodpi');
 const LEGACY_DENSITIES = [
   { dir: 'mipmap-mdpi', size: 48 },
   { dir: 'mipmap-hdpi', size: 72 },
@@ -58,6 +59,29 @@ const ADAPTIVE_DENSITIES = [
 ];
 const ICON_BACKGROUND = '#FFFFFF';
 
+async function renderContainedCanvas(size, innerRatio, background) {
+  const innerSize = Math.round(size * innerRatio);
+  return sharp({
+    create: {
+      width: size,
+      height: size,
+      channels: 4,
+      background,
+    },
+  })
+    .composite([
+      {
+        input: await sharp(SRC)
+          .resize(innerSize, innerSize, { fit: 'contain' })
+          .png()
+          .toBuffer(),
+        gravity: 'center',
+      },
+    ])
+    .png()
+    .toBuffer();
+}
+
 const adaptiveIconXml = `<?xml version="1.0" encoding="utf-8"?>
 <adaptive-icon xmlns:android="http://schemas.android.com/apk/res/android">
     <background android:drawable="@color/ic_launcher_background" />
@@ -70,13 +94,35 @@ const adaptiveIconXml = `<?xml version="1.0" encoding="utf-8"?>
     throw new Error(`Logo file not found: ${SRC}`);
   }
 
+  const splashCanvasSize = 1024;
+  const splashLogoSize = 560;
+  fs.mkdirSync(SPLASH_DRAWABLE_DIR, { recursive: true });
+  const splashLogo = await sharp({
+    create: {
+      width: splashCanvasSize,
+      height: splashCanvasSize,
+      channels: 4,
+      background: { r: 0, g: 0, b: 0, alpha: 0 },
+    },
+  })
+    .composite([
+      {
+        input: await sharp(SRC)
+          .resize(splashLogoSize, splashLogoSize, { fit: 'contain' })
+          .png()
+          .toBuffer(),
+        gravity: 'center',
+      },
+    ])
+    .png()
+    .toBuffer();
+
+  fs.writeFileSync(path.join(SPLASH_DRAWABLE_DIR, 'splash_logo.png'), splashLogo);
+
   for (const { dir, size } of LEGACY_DENSITIES) {
     const dest = path.join(RES, dir);
     fs.mkdirSync(dest, { recursive: true });
-    const buf = await sharp(SRC)
-      .resize(size, size, { fit: 'contain' })
-      .png()
-      .toBuffer();
+    const buf = await renderContainedCanvas(size, 0.78, { r: 255, g: 255, b: 255, alpha: 1 });
 
     fs.writeFileSync(path.join(dest, 'ic_launcher.png'), buf);
     fs.writeFileSync(path.join(dest, 'ic_launcher_round.png'), buf);
@@ -85,10 +131,7 @@ const adaptiveIconXml = `<?xml version="1.0" encoding="utf-8"?>
   for (const { dir, size } of ADAPTIVE_DENSITIES) {
     const dest = path.join(RES, dir);
     fs.mkdirSync(dest, { recursive: true });
-    const buf = await sharp(SRC)
-      .resize(size, size, { fit: 'contain', background: { r: 0, g: 0, b: 0, alpha: 0 } })
-      .png()
-      .toBuffer();
+    const buf = await renderContainedCanvas(size, 0.64, { r: 0, g: 0, b: 0, alpha: 0 });
 
     fs.writeFileSync(path.join(dest, 'ic_launcher_foreground.png'), buf);
   }

@@ -1,6 +1,8 @@
 package com.xinya.app;
 
 import android.net.Uri;
+import android.os.Handler;
+import android.os.Looper;
 import android.webkit.CookieManager;
 import android.webkit.MimeTypeMap;
 
@@ -24,8 +26,10 @@ import java.net.URL;
 import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
 import java.util.Locale;
+import java.util.concurrent.Callable;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
+import java.util.concurrent.FutureTask;
 
 @CapacitorPlugin(name = "NativeMediaCache")
 public class NativeMediaCachePlugin extends Plugin {
@@ -33,6 +37,7 @@ public class NativeMediaCachePlugin extends Plugin {
     private static final String CACHE_DIR_NAME = "native-media-cache";
 
     private final ExecutorService executor = Executors.newFixedThreadPool(2);
+    private final Handler mainHandler = new Handler(Looper.getMainLooper());
     private File cacheRoot;
 
     @Override
@@ -193,6 +198,8 @@ public class NativeMediaCachePlugin extends Plugin {
     private DownloadResult downloadToTempFile(String sourceUrl, String hash) throws Exception {
         File tempFile = File.createTempFile(hash, ".download", cacheRoot);
         HttpURLConnection connection = null;
+        final String cookie = readCookieOnMainThread(sourceUrl);
+        final String userAgent = readUserAgentOnMainThread();
 
         try {
             URL url = new URL(sourceUrl);
@@ -202,16 +209,12 @@ public class NativeMediaCachePlugin extends Plugin {
             connection.setReadTimeout(60000);
             connection.setInstanceFollowRedirects(true);
 
-            String cookie = CookieManager.getInstance().getCookie(sourceUrl);
             if (cookie != null && !cookie.isEmpty()) {
                 connection.setRequestProperty("Cookie", cookie);
             }
 
-            if (getBridge() != null && getBridge().getWebView() != null) {
-                String userAgent = getBridge().getWebView().getSettings().getUserAgentString();
-                if (userAgent != null && !userAgent.isEmpty()) {
-                    connection.setRequestProperty("User-Agent", userAgent);
-                }
+            if (userAgent != null && !userAgent.isEmpty()) {
+                connection.setRequestProperty("User-Agent", userAgent);
             }
 
             int statusCode = connection.getResponseCode();
@@ -412,11 +415,48 @@ public class NativeMediaCachePlugin extends Plugin {
     }
 
     private void dispatchToMainThread(Runnable action) {
-        if (getActivity() != null) {
-            getActivity().runOnUiThread(action);
+        if (Looper.myLooper() == Looper.getMainLooper()) {
+            action.run();
             return;
         }
-        action.run();
+        mainHandler.post(action);
+    }
+
+    private String readCookieOnMainThread(String sourceUrl) {
+        return callOnMainThread(() -> CookieManager.getInstance().getCookie(sourceUrl), null);
+    }
+
+    private String readUserAgentOnMainThread() {
+        return callOnMainThread(() -> {
+            if (getBridge() == null || getBridge().getWebView() == null) {
+                return null;
+            }
+            return getBridge().getWebView().getSettings().getUserAgentString();
+        }, null);
+    }
+
+    private <T> T callOnMainThread(Callable<T> action, T fallback) {
+        if (Looper.myLooper() == Looper.getMainLooper()) {
+            try {
+                return action.call();
+            } catch (Exception error) {
+                return fallback;
+            }
+        }
+
+        FutureTask<T> task = new FutureTask<>(() -> {
+            try {
+                return action.call();
+            } catch (Exception error) {
+                return fallback;
+            }
+        });
+        mainHandler.post(task);
+        try {
+            return task.get();
+        } catch (Exception error) {
+            return fallback;
+        }
     }
 
     private static final class CacheEntry {
