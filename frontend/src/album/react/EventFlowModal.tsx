@@ -8,7 +8,8 @@ import {
   reorderEventFlows,
   updateEventFlow,
 } from "../../event/shared/api";
-import { ensureDesignTokens } from "../../theme/designTokens";
+import { showConfirmDialog } from "../../js/dialogs";
+import { useEnsureDesignTokens } from "../../theme/designTokens";
 import type { EventDetailRecord, EventFlowRecord } from "../../event/shared/types";
 
 type Props = {
@@ -25,7 +26,7 @@ type EditorState = {
 };
 
 export function EventFlowModal({ detail, canEdit = false, onClose }: Props) {
-  ensureDesignTokens();
+  useEnsureDesignTokens();
 
   const [flows, setFlows] = useState<EventFlowRecord[]>([]);
   const [loading, setLoading] = useState(true);
@@ -87,7 +88,7 @@ export function EventFlowModal({ detail, canEdit = false, onClose }: Props) {
     if (!canEdit) {
       return;
     }
-    if (!window.confirm("确定删除该流程？")) {
+    if (!(await showConfirmDialog({ message: "确定删除该流程？", tone: "danger" }))) {
       return;
     }
     setSaving(true);

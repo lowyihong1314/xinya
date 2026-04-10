@@ -2,6 +2,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import type { ChangeEvent } from "react";
 
 import { useUserState } from "../../../../app/UserState";
+import { showConfirmDialog, showPromptDialog } from "../../../../js/dialogs";
 import { showEventPicker } from "../../../shared/showEventPicker";
 import { render_sign_modal } from "../../../../../../static/js/sign_tools.js";
 import { decideClaim, deleteClaim, fetchClaims, submitClaim } from "./api";
@@ -274,8 +275,19 @@ export function ClaimWorkspace() {
 
     const comment =
       action === "reject"
-        ? window.prompt("拒绝原因") || ""
-        : window.prompt("审批备注（可选）") || "";
+        ? (await showPromptDialog({
+            title: "拒绝申请",
+            message: "拒绝原因",
+            placeholder: "请输入拒绝原因",
+            multiline: true,
+            tone: "danger",
+          })) || ""
+        : (await showPromptDialog({
+            title: "审批备注",
+            message: "审批备注（可选）",
+            placeholder: "可留空",
+            multiline: true,
+          })) || "";
 
     if (action === "reject" && !comment.trim()) {
       setError("拒绝必须填写原因");
@@ -315,7 +327,10 @@ export function ClaimWorkspace() {
       return;
     }
 
-    const confirmed = window.confirm(`确认删除申请 #${selectedClaim.id} 吗？此操作无法撤销。`);
+    const confirmed = await showConfirmDialog({
+      message: `确认删除申请 #${selectedClaim.id} 吗？此操作无法撤销。`,
+      tone: "danger",
+    });
     if (!confirmed) {
       return;
     }

@@ -1,12 +1,12 @@
 import type { AboutEntry, HistoryEntry, TreeHoleEntry } from "./types";
 import { apiFetch } from "../../js/apiFetch";
 
-async function parseJson(response: Response) {
+async function parseJson<T = unknown>(response: Response): Promise<T> {
   const data = await response.json();
   if (!response.ok) {
-    throw new Error(data.error || data.message || "Request failed");
+    throw new Error((data as { error?: string; message?: string }).error || (data as { error?: string; message?: string }).message || "Request failed");
   }
-  return data;
+  return data as T;
 }
 
 export async function fetchHeroImage() {

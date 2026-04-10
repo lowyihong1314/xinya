@@ -9,7 +9,8 @@ import { PageHero } from "../../components/PageHero";
 import { UserCard } from "../../CRM/user_control/react/UserControlView";
 import { fetchAllUsers } from "../../CRM/user_control/react/api";
 import type { UserRecord } from "../../CRM/user_control/react/types";
-import { ensureDesignTokens } from "../../theme/designTokens";
+import { showConfirmDialog } from "../../js/dialogs";
+import { useEnsureDesignTokens } from "../../theme/designTokens";
 import {
   createTreeHoleEntry,
   deleteTreeHoleEntry,
@@ -61,7 +62,7 @@ type EditorState =
   | null;
 
 export function InfoPage() {
-  ensureDesignTokens();
+  useEnsureDesignTokens();
 
   const { section = "history" } = useParams();
   const { user, isAuthenticated, isMobile } = useUserState();
@@ -175,7 +176,7 @@ export function InfoPage() {
   }
 
   async function handleDeleteAbout(id: number) {
-    if (!window.confirm("确认删除这段简介？")) return;
+    if (!(await showConfirmDialog({ message: "确认删除这段简介？", tone: "danger" }))) return;
     try {
       await deleteAboutEntry(id);
       setAboutEntries((prev) => prev.filter((item) => item.id !== id));
@@ -186,7 +187,7 @@ export function InfoPage() {
   }
 
   async function handleDeleteHistory(id: number) {
-    if (!window.confirm("确认删除这段历史？")) return;
+    if (!(await showConfirmDialog({ message: "确认删除这段历史？", tone: "danger" }))) return;
     try {
       await deleteHistoryEntry(id);
       setHistoryEntries((prev) => prev.filter((item) => item.id !== id));
@@ -579,7 +580,7 @@ function TreeHoleSection(props: {
   }
 
   async function handleDelete(entryId: number) {
-    if (!window.confirm("确认删除这条树洞留言？")) return;
+    if (!(await showConfirmDialog({ message: "确认删除这条树洞留言？", tone: "danger" }))) return;
     try {
       await props.onDelete(entryId);
       if (editingId === entryId) {
@@ -1224,9 +1225,16 @@ const treeHoleHintCardStyle: CSSProperties = {
 };
 
 const treeHoleTextAreaStyle: CSSProperties = {
-  ...textAreaStyle,
+  width: "100%",
   minHeight: "180px",
+  borderRadius: "var(--x-radius-md)",
+  border: "1px solid var(--x-color-line)",
+  padding: "14px 16px",
   marginTop: 0,
+  resize: "vertical",
+  font: "inherit",
+  lineHeight: 1.8,
+  boxSizing: "border-box",
 };
 
 const treeHoleFormActionsStyle: CSSProperties = {

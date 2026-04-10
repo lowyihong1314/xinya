@@ -1,3 +1,5 @@
+import { useInsertionEffect } from "react";
+
 const STYLE_ID = "xinya-design-tokens";
 
 export const designTokens = {
@@ -52,6 +54,10 @@ export const designTokens = {
 };
 
 export function ensureDesignTokens() {
+  if (typeof document === "undefined") {
+    return;
+  }
+
   if (document.getElementById(STYLE_ID)) {
     return;
   }
@@ -105,4 +111,10 @@ export function ensureDesignTokens() {
     }
   `;
   document.head.appendChild(style);
+}
+
+export function useEnsureDesignTokens() {
+  useInsertionEffect(() => {
+    ensureDesignTokens();
+  }, []);
 }

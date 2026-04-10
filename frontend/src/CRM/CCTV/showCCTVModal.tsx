@@ -1,8 +1,8 @@
 import { useEffect, useRef } from "react";
-import { createRoot } from "react-dom/client";
 import type { CSSProperties } from "react";
 import Hls from "hls.js";
 
+import { openOverlay } from "../../app/OverlayProvider";
 import { CachedVideo } from "../../components/CachedMedia";
 import { apiFetch } from "../../js/apiFetch";
 
@@ -103,18 +103,7 @@ function CCTVPlayerModal({
 }
 
 export function showCCTVModal(hlsUrl = "/cctv_rdsp_converd/cam1/live.m3u8") {
-  const host = document.createElement("div");
-  document.body.appendChild(host);
-  const root = createRoot(host);
-
-  const close = () => {
-    queueMicrotask(() => {
-      root.unmount();
-      host.remove();
-    });
-  };
-
-  root.render(<CCTVPlayerModal hlsUrl={hlsUrl} onClose={close} />);
+  openOverlay((close) => <CCTVPlayerModal hlsUrl={hlsUrl} onClose={close} />);
 }
 
 const overlayStyle: CSSProperties = {

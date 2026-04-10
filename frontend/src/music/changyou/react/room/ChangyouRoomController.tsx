@@ -5,7 +5,8 @@ import { useNavigate } from "react-router-dom";
 
 import { useUserState } from "../../../../app/UserState";
 import { IS_APK } from "../../../../js/apiBase";
-import { ensureDesignTokens } from "../../../../theme/designTokens";
+import { useBaseNavbarVisibility } from "../../../../router/AppChromeContext";
+import { useEnsureDesignTokens } from "../../../../theme/designTokens";
 import {
   CHANGYOU_ROOM_PATH,
   getChangyouPublicRoomPath,
@@ -173,7 +174,7 @@ function getProjectionBlocks(projection: ChangyouRoomProjection | null | undefin
 }
 
 export function ChangyouRoomController({ roomId }: { roomId: string }) {
-  ensureDesignTokens();
+  useEnsureDesignTokens();
 
   const navigate = useNavigate();
   const { isMobile } = useUserState();
@@ -212,6 +213,8 @@ export function ChangyouRoomController({ roomId }: { roomId: string }) {
 
   const selectedSongId = selectedEntry?.id || null;
 
+  useBaseNavbarVisibility(!hideNav);
+
   useEffect(() => {
     if (typeof window !== "undefined") {
       window.localStorage.setItem(FONT_SIZE_STORAGE_KEY, String(fontSize));
@@ -228,16 +231,6 @@ export function ChangyouRoomController({ roomId }: { roomId: string }) {
     if (typeof window !== "undefined") {
       window.localStorage.setItem(HIDE_NAV_STORAGE_KEY, hideNav ? "1" : "0");
     }
-    const navbar = document.getElementById("base_navbar");
-    if (navbar) {
-      navbar.style.display = hideNav ? "none" : "flex";
-    }
-    return () => {
-      const currentNavbar = document.getElementById("base_navbar");
-      if (currentNavbar) {
-        currentNavbar.style.display = "flex";
-      }
-    };
   }, [hideNav]);
 
   async function loadEntry(targetEntryId: number, options?: { versionKind?: "base" | "user"; editorUserId?: number | null }) {

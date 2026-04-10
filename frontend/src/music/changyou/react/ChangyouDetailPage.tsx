@@ -3,7 +3,8 @@ import type { CSSProperties } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 
 import { useUserState } from "../../../app/UserState";
-import { ensureDesignTokens } from "../../../theme/designTokens";
+import { useBaseNavbarVisibility } from "../../../router/AppChromeContext";
+import { useEnsureDesignTokens } from "../../../theme/designTokens";
 import { CHANGYOU_PATH } from "../../router/paths";
 import { deleteMySongbookEdit, fetchSongbookEntry, saveMySongbookEdit } from "./api";
 import type { SongbookEntry, SongbookVersionOption } from "./types";
@@ -130,7 +131,7 @@ function formatVersionMeta(option: SongbookVersionOption) {
 }
 
 export function ChangyouDetailPage() {
-  ensureDesignTokens();
+  useEnsureDesignTokens();
 
   const navigate = useNavigate();
   const { entryId } = useParams();
@@ -157,6 +158,8 @@ export function ChangyouDetailPage() {
     return saved && CHORD_FAMILY_OPTIONS.includes(saved) ? saved : "original";
   });
 
+  useBaseNavbarVisibility(!hideNav);
+
   useEffect(() => {
     if (typeof window !== "undefined") {
       window.localStorage.setItem(FONT_SIZE_STORAGE_KEY, String(fontSize));
@@ -173,16 +176,6 @@ export function ChangyouDetailPage() {
     if (typeof window !== "undefined") {
       window.localStorage.setItem(HIDE_NAV_STORAGE_KEY, hideNav ? "1" : "0");
     }
-    const navbar = document.getElementById("base_navbar");
-    if (navbar) {
-      navbar.style.display = hideNav ? "none" : "flex";
-    }
-    return () => {
-      const currentNavbar = document.getElementById("base_navbar");
-      if (currentNavbar) {
-        currentNavbar.style.display = "flex";
-      }
-    };
   }, [hideNav]);
 
   async function loadEntry(editorUserId?: number | null) {

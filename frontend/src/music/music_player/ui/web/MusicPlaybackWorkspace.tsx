@@ -2,7 +2,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import type { CSSProperties, ReactNode } from "react";
 
 import { API_BASE } from "../../../../js/apiBase";
-import { ensureDesignTokens } from "../../../../theme/designTokens";
+import { useEnsureDesignTokens } from "../../../../theme/designTokens";
 import { resolveTrackAlbumName } from "../../logic/musicCoverUtils";
 import { useMusicPlayback } from "../../logic/MusicPlaybackContext";
 import { DesktopMusicSectionSidebar } from "../desktop/DesktopMusicSectionSidebar";
@@ -11,6 +11,7 @@ import { type MusicPlaybackSection } from "../mobile/MobileMusicSectionNav";
 import { MusicListeningPanel } from "../shared/MusicListeningPanel";
 import { MusicPlayerPanel } from "../shared/MusicPlayerPanel";
 import { MusicQueuePanel } from "../shared/MusicQueuePanel";
+import type { ListeningSessionRecord } from "../shared/listeningActivityShared";
 
 export type { MusicPlaybackSection } from "../mobile/MobileMusicSectionNav";
 
@@ -39,16 +40,9 @@ export function MusicPlaybackWorkspace({
   listeningTimezone: string;
   listeningTotalMinutes: number;
   listeningUniqueListeners: number;
-  listeningSessions: Array<{
-    minute_count: number;
-    music_id?: number | null;
-    music_title?: string | null;
-    end_at: string;
-    display_name?: string | null;
-    username?: string | null;
-  }>;
+  listeningSessions: ListeningSessionRecord[];
 }) {
-  ensureDesignTokens();
+  useEnsureDesignTokens();
 
   const {
     albums,

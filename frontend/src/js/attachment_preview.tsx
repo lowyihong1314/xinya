@@ -1,7 +1,7 @@
-import { useEffect, useState } from "react";
-import { createRoot } from "react-dom/client";
+import { useEffect, useState, type CSSProperties } from "react";
 import heic2any from "heic2any";
 
+import { openOverlay } from "../app/OverlayProvider";
 import { CachedImage, CachedVideo } from "../components/CachedMedia";
 import { apiFetch } from "./apiFetch";
 
@@ -423,21 +423,10 @@ function InfoPill({ label, value }: { label: string; value: string }) {
 }
 
 export async function openPreviewModal(attachment: AttachmentRecord) {
-  document.querySelectorAll("[data-xinya-preview-root='true']").forEach((node) => node.remove());
-
-  const host = document.createElement("div");
-  host.dataset.xinyaPreviewRoot = "true";
-  document.body.appendChild(host);
-  const root = createRoot(host);
-
-  const close = () => {
-    queueMicrotask(() => {
-      root.unmount();
-      host.remove();
-    });
-  };
-
-  root.render(<AttachmentPreviewModal attachment={attachment} onClose={close} />);
+  openOverlay(
+    (close) => <AttachmentPreviewModal attachment={attachment} onClose={close} />,
+    { key: "xinya-attachment-preview" },
+  );
 }
 
 function overlayStyle(isMobile: boolean): CSSProperties {

@@ -1,12 +1,13 @@
 import { useEffect, useRef, useState } from "react";
 
-import { ensureDesignTokens } from "../../../../theme/designTokens";
+import { useAppChrome } from "../../../../router/AppChromeContext";
+import { useEnsureDesignTokens } from "../../../../theme/designTokens";
 import { MusicPlaybackWorkspace } from "./MusicPlaybackWorkspace";
 import { MusicWorkspacePanel } from "./MusicWorkspacePanel";
 import { useMusicWorkspace } from "../../logic/useMusicWorkspace";
 
 export function MusicPage() {
-  ensureDesignTokens();
+  useEnsureDesignTokens();
 
   const [activeSection, setActiveSection] = useState<"browse" | "player" | "queue" | "history">("browse");
   const [layoutMetrics, setLayoutMetrics] = useState({
@@ -14,6 +15,7 @@ export function MusicPage() {
     stickyTop: 84,
   });
   const shellRef = useRef<HTMLDivElement | null>(null);
+  const { navbarHeight } = useAppChrome();
   const { state, actions } = useMusicWorkspace();
 
   useEffect(() => {
@@ -24,13 +26,11 @@ export function MusicPage() {
 
     let frame = 0;
     const measure = () => {
-      const navbar = document.getElementById("base_navbar");
-      const navHeight = navbar?.getBoundingClientRect().height ?? 0;
       const shellStyle = window.getComputedStyle(shell);
       const paddingTop = parseFloat(shellStyle.paddingTop || "0") || 0;
       const paddingBottom = parseFloat(shellStyle.paddingBottom || "0") || 0;
-      const nextHeight = Math.max(320, Math.round(window.innerHeight - navHeight - paddingTop - paddingBottom));
-      const nextStickyTop = Math.round(navHeight + paddingTop);
+      const nextHeight = Math.max(320, Math.round(window.innerHeight - navbarHeight - paddingTop - paddingBottom));
+      const nextStickyTop = Math.round(navbarHeight + paddingTop);
 
       setLayoutMetrics((current) => {
         if (current.contentHeight === nextHeight && current.stickyTop === nextStickyTop) {
@@ -50,12 +50,8 @@ export function MusicPage() {
 
     scheduleMeasure();
 
-    const navbar = document.getElementById("base_navbar");
     const observer = typeof ResizeObserver !== "undefined" ? new ResizeObserver(scheduleMeasure) : null;
     observer?.observe(shell);
-    if (navbar) {
-      observer?.observe(navbar);
-    }
 
     window.addEventListener("resize", scheduleMeasure);
 
@@ -64,7 +60,7 @@ export function MusicPage() {
       window.removeEventListener("resize", scheduleMeasure);
       observer?.disconnect();
     };
-  }, []);
+  }, [navbarHeight]);
 
   return (
     <div ref={shellRef} style={pageShellStyle(state.isMobile)}>

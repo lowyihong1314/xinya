@@ -1,8 +1,10 @@
 import { CSSProperties, useEffect, useMemo, useState } from "react";
 
 import { useUserState } from "../../app/UserState";
+import { showConfirmDialog } from "../../js/dialogs";
 import { get_phone_on_localhost } from "../../js/get_phone_on_localhost";
-import { ensureDesignTokens } from "../../theme/designTokens";
+import { useEnsureDesignTokens } from "../../theme/designTokens";
+import { takeLegacyLampPaymentSelection } from "../legacyPaymentSelection";
 import {
   deleteLampRegistration,
   fetchAllRegistrations,
@@ -40,10 +42,6 @@ type LampFormState = {
 
 type ToastState = { type: "success" | "error"; text: string } | null;
 
-type LampPageProps = {
-  hostElement?: HTMLElement | null;
-};
-
 function loadDrafts(): LampDraft[] {
   try {
     const raw = localStorage.getItem("lamp_drafts");
@@ -69,12 +67,8 @@ function createInitialForm(): LampFormState {
   };
 }
 
-function resolveHostElement(hostElement?: HTMLElement | null) {
-  return hostElement || document.getElementById("app") || document.body;
-}
-
-export function LampPage({ hostElement }: LampPageProps) {
-  ensureDesignTokens();
+export function LampPage() {
+  useEnsureDesignTokens();
 
   const { user } = useUserState();
   const isAuthenticated = Boolean(user);
@@ -87,9 +81,14 @@ export function LampPage({ hostElement }: LampPageProps) {
   const [toast, setToast] = useState<ToastState>(null);
   const [form, setForm] = useState<LampFormState>(createInitialForm());
   const [paymentDrafts, setPaymentDrafts] = useState<LampDraft[] | null>(null);
-  const paymentHost = resolveHostElement(hostElement);
 
   useEffect(() => {
+    const pendingPaymentDrafts = takeLegacyLampPaymentSelection<LampDraft>();
+    if (pendingPaymentDrafts?.length) {
+      setPaymentDrafts(pendingPaymentDrafts);
+      return;
+    }
+
     void loadInitial();
   }, []);
 
@@ -117,7 +116,7 @@ export function LampPage({ hostElement }: LampPageProps) {
   async function loadInitial() {
     setLoading(true);
     try {
-      const detectedPhone = await get_phone_on_localhost(paymentHost);
+      const detectedPhone = await get_phone_on_localhost();
       setPhone((detectedPhone || "").trim());
 
       const localDrafts = loadDrafts();
@@ -206,7 +205,7 @@ export function LampPage({ hostElement }: LampPageProps) {
   }
 
   async function removeDraft(id) {
-    if (!window.confirm("确认删除这笔点灯记录吗？")) return;
+    if (!(await showConfirmDialog({ message: "确认删除这笔点灯记录吗？", tone: "danger" }))) return;
     try {
       await deleteLampRegistration(id);
       const nextDrafts = drafts.filter((draft) => draft.id !== id);
@@ -232,10 +231,13 @@ export function LampPage({ hostElement }: LampPageProps) {
   if (paymentDrafts) {
     return (
       <LampPaymentPage
-        hostElement={paymentHost}
         selected={paymentDrafts}
-        onBack={() => setPaymentDrafts(null)}
+        onBack={() => {
+          setPaymentDrafts(null);
+          void loadInitial();
+        }}
         onCompleted={async () => {
+          setPaymentDrafts(null);
           await loadInitial();
         }}
       />

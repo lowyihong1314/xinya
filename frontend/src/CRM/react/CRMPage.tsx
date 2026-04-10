@@ -2,7 +2,7 @@ import { NavLink, Outlet, useLocation, useNavigate } from "react-router-dom";
 import type { CSSProperties } from "react";
 
 import { useUserState } from "../../app/UserState";
-import { ensureDesignTokens } from "../../theme/designTokens";
+import { useEnsureDesignTokens } from "../../theme/designTokens";
 import {
   CRM_MODULES,
   buildCRMModulePath,
@@ -10,7 +10,7 @@ import {
 } from "./crmModules";
 
 export function CRMPage() {
-  ensureDesignTokens();
+  useEnsureDesignTokens();
 
   const { isAuthenticated, openLogin, isMobile } = useUserState();
   const location = useLocation();

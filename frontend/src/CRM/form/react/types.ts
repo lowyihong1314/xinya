@@ -59,10 +59,11 @@ export type FormFieldSwitches = {
   parent_1?: boolean;
   parent_2?: boolean;
   parent_1_phone?: boolean;
+  address?: boolean;
   parent_2_phone?: boolean;
   medical?: boolean;
   allergy?: boolean;
-  address?: boolean;
+  other_remark?: boolean;
 };
 
 export type FormMemberTimeSlot = {
@@ -78,6 +79,7 @@ export type FormMember = {
   gender?: string;
   email?: string;
   address?: string;
+  other_remark?: string;
   nric?: string;
   parent_1?: string;
   parent_2?: string;
@@ -114,9 +116,10 @@ export type FormRecord = {
   parent_2?: boolean;
   parent_1_phone?: boolean;
   parent_2_phone?: boolean;
+  address?: boolean;
   medical?: boolean;
   allergy?: boolean;
-  address?: boolean;
+  other_remark?: boolean;
 };
 
 export type FormDetailResponse = {
@@ -139,9 +142,10 @@ export type FormCreatePayload = {
   parent_2?: boolean;
   parent_1_phone?: boolean;
   parent_2_phone?: boolean;
+  address?: boolean;
   medical?: boolean;
   allergy?: boolean;
-  address?: boolean;
+  other_remark?: boolean;
   extra_fields_config: Array<{
     label: string;
     field_type: string;

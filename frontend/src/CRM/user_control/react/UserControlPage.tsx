@@ -1,10 +1,10 @@
-import { ensureDesignTokens } from "../../../theme/designTokens";
+import { useEnsureDesignTokens } from "../../../theme/designTokens";
 import { useUserState } from "../../../app/UserState";
 import { useUserControlController } from "./useUserControlController";
 import { UserControlView } from "./UserControlView";
 
 export function UserControlPage() {
-  ensureDesignTokens();
+  useEnsureDesignTokens();
 
   const { isMobile } = useUserState();
   const { state, actions } = useUserControlController();

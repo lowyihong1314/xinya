@@ -7,9 +7,10 @@ import {
 } from "react";
 import type { ReactNode } from "react";
 
-import { ensureDesignTokens } from "../theme/designTokens";
+import { useEnsureDesignTokens } from "../theme/designTokens";
 import { apiFetch } from "../js/apiFetch";
 import { clearAllNativeResponseCache } from "../js/nativeResponseCache";
+import { navigateWithRouter } from "../router/navigationBridge";
 
 type UserData = {
   username?: string;
@@ -57,7 +58,7 @@ async function fetchCurrentUser(): Promise<CurrentUserFetchResult> {
 
 function navigateToLogin(from?: string) {
   const dest = from && from !== "/login" ? `/login?from=${encodeURIComponent(from)}` : "/login";
-  window.location.hash = dest;
+  navigateWithRouter(dest);
 }
 
 export function UserStateProvider({
@@ -67,7 +68,7 @@ export function UserStateProvider({
   children: ReactNode;
   initialIsMobile?: boolean;
 }) {
-  ensureDesignTokens();
+  useEnsureDesignTokens();
 
   const [user, setUser] = useState<UserData | null>(null);
   const [isMobile, setIsMobile] = useState(initialIsMobile);

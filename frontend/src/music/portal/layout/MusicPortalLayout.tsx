@@ -3,18 +3,21 @@ import type { CSSProperties } from "react";
 import { Outlet, useLocation, useNavigate } from "react-router-dom";
 
 import { useUserState } from "../../../app/UserState";
-import { ensureDesignTokens } from "../../../theme/designTokens";
+import { useEnsureDesignTokens } from "../../../theme/designTokens";
+import { useRegisterRouterNavigation } from "../../../router/navigationBridge";
 import { DesktopMusicPortalHeader } from "./DesktopMusicPortalHeader";
 import { MobileMusicPortalHeader } from "./MobileMusicPortalHeader";
 import { PORTAL_ITEMS } from "./portalNavItems";
 
 export function MusicPortalLayout() {
-  ensureDesignTokens();
+  useEnsureDesignTokens();
 
   const location = useLocation();
   const navigate = useNavigate();
   const { user, isAuthenticated, isMobile, loadingUser, logout, openLogin } = useUserState();
   const [loggingOut, setLoggingOut] = useState(false);
+
+  useRegisterRouterNavigation();
 
   const activeKey = useMemo(() => {
     const matched = PORTAL_ITEMS.find((item) => location.pathname.startsWith(item.path));

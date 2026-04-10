@@ -1,10 +1,12 @@
-import { useEffect, useRef } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import type { CSSProperties } from "react";
 import { Outlet, useLocation, useNavigate } from "react-router-dom";
 
 import { useUserState } from "../app/UserState";
 import { CHANGYOU_PATH, MUSIC_PLAYER_PATH, MUSIC_ROOT_PATH } from "../music/router/paths";
-import { ensureDesignTokens } from "../theme/designTokens";
+import { useEnsureDesignTokens } from "../theme/designTokens";
+import { AppChromeProvider } from "./AppChromeContext";
+import { useRegisterRouterNavigation } from "./navigationBridge";
 import { NAV_ITEMS, pageKeyFromPath, resolveLegacyPath } from "./routeConfig";
 
 const MUSIC_NAV_ITEMS = [
@@ -23,13 +25,18 @@ const MUSIC_NAV_ITEMS = [
 ] as const;
 
 export function AppLayout() {
-  ensureDesignTokens();
+  useEnsureDesignTokens();
 
   const location = useLocation();
   const navigate = useNavigate();
   const { user } = useUserState();
   const lastPrimaryPathRef = useRef("/");
+  const navbarRef = useRef<HTMLElement | null>(null);
   const isInsideMusicRouter = location.pathname.startsWith(MUSIC_ROOT_PATH);
+  const [navbarVisible, setNavbarVisible] = useState(true);
+  const [navbarHeight, setNavbarHeight] = useState(60);
+
+  useRegisterRouterNavigation();
 
   useEffect(() => {
     if (!isInsideMusicRouter) {
@@ -47,61 +54,100 @@ export function AppLayout() {
     navigate(resolveLegacyPath(legacyPage, searchParams), { replace: true });
   }, [location.search, navigate]);
 
+  useEffect(() => {
+    const navbar = navbarRef.current;
+    if (!navbar || typeof window === "undefined") {
+      return;
+    }
+
+    let frame = 0;
+    const measure = () => {
+      setNavbarHeight(Math.round(navbar.getBoundingClientRect().height));
+    };
+
+    const scheduleMeasure = () => {
+      window.cancelAnimationFrame(frame);
+      frame = window.requestAnimationFrame(measure);
+    };
+
+    scheduleMeasure();
+
+    const observer = typeof ResizeObserver !== "undefined" ? new ResizeObserver(scheduleMeasure) : null;
+    observer?.observe(navbar);
+    window.addEventListener("resize", scheduleMeasure);
+
+    return () => {
+      window.cancelAnimationFrame(frame);
+      window.removeEventListener("resize", scheduleMeasure);
+      observer?.disconnect();
+    };
+  }, [navbarVisible]);
+
   const visibleItems = NAV_ITEMS.filter(
     (item) => (!item.auth || user) && !(user && item.key === "login"),
   );
   const activeKey = pageKeyFromPath(location.pathname);
   const exitTarget = lastPrimaryPathRef.current || visibleItems[0]?.path || "/";
+  const chromeValue = useMemo(
+    () => ({
+      navbarHeight,
+      navbarVisible,
+      setNavbarVisible,
+    }),
+    [navbarHeight, navbarVisible],
+  );
 
   return (
-    <div style={shellStyle}>
-      <nav id="base_navbar" style={navbarStyle}>
-        {isInsideMusicRouter
-          ? MUSIC_NAV_ITEMS.map((item) => {
-              const isActive =
-                item.key === "changyou"
-                  ? location.pathname.startsWith(CHANGYOU_PATH)
-                  : location.pathname.startsWith(MUSIC_PLAYER_PATH);
+    <AppChromeProvider value={chromeValue}>
+      <div style={shellStyle}>
+        <nav id="base_navbar" ref={navbarRef} style={navbarStyle(navbarVisible)}>
+          {isInsideMusicRouter
+            ? MUSIC_NAV_ITEMS.map((item) => {
+                const isActive =
+                  item.key === "changyou"
+                    ? location.pathname.startsWith(CHANGYOU_PATH)
+                    : location.pathname.startsWith(MUSIC_PLAYER_PATH);
 
-              return (
+                return (
+                  <button
+                    key={item.key}
+                    title={item.title}
+                    type="button"
+                    onClick={() => navigate(item.path)}
+                    style={navButtonStyle(isActive)}
+                  >
+                    <i className={item.icon} />
+                  </button>
+                );
+              })
+            : visibleItems.map((item) => (
                 <button
                   key={item.key}
                   title={item.title}
                   type="button"
                   onClick={() => navigate(item.path)}
-                  style={navButtonStyle(isActive)}
+                  style={navButtonStyle(activeKey === item.key)}
                 >
                   <i className={item.icon} />
                 </button>
-              );
-            })
-          : visibleItems.map((item) => (
-              <button
-                key={item.key}
-                title={item.title}
-                type="button"
-                onClick={() => navigate(item.path)}
-                style={navButtonStyle(activeKey === item.key)}
-              >
-                <i className={item.icon} />
-              </button>
-            ))}
+              ))}
 
-        {isInsideMusicRouter ? (
-          <button
-            key="music-exit"
-            title="返回主导航"
-            type="button"
-            onClick={() => navigate(exitTarget)}
-            style={navButtonStyle(false)}
-          >
-            <i className="fas fa-right-from-bracket" />
-          </button>
-        ) : null}
-      </nav>
+          {isInsideMusicRouter ? (
+            <button
+              key="music-exit"
+              title="返回主导航"
+              type="button"
+              onClick={() => navigate(exitTarget)}
+              style={navButtonStyle(false)}
+            >
+              <i className="fas fa-right-from-bracket" />
+            </button>
+          ) : null}
+        </nav>
 
-      <Outlet />
-    </div>
+        <Outlet />
+      </div>
+    </AppChromeProvider>
   );
 }
 
@@ -110,17 +156,19 @@ const shellStyle: CSSProperties = {
   background: "var(--x-color-canvas)",
 };
 
-const navbarStyle: CSSProperties = {
-  height: "60px",
-  display: "flex",
-  justifyContent: "center",
-  alignItems: "center",
-  gap: "12px",
-  background: "linear-gradient(135deg, var(--x-color-nav-start), var(--x-color-nav-end))",
-  position: "sticky",
-  top: "0",
-  zIndex: 1000,
-};
+function navbarStyle(visible: boolean): CSSProperties {
+  return {
+    height: "60px",
+    display: visible ? "flex" : "none",
+    justifyContent: "center",
+    alignItems: "center",
+    gap: "12px",
+    background: "linear-gradient(135deg, var(--x-color-nav-start), var(--x-color-nav-end))",
+    position: "sticky",
+    top: "0",
+    zIndex: 1000,
+  };
+}
 
 function navButtonStyle(active: boolean): CSSProperties {
   return {

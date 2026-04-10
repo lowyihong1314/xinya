@@ -2,7 +2,8 @@ import { useEffect, useMemo, useState } from "react";
 import type { CSSProperties } from "react";
 
 import { useUserState } from "../../../app/UserState";
-import { ensureDesignTokens } from "../../../theme/designTokens";
+import { showConfirmDialog } from "../../../js/dialogs";
+import { useEnsureDesignTokens } from "../../../theme/designTokens";
 import {
   deleteSongbookEntry,
   fetchSongbookEntriesForAdmin,
@@ -16,7 +17,7 @@ const DEFAULT_IMPORT_PATH = "/home/yukang/flaskapp/xinya/tmp/songbook_import/son
 const PAGE_SIZE = 12;
 
 export function SongbookAdminPage() {
-  ensureDesignTokens();
+  useEnsureDesignTokens();
 
   const { isMobile } = useUserState();
   const [query, setQuery] = useState("");
@@ -136,7 +137,7 @@ export function SongbookAdminPage() {
 
   async function handleDelete() {
     if (!draft.id) return;
-    if (!window.confirm(`确认删除《${draft.title || "未命名歌曲"}》？`)) return;
+    if (!(await showConfirmDialog({ message: `确认删除《${draft.title || "未命名歌曲"}》？`, tone: "danger" }))) return;
     try {
       await deleteSongbookEntry(draft.id);
       setToast("已删除");

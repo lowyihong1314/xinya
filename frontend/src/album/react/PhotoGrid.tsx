@@ -1,9 +1,13 @@
 import { useEffect, useMemo, useState } from "react";
 import type { CSSProperties } from "react";
+import { useNavigate } from "react-router-dom";
 
 import { CacheMediaPlayer } from "../../components/CacheMediaPlayer";
 import type { AlbumFile, EventDetailRecord } from "../../event/shared/types";
 import { apiFetch } from "../../js/apiFetch";
+import { downloadBlob } from "../../js/browserActions";
+import { showConfirmDialog } from "../../js/dialogs";
+import { show_alert } from "../../js/show_alert";
 import { PhotoGridBatchActions } from "./PhotoGridBatchActions";
 import type { MediaNotification } from "./mediaRealtime";
 
@@ -181,16 +185,9 @@ export function PhotoGrid({
       }
 
       const blob = await response.blob();
-      const url = URL.createObjectURL(blob);
-      const anchor = document.createElement("a");
-      anchor.href = url;
-      anchor.download = `event-${detail.id}-${downloadType}.zip`;
-      document.body.appendChild(anchor);
-      anchor.click();
-      anchor.remove();
-      URL.revokeObjectURL(url);
+      downloadBlob(blob, `event-${detail.id}-${downloadType}.zip`);
     } catch (error) {
-      window.alert(error instanceof Error ? error.message : "下载失败");
+      show_alert("error", error instanceof Error ? error.message : "下载失败");
     } finally {
       setBusy(false);
     }
@@ -203,7 +200,7 @@ export function PhotoGrid({
     if (!selectedIds.length) {
       return;
     }
-    if (!window.confirm(`确认移除这 ${selectedIds.length} 张图片？`)) {
+    if (!(await showConfirmDialog({ message: `确认移除这 ${selectedIds.length} 张图片？`, tone: "danger" }))) {
       return;
     }
 
@@ -223,7 +220,7 @@ export function PhotoGrid({
       setSelectedIds([]);
       setSelectionMode(false);
     } catch (error) {
-      window.alert(error instanceof Error ? error.message : "移除失败");
+      show_alert("error", error instanceof Error ? error.message : "移除失败");
     } finally {
       setBusy(false);
     }
@@ -329,6 +326,8 @@ function PhotoCard({
   videoProgress?: VideoProgressState;
   onToggleSelect: (fileId: number) => void;
 }) {
+  const navigate = useNavigate();
+
   return (
     <button
       type="button"
@@ -338,7 +337,7 @@ function PhotoCard({
           onToggleSelect(file.id);
           return;
         }
-        window.location.hash = `#/image/${file.id}`;
+        navigate(`/image/${file.id}`);
       }}
     >
       {selectionMode ? (

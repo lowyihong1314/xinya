@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import type { CSSProperties } from "react";
 
 import { CacheMediaPlayer } from "../../components/CacheMediaPlayer";
-import { ensureDesignTokens } from "../../theme/designTokens";
+import { useEnsureDesignTokens } from "../../theme/designTokens";
 import { saveEvent, setEventPoster, uploadEventBrochure } from "../../event/shared/api";
 import type { AlbumFile, EventDetailRecord } from "../../event/shared/types";
 import { openBrochurePreviewModal } from "../../event/shared/brochurePreview";
@@ -20,7 +20,7 @@ type PosterThumbProps = {
 };
 
 export function EditEventModal({ detail, onClose, onSaved }: Props) {
-  ensureDesignTokens();
+  useEnsureDesignTokens();
   const posterFiles = detail.album_files || [];
   const posterPageSize = 15;
 

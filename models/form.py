@@ -55,9 +55,10 @@ class RegisForm(db.Model):
     parent_2 = db.Column(db.Boolean, nullable=False, default=False)
     parent_1_phone = db.Column(db.Boolean, nullable=False, default=True)
     parent_2_phone = db.Column(db.Boolean, nullable=False, default=False)
+    address = db.Column(db.Boolean, nullable=False, default=False)
     medical = db.Column(db.Boolean, nullable=False, default=False)
     allergy = db.Column(db.Boolean, nullable=False, default=False)
-    address = db.Column(db.Boolean, nullable=False, default=False)
+    other_remark = db.Column(db.Boolean, nullable=False, default=False)
 
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
 
@@ -85,9 +86,10 @@ class RegisForm(db.Model):
             "parent_2": bool(self.parent_2),
             "parent_1_phone": bool(self.parent_1_phone),
             "parent_2_phone": bool(self.parent_2_phone),
+            "address": bool(self.address),
             "medical": bool(self.medical),
             "allergy": bool(self.allergy),
-            "address": bool(self.address),
+            "other_remark": bool(self.other_remark),
         }
 
     def to_dict(self, is_public=False):
@@ -338,6 +340,7 @@ class RegisMemberData(db.Model):
     parent_2_phone = db.Column(db.String(20), nullable=True)
     medical = db.Column(db.Text, nullable=True)
     allergy = db.Column(db.Text, nullable=True)
+    other_remark = db.Column(db.Text, nullable=True)
     # ⭐ 新增：可用时间段（JSON）
     available_time_slot_json = db.Column(JSON, nullable=True)
 
@@ -374,6 +377,7 @@ class RegisMemberData(db.Model):
             "parent_2_phone": self.parent_2_phone,
             "medical": self.medical,
             "allergy": self.allergy,
+            "other_remark": self.other_remark,
             "available_time_slot_json": self.available_time_slot_json,
             "edit_at": self.edit_at.isoformat() if self.edit_at else None,
         }

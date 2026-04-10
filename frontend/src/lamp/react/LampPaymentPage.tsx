@@ -2,7 +2,7 @@ import { CSSProperties, useEffect, useMemo, useRef, useState } from "react";
 import QRCode from "qrcode";
 
 import { get_phone_on_localhost } from "../../js/get_phone_on_localhost";
-import { ensureDesignTokens } from "../../theme/designTokens";
+import { useEnsureDesignTokens } from "../../theme/designTokens";
 import { fetchLampByIds, postLampPayment } from "./api";
 
 type LampPayment = {
@@ -21,19 +21,17 @@ type LampOrder = {
 };
 
 type LampPaymentPageProps = {
-  hostElement?: HTMLElement | null;
   selected: LampOrder[];
   onBack: () => void;
   onCompleted?: () => Promise<void> | void;
 };
 
 export function LampPaymentPage({
-  hostElement,
   selected,
   onBack,
   onCompleted,
 }: LampPaymentPageProps) {
-  ensureDesignTokens();
+  useEnsureDesignTokens();
 
   const [orders, setOrders] = useState<LampOrder[]>([]);
   const [loading, setLoading] = useState(true);
@@ -56,7 +54,7 @@ export function LampPaymentPage({
 
   useEffect(() => {
     void loadPhone();
-  }, [hostElement]);
+  }, []);
 
   useEffect(() => {
     if (!toast) return;
@@ -98,9 +96,7 @@ export function LampPaymentPage({
 
   async function loadPhone() {
     try {
-      const currentPhone = await get_phone_on_localhost(
-        hostElement || document.getElementById("app") || document.body,
-      );
+      const currentPhone = await get_phone_on_localhost();
       setPhone((currentPhone || "").trim());
     } catch {
       setPhone("");

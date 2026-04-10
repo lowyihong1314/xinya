@@ -1,13 +1,13 @@
 import { useSearchParams } from "react-router-dom";
 
-import { ensureDesignTokens } from "../../../theme/designTokens";
+import { useEnsureDesignTokens } from "../../../theme/designTokens";
 import { useUserState } from "../../../app/UserState";
 import { getUserPermissionNames } from "../../../app/permissions";
 import { useFormWorkspace } from "./useFormWorkspace";
 import { FormWorkspaceView } from "./FormWorkspaceView";
 
 export function FormWorkspacePage() {
-  ensureDesignTokens();
+  useEnsureDesignTokens();
 
   const { user, isMobile } = useUserState();
   const [searchParams] = useSearchParams();

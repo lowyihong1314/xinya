@@ -1,37 +1,47 @@
 # fahui
 
-CRM dharma-event payment review module.
+CRM dharma-event workspace with YLP/Lamp entry selection, payment review, and YLP order lookup.
 
 ## Files
 
-- `FahuiPage.tsx`: searchable payment review board with approval, removal, and detail overlays.
-- `api.ts`: payment list fetch and review actions.
-- `types.ts`: payment, registration, and lamp item types.
+- `FahuiPage.tsx`: selection-first dharma-event workspace with page-level detail views for payment review and YLP order lookup.
+- `api.ts`: unified FAHUI review APIs plus YLP order/detail fetches.
+- `types.ts`: shared FAHUI payment types and YLP order/detail types.
 
 ## Scope
 
-This module currently focuses on lamp-registration payments that need CRM-side review:
+This module now covers:
 
-- list all payments
-- search by payer, phone, or devotee name
-- inspect linked registrations and lamp selections
-- approve a payment
-- remove or revoke a payment record
+- unified lamp + YLP payment review
+- selection-first entry flow: choose `YLP` or `Lamp` before entering the next tool
+- YLP order search by version and keyword
+- page-level detail views with Back navigation instead of modal overlays
+- YLP order detail lookup and quotation download
 
 ## Backend endpoints
 
-- `/api/lampRegistration_API/get_all_register_by_payment`
-- `/api/lampRegistration_API/approve_payment`
-- `/api/lampRegistration_API/remove_payment`
+- `/api/payment/review`
+- `/api/payment/review/:paymentId/approve`
+- `/api/payment/review/:paymentId/revoke`
+- `/api/payment/review/:paymentId`
+- `/api/fahui_router/versions`
+- `/api/fahui_router/orders/search`
+- `/api/fahui_router/orders/:orderId`
+- `/api/payment/orders/:orderId/payments`
+- `/api/payment/orders/:orderId/quotation`
+
+Legacy aliases such as `/api/fahui_router/get_versions`, `/api/payment/download_quotiton/:orderId`, and `/api/lampRegistration_API/approve_payment` are still preserved for backward compatibility.
 
 ## Important dependencies
 
-- `LAMP_META` is imported from `frontend/src/lamp/render_lamp_init.js` to render human-readable lamp labels.
+- `LAMP_META` is imported from `frontend/src/lamp/lampMeta.ts` to render human-readable lamp labels in the lamp review flow.
 
 ## Upgrade notes
 
 - This module depends on lamp-domain metadata from outside CRM, so changes to lamp type constants should be reviewed here too.
-- Approval state is inferred partly from `submitter_id` and `paid_at`, so backend response shape changes can affect card rendering.
+- Payment cards now distinguish `lamp` and `ylp` through a shared `type` field.
+- Approval state now has explicit `is_approved` / `status` fields, while `submitter_id` remains for avatar compatibility.
+- Detail interactions now stay inside the page view; destructive actions still use confirmation dialogs, but order/payment detail itself no longer opens in an overlay.
 
 ## React Router Migration Track
 

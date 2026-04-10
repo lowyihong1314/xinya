@@ -2,6 +2,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import type { ChangeEvent, CSSProperties } from "react";
 
 import { CachedImage } from "../../../../components/CachedMedia";
+import { showConfirmDialog } from "../../../../js/dialogs";
 import type { FormPayment } from "../../../form/react/types";
 import { designTokens } from "../../../../theme/designTokens";
 import { deleteRegisterPayment, replaceRegisterPaymentProof } from "./api";
@@ -83,7 +84,10 @@ export function PaymentDetailPanel({
     if (!payment || removing) {
       return;
     }
-    const shouldContinue = window.confirm(`确认移除付款记录 #${payment.id}？这个动作无法撤回。`);
+    const shouldContinue = await showConfirmDialog({
+      message: `确认移除付款记录 #${payment.id}？这个动作无法撤回。`,
+      tone: "danger",
+    });
     if (!shouldContinue) {
       return;
     }

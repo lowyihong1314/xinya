@@ -1,4 +1,4 @@
-import { createRoot } from "react-dom/client";
+import { openOverlay } from "../app/OverlayProvider";
 
 type AlertStatus = "success" | "error" | "loading";
 
@@ -18,56 +18,49 @@ function AlertModal({
   } as const;
 
   return (
-    <div style={overlayStyle}>
-      <div style={{ ...boxStyle, borderLeft: `6px solid ${colors[status]}` }}>
-        <div style={iconWrapStyle}>
-          {status === "loading" ? <div style={{ ...spinnerStyle, borderTopColor: colors.loading }} /> : null}
-          {status === "success" ? <div style={{ ...emojiStyle, color: colors.success }}>✓</div> : null}
-          {status === "error" ? <div style={{ ...emojiStyle, color: colors.error }}>✕</div> : null}
+    <>
+      <style>{`
+        @keyframes xinya-alert-spin {
+          0% { transform: rotate(0deg); }
+          100% { transform: rotate(360deg); }
+        }
+      `}</style>
+      <div style={overlayStyle}>
+        <div style={{ ...boxStyle, borderLeft: `6px solid ${colors[status]}` }}>
+          <div style={iconWrapStyle}>
+            {status === "loading" ? <div style={{ ...spinnerStyle, borderTopColor: colors.loading }} /> : null}
+            {status === "success" ? <div style={{ ...emojiStyle, color: colors.success }}>✓</div> : null}
+            {status === "error" ? <div style={{ ...emojiStyle, color: colors.error }}>✕</div> : null}
+          </div>
+
+          <div style={messageStyle}>{message}</div>
+
+          {status !== "loading" ? (
+            <button type="button" style={{ ...buttonStyle, background: colors[status] }} onClick={onClose}>
+              OK
+            </button>
+          ) : null}
         </div>
-
-        <div style={messageStyle}>{message}</div>
-
-        {status !== "loading" ? (
-          <button type="button" style={{ ...buttonStyle, background: colors[status] }} onClick={onClose}>
-            OK
-          </button>
-        ) : null}
       </div>
-    </div>
+    </>
   );
 }
 
 export function show_alert(status: AlertStatus, message: string) {
-  document.querySelectorAll("[data-xinya-alert-root='true']").forEach((node) => node.remove());
-
-  const host = document.createElement("div");
-  host.dataset.xinyaAlertRoot = "true";
-  document.body.appendChild(host);
-  const root = createRoot(host);
-
-  const close = () => {
-    queueMicrotask(() => {
-      root.unmount();
-      host.remove();
-    });
-  };
-
-  root.render(<AlertModal status={status} message={message} onClose={close} />);
+  const close = openOverlay(
+    (dismiss) => <AlertModal status={status} message={message} onClose={dismiss} />,
+    { key: "xinya-alert" },
+  );
 
   if (status === "loading") {
     window.setTimeout(() => {
-      if (host.isConnected) {
-        close();
-      }
+      close();
     }, 60000);
     return;
   }
 
   window.setTimeout(() => {
-    if (host.isConnected) {
-      close();
-    }
+    close();
   }, 3000);
 }
 
@@ -130,15 +123,3 @@ const buttonStyle = {
   fontSize: "14px",
   marginTop: "5px",
 };
-
-if (typeof document !== "undefined" && !document.getElementById("xinya-alert-react-style")) {
-  const style = document.createElement("style");
-  style.id = "xinya-alert-react-style";
-  style.textContent = `
-    @keyframes xinya-alert-spin {
-      0% { transform: rotate(0deg); }
-      100% { transform: rotate(360deg); }
-    }
-  `;
-  document.head.appendChild(style);
-}

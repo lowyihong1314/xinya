@@ -1,7 +1,8 @@
 import { useEffect, useState } from "react";
 import type { CSSProperties } from "react";
 
-import { designTokens, ensureDesignTokens } from "../../../../theme/designTokens";
+import { showPromptDialog } from "../../../../js/dialogs";
+import { designTokens, useEnsureDesignTokens } from "../../../../theme/designTokens";
 import { fetchPaymentVoucherShare } from "./api";
 import type { PaymentVoucherSharePayload } from "./types";
 
@@ -12,7 +13,7 @@ export function PaymentVoucherModal({
   claimId: number;
   onClose: () => void;
 }) {
-  ensureDesignTokens();
+  useEnsureDesignTokens();
 
   const [loading, setLoading] = useState(true);
   const [payload, setPayload] = useState<PaymentVoucherSharePayload | null>(null);
@@ -59,7 +60,13 @@ export function PaymentVoucherModal({
       setCopied(true);
       window.setTimeout(() => setCopied(false), 1600);
     } catch {
-      window.prompt("分享链接", payload.share_url);
+      await showPromptDialog({
+        title: "分享链接",
+        message: "请复制下面的链接",
+        initialValue: payload.share_url,
+        readOnly: true,
+        confirmText: "关闭",
+      });
     }
   }
 

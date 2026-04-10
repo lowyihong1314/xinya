@@ -2,13 +2,13 @@ import { useEffect, useState } from "react";
 import type { CSSProperties } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 
-import { ensureDesignTokens } from "../../../../theme/designTokens";
+import { useEnsureDesignTokens } from "../../../../theme/designTokens";
 import { CHANGYOU_PATH, getChangyouRoomPath } from "../../../router/paths";
 import { createChangyouRoom, fetchChangyouRooms, type ChangyouRoom } from "./api";
 import { ChangyouRoomController } from "./ChangyouRoomController";
 
 export function ChangyouRoomPage() {
-  ensureDesignTokens();
+  useEnsureDesignTokens();
 
   const navigate = useNavigate();
   const { roomId } = useParams();

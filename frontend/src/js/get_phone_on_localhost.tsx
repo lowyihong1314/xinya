@@ -1,6 +1,6 @@
 import { useState } from "react";
-import { createRoot } from "react-dom/client";
 
+import { openOverlay } from "../app/OverlayProvider";
 import { CachedImage } from "../components/CachedMedia";
 import { apiFetch } from "./apiFetch";
 import { show_alert } from "./show_alert";
@@ -48,7 +48,7 @@ function PhoneVerificationModal({
   async function sendOtp(channel: "sms" | "call" = "sms") {
     const rawPhone = phoneInput.trim();
     if (!rawPhone) {
-      window.alert("请输入手机号码");
+      show_alert("error", "请输入手机号码");
       return;
     }
 
@@ -77,7 +77,7 @@ function PhoneVerificationModal({
       setVerifyVisible(true);
       setCallVisible(channel === "sms");
     } catch (error) {
-      window.alert(error instanceof Error ? error.message : "发送失败");
+      show_alert("error", error instanceof Error ? error.message : "发送失败");
     } finally {
       setSending(false);
     }
@@ -87,7 +87,7 @@ function PhoneVerificationModal({
     const rawPhone = phoneInput.trim();
     const otp = otpInput.trim();
     if (!otp) {
-      window.alert("请输入验证码");
+      show_alert("error", "请输入验证码");
       return;
     }
 
@@ -105,7 +105,7 @@ function PhoneVerificationModal({
       localStorage.setItem("my_phone_number", phone);
       onResolve(phone);
     } catch (error) {
-      window.alert(error instanceof Error ? error.message : "验证失败");
+      show_alert("error", error instanceof Error ? error.message : "验证失败");
     } finally {
       setVerifying(false);
     }
@@ -160,7 +160,7 @@ function PhoneVerificationModal({
   );
 }
 
-export function get_phone_on_localhost(_hostElement?: HTMLElement | null): Promise<string> {
+export function get_phone_on_localhost(): Promise<string> {
   return new Promise((resolve) => {
     const saved = localStorage.getItem("my_phone_number");
     if (saved) {
@@ -168,19 +168,14 @@ export function get_phone_on_localhost(_hostElement?: HTMLElement | null): Promi
       return;
     }
 
-    const host = document.createElement("div");
-    document.body.appendChild(host);
-    const root = createRoot(host);
-
-    const finish = (phone: string) => {
-      queueMicrotask(() => {
-        root.unmount();
-        host.remove();
-      });
-      resolve(phone);
-    };
-
-    root.render(<PhoneVerificationModal onResolve={finish} />);
+    openOverlay((close) => (
+      <PhoneVerificationModal
+        onResolve={(phone) => {
+          close();
+          resolve(phone);
+        }}
+      />
+    ));
   });
 }
 

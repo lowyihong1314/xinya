@@ -1,13 +1,13 @@
 import { useNavigate } from "react-router-dom";
 
-import { ensureDesignTokens } from "../../../theme/designTokens";
+import { useEnsureDesignTokens } from "../../../theme/designTokens";
 import { useUserState } from "../../../app/UserState";
 import { useEventTableController } from "./useEventTableController";
 import { EventTableView } from "./EventTableView";
 import { hasUserPermission } from "../../../app/permissions";
 
 export function EventTablePage() {
-  ensureDesignTokens();
+  useEnsureDesignTokens();
 
   const { isMobile, user } = useUserState();
   const navigate = useNavigate();

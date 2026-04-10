@@ -98,7 +98,7 @@ export function ListeningActivityChart({
           backgroundColor: "rgba(15, 23, 42, 0.94)",
           titleFont: {
             size: 13,
-            weight: "700",
+            weight: 700,
           },
           bodyFont: {
             size: 12,
@@ -139,7 +139,7 @@ export function ListeningActivityChart({
             minRotation: isMobile ? 44 : 32,
             font: {
               size: isMobile ? 11 : 12,
-              weight: "600",
+              weight: 600,
             },
           },
         },
@@ -164,7 +164,7 @@ export function ListeningActivityChart({
             color: "rgba(15, 23, 42, 0.6)",
             font: {
               size: 11,
-              weight: "700",
+              weight: 700,
             },
           },
         },

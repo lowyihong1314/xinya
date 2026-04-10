@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import type { ReactNode } from "react";
+import type { CSSProperties, ReactNode } from "react";
 
 import { CachedImage } from "../../../../components/CachedMedia";
 import { apiFetch } from "../../../../js/apiFetch";
@@ -375,7 +375,7 @@ function DetailRow({ label, value }: { label: string; value?: string }) {
   );
 }
 
-function disabledStyle<T extends Record<string, unknown>>(style: T, disabled: boolean): T {
+function disabledStyle(style: CSSProperties, disabled: boolean): CSSProperties {
   if (!disabled) {
     return style;
   }

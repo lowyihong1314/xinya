@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
-import { createRoot } from "react-dom/client";
 
+import { openOverlay } from "../../app/OverlayProvider";
 import { apiFetch } from "../../js/apiFetch";
 import { smartImageURL } from "../../js/get_img";
 
@@ -329,19 +329,14 @@ function EventPickerModal({
 
 export function showEventPicker() {
   return new Promise<EventPickerRecord | null>((resolve) => {
-    const host = document.createElement("div");
-    document.body.appendChild(host);
-    const root = createRoot(host);
-
-    const close = (event: EventPickerRecord | null) => {
-      queueMicrotask(() => {
-        root.unmount();
-        host.remove();
-      });
-      resolve(event);
-    };
-
-    root.render(<EventPickerModal onClose={close} />);
+    openOverlay((close) => (
+      <EventPickerModal
+        onClose={(event) => {
+          close();
+          resolve(event);
+        }}
+      />
+    ));
   });
 }
 

@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
 
 import { useUserState } from "../../../app/UserState";
-import { ensureDesignTokens } from "../../../theme/designTokens";
+import { useEnsureDesignTokens } from "../../../theme/designTokens";
 import { CHANGYOU_ROOM_PATH, getChangyouDetailPath } from "../../router/paths";
 import { fetchSongbookEntries } from "./api";
 import type { SongbookEntry } from "./types";
@@ -38,7 +38,7 @@ function buildPagination(currentPage: number, totalPages: number) {
 }
 
 export function ChangyouPage() {
-  ensureDesignTokens();
+  useEnsureDesignTokens();
 
   const navigate = useNavigate();
   const { isMobile } = useUserState();

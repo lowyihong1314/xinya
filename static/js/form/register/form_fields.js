@@ -139,14 +139,21 @@ export function openFormFieldsModal(
   allergy.rows = 3;
   allergy.placeholder = "过敏信息（可留空）";
 
+  const otherRemark = document.createElement("textarea");
+  otherRemark.rows = 3;
+  otherRemark.placeholder = "其他备注（可留空）";
+
+  if (form.address) {
+    body.append(createStyledField("居住地址", address));
+  }
   if (form.medical) {
     body.append(createStyledField("医疗备注", medical));
   }
   if (form.allergy) {
     body.append(createStyledField("过敏", allergy));
   }
-  if (form.address) {
-    body.append(createStyledField("居住地址", address));
+  if (form.other_remark) {
+    body.append(createStyledField("其他备注", otherRemark));
   }
 
   const cfgs = Array.isArray(form.extra_field_configs)
@@ -277,6 +284,7 @@ export function openFormFieldsModal(
     medical.value = "";
     allergy.value = "";
     address.value = "";
+    otherRemark.value = "";
   };
 
   const backBtn = document.createElement("button");
@@ -341,6 +349,7 @@ export function openFormFieldsModal(
       parent_2_phone: form.parent_2 ? p2phone.value.trim() || null : null,
       medical: form.medical ? medical.value.trim() || null : null,
       allergy: form.allergy ? allergy.value.trim() || null : null,
+      other_remark: form.other_remark ? otherRemark.value.trim() || null : null,
       available_time_slot_json,
       extra_fields: extraFieldsPayload,
       parental_payload: parentalPayload || null,

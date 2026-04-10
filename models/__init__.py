@@ -14,6 +14,7 @@ MODEL_MODULES = (
     "models.music",
     "models.finance",
     "models.lampRegistration",
+    "models.fahui",
     "models.songbook",
     "models.songbook_user_edit",
     "models.youth_class_registration",

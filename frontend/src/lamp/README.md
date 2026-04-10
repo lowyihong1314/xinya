@@ -5,15 +5,15 @@ Lamp registration and payment feature.
 ## Route and compatibility entrypoints
 
 - Router path: `/lamp-registration`
-- Legacy compatibility mounts:
+- Compatibility entrypoints:
   - `render_lamp_init.js`
   - `render_payment_init.js`
 
 ## Structure
 
 - `react/`: primary React implementation for registration and payment
-- `render_lamp_init.js`: mounts `LampPage` into a legacy host node
-- `render_payment_init.js`: mounts `LampPaymentPage` for old callers and returns to `LampPage` after completion
+- `render_lamp_init.js`: asks the shared router bridge to open the lamp route
+- `render_payment_init.js`: stores the selected drafts and routes into the same lamp page flow
 
 ## Runtime flow
 
@@ -29,11 +29,10 @@ Lamp registration and payment feature.
 
 ## Upgrade notes
 
-- This module still supports both direct router rendering and older imperative render functions.
-- Payment is tightly coupled to the same host element because the legacy compatibility layer swaps between page components in place.
+- This module still supports both direct router rendering and older callers that enter through compatibility functions.
+- Payment now stays inside the routed React flow; compatibility code only bridges navigation and selected draft state.
 
-## React Router Migration Track
+## Next cleanup target
 
-- Lamp is not fully migrated while `render_lamp_init.js` and `render_payment_init.js` still swap React screens inside an arbitrary host node.
-- The target shape is route-native lamp flow, for example `/lamp-registration` plus a payment child route such as `/lamp-registration/payment`, with React Router carrying state instead of `hostElement` swapping.
-- Once all callers use the routed entry, remove the legacy render shims and the host-node assumptions inside the feature.
+- The next useful refinement is a nested payment route such as `/lamp-registration/payment`, so the current in-page payment state can move fully into React Router.
+- Once all callers use the routed entry directly, the compatibility shims can become thin aliases or disappear entirely.

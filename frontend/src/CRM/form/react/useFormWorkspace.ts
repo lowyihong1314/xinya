@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from "react";
 import { startTransition } from "react";
 
 import { open_parental_form } from "../../../../../static/js/form/parental/modal.js";
+import { showConfirmDialog } from "../../../js/dialogs";
 import { showEventPicker } from "../../shared/showEventPicker";
 import { showRegisterDetail } from "./showRegisterDetail";
 import {
@@ -40,9 +41,10 @@ function normalizeFieldSwitches(form: FormRecord | null): FormRecord | null {
     parent_2: form.field_switches?.parent_2 ?? Boolean(form.parent_2),
     parent_1_phone: form.field_switches?.parent_1_phone ?? Boolean(form.parent_1_phone),
     parent_2_phone: form.field_switches?.parent_2_phone ?? Boolean(form.parent_2_phone),
+    address: form.field_switches?.address ?? Boolean(form.address),
     medical: form.field_switches?.medical ?? Boolean(form.medical),
     allergy: form.field_switches?.allergy ?? Boolean(form.allergy),
-    address: form.field_switches?.address ?? Boolean(form.address),
+    other_remark: form.field_switches?.other_remark ?? Boolean(form.other_remark),
   };
 
   return {
@@ -182,7 +184,7 @@ export function useFormWorkspace(options?: { enabled?: boolean; canEditMembers?:
   }
 
   async function handleDeleteForm(formId: number) {
-    if (!window.confirm("确认删除这个报名表？")) {
+    if (!(await showConfirmDialog({ message: "确认删除这个报名表？", tone: "danger" }))) {
       return;
     }
     try {
@@ -297,9 +299,9 @@ export function useFormWorkspace(options?: { enabled?: boolean; canEditMembers?:
     try {
       await addExtraField(selectedFormId, payload);
       await refreshSelectedForm();
-      setToast({ type: "success", text: "扩展字段已添加" });
+      setToast({ type: "success", text: "表格内容已添加" });
     } catch (err) {
-      setToast({ type: "error", text: getErrorMessage(err, "添加扩展字段失败") });
+      setToast({ type: "error", text: getErrorMessage(err, "添加表格内容失败") });
     }
   }
 
@@ -310,9 +312,9 @@ export function useFormWorkspace(options?: { enabled?: boolean; canEditMembers?:
     try {
       await editExtraField(fieldId, payload);
       await refreshSelectedForm();
-      setToast({ type: "success", text: "扩展字段已更新" });
+      setToast({ type: "success", text: "表格内容已更新" });
     } catch (err) {
-      setToast({ type: "error", text: getErrorMessage(err, "更新扩展字段失败") });
+      setToast({ type: "error", text: getErrorMessage(err, "更新表格内容失败") });
     }
   }
 
@@ -320,9 +322,9 @@ export function useFormWorkspace(options?: { enabled?: boolean; canEditMembers?:
     try {
       await deleteExtraField(fieldId);
       await refreshSelectedForm();
-      setToast({ type: "success", text: "扩展字段已删除" });
+      setToast({ type: "success", text: "表格内容已删除" });
     } catch (err) {
-      setToast({ type: "error", text: getErrorMessage(err, "删除扩展字段失败") });
+      setToast({ type: "error", text: getErrorMessage(err, "删除表格内容失败") });
     }
   }
 
@@ -352,7 +354,7 @@ export function useFormWorkspace(options?: { enabled?: boolean; canEditMembers?:
 
   async function handleRemoveMember(memberId: number) {
     if (!selectedFormId) return;
-    if (!window.confirm("确认移出这个成员？")) return;
+    if (!(await showConfirmDialog({ message: "确认移出这个成员？", tone: "danger" }))) return;
     try {
       await removeMemberFromForm(selectedFormId, memberId);
       await refreshSelectedForm();

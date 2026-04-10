@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
-import { createRoot } from "react-dom/client";
 
+import { openOverlay } from "../app/OverlayProvider";
 import { CachedImage } from "../components/CachedMedia";
 import { apiFetch } from "../js/apiFetch";
 
@@ -171,19 +171,15 @@ function SelectUsersDialog({ maxId, onClose }: SelectUsersDialogProps) {
 
 export function select_users_modal(maxId = Infinity) {
   return new Promise<number[]>((resolve) => {
-    const host = document.createElement("div");
-    document.body.appendChild(host);
-    const root = createRoot(host);
-
-    const close = (selectedIds: number[]) => {
-      queueMicrotask(() => {
-        root.unmount();
-        host.remove();
-      });
-      resolve(selectedIds);
-    };
-
-    root.render(<SelectUsersDialog maxId={maxId} onClose={close} />);
+    openOverlay((close) => (
+      <SelectUsersDialog
+        maxId={maxId}
+        onClose={(selectedIds) => {
+          close();
+          resolve(selectedIds);
+        }}
+      />
+    ));
   });
 }
 

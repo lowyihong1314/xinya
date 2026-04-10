@@ -6,7 +6,9 @@ import { useUserState } from "../../../app/UserState";
 import { getUserPermissionNames } from "../../../app/permissions";
 import { CachedImage } from "../../../components/CachedMedia";
 import { apiFetch } from "../../../js/apiFetch";
-import { ensureDesignTokens } from "../../../theme/designTokens";
+import { copyTextToClipboard } from "../../../js/browserActions";
+import { showPromptDialog } from "../../../js/dialogs";
+import { useEnsureDesignTokens } from "../../../theme/designTokens";
 import {
   FeePanel,
   type FeeDraft,
@@ -119,19 +121,17 @@ async function updatePaymentStatus(paymentId: number, status: string) {
 }
 
 async function copyText(text: string) {
-  if (navigator.clipboard?.writeText) {
-    await navigator.clipboard.writeText(text);
-    return;
+  try {
+    await copyTextToClipboard(text);
+  } catch {
+    await showPromptDialog({
+      title: "复制链接",
+      message: "请复制下面的内容",
+      initialValue: text,
+      readOnly: true,
+      confirmText: "关闭",
+    });
   }
-
-  const input = document.createElement("textarea");
-  input.value = text;
-  input.style.position = "fixed";
-  input.style.opacity = "0";
-  document.body.appendChild(input);
-  input.select();
-  document.execCommand("copy");
-  input.remove();
 }
 
 function formatAmount(amount: number | string | undefined | null) {
@@ -151,7 +151,7 @@ function registrationStatusLabel(status: string | undefined) {
 }
 
 export function YouthClassRegistrationPage() {
-  ensureDesignTokens();
+  useEnsureDesignTokens();
 
   const { user, isMobile } = useUserState();
   const permissionNames = getUserPermissionNames(user);

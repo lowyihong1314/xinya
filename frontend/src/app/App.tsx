@@ -1,5 +1,6 @@
 import { RouterProvider } from "react-router-dom";
 
+import { OverlayProvider } from "./OverlayProvider";
 import { UserStateProvider } from "./UserState";
 import { EventDataProvider } from "../event/shared/EventDataContext";
 import { IS_APK } from "../js/apiBase";
@@ -10,13 +11,15 @@ export function App({ initialIsMobile = false }: { initialIsMobile?: boolean }) 
   return (
     <UserStateProvider initialIsMobile={initialIsMobile}>
       <EventDataProvider>
-        {IS_APK ? (
-          <RouterProvider router={appRouter} />
-        ) : (
-          <MusicPlaybackProvider>
+        <OverlayProvider>
+          {IS_APK ? (
             <RouterProvider router={appRouter} />
-          </MusicPlaybackProvider>
-        )}
+          ) : (
+            <MusicPlaybackProvider>
+              <RouterProvider router={appRouter} />
+            </MusicPlaybackProvider>
+          )}
+        </OverlayProvider>
       </EventDataProvider>
     </UserStateProvider>
   );

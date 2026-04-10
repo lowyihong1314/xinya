@@ -4,7 +4,7 @@ import { Link, useNavigate, useParams } from "react-router-dom";
 
 import { useUserState } from "../../app/UserState";
 import { CachedImage } from "../../components/CachedMedia";
-import { ensureDesignTokens } from "../../theme/designTokens";
+import { useEnsureDesignTokens } from "../../theme/designTokens";
 import { API_BASE } from "../../js/apiBase";
 import { changeMyPassword, fetchAppReleases, fetchMyFootprints, startMembershipRenewal, updateProfile, uploadProfileImage } from "./api";
 import { MembershipActionCard } from "./MembershipActionCard";
@@ -327,7 +327,7 @@ function pickLatestFootprint(
 }
 
 export function ProfilePage() {
-  ensureDesignTokens();
+  useEnsureDesignTokens();
 
   const { section: sectionParam } = useParams<{ section?: string }>();
   const navigate = useNavigate();
@@ -457,7 +457,7 @@ export function ProfilePage() {
           <h1 style={gateTitleStyle}>请先登录</h1>
           <p style={gateBodyStyle}>用户资料页已经切到 React 架构，登录态统一来自全局 user state。</p>
           <div style={gateActionsStyle}>
-            <button type="button" style={primaryButtonStyle} onClick={openLogin}>
+            <button type="button" style={primaryButtonStyle} onClick={() => openLogin()}>
               打开登录框
             </button>
             <button

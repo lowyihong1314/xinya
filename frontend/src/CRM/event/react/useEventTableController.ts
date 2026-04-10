@@ -1,6 +1,7 @@
 import { startTransition, useEffect, useMemo, useState } from "react";
 
 import { smartImageURL } from "../../../js/get_img";
+import { showConfirmDialog } from "../../../js/dialogs";
 import { useEventData } from "../../../event/shared/EventDataContext";
 import { select_users_modal } from "../../select_users_modal";
 import { fetchForms } from "../../form/react/api";
@@ -234,7 +235,10 @@ export function useEventTableController() {
     if (!selectedEvent) {
       return;
     }
-    if (!window.confirm(`确认删除活动「${selectedEvent.event_name || `#${selectedEvent.id}`}」？`)) {
+    if (!(await showConfirmDialog({
+      message: `确认删除活动「${selectedEvent.event_name || `#${selectedEvent.id}`}」？`,
+      tone: "danger",
+    }))) {
       return;
     }
 

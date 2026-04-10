@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState, type CSSProperties } from "react";
-import { createRoot } from "react-dom/client";
+
+import { openOverlay } from "../../app/OverlayProvider";
 
 type BrochureRecord = {
   file_name?: string;
@@ -107,21 +108,10 @@ function BrochurePreviewModal({
 }
 
 export async function openBrochurePreviewModal(brochure: BrochureRecord) {
-  document.querySelectorAll("[data-xinya-brochure-preview='true']").forEach((node) => node.remove());
-
-  const host = document.createElement("div");
-  host.dataset.xinyaBrochurePreview = "true";
-  document.body.appendChild(host);
-  const root = createRoot(host);
-
-  const close = () => {
-    queueMicrotask(() => {
-      root.unmount();
-      host.remove();
-    });
-  };
-
-  root.render(<BrochurePreviewModal brochure={brochure} onClose={close} />);
+  openOverlay(
+    (close) => <BrochurePreviewModal brochure={brochure} onClose={close} />,
+    { key: "xinya-brochure-preview" },
+  );
 }
 
 const overlayStyle: CSSProperties = {

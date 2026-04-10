@@ -19,11 +19,12 @@ React migration entry for the lamp registration flow.
 
 ## Backend endpoints
 
-- `/api/lampRegistration_API/register`
-- `/api/lampRegistration_API/get_by_ids`
-- `/api/lampRegistration_API/delete`
-- `/api/lampRegistration_API/get_all_register`
-- `/api/lampRegistration_API/make_payment`
+- `/api/lampRegistration_API/registrations`
+- `/api/lampRegistration_API/registrations/query`
+- `/api/lampRegistration_API/registrations/:id`
+- `/api/lampRegistration_API/payments`
+
+Legacy aliases such as `/api/lampRegistration_API/register` and `/api/lampRegistration_API/make_payment` are still preserved for backward compatibility.
 
 ## Important behaviors
 
@@ -35,13 +36,12 @@ React migration entry for the lamp registration flow.
 
 ## Notes
 
-- `render_lamp_init.js` remains as a compatibility mount for legacy callers.
-- Colors in `LampPage.tsx` should come from `frontend/src/theme/designTokens.ts`.
-- `render_payment_init.js` now only acts as a compatibility mount for old callers.
+- `render_lamp_init.js` remains as a compatibility router shim for older callers.
+- Colors in `LampPage.tsx` and `LampPaymentPage.tsx` come from `frontend/src/theme/designTokens.ts` via `useEnsureDesignTokens()`.
+- `render_payment_init.js` only stashes the selected drafts and routes into the same lamp page flow.
 - The admin list currently lives inside the same page component rather than a separate route or module.
 
-## React Router Migration Track
+## Route direction
 
-- Follow the phased migration plan in `frontend/Agent_todo.md`; that file is the source of truth for the full React + React Router upgrade and legacy-removal sequence.
-- End-state for this directory is React components, route params or nested routes, shared hooks/context, and React portals instead of query-string routers, `window` bridges, `window.app`, or DOM-built overlays.
-- Do not add new legacy mounts, `createRoot(document.body)` helpers, or new UI imports from `static/js/*`; when this area is touched, migrate existing legacy control flow out instead of extending it.
+- The remaining route-level improvement here is a dedicated payment child route instead of keeping payment mode in page-local state.
+- Do not reintroduce host-node swapping, ad-hoc roots, or direct browser-location navigation when touching this feature.

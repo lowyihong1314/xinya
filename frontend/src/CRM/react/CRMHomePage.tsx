@@ -1,11 +1,11 @@
 import { Link, useLocation } from "react-router-dom";
 import type { CSSProperties } from "react";
 
-import { ensureDesignTokens } from "../../theme/designTokens";
+import { useEnsureDesignTokens } from "../../theme/designTokens";
 import { CRM_MODULES, buildCRMModuleHref } from "./crmModules";
 
 export function CRMHomePage() {
-  ensureDesignTokens();
+  useEnsureDesignTokens();
 
   const location = useLocation();
   const searchParams = new URLSearchParams(location.search);

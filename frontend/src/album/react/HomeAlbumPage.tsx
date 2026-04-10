@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import type { CSSProperties } from "react";
+import { useNavigate } from "react-router-dom";
 
 import { CacheMediaPlayer } from "../../components/CacheMediaPlayer";
 import { CachedImage } from "../../components/CachedMedia";
@@ -8,7 +9,7 @@ import { smartImageURL } from "../../js/get_img";
 import { useEventData } from "../../event/shared/EventDataContext";
 import { fetchEventDetail } from "../../event/shared/api";
 import type { AlbumFile, SharedEventRecord } from "../../event/shared/types";
-import { ensureDesignTokens } from "../../theme/designTokens";
+import { useEnsureDesignTokens } from "../../theme/designTokens";
 import { useUserState } from "../../app/UserState";
 
 function formatDateKey(date: Date) {
@@ -16,7 +17,7 @@ function formatDateKey(date: Date) {
 }
 
 export function HomeAlbumPage() {
-  ensureDesignTokens();
+  useEnsureDesignTokens();
 
   const { getEventsForMonth, loading, error, refreshEvents } = useEventData();
   const { isMobile } = useUserState();
@@ -108,6 +109,7 @@ export function HomeAlbumPage() {
 }
 
 function EventPreviewCard({ event, isMobile }: { event: SharedEventRecord; isMobile: boolean }) {
+  const navigate = useNavigate();
   const [coverMedia, setCoverMedia] = useState<{ id: number; fileType?: string | null } | null>(null);
   const [previewUrls, setPreviewUrls] = useState<string[]>([]);
 
@@ -170,9 +172,7 @@ function EventPreviewCard({ event, isMobile }: { event: SharedEventRecord; isMob
     <button
       type="button"
       style={eventCardStyle(isMobile)}
-      onClick={() => {
-        window.location.hash = `#/event/${event.id}`;
-      }}
+      onClick={() => navigate(`/event/${event.id}`)}
     >
       <div style={eventCardMediaWrapStyle(isMobile)}>
         <div style={eventCardHeroStyle}>
@@ -210,6 +210,17 @@ function EventPreviewCard({ event, isMobile }: { event: SharedEventRecord; isMob
   );
 }
 
+function getDaysLeft(dateStr: string) {
+  const today = new Date();
+  const target = new Date(dateStr + "T00:00:00"); // 👈 避免时区坑
+
+  today.setHours(0, 0, 0, 0);
+
+  const diff = target.getTime() - today.getTime();
+
+  return Math.ceil(diff / (1000 * 60 * 60 * 24));
+}
+
 function renderCalendarCells(
   calendar_data: CalendarCellData[],
   selectedDate: string | null,
@@ -222,20 +233,42 @@ function renderCalendarCells(
     }
 
     const active = selectedDate === cell.dateKey;
+    const hasEvent = cell.items.length > 0;
+
+    // 👇 只有有 event 才算
+    const daysLeft = hasEvent ? getDaysLeft(cell.dateKey) : null;
+
     return (
       <button
         key={index}
         type="button"
-        style={dayCardStyle(active, cell.items.length > 0, isMobile)}
+        style={dayCardStyle(active, hasEvent, isMobile)}
         onClick={() => setSelectedDate(cell.dateKey)}
       >
-        <div style={dayNumberStyle}>{cell.dayLabel}</div>
+        <div style={dayNumberStyle}>
+          {cell.dayLabel}
+
+          {/* 👇 只有有 event 才显示 */}
+          {hasEvent && daysLeft !== null && (
+            <span style={{ marginLeft: 6, fontSize: 12 }}>
+              {daysLeft > 0
+                ? `${daysLeft}d`
+                : daysLeft === 0
+                ? "Today"
+                : ""}
+            </span>
+          )}
+        </div>
+
         {cell.items.slice(0, 3).map((event) => (
           <div key={event.id} style={dayEventStyle}>
             {event.event_name}
           </div>
         ))}
-        {cell.items.length > 3 ? <div style={dayMoreStyle}>+{cell.items.length - 3}</div> : null}
+
+        {cell.items.length > 3 ? (
+          <div style={dayMoreStyle}>+{cell.items.length - 3}</div>
+        ) : null}
       </button>
     );
   });

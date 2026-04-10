@@ -3,7 +3,7 @@ import type { CSSProperties } from "react";
 import { useSearchParams } from "react-router-dom";
 
 import { useUserState } from "../../../app/UserState";
-import { designTokens, ensureDesignTokens } from "../../../theme/designTokens";
+import { designTokens, useEnsureDesignTokens } from "../../../theme/designTokens";
 import { ClaimWorkspace } from "./claim/ClaimWorkspace";
 import { IncomeWorkspace } from "./income/IncomeWorkspace";
 import { RegisterWorkspace } from "./register/RegisterWorkspace";
@@ -48,7 +48,7 @@ function isFinanceTabKey(value: string | null): value is FinanceTabKey {
 }
 
 export function FinancePage() {
-  ensureDesignTokens();
+  useEnsureDesignTokens();
 
   const { isMobile } = useUserState();
   const [searchParams, setSearchParams] = useSearchParams();

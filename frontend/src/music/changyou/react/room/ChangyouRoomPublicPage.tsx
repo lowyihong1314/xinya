@@ -2,6 +2,7 @@ import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import QRCode from "qrcode";
 import { useNavigate, useParams } from "react-router-dom";
 
+import { useBaseNavbarVisibility } from "../../../../router/AppChromeContext";
 import { CHANGYOU_ROOM_PATH } from "../../../router/paths";
 import { ensureProjectionBlocks, splitBlocksForDoublePage, type LyricProjectionBlock } from "../projection";
 import type { SongbookEntry } from "../types";
@@ -169,8 +170,10 @@ function ProjectionColumn(props: {
   activeMarkerIndex: number | null;
   backgroundThemeKey: BackgroundThemeKey;
   baseStyle: ReturnType<typeof buildTextBlockStyle>;
+  activeProjectionBlockRef?: { current: HTMLDivElement | null };
 }) {
   const columnRef = useRef<HTMLDivElement | null>(null);
+  const activeBlockRef = useRef<HTMLDivElement | null>(null);
   const [haloFrame, setHaloFrame] = useState({ top: 0, height: 0, visible: false });
 
   useLayoutEffect(() => {
@@ -182,7 +185,7 @@ function ProjectionColumn(props: {
     let resizeObserver: ResizeObserver | null = null;
 
     const updateHalo = () => {
-      const activeNode = columnNode.querySelector('[data-projection-active="true"]') as HTMLDivElement | null;
+      const activeNode = activeBlockRef.current;
       if (!activeNode) {
         setHaloFrame((current) => (current.visible ? { ...current, visible: false } : current));
         return;
@@ -204,7 +207,7 @@ function ProjectionColumn(props: {
     if (typeof ResizeObserver !== "undefined") {
       resizeObserver = new ResizeObserver(scheduleUpdate);
       resizeObserver.observe(columnNode);
-      const activeNode = columnNode.querySelector('[data-projection-active="true"]') as HTMLDivElement | null;
+      const activeNode = activeBlockRef.current;
       if (activeNode) {
         resizeObserver.observe(activeNode);
       }
@@ -227,6 +230,16 @@ function ProjectionColumn(props: {
         return (
           <div
             key={block.id || `${block.label}-${index}`}
+            ref={
+              active
+                ? (node) => {
+                    activeBlockRef.current = node;
+                    if (props.activeProjectionBlockRef) {
+                      props.activeProjectionBlockRef.current = node;
+                    }
+                  }
+                : undefined
+            }
             data-projection-active={active ? "true" : undefined}
             style={projectionBlockShellStyle(active, props.backgroundThemeKey)}
           >
@@ -276,6 +289,8 @@ export function ChangyouRoomPublicPage({
   showBackButton = false,
   onBack,
 }: ChangyouRoomPublicPageProps) {
+  useBaseNavbarVisibility(!embeddedInApp);
+
   const [room, setRoom] = useState<ChangyouRoom | null>(null);
   const [entry, setEntry] = useState<SongbookEntry | null>(null);
   const [loading, setLoading] = useState(true);
@@ -313,6 +328,7 @@ export function ChangyouRoomPublicPage({
     readStoredChoice(TEXT_GLOW_STORAGE_KEY, ["off", "soft", "strong"], "soft"),
   );
   const [roomUpdateTick, setRoomUpdateTick] = useState(0);
+  const activeProjectionBlockRef = useRef<HTMLDivElement | null>(null);
 
   useEffect(() => {
     let cancelled = false;
@@ -362,17 +378,6 @@ export function ChangyouRoomPublicPage({
       document.title = "唱游房间";
     };
   }, []);
-
-  useEffect(() => {
-    if (!embeddedInApp) return;
-    const navbar = document.getElementById("base_navbar");
-    if (!navbar) return;
-    const previousDisplay = navbar.style.display;
-    navbar.style.display = "none";
-    return () => {
-      navbar.style.display = previousDisplay;
-    };
-  }, [embeddedInApp]);
 
   useEffect(() => {
     if (typeof window === "undefined") return;
@@ -525,7 +530,7 @@ export function ChangyouRoomPublicPage({
     let settleTimer = 0;
 
     const centerActiveProjectionBlock = () => {
-      const activeNode = document.querySelector('[data-projection-active="true"]') as HTMLElement | null;
+      const activeNode = activeProjectionBlockRef.current;
       if (!activeNode) return;
 
       const rect = activeNode.getBoundingClientRect();
@@ -797,6 +802,7 @@ export function ChangyouRoomPublicPage({
               activeMarkerIndex={activeMarkerIndex}
               backgroundThemeKey={backgroundThemeKey}
               baseStyle={doubleBlockStyle}
+              activeProjectionBlockRef={activeProjectionBlockRef}
             />
             <ProjectionColumn
               blocks={doubleProjectionBlocks.right}
@@ -804,6 +810,7 @@ export function ChangyouRoomPublicPage({
               activeMarkerIndex={activeMarkerIndex}
               backgroundThemeKey={backgroundThemeKey}
               baseStyle={doubleBlockStyle}
+              activeProjectionBlockRef={activeProjectionBlockRef}
             />
           </div>
         </div>
@@ -816,6 +823,7 @@ export function ChangyouRoomPublicPage({
               activeMarkerIndex={activeMarkerIndex}
               backgroundThemeKey={backgroundThemeKey}
               baseStyle={singleBlockStyle}
+              activeProjectionBlockRef={activeProjectionBlockRef}
             />
           </div>
         </div>

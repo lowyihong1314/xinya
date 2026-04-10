@@ -1,59 +1,454 @@
 import { useEffect, useState } from "react";
+import type { ReactNode } from "react";
+import { useLocation, useNavigate } from "react-router-dom";
 
-import { ensureDesignTokens } from "../../theme/designTokens";
+import { useEnsureDesignTokens } from "../../theme/designTokens";
 import { useUserState } from "../../app/UserState";
 import { CachedImage } from "../../components/CachedMedia";
-import { LAMP_META } from "../../lamp/render_lamp_init.js";
-import { approvePayment, fetchPayments, removePayment } from "./api";
-import type { PaymentRecord, RegistrationRecord } from "./types";
+import { showConfirmDialog } from "../../js/dialogs";
+import { downloadBlob } from "../../js/browserActions";
+import { show_alert } from "../../js/show_alert";
+import { LAMP_META } from "../../lamp/lampMeta";
+import {
+  approvePayment,
+  downloadYlpPaiwei,
+  fetchPayments,
+  fetchYlpOrderDetail,
+  fetchYlpPayments,
+  fetchYlpVersions,
+  removePayment,
+  revokePayment,
+  searchYlpOrders,
+} from "./api";
+import type {
+  PaymentRecord,
+  RegistrationRecord,
+  YlpOrderDetail,
+  YlpOrderItem,
+  YlpOrderSummary,
+  YlpPagination,
+  YlpPaymentRecord,
+} from "./types";
 
 const PAGE_SIZE = 8;
 
-type ContextMenuState = {
-  payment: PaymentRecord;
-  x: number;
-  y: number;
+type WorkspaceTab = "lamp" | "ylp";
+type WorkspaceSection = "payments" | "orders";
+type WorkspaceStateValue<T> = Record<WorkspaceTab, T>;
+
+type ScreenState =
+  | { kind: "selection" }
+  | { kind: "workspace"; workspace: WorkspaceTab; section: WorkspaceSection }
+  | { kind: "payment-detail"; workspace: WorkspaceTab; paymentId: number }
+  | { kind: "ylp-order-detail"; orderId: number };
+
+type YlpDetailState = {
+  orderId: number;
+  loading: boolean;
+  error: string;
+  order: YlpOrderDetail | null;
+  payments: YlpPaymentRecord[];
+  paymentsError: string;
 };
 
-type DetailState = {
-  payment: PaymentRecord;
-  edit: boolean;
+type FahuiRouteState = {
+  screen: ScreenState;
+  paymentQueryByWorkspace: WorkspaceStateValue<string>;
+  paymentPageByWorkspace: WorkspaceStateValue<number>;
+  ylpVersion: string;
+  ylpQuery: string;
+  ylpPage: number;
 };
+
+const FAHUI_ROUTE_PARAM_KEYS = [
+  "fahui_view",
+  "fahui_workspace",
+  "fahui_section",
+  "fahui_payment_id",
+  "fahui_order_id",
+  "fahui_lamp_query",
+  "fahui_lamp_page",
+  "fahui_ylp_payment_query",
+  "fahui_ylp_payment_page",
+  "fahui_ylp_order_query",
+  "fahui_ylp_order_page",
+  "fahui_ylp_version",
+] as const;
+
+function getPaymentRecordId(payment: PaymentRecord) {
+  return payment.id ?? payment.payment_id;
+}
+
+function isPaymentApproved(payment: PaymentRecord) {
+  return payment.is_approved ?? Boolean(payment.submitter_id);
+}
+
+function getPaymentTypeLabel(payment: PaymentRecord) {
+  return payment.type === "ylp" ? "YLP" : "Lamp";
+}
+
+function getPaymentPrimaryText(payment: PaymentRecord) {
+  if (payment.type === "ylp") {
+    return payment.payer_name || payment.order?.customer_name || payment.order?.name || "盂兰盆付款";
+  }
+  return payment.payer_name || "点灯付款";
+}
+
+function getPaymentSecondaryText(payment: PaymentRecord) {
+  if (payment.type === "ylp") {
+    const parts = [
+      payment.order_id || payment.order?.id ? `订单 #${payment.order_id || payment.order?.id}` : null,
+      payment.phone || payment.order?.phone || null,
+      payment.order?.version || null,
+    ].filter(Boolean);
+    return parts.join(" · ") || "暂无订单信息";
+  }
+
+  return (
+    (payment.registrations || [])
+      .map((registration) => registration.devotee_name)
+      .filter(Boolean)
+      .join("、") || "暂无祈福者信息"
+  );
+}
+
+function matchesPaymentWorkspace(payment: PaymentRecord, workspace: WorkspaceTab) {
+  if (workspace === "ylp") {
+    return payment.type === "ylp";
+  }
+  return payment.type !== "ylp";
+}
+
+function matchesPaymentQuery(payment: PaymentRecord, normalizedQuery: string) {
+  if (!normalizedQuery) {
+    return true;
+  }
+
+  if ((payment.phone || "").toLowerCase().includes(normalizedQuery)) {
+    return true;
+  }
+
+  if ((payment.payer_name || "").toLowerCase().includes(normalizedQuery)) {
+    return true;
+  }
+
+  if ((payment.type || "").toLowerCase().includes(normalizedQuery)) {
+    return true;
+  }
+
+  if (String(payment.order_id || payment.order?.id || "").includes(normalizedQuery)) {
+    return true;
+  }
+
+  if ((payment.order?.customer_name || "").toLowerCase().includes(normalizedQuery)) {
+    return true;
+  }
+
+  if ((payment.order?.name || "").toLowerCase().includes(normalizedQuery)) {
+    return true;
+  }
+
+  if ((payment.order?.phone || "").toLowerCase().includes(normalizedQuery)) {
+    return true;
+  }
+
+  return (payment.registrations || []).some((registration) =>
+    (registration.devotee_name || "").toLowerCase().includes(normalizedQuery),
+  );
+}
+
+function getWorkspaceTitle(workspace: WorkspaceTab) {
+  return workspace === "ylp" ? "YLP 工作区" : "Lamp 工作区";
+}
+
+function getWorkspaceDescription(workspace: WorkspaceTab) {
+  return workspace === "ylp"
+    ? "先锁定盂兰盆，再切到付款审核或订单查询。"
+    : "Lamp 这边先聚焦在付款审核，流程保持轻一点。";
+}
+
+function getWorkspaceEyebrow(workspace: WorkspaceTab) {
+  return workspace === "ylp" ? "YLP" : "LAMP";
+}
+
+function getSectionTitle(workspace: WorkspaceTab, section: WorkspaceSection) {
+  if (workspace === "ylp" && section === "orders") {
+    return "订单查询";
+  }
+  return "付款审核";
+}
+
+function getSectionDescription(workspace: WorkspaceTab, section: WorkspaceSection) {
+  if (workspace === "ylp" && section === "orders") {
+    return "按版本和关键字查订单，点进去直接看详情。";
+  }
+  return workspace === "ylp"
+    ? "只看 YLP 付款记录，审核和撤销都在详情页完成。"
+    : "只看 Lamp 付款记录，卡片进去就是详情页。";
+}
+
+function getPaymentStatusLabel(payment: PaymentRecord) {
+  return isPaymentApproved(payment) ? "已审核" : "待审核";
+}
+
+function getValueText(value: number | string | null | undefined) {
+  if (value === null || value === undefined || value === "") {
+    return "-";
+  }
+  return String(value);
+}
+
+function isWorkspaceTab(value: string | null): value is WorkspaceTab {
+  return value === "lamp" || value === "ylp";
+}
+
+function isWorkspaceSection(value: string | null): value is WorkspaceSection {
+  return value === "payments" || value === "orders";
+}
+
+function parsePositiveInt(value: string | null, fallback: number) {
+  const parsed = Number(value);
+  return Number.isInteger(parsed) && parsed > 0 ? parsed : fallback;
+}
+
+function screensEqual(left: ScreenState, right: ScreenState) {
+  if (left.kind !== right.kind) {
+    return false;
+  }
+
+  switch (left.kind) {
+    case "selection":
+      return true;
+    case "workspace":
+      return left.workspace === (right as Extract<ScreenState, { kind: "workspace" }>).workspace &&
+        left.section === (right as Extract<ScreenState, { kind: "workspace" }>).section;
+    case "payment-detail":
+      return left.workspace === (right as Extract<ScreenState, { kind: "payment-detail" }>).workspace &&
+        left.paymentId === (right as Extract<ScreenState, { kind: "payment-detail" }>).paymentId;
+    case "ylp-order-detail":
+      return left.orderId === (right as Extract<ScreenState, { kind: "ylp-order-detail" }>).orderId;
+    default:
+      return false;
+  }
+}
+
+function workspaceStateEqual<T>(left: WorkspaceStateValue<T>, right: WorkspaceStateValue<T>) {
+  return left.lamp === right.lamp && left.ylp === right.ylp;
+}
+
+function parseFahuiRouteState(search: string): FahuiRouteState {
+  const params = new URLSearchParams(search);
+  const view = params.get("fahui_view");
+  const workspace = params.get("fahui_workspace");
+  const section = params.get("fahui_section");
+  const paymentId = parsePositiveInt(params.get("fahui_payment_id"), 0);
+  const orderId = parsePositiveInt(params.get("fahui_order_id"), 0);
+
+  let screen: ScreenState = { kind: "selection" };
+  if (view === "payment" && isWorkspaceTab(workspace) && paymentId > 0) {
+    screen = { kind: "payment-detail", workspace, paymentId };
+  } else if (view === "ylp_order" && orderId > 0) {
+    screen = { kind: "ylp-order-detail", orderId };
+  } else if (view === "workspace" && isWorkspaceTab(workspace)) {
+    screen = {
+      kind: "workspace",
+      workspace,
+      section:
+        workspace === "lamp"
+          ? "payments"
+          : isWorkspaceSection(section)
+            ? section
+            : "orders",
+    };
+  }
+
+  return {
+    screen,
+    paymentQueryByWorkspace: {
+      lamp: params.get("fahui_lamp_query") || "",
+      ylp: params.get("fahui_ylp_payment_query") || "",
+    },
+    paymentPageByWorkspace: {
+      lamp: parsePositiveInt(params.get("fahui_lamp_page"), 1),
+      ylp: parsePositiveInt(params.get("fahui_ylp_payment_page"), 1),
+    },
+    ylpVersion: params.get("fahui_ylp_version") || "",
+    ylpQuery: params.get("fahui_ylp_order_query") || "",
+    ylpPage: parsePositiveInt(params.get("fahui_ylp_order_page"), 1),
+  };
+}
+
+function buildFahuiSearchParams(
+  baseSearch: string,
+  routeState: FahuiRouteState,
+) {
+  const params = new URLSearchParams(baseSearch);
+
+  for (const key of FAHUI_ROUTE_PARAM_KEYS) {
+    params.delete(key);
+  }
+
+  if (routeState.screen.kind === "workspace") {
+    params.set("fahui_view", "workspace");
+    params.set("fahui_workspace", routeState.screen.workspace);
+    params.set("fahui_section", routeState.screen.section);
+  } else if (routeState.screen.kind === "payment-detail") {
+    params.set("fahui_view", "payment");
+    params.set("fahui_workspace", routeState.screen.workspace);
+    params.set("fahui_payment_id", String(routeState.screen.paymentId));
+  } else if (routeState.screen.kind === "ylp-order-detail") {
+    params.set("fahui_view", "ylp_order");
+    params.set("fahui_workspace", "ylp");
+    params.set("fahui_order_id", String(routeState.screen.orderId));
+  }
+
+  if (routeState.paymentQueryByWorkspace.lamp) {
+    params.set("fahui_lamp_query", routeState.paymentQueryByWorkspace.lamp);
+  }
+  if (routeState.paymentPageByWorkspace.lamp > 1) {
+    params.set("fahui_lamp_page", String(routeState.paymentPageByWorkspace.lamp));
+  }
+  if (routeState.paymentQueryByWorkspace.ylp) {
+    params.set("fahui_ylp_payment_query", routeState.paymentQueryByWorkspace.ylp);
+  }
+  if (routeState.paymentPageByWorkspace.ylp > 1) {
+    params.set("fahui_ylp_payment_page", String(routeState.paymentPageByWorkspace.ylp));
+  }
+  if (routeState.ylpQuery) {
+    params.set("fahui_ylp_order_query", routeState.ylpQuery);
+  }
+  if (routeState.ylpPage > 1) {
+    params.set("fahui_ylp_order_page", String(routeState.ylpPage));
+  }
+  if (routeState.ylpVersion) {
+    params.set("fahui_ylp_version", routeState.ylpVersion);
+  }
+
+  return params;
+}
 
 export function FahuiPage() {
-  ensureDesignTokens();
+  useEnsureDesignTokens();
 
+  const location = useLocation();
+  const navigate = useNavigate();
   const { isMobile } = useUserState();
+  const initialRouteState = parseFahuiRouteState(location.search);
+  const [screen, setScreen] = useState<ScreenState>(initialRouteState.screen);
   const [payments, setPayments] = useState<PaymentRecord[]>([]);
-  const [query, setQuery] = useState("");
-  const [page, setPage] = useState(1);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState("");
+  const [paymentQueryByWorkspace, setPaymentQueryByWorkspace] = useState<WorkspaceStateValue<string>>(
+    initialRouteState.paymentQueryByWorkspace,
+  );
+  const [paymentPageByWorkspace, setPaymentPageByWorkspace] = useState<WorkspaceStateValue<number>>(
+    initialRouteState.paymentPageByWorkspace,
+  );
+  const [paymentLoading, setPaymentLoading] = useState(true);
+  const [paymentError, setPaymentError] = useState("");
   const [actionMessage, setActionMessage] = useState("");
-  const [contextMenu, setContextMenu] = useState<ContextMenuState | null>(null);
-  const [detail, setDetail] = useState<DetailState | null>(null);
+  const [ylpVersions, setYlpVersions] = useState<string[]>([]);
+  const [ylpVersion, setYlpVersion] = useState(initialRouteState.ylpVersion);
+  const [ylpQueryInput, setYlpQueryInput] = useState(initialRouteState.ylpQuery);
+  const [ylpQuery, setYlpQuery] = useState(initialRouteState.ylpQuery);
+  const [ylpPage, setYlpPage] = useState(initialRouteState.ylpPage);
+  const [ylpLoading, setYlpLoading] = useState(false);
+  const [ylpError, setYlpError] = useState("");
+  const [ylpOrders, setYlpOrders] = useState<YlpOrderSummary[]>([]);
+  const [ylpPagination, setYlpPagination] = useState<YlpPagination | null>(null);
+  const [ylpDetail, setYlpDetail] = useState<YlpDetailState | null>(null);
+
+  const currentWorkspace =
+    screen.kind === "workspace" || screen.kind === "payment-detail" ? screen.workspace : screen.kind === "ylp-order-detail" ? "ylp" : null;
+  const currentSection =
+    screen.kind === "workspace" ? screen.section : screen.kind === "payment-detail" ? "payments" : screen.kind === "ylp-order-detail" ? "orders" : null;
+  const paymentQuery = currentWorkspace ? paymentQueryByWorkspace[currentWorkspace] : "";
+  const normalizedPaymentQuery = paymentQuery.trim().toLowerCase();
+  const workspacePayments = currentWorkspace
+    ? payments.filter(
+        (payment) =>
+          matchesPaymentWorkspace(payment, currentWorkspace) && matchesPaymentQuery(payment, normalizedPaymentQuery),
+      )
+    : [];
+  const paymentTotalPages = Math.max(1, Math.ceil(workspacePayments.length / PAGE_SIZE));
+  const paymentPage = currentWorkspace ? paymentPageByWorkspace[currentWorkspace] : 1;
+  const safePaymentPage = Math.min(paymentPage, paymentTotalPages);
+  const pagedPayments = workspacePayments.slice((safePaymentPage - 1) * PAGE_SIZE, safePaymentPage * PAGE_SIZE);
+  const ylpTotalPages = Math.max(1, ylpPagination?.pages || 1);
+  const ylpSafePage = Math.min(ylpPage, ylpTotalPages);
+  const selectedPayment =
+    screen.kind === "payment-detail"
+      ? payments.find((item) => getPaymentRecordId(item) === screen.paymentId) || null
+      : null;
+  useEffect(() => {
+    const nextRouteState = parseFahuiRouteState(location.search);
+
+    setScreen((current) => (screensEqual(current, nextRouteState.screen) ? current : nextRouteState.screen));
+    setPaymentQueryByWorkspace((current) =>
+      workspaceStateEqual(current, nextRouteState.paymentQueryByWorkspace)
+        ? current
+        : nextRouteState.paymentQueryByWorkspace,
+    );
+    setPaymentPageByWorkspace((current) =>
+      workspaceStateEqual(current, nextRouteState.paymentPageByWorkspace)
+        ? current
+        : nextRouteState.paymentPageByWorkspace,
+    );
+    setYlpQuery((current) => (current === nextRouteState.ylpQuery ? current : nextRouteState.ylpQuery));
+    setYlpQueryInput((current) => (current === nextRouteState.ylpQuery ? current : nextRouteState.ylpQuery));
+    setYlpPage((current) => (current === nextRouteState.ylpPage ? current : nextRouteState.ylpPage));
+    setYlpVersion((current) => {
+      if (!nextRouteState.ylpVersion || current === nextRouteState.ylpVersion) {
+        return current;
+      }
+      return nextRouteState.ylpVersion;
+    });
+  }, [location.search]);
 
   useEffect(() => {
-    void loadPayments();
-  }, []);
+    const nextSearchParams = buildFahuiSearchParams(location.search, {
+      screen,
+      paymentQueryByWorkspace,
+      paymentPageByWorkspace,
+      ylpVersion,
+      ylpQuery,
+      ylpPage,
+    });
+    const nextSearch = nextSearchParams.toString();
+    const currentSearch = location.search.replace(/^\?/, "");
 
-  useEffect(() => {
-    if (!contextMenu) {
+    if (nextSearch === currentSearch) {
       return;
     }
 
-    const close = () => setContextMenu(null);
+    navigate(
+      {
+        pathname: location.pathname,
+        search: nextSearch ? `?${nextSearch}` : "",
+      },
+      { replace: true },
+    );
+  }, [
+    location.pathname,
+    location.search,
+    navigate,
+    paymentPageByWorkspace,
+    paymentQueryByWorkspace,
+    screen,
+    ylpPage,
+    ylpQuery,
+    ylpVersion,
+  ]);
 
-    window.addEventListener("click", close);
-    window.addEventListener("contextmenu", close);
-    window.addEventListener("scroll", close, true);
+  useEffect(() => {
+    void loadPayments();
+    void loadYlpVersions();
+  }, []);
 
-    return () => {
-      window.removeEventListener("click", close);
-      window.removeEventListener("contextmenu", close);
-      window.removeEventListener("scroll", close, true);
-    };
-  }, [contextMenu]);
+  useEffect(() => {
+    if (screen.kind !== "workspace" || screen.workspace !== "ylp" || screen.section !== "orders" || !ylpVersion) {
+      return;
+    }
+    void loadYlpOrders();
+  }, [screen, ylpPage, ylpQuery, ylpVersion]);
 
   useEffect(() => {
     if (!actionMessage) {
@@ -64,349 +459,981 @@ export function FahuiPage() {
     return () => window.clearTimeout(timer);
   }, [actionMessage]);
 
-  const normalizedQuery = query.trim().toLowerCase();
-  const filteredPayments = payments.filter((payment) => {
-    if (!normalizedQuery) {
-      return true;
+  useEffect(() => {
+    if (!currentWorkspace) {
+      return;
     }
 
-    if ((payment.phone || "").toLowerCase().includes(normalizedQuery)) {
-      return true;
+    if (paymentPageByWorkspace[currentWorkspace] !== safePaymentPage) {
+      setPaymentPageByWorkspace((current) => ({
+        ...current,
+        [currentWorkspace]: safePaymentPage,
+      }));
     }
-
-    if ((payment.payer_name || "").toLowerCase().includes(normalizedQuery)) {
-      return true;
-    }
-
-    return (payment.registrations || []).some((registration) =>
-      (registration.devotee_name || "").toLowerCase().includes(normalizedQuery),
-    );
-  });
-
-  const totalPages = Math.max(1, Math.ceil(filteredPayments.length / PAGE_SIZE));
-  const safePage = Math.min(page, totalPages);
-  const pageItems = filteredPayments.slice((safePage - 1) * PAGE_SIZE, safePage * PAGE_SIZE);
+  }, [currentWorkspace, paymentPageByWorkspace, safePaymentPage]);
 
   useEffect(() => {
-    if (page !== safePage) {
-      setPage(safePage);
+    if (ylpPage !== ylpSafePage) {
+      setYlpPage(ylpSafePage);
     }
-  }, [page, safePage]);
+  }, [ylpPage, ylpSafePage]);
+
+  useEffect(() => {
+    if (screen.kind !== "payment-detail" || paymentLoading) {
+      return;
+    }
+
+    if (!selectedPayment) {
+      setScreen({
+        kind: "workspace",
+        workspace: screen.workspace,
+        section: "payments",
+      });
+    }
+  }, [paymentLoading, screen, selectedPayment]);
+
+  useEffect(() => {
+    if (screen.kind !== "ylp-order-detail") {
+      return;
+    }
+    if (ylpDetail?.orderId === screen.orderId) {
+      return;
+    }
+    void loadYlpDetail(screen.orderId);
+  }, [screen, ylpDetail]);
 
   async function loadPayments() {
-    setLoading(true);
-    setError("");
+    setPaymentLoading(true);
+    setPaymentError("");
 
     try {
       const response = await fetchPayments();
       setPayments(response.data || []);
     } catch (loadError) {
-      setError(loadError instanceof Error ? loadError.message : "加载失败");
+      setPaymentError(loadError instanceof Error ? loadError.message : "加载失败");
     } finally {
-      setLoading(false);
+      setPaymentLoading(false);
     }
   }
 
-  async function handleApprove(payment: PaymentRecord) {
-    setContextMenu(null);
-    setError("");
+  async function loadYlpVersions() {
+    try {
+      const response = await fetchYlpVersions();
+      const versions = (response.data || []).filter(Boolean);
+      const preferredVersion =
+        versions.find((item) => item === "2025_YLP") ||
+        versions.find((item) => item !== "DELETE") ||
+        versions[0] ||
+        "2025_YLP";
+
+      setYlpVersions(versions);
+      setYlpVersion((current) => current || preferredVersion);
+    } catch (loadError) {
+      setYlpError(loadError instanceof Error ? loadError.message : "版本加载失败");
+    }
+  }
+
+  async function loadYlpOrders() {
+    setYlpLoading(true);
+    setYlpError("");
 
     try {
-      await approvePayment(payment.payment_id);
+      const response = await searchYlpOrders({
+        version: ylpVersion,
+        value: ylpQuery,
+        page: ylpPage,
+        perPage: PAGE_SIZE,
+      });
+      setYlpOrders(response.data?.items || []);
+      setYlpPagination(response.data?.pagination || null);
+    } catch (loadError) {
+      setYlpError(loadError instanceof Error ? loadError.message : "订单加载失败");
+    } finally {
+      setYlpLoading(false);
+    }
+  }
+
+  function enterWorkspace(workspace: WorkspaceTab) {
+    setScreen({
+      kind: "workspace",
+      workspace,
+      section: workspace === "ylp" ? "orders" : "payments",
+    });
+  }
+
+  function goBack() {
+    if (screen.kind === "selection") {
+      return;
+    }
+
+    if (screen.kind === "workspace") {
+      setScreen({ kind: "selection" });
+      return;
+    }
+
+    if (screen.kind === "payment-detail") {
+      setScreen({
+        kind: "workspace",
+        workspace: screen.workspace,
+        section: "payments",
+      });
+      return;
+    }
+
+    setScreen({
+      kind: "workspace",
+      workspace: "ylp",
+      section: "orders",
+    });
+  }
+
+  function openPaymentDetail(workspace: WorkspaceTab, paymentId: number) {
+    setScreen({
+      kind: "payment-detail",
+      workspace,
+      paymentId,
+    });
+  }
+
+  function openSection(workspace: WorkspaceTab, section: WorkspaceSection) {
+    setScreen({
+      kind: "workspace",
+      workspace,
+      section,
+    });
+  }
+
+  async function handleApprove(payment: PaymentRecord) {
+    setPaymentError("");
+    const paymentId = getPaymentRecordId(payment);
+
+    try {
+      const response = await approvePayment(paymentId);
       setPayments((current) =>
-        current.map((item) =>
-          item.payment_id === payment.payment_id
-            ? {
-                ...item,
-                submitter_id: item.submitter_id ?? 1,
-                paid_at: item.paid_at || new Date().toISOString(),
-              }
-            : item,
-        ),
+        current.map((item) => (getPaymentRecordId(item) === paymentId ? response.payment || item : item)),
       );
       setActionMessage("审核已通过");
     } catch (actionError) {
-      setError(actionError instanceof Error ? actionError.message : "操作失败");
+      setPaymentError(actionError instanceof Error ? actionError.message : "操作失败");
     }
   }
 
   async function handleRemove(payment: PaymentRecord, mode: "revoke" | "delete") {
-    setContextMenu(null);
-    setError("");
+    setPaymentError("");
+    const paymentId = getPaymentRecordId(payment);
 
-    const confirmed = window.confirm(mode === "delete" ? "确认删除这笔付款？" : "确认撤销审核？");
+    const confirmed = await showConfirmDialog({
+      message: mode === "delete" ? "确认删除这笔付款？" : "确认撤销审核？",
+      tone: "danger",
+    });
     if (!confirmed) {
       return;
     }
 
     try {
-      await removePayment(payment.payment_id);
-      setPayments((current) => current.filter((item) => item.payment_id !== payment.payment_id));
-      setActionMessage(mode === "delete" ? "付款已删除" : "审核已撤销");
+      if (mode === "delete") {
+        await removePayment(paymentId);
+        setPayments((current) => current.filter((item) => getPaymentRecordId(item) !== paymentId));
+        setActionMessage("付款已删除");
+        setScreen({
+          kind: "workspace",
+          workspace: payment.type === "ylp" ? "ylp" : "lamp",
+          section: "payments",
+        });
+        return;
+      }
+
+      const response = await revokePayment(paymentId);
+      setPayments((current) =>
+        current.map((item) => (getPaymentRecordId(item) === paymentId ? response.payment || item : item)),
+      );
+      setActionMessage("审核已撤销");
     } catch (actionError) {
-      setError(actionError instanceof Error ? actionError.message : "操作失败");
+      setPaymentError(actionError instanceof Error ? actionError.message : "操作失败");
     }
   }
 
-  function renderRegistration(registration: RegistrationRecord, index: number) {
-    return (
-      <section key={`${registration.devotee_name || "registration"}-${index}`} style={styles.detailSection}>
-        <div style={styles.detailSectionTitle}>
-          {`报名 #${index + 1} · ${registration.devotee_name || "-"}`}
-        </div>
-        <div style={styles.detailInfo}>
-          <div>{`📞 ${registration.phone || "-"}`}</div>
-          <div>{`📍 ${registration.address || "-"}`}</div>
-          <div>{`💰 合计：${registration.total_amount ?? "-"}`}</div>
-        </div>
-        <ul style={styles.lampList}>
-          {(registration.lamps || []).map((lamp, lampIndex) => {
-            const meta = LAMP_META[lamp.lamp_type] || {};
-            const label = meta.withAmount
-              ? `${meta.label || lamp.lamp_type}：${lamp.amount ?? "-"}`
-              : `${meta.label || lamp.lamp_type}`;
+  async function loadYlpDetail(orderId: number) {
+    setYlpDetail({
+      orderId,
+      loading: true,
+      error: "",
+      order: null,
+      payments: [],
+      paymentsError: "",
+    });
 
-            return <li key={`${lamp.lamp_type}-${lampIndex}`}>{label}</li>;
-          })}
-        </ul>
+    try {
+      const detailResponse = await fetchYlpOrderDetail(orderId);
+      let paymentRows: YlpPaymentRecord[] = [];
+      let paymentsError = "";
+
+      try {
+        paymentRows = await fetchYlpPayments(orderId);
+      } catch (paymentLoadError) {
+        paymentsError = paymentLoadError instanceof Error ? paymentLoadError.message : "支付记录加载失败";
+      }
+
+      setYlpDetail({
+        orderId,
+        loading: false,
+        error: "",
+        order: detailResponse.data || null,
+        payments: paymentRows,
+        paymentsError,
+      });
+    } catch (loadError) {
+      setYlpDetail({
+        orderId,
+        loading: false,
+        error: loadError instanceof Error ? loadError.message : "详情加载失败",
+        order: null,
+        payments: [],
+        paymentsError: "",
+      });
+    }
+  }
+
+  function openYlpDetail(orderId: number) {
+    setScreen({
+      kind: "ylp-order-detail",
+      orderId,
+    });
+  }
+
+  function updatePaymentQuery(workspace: WorkspaceTab, value: string) {
+    setPaymentQueryByWorkspace((current) => ({
+      ...current,
+      [workspace]: value,
+    }));
+    setPaymentPageByWorkspace((current) => ({
+      ...current,
+      [workspace]: 1,
+    }));
+  }
+
+  function updatePaymentPage(workspace: WorkspaceTab, nextPage: number) {
+    setPaymentPageByWorkspace((current) => ({
+      ...current,
+      [workspace]: nextPage,
+    }));
+  }
+
+  async function handleDownloadPaiwei(orderId: number) {
+    try {
+      const result = await downloadYlpPaiwei(orderId);
+      downloadBlob(result.blob, result.filename);
+      setActionMessage("牌位文件已开始下载");
+    } catch (downloadError) {
+      show_alert("error", downloadError instanceof Error ? downloadError.message : "下载牌位失败");
+    }
+  }
+
+  function renderSelectionView() {
+    return (
+      <>
+        <section style={styles.heroCard}>
+          <p style={styles.eyebrow}>Dharma CRM</p>
+          <h1 style={styles.title}>法会工作台</h1>
+          <p style={styles.subtitle}>
+            先选 YLP 或 Lamp，再进入对应流程。列表点击后直接进页面，不再用详情弹窗把内容包起来。
+          </p>
+        </section>
+
+        <section style={styles.choiceGrid(isMobile)}>
+          <button type="button" style={styles.choiceCard} onClick={() => enterWorkspace("ylp")}>
+            <p style={styles.choiceEyebrow}>YLP</p>
+            <h2 style={styles.choiceTitle}>盂兰盆</h2>
+            <p style={styles.choiceBody}>先看订单查询，也可以切去付款审核，适合从法会项目往下钻。</p>
+          </button>
+
+          <button type="button" style={styles.choiceCard} onClick={() => enterWorkspace("lamp")}>
+            <p style={styles.choiceEyebrow}>LAMP</p>
+            <h2 style={styles.choiceTitle}>点灯</h2>
+            <p style={styles.choiceBody}>直接进入 Lamp 付款审核，列表卡片点开就是详情页和操作区。</p>
+          </button>
+        </section>
+      </>
+    );
+  }
+
+  function renderWorkspaceHeader() {
+    if (!currentWorkspace || !currentSection) {
+      return null;
+    }
+
+    const title =
+      screen.kind === "payment-detail"
+        ? "付款详情"
+        : screen.kind === "ylp-order-detail"
+          ? "订单详情"
+          : getSectionTitle(currentWorkspace, currentSection);
+    const description =
+      screen.kind === "payment-detail"
+        ? "审核、撤销和删除都放在当前详情页，不再弹出窗口。"
+        : screen.kind === "ylp-order-detail"
+          ? "订单信息、付款记录和项目内容直接展开在页面里。"
+          : getSectionDescription(currentWorkspace, currentSection);
+
+    return (
+      <section style={styles.workspaceCard}>
+        <header style={styles.workspaceHeader(isMobile)}>
+          <button type="button" style={styles.backButton} onClick={goBack}>
+            <i className="fas fa-arrow-left" />
+            <span>Back</span>
+          </button>
+
+          <section style={styles.workspaceCopy}>
+            <p style={styles.workspaceEyebrow}>{getWorkspaceEyebrow(currentWorkspace)}</p>
+            <h2 style={styles.workspaceTitle}>{title}</h2>
+            <p style={styles.workspaceDescription}>{description}</p>
+          </section>
+        </header>
+
+        {screen.kind === "workspace" ? (
+          currentWorkspace === "ylp" ? (
+            <nav style={styles.sectionTabs}>
+              <button
+                type="button"
+                style={{
+                  ...styles.sectionTab,
+                  ...(currentSection === "orders" ? styles.sectionTabActive : null),
+                }}
+                onClick={() => openSection("ylp", "orders")}
+              >
+                订单查询
+              </button>
+
+              <button
+                type="button"
+                style={{
+                  ...styles.sectionTab,
+                  ...(currentSection === "payments" ? styles.sectionTabActive : null),
+                }}
+                onClick={() => openSection("ylp", "payments")}
+              >
+                付款审核
+              </button>
+            </nav>
+          ) : (
+            <p style={styles.workspaceHint}>Lamp 入口只显示 Lamp 付款审核；如需切去 YLP，请先返回选择页。</p>
+          )
+        ) : (
+          <p style={styles.workspaceHint}>{getWorkspaceTitle(currentWorkspace)}</p>
+        )}
       </section>
     );
   }
 
-  return (
-    <div style={styles.page}>
-      <div style={styles.hero}>
-        <div>
-          <div style={styles.eyebrow}>Dharma CRM</div>
-          <h1 style={styles.title}>法会付款管理</h1>
-          <p style={styles.subtitle}>按付款人、电话或祈福者检索，右键执行审核和删除操作。</p>
-        </div>
+  function renderPaymentList(workspace: WorkspaceTab) {
+    return (
+      <>
+        <section style={styles.paymentToolbar(isMobile)}>
+          <input
+            value={paymentQueryByWorkspace[workspace]}
+            onChange={(event) => updatePaymentQuery(workspace, event.target.value)}
+            placeholder="搜索订单号 / 手机号 / 付款人 / 祈福者"
+            style={styles.searchInput}
+          />
+          <p style={styles.summary}>{`共 ${workspacePayments.length} 条，当前第 ${safePaymentPage}/${paymentTotalPages} 页`}</p>
+        </section>
 
-      </div>
+        {paymentLoading ? <section style={styles.stateCard}>加载中…</section> : null}
+        {!paymentLoading && paymentError ? <section style={styles.stateCard}>{paymentError}</section> : null}
 
-      <div style={{ ...styles.toolbar, flexDirection: isMobile ? "column" : "row" }}>
-        <input
-          value={query}
-          onChange={(event) => {
-            setQuery(event.target.value);
-            setPage(1);
-          }}
-          placeholder="搜索手机号 / 付款人 / 祈福者"
-          style={styles.searchInput}
-        />
-        <div style={styles.summary}>{`共 ${filteredPayments.length} 条，当前第 ${safePage}/${totalPages} 页`}</div>
-      </div>
+        {!paymentLoading && !paymentError ? (
+          <>
+            <nav style={styles.pagination}>
+              {Array.from({ length: paymentTotalPages }, (_, index) => {
+                const nextPage = index + 1;
+                const active = nextPage === safePaymentPage;
 
-      {actionMessage ? <div style={styles.toast}>{actionMessage}</div> : null}
+                return (
+                  <button
+                    key={nextPage}
+                    type="button"
+                    onClick={() => updatePaymentPage(workspace, nextPage)}
+                    style={{
+                      ...styles.pageButton,
+                      ...(active ? styles.pageButtonActive : null),
+                    }}
+                  >
+                    {nextPage}
+                  </button>
+                );
+              })}
+            </nav>
 
-      {loading ? <div style={styles.stateCard}>加载中…</div> : null}
-      {!loading && error ? <div style={styles.stateCard}>{error}</div> : null}
+            <section style={styles.grid}>
+              {pagedPayments.map((payment) => {
+                const approved = isPaymentApproved(payment);
 
-      {!loading && !error ? (
-        <>
-          <div style={styles.pagination}>
-            {Array.from({ length: totalPages }, (_, index) => {
-              const nextPage = index + 1;
-              const active = nextPage === safePage;
+                return (
+                  <article
+                    key={getPaymentRecordId(payment)}
+                    style={{
+                      ...styles.card,
+                      ...(approved ? styles.cardApproved : styles.cardPending),
+                    }}
+                  >
+                    <header style={styles.cardHeader}>
+                      <p style={styles.typeBadge(payment.type === "ylp")}>{getPaymentTypeLabel(payment)}</p>
+                      {approved && payment.submitter_id ? (
+                        <CachedImage
+                          src={`/api/user_control/get_profile_image/${payment.submitter_id}`}
+                          cacheKey={`fahui-submitter:${payment.submitter_id}`}
+                          resolveRelativeToApi
+                          alt=""
+                          style={styles.avatar}
+                        />
+                      ) : null}
+                    </header>
 
-              return (
+                    <h3 style={styles.cardTitle}>{getPaymentPrimaryText(payment)}</h3>
+                    <p style={styles.cardMeta}>{getPaymentSecondaryText(payment)}</p>
+                    <p style={styles.cardMeta}>{`金额：${payment.amount ?? payment.total_price ?? "-"} / ${payment.method || payment.payment_mode || "-"}`}</p>
+                    <p style={styles.cardNote}>{payment.note || payment.valid_by || payment.status || "-"}</p>
+
+                    <button
+                      type="button"
+                      style={styles.cardAction}
+                      onClick={() => openPaymentDetail(workspace, getPaymentRecordId(payment))}
+                    >
+                      查看详情
+                    </button>
+                  </article>
+                );
+              })}
+            </section>
+          </>
+        ) : null}
+      </>
+    );
+  }
+
+  function renderPaymentDetail(payment: PaymentRecord, workspace: WorkspaceTab) {
+    const approved = isPaymentApproved(payment);
+
+    return (
+      <>
+        {paymentError ? <section style={styles.stateCard}>{paymentError}</section> : null}
+
+        <section style={styles.detailCard}>
+          <header style={styles.detailHero(isMobile)}>
+            <section>
+              <p style={styles.detailEyebrow}>{getPaymentTypeLabel(payment)}</p>
+              <h3 style={styles.detailTitle}>{getPaymentPrimaryText(payment)}</h3>
+              <p style={styles.detailLead}>{getPaymentSecondaryText(payment)}</p>
+            </section>
+
+            <nav style={styles.detailActions(isMobile)}>
+              {approved ? (
                 <button
-                  key={nextPage}
                   type="button"
-                  onClick={() => setPage(nextPage)}
+                  style={styles.secondaryAction}
+                  onClick={() => void handleRemove(payment, "revoke")}
+                >
+                  撤销审核
+                </button>
+              ) : (
+                <button type="button" style={styles.primaryAction} onClick={() => void handleApprove(payment)}>
+                  审核通过
+                </button>
+              )}
+
+              <button type="button" style={styles.dangerAction} onClick={() => void handleRemove(payment, "delete")}>
+                删除付款
+              </button>
+            </nav>
+          </header>
+
+          <section style={styles.infoGrid}>
+            <DetailField label="工作区" value={workspace === "ylp" ? "YLP" : "Lamp"} />
+            <DetailField label="审核状态" value={payment.status || getPaymentStatusLabel(payment)} />
+            <DetailField label="付款人姓名" value={payment.payer_name} />
+            <DetailField label="付款电话" value={payment.phone || payment.order?.phone} />
+            <DetailField label="付款金额" value={payment.amount || payment.total_price} />
+            <DetailField label="付款方式" value={payment.method || payment.payment_mode} />
+            <DetailField label="付款时间" value={payment.paid_at} />
+            <DetailField label="创建时间" value={payment.created_at} />
+            <DetailField label="审核人" value={payment.valid_by} />
+            <DetailField label="审核时间" value={payment.valid_at} />
+          </section>
+
+          {payment.order ? (
+            <section style={styles.detailSection}>
+              <header style={styles.detailSectionHeader}>
+                <h4 style={styles.detailSectionTitle}>订单信息</h4>
+              </header>
+              <section style={styles.infoGrid}>
+                <DetailField label="订单编号" value={payment.order.id || payment.order_id} />
+                <DetailField label="功德主" value={payment.order.customer_name || payment.order.name} />
+                <DetailField label="电话" value={payment.order.phone} />
+                <DetailField label="版本" value={payment.order.version} />
+              </section>
+            </section>
+          ) : null}
+
+          {(payment.registrations || []).length ? (
+            <section style={styles.detailSection}>
+              <header style={styles.detailSectionHeader}>
+                <h4 style={styles.detailSectionTitle}>报名资料</h4>
+              </header>
+              {(payment.registrations || []).map(renderRegistration)}
+            </section>
+          ) : null}
+        </section>
+      </>
+    );
+  }
+
+  function renderYlpOrderList() {
+    return (
+      <>
+        <section style={styles.orderToolbar(isMobile)}>
+          <select
+            value={ylpVersion}
+            onChange={(event) => {
+              setYlpVersion(event.target.value);
+              setYlpPage(1);
+            }}
+            style={styles.selectInput}
+          >
+            {(ylpVersions.length ? ylpVersions : [ylpVersion || "2025_YLP"]).map((version) => (
+              <option key={version} value={version}>
+                {version}
+              </option>
+            ))}
+          </select>
+
+          <input
+            value={ylpQueryInput}
+            onChange={(event) => setYlpQueryInput(event.target.value)}
+            onKeyDown={(event) => {
+              if (event.key === "Enter") {
+                setYlpQuery(ylpQueryInput.trim());
+                setYlpPage(1);
+              }
+            }}
+            placeholder="搜索订单号 / 功德主 / 电话 / 牌位内容"
+            style={styles.searchInput}
+          />
+
+          <button
+            type="button"
+            style={styles.secondaryActionCompact}
+            onClick={() => {
+              setYlpQuery(ylpQueryInput.trim());
+              setYlpPage(1);
+            }}
+          >
+            搜索
+          </button>
+
+          <p style={styles.summary}>{`共 ${ylpPagination?.total || 0} 条，当前第 ${ylpSafePage}/${ylpTotalPages} 页`}</p>
+        </section>
+
+        {ylpLoading ? <section style={styles.stateCard}>加载中…</section> : null}
+        {!ylpLoading && ylpError ? <section style={styles.stateCard}>{ylpError}</section> : null}
+
+        {!ylpLoading && !ylpError ? (
+          <>
+            <nav style={styles.pagination}>
+              {Array.from({ length: ylpTotalPages }, (_, index) => {
+                const nextPage = index + 1;
+                const active = nextPage === ylpSafePage;
+
+                return (
+                  <button
+                    key={nextPage}
+                    type="button"
+                    onClick={() => setYlpPage(nextPage)}
+                    style={{
+                      ...styles.pageButton,
+                      ...(active ? styles.pageButtonActive : null),
+                    }}
+                  >
+                    {nextPage}
+                  </button>
+                );
+              })}
+            </nav>
+
+            <section style={styles.grid}>
+              {ylpOrders.map((order) => (
+                <article
+                  key={order.id}
                   style={{
-                    ...styles.pageButton,
-                    ...(active ? styles.pageButtonActive : null),
+                    ...styles.card,
+                    ...(order.status === "approved" || order.status === "paid"
+                      ? styles.cardApproved
+                      : styles.cardPending),
                   }}
                 >
-                  {nextPage}
-                </button>
-              );
-            })}
-          </div>
+                  <p style={styles.orderBadge}>{`#${order.id}`}</p>
+                  <h3 style={styles.cardTitle}>{order.customer_name || order.name || "-"}</h3>
+                  <p style={styles.cardMeta}>{`电话：${order.phone || "-"}`}</p>
+                  <p style={styles.cardMeta}>{`版本：${order.version || "-"}`}</p>
+                  <p style={styles.cardMeta}>{`状态：${order.status || "-"}`}</p>
+                  <p style={styles.cardNote}>{order.created_at || "暂无创建时间"}</p>
 
-          <div style={styles.grid}>
-            {pageItems.map((payment) => {
-              const approved = Boolean(payment.submitter_id);
-              const registrations = (payment.registrations || [])
-                .map((registration) => registration.devotee_name)
+                  <button type="button" style={styles.cardAction} onClick={() => void openYlpDetail(order.id)}>
+                    查看详情
+                  </button>
+                </article>
+              ))}
+            </section>
+          </>
+        ) : null}
+      </>
+    );
+  }
+
+  function renderYlpOrderDetailView() {
+    return (
+      <section style={styles.detailCard}>
+        {ylpDetail?.loading ? <section style={styles.stateCard}>加载中…</section> : null}
+        {!ylpDetail?.loading && ylpDetail?.error ? <section style={styles.stateCard}>{ylpDetail.error}</section> : null}
+
+        {!ylpDetail?.loading && !ylpDetail?.error && ylpDetail?.order ? (
+          <>
+            <header style={styles.detailHero(isMobile)}>
+              <section>
+                <p style={styles.detailEyebrow}>YLP Order</p>
+                <h3 style={styles.detailTitle}>{ylpDetail.order.customer_name || ylpDetail.order.name || "-"}</h3>
+                <p style={styles.detailLead}>{`订单 #${ylpDetail.order.id} · ${ylpDetail.order.version || "-"}`}</p>
+              </section>
+
+              <nav style={styles.detailActions(isMobile)}>
+                <button
+                  type="button"
+                  style={styles.secondaryAction}
+                  onClick={() => void handleDownloadPaiwei(ylpDetail.orderId)}
+                >
+                  下载牌位
+                </button>
+
+                <button
+                  type="button"
+                  style={styles.secondaryAction}
+                  onClick={() =>
+                    window.open(`/api/payment/orders/${ylpDetail.orderId}/quotation`, "_blank", "noopener")
+                  }
+                >
+                  下载报价单
+                </button>
+              </nav>
+            </header>
+
+            <section style={styles.infoGrid}>
+              <DetailField label="订单编号" value={ylpDetail.order.id} />
+              <DetailField label="功德主" value={ylpDetail.order.customer_name || ylpDetail.order.name} />
+              <DetailField label="联系电话" value={ylpDetail.order.phone} />
+              <DetailField label="状态" value={ylpDetail.order.status} />
+              <DetailField label="版本" value={ylpDetail.order.version} />
+              <DetailField label="创建时间" value={ylpDetail.order.created_at} />
+            </section>
+
+            <section style={styles.detailSection}>
+              <header style={styles.detailSectionHeader}>
+                <h4 style={styles.detailSectionTitle}>支付记录</h4>
+              </header>
+
+              {ylpDetail.paymentsError ? <p style={styles.emptyText}>{ylpDetail.paymentsError}</p> : null}
+
+              {(ylpDetail.payments || []).length ? (
+                <section style={styles.listSection}>
+                  {ylpDetail.payments.map((payment) => (
+                    <article key={payment.id} style={styles.listCard}>
+                      <p style={styles.listTitle}>{`#${payment.id}`}</p>
+                      <p style={styles.listText}>{`${payment.payment_mode || "-"} · RM ${payment.total_price ?? 0}`}</p>
+                      <p style={styles.listText}>{`${payment.status || "-"} · ${payment.created_at || "-"}`}</p>
+                    </article>
+                  ))}
+                </section>
+              ) : (
+                <p style={styles.emptyText}>暂无支付记录</p>
+              )}
+            </section>
+
+            {(ylpDetail.order.order_items || []).length ? (
+              <section style={styles.detailSection}>
+                <header style={styles.detailSectionHeader}>
+                  <h4 style={styles.detailSectionTitle}>项目内容</h4>
+                </header>
+                {(ylpDetail.order.order_items || []).map(renderYlpItem)}
+              </section>
+            ) : null}
+          </>
+        ) : null}
+      </section>
+    );
+  }
+
+  function renderRegistration(registration: RegistrationRecord, index: number) {
+    return (
+      <article key={`${registration.devotee_name || "registration"}-${index}`} style={styles.listCard}>
+        <p style={styles.listTitle}>{`报名 #${index + 1} · ${registration.devotee_name || "-"}`}</p>
+        <p style={styles.listText}>{`电话：${registration.phone || "-"}`}</p>
+        <p style={styles.listText}>{`地址：${registration.address || "-"}`}</p>
+        <p style={styles.listText}>{`合计：${registration.total_amount ?? "-"}`}</p>
+
+        {(registration.lamps || []).length ? (
+          <ul style={styles.lampList}>
+            {(registration.lamps || []).map((lamp, lampIndex) => {
+              const meta = LAMP_META[lamp.lamp_type] || {};
+              const label = meta.withAmount
+                ? `${meta.label || lamp.lamp_type}：${lamp.amount ?? "-"}`
+                : `${meta.label || lamp.lamp_type}`;
+
+              return <li key={`${lamp.lamp_type}-${lampIndex}`}>{label}</li>;
+            })}
+          </ul>
+        ) : null}
+      </article>
+    );
+  }
+
+  function renderYlpItem(item: YlpOrderItem, index: number) {
+    const fieldEntries = Object.entries(item.item_form_data || {});
+
+    return (
+      <article key={`${item.id}-${index}`} style={styles.listCard}>
+        <p style={styles.listTitle}>{`${item.item_name || item.code || "项目"} · RM ${item.price ?? 0}`}</p>
+        <p style={styles.listText}>{`项目编号：${item.id} / 代码：${item.code || "-"}`}</p>
+
+        {fieldEntries.length ? (
+          <section style={styles.inlineList}>
+            {fieldEntries.map(([key, values]) => (
+              <p key={key} style={styles.listText}>
+                {`${key}：${(values || []).map((value) => value.val).filter(Boolean).join(" / ") || "-"}`}
+              </p>
+            ))}
+          </section>
+        ) : null}
+
+        {(item.item_location || []).length ? (
+          <section style={styles.inlineList}>
+            {(item.item_location || []).map((location, locationIndex) => {
+              const boards = (location.boards || [])
+                .map((board) =>
+                  board.board_name ? `${board.board_name}${board.location ? ` #${board.location}` : ""}` : null,
+                )
                 .filter(Boolean)
                 .join("、");
 
               return (
-                <article
-                  key={payment.payment_id}
-                  style={{
-                    ...styles.card,
-                    ...(approved ? styles.cardApproved : styles.cardPending),
-                  }}
-                  onClick={() => setDetail({ payment, edit: false })}
-                  onContextMenu={(event) => {
-                    event.preventDefault();
-                    setContextMenu({
-                      payment,
-                      x: event.clientX,
-                      y: event.clientY,
-                    });
-                  }}
-                >
-                  {approved && payment.submitter_id ? (
-                    <CachedImage
-                      src={`/api/user_control/get_profile_image/${payment.submitter_id}`}
-                      cacheKey={`fahui-submitter:${payment.submitter_id}`}
-                      resolveRelativeToApi
-                      alt=""
-                      style={styles.avatar}
-                    />
-                  ) : null}
-                  <div style={styles.cardTitle}>{payment.payer_name || "-"}</div>
-                  <div style={styles.cardMeta}>{`📞 ${payment.phone || "-"}`}</div>
-                  <div style={styles.cardMeta}>{`💰 ${payment.amount ?? "-"} (${payment.method || "-"})`}</div>
-                  <div style={styles.cardRegistrations}>{registrations || "暂无祈福者信息"}</div>
-                </article>
+                <p key={`${location.print_pdf?.id || "pdf"}-${locationIndex}`} style={styles.listText}>
+                  {`打印 PDF ${location.print_pdf?.id || "-"}${boards ? ` · ${boards}` : ""}`}
+                </p>
               );
             })}
-          </div>
+          </section>
+        ) : null}
+      </article>
+    );
+  }
+
+  return (
+    <section style={styles.page}>
+      {actionMessage ? <section style={styles.toast}>{actionMessage}</section> : null}
+
+      {screen.kind === "selection" ? renderSelectionView() : null}
+
+      {screen.kind !== "selection" ? (
+        <>
+          {renderWorkspaceHeader()}
+
+          {screen.kind === "workspace" && screen.section === "payments" ? renderPaymentList(screen.workspace) : null}
+          {screen.kind === "workspace" && screen.workspace === "ylp" && screen.section === "orders"
+            ? renderYlpOrderList()
+            : null}
+          {screen.kind === "payment-detail" && selectedPayment ? renderPaymentDetail(selectedPayment, screen.workspace) : null}
+          {screen.kind === "ylp-order-detail" ? renderYlpOrderDetailView() : null}
         </>
       ) : null}
-
-      {contextMenu ? (
-        <div
-          style={{
-            ...styles.contextMenu,
-            top: contextMenu.y,
-            left: contextMenu.x,
-          }}
-          onClick={(event) => event.stopPropagation()}
-        >
-          <button
-            type="button"
-            style={styles.menuItem}
-            onClick={() => {
-              setContextMenu(null);
-              setDetail({ payment: contextMenu.payment, edit: true });
-            }}
-          >
-            ✏️ 编辑
-          </button>
-          <button
-            type="button"
-            style={{ ...styles.menuItem, ...styles.menuItemApprove }}
-            onClick={() =>
-              void (contextMenu.payment.submitter_id
-                ? handleRemove(contextMenu.payment, "revoke")
-                : handleApprove(contextMenu.payment))
-            }
-          >
-            {contextMenu.payment.submitter_id ? "🚫 撤销审核" : "✅ 审核通过"}
-          </button>
-          <button
-            type="button"
-            style={{ ...styles.menuItem, ...styles.menuItemDelete }}
-            onClick={() => void handleRemove(contextMenu.payment, "delete")}
-          >
-            🗑 删除
-          </button>
-        </div>
-      ) : null}
-
-      {detail ? (
-        <div style={styles.overlay} onClick={() => setDetail(null)}>
-          <div style={styles.modal} onClick={(event) => event.stopPropagation()}>
-            <div style={styles.modalTitle}>{detail.edit ? "付款详情 / 编辑预览" : "付款详情"}</div>
-            <DetailField label="付款人姓名" value={detail.payment.payer_name} readOnly={!detail.edit} />
-            <DetailField label="付款电话" value={detail.payment.phone} readOnly={!detail.edit} />
-            <DetailField label="付款金额" value={detail.payment.amount} readOnly={!detail.edit} />
-            <DetailField label="付款方式" value={detail.payment.method} readOnly={!detail.edit} />
-            <DetailField label="付款时间" value={detail.payment.paid_at} readOnly={!detail.edit} />
-            <DetailField label="创建时间" value={detail.payment.created_at} readOnly={!detail.edit} />
-            {(detail.payment.registrations || []).map(renderRegistration)}
-            <button type="button" style={styles.closeButton} onClick={() => setDetail(null)}>
-              关闭
-            </button>
-          </div>
-        </div>
-      ) : null}
-    </div>
+    </section>
   );
 }
 
 function DetailField({
   label,
   value,
-  readOnly,
 }: {
   label: string;
-  value: number | string | null | undefined;
-  readOnly: boolean;
+  value: number | string | null | undefined | ReactNode;
 }) {
   return (
-    <label style={styles.detailField}>
-      <span style={styles.detailLabel}>{label}</span>
-      <input value={value ?? ""} readOnly={readOnly} style={styles.detailInput(readOnly)} />
-    </label>
+    <article style={styles.infoCard}>
+      <p style={styles.infoLabel}>{label}</p>
+      <p style={styles.infoValue}>{typeof value === "string" || typeof value === "number" ? getValueText(value) : value || "-"}</p>
+    </article>
   );
 }
 
 const styles = {
   page: {
     minHeight: "100%",
-    padding: "20px",
+    display: "grid",
+    gap: "16px",
     color: "var(--x-color-ink)",
     fontFamily: '"PingFang SC","Microsoft YaHei",var(--x-font-sans)',
-    background:
-      "radial-gradient(circle at top left, var(--x-color-accent-tint-strong), var(--x-color-canvas) 42%, var(--x-color-canvas-alt) 100%)",
   },
-  hero: {
-    display: "flex",
-    justifyContent: "space-between",
-    gap: "16px",
-    alignItems: "flex-start",
-    padding: "20px",
+  heroCard: {
+    display: "grid",
+    gap: "10px",
+    padding: "22px",
     borderRadius: "24px",
     background: "linear-gradient(135deg, var(--x-color-nav-start), var(--x-color-accent))",
     color: "white",
-    boxShadow: "0 20px 40px var(--x-color-shadow)",
+    boxShadow: "0 18px 40px var(--x-color-shadow)",
   },
   eyebrow: {
+    margin: 0,
     fontSize: "12px",
-    letterSpacing: "0.2em",
+    letterSpacing: "0.18em",
     textTransform: "uppercase" as const,
-    opacity: 0.84,
-    marginBottom: "8px",
+    opacity: 0.82,
   },
   title: {
     margin: 0,
-    fontSize: "30px",
+    fontSize: "32px",
     fontWeight: 900,
   },
   subtitle: {
-    margin: "10px 0 0",
-    maxWidth: "640px",
-    lineHeight: 1.6,
+    margin: 0,
+    maxWidth: "680px",
+    lineHeight: 1.7,
     fontSize: "14px",
-    color: "rgba(255,255,255,0.84)",
+    color: "rgba(255,255,255,0.88)",
   },
-  refreshButton: {
-    border: "none",
-    borderRadius: "999px",
-    padding: "12px 18px",
-    background: "white",
+  choiceGrid: (isMobile: boolean) => ({
+    display: "grid",
+    gridTemplateColumns: isMobile ? "1fr" : "repeat(2,minmax(0,1fr))",
+    gap: "14px",
+  }),
+  choiceCard: {
+    display: "grid",
+    gap: "10px",
+    padding: "22px",
+    borderRadius: "22px",
+    border: "1px solid var(--x-color-line-soft)",
+    background:
+      "linear-gradient(180deg, var(--x-color-panel-strongest), color-mix(in srgb, var(--x-color-info-tint) 60%, white))",
+    color: "var(--x-color-ink)",
+    textAlign: "left" as const,
+    cursor: "pointer",
+    boxShadow: "0 14px 30px var(--x-color-shadow-soft)",
+  },
+  choiceEyebrow: {
+    margin: 0,
+    fontSize: "12px",
+    fontWeight: 800,
+    letterSpacing: "0.14em",
+    textTransform: "uppercase" as const,
     color: "var(--x-color-accent-strong)",
+  },
+  choiceTitle: {
+    margin: 0,
+    fontSize: "26px",
+    fontWeight: 900,
+  },
+  choiceBody: {
+    margin: 0,
+    fontSize: "14px",
+    lineHeight: 1.7,
+    color: "var(--x-color-ink-muted)",
+  },
+  workspaceCard: {
+    display: "grid",
+    gap: "14px",
+    padding: "18px 20px",
+    borderRadius: "22px",
+    border: "1px solid var(--x-color-line-soft)",
+    background: "var(--x-color-panel-glass)",
+    boxShadow: "0 14px 32px var(--x-color-shadow-soft)",
+  },
+  workspaceHeader: (isMobile: boolean) => ({
+    display: "grid",
+    gridTemplateColumns: isMobile ? "1fr" : "auto minmax(0,1fr)",
+    gap: "14px",
+    alignItems: "start",
+  }),
+  backButton: {
+    width: "fit-content",
+    display: "inline-flex",
+    alignItems: "center",
+    gap: "8px",
+    padding: "10px 14px",
+    borderRadius: "999px",
+    border: "1px solid var(--x-color-line-soft)",
+    background: "var(--x-color-panel)",
+    color: "var(--x-color-ink)",
     fontWeight: 800,
     cursor: "pointer",
-    whiteSpace: "nowrap" as const,
-    boxShadow: "0 8px 18px var(--x-color-shadow-soft)",
   },
-  toolbar: {
+  workspaceCopy: {
+    display: "grid",
+    gap: "6px",
+  },
+  workspaceEyebrow: {
+    margin: 0,
+    fontSize: "12px",
+    fontWeight: 800,
+    letterSpacing: "0.14em",
+    textTransform: "uppercase" as const,
+    color: "var(--x-color-accent-strong)",
+  },
+  workspaceTitle: {
+    margin: 0,
+    fontSize: "26px",
+    lineHeight: 1.1,
+    fontWeight: 900,
+  },
+  workspaceDescription: {
+    margin: 0,
+    fontSize: "14px",
+    lineHeight: 1.7,
+    color: "var(--x-color-ink-muted)",
+  },
+  workspaceHint: {
+    margin: 0,
+    fontSize: "13px",
+    color: "var(--x-color-ink-muted)",
+  },
+  sectionTabs: {
     display: "flex",
+    flexWrap: "wrap" as const,
+    gap: "10px",
+  },
+  sectionTab: {
+    border: "1px solid var(--x-color-line)",
+    borderRadius: "999px",
+    padding: "10px 16px",
+    background: "var(--x-color-panel)",
+    color: "var(--x-color-ink-muted)",
+    fontWeight: 800,
+    cursor: "pointer",
+  },
+  sectionTabActive: {
+    background: "linear-gradient(135deg, var(--x-color-accent), var(--x-color-info))",
+    color: "white",
+    border: "1px solid transparent",
+    boxShadow: "0 12px 24px var(--x-color-shadow-soft)",
+  },
+  paymentToolbar: (isMobile: boolean) => ({
+    display: "grid",
+    gridTemplateColumns: isMobile ? "1fr" : "minmax(0,1fr) auto",
     gap: "12px",
     alignItems: "center",
-    marginTop: "18px",
-    marginBottom: "12px",
-  },
+  }),
+  orderToolbar: (isMobile: boolean) => ({
+    display: "grid",
+    gridTemplateColumns: isMobile ? "1fr" : "160px minmax(0,1fr) auto auto",
+    gap: "12px",
+    alignItems: "center",
+  }),
   searchInput: {
-    flex: 1,
     width: "100%",
     padding: "13px 16px",
     borderRadius: "14px",
@@ -416,7 +1443,18 @@ const styles = {
     fontSize: "14px",
     color: "var(--x-color-ink)",
   },
+  selectInput: {
+    minWidth: "150px",
+    padding: "13px 16px",
+    borderRadius: "14px",
+    border: "1px solid var(--x-color-line)",
+    background: "var(--x-color-panel-strongest)",
+    boxSizing: "border-box" as const,
+    fontSize: "14px",
+    color: "var(--x-color-ink)",
+  },
   summary: {
+    margin: 0,
     padding: "12px 14px",
     borderRadius: "14px",
     background: "var(--x-color-panel-glass)",
@@ -426,7 +1464,6 @@ const styles = {
     whiteSpace: "nowrap" as const,
   },
   toast: {
-    marginBottom: "12px",
     padding: "12px 14px",
     borderRadius: "14px",
     background: "var(--x-color-success-soft)",
@@ -435,8 +1472,7 @@ const styles = {
     border: "1px solid rgba(21, 128, 61, 0.12)",
   },
   stateCard: {
-    marginTop: "16px",
-    padding: "28px",
+    padding: "26px",
     borderRadius: "20px",
     background: "var(--x-color-panel-strong)",
     boxShadow: "0 12px 28px var(--x-color-shadow-soft)",
@@ -448,7 +1484,6 @@ const styles = {
     display: "flex",
     gap: "8px",
     flexWrap: "wrap" as const,
-    marginBottom: "14px",
   },
   pageButton: {
     minWidth: "40px",
@@ -471,14 +1506,13 @@ const styles = {
     gap: "14px",
   },
   card: {
-    position: "relative" as const,
-    minHeight: "152px",
+    display: "grid",
+    gap: "8px",
+    minHeight: "190px",
     padding: "16px",
     borderRadius: "18px",
     border: "1px solid var(--x-color-line-soft)",
     boxShadow: "0 14px 30px var(--x-color-shadow-soft)",
-    cursor: "pointer",
-    transition: "transform 140ms ease, box-shadow 140ms ease",
   },
   cardApproved: {
     background: "linear-gradient(180deg, var(--x-color-success-soft), var(--x-color-panel))",
@@ -486,10 +1520,13 @@ const styles = {
   cardPending: {
     background: "linear-gradient(180deg, var(--x-color-warning-soft), var(--x-color-panel))",
   },
+  cardHeader: {
+    display: "flex",
+    justifyContent: "space-between",
+    gap: "10px",
+    alignItems: "start",
+  },
   avatar: {
-    position: "absolute" as const,
-    top: "12px",
-    right: "12px",
     width: "30px",
     height: "30px",
     borderRadius: "50%",
@@ -498,130 +1535,218 @@ const styles = {
     background: "white",
   },
   cardTitle: {
-    marginBottom: "6px",
+    margin: 0,
     fontSize: "18px",
     fontWeight: 900,
-    paddingRight: "40px",
   },
   cardMeta: {
+    margin: 0,
     fontSize: "13px",
-    marginTop: "4px",
+    lineHeight: 1.6,
     color: "var(--x-color-ink-muted)",
   },
-  cardRegistrations: {
-    marginTop: "10px",
+  typeBadge: (isYlp: boolean) => ({
+    display: "inline-flex",
+    alignItems: "center",
+    justifyContent: "center",
+    width: "fit-content",
+    padding: "4px 10px",
+    borderRadius: "999px",
+    background: isYlp ? "rgba(14, 116, 144, 0.12)" : "rgba(202, 138, 4, 0.12)",
+    color: isYlp ? "var(--x-color-info)" : "var(--x-color-warning)",
+    fontSize: "12px",
+    fontWeight: 800,
+    margin: 0,
+  }),
+  cardNote: {
+    margin: 0,
     fontSize: "12px",
     lineHeight: 1.6,
     color: "var(--x-color-ink-muted)",
   },
-  contextMenu: {
-    position: "fixed" as const,
-    zIndex: 1000,
-    minWidth: "168px",
-    padding: "6px",
-    borderRadius: "14px",
-    background: "var(--x-color-panel)",
-    border: "1px solid var(--x-color-line-soft)",
-    boxShadow: "0 12px 28px var(--x-color-shadow)",
-  },
-  menuItem: {
-    display: "block",
+  cardAction: {
+    marginTop: "auto",
     width: "100%",
-    padding: "10px 12px",
-    border: "none",
-    borderRadius: "10px",
-    background: "transparent",
-    textAlign: "left" as const,
-    fontSize: "14px",
-    fontWeight: 700,
+    padding: "12px 14px",
+    borderRadius: "12px",
+    border: "1px solid var(--x-color-line)",
+    background: "rgba(255,255,255,0.78)",
+    color: "var(--x-color-accent-strong)",
+    fontWeight: 800,
     cursor: "pointer",
-    color: "var(--x-color-ink)",
   },
-  menuItemApprove: {
-    color: "var(--x-color-success)",
-  },
-  menuItemDelete: {
-    color: "var(--x-color-danger)",
-  },
-  overlay: {
-    position: "fixed" as const,
-    inset: 0,
-    zIndex: 1001,
-    display: "flex",
+  orderBadge: {
+    margin: 0,
+    display: "inline-flex",
     alignItems: "center",
     justifyContent: "center",
-    padding: "20px",
-    background: "rgba(15, 23, 42, 0.42)",
-  },
-  modal: {
-    width: "min(520px, 100%)",
-    maxHeight: "90vh",
-    overflowY: "auto" as const,
-    padding: "20px",
-    borderRadius: "20px",
-    background: "var(--x-color-panel-strongest)",
-    border: "1px solid var(--x-color-line-soft)",
-    boxShadow: "0 20px 50px var(--x-color-shadow)",
-  },
-  modalTitle: {
-    marginBottom: "14px",
-    fontSize: "20px",
-    fontWeight: 900,
-    textAlign: "center" as const,
-    color: "var(--x-color-ink)",
-  },
-  detailField: {
-    display: "block",
-    marginBottom: "12px",
-  },
-  detailLabel: {
-    display: "block",
-    marginBottom: "4px",
-    fontSize: "13px",
-    fontWeight: 700,
-    color: "var(--x-color-ink-muted)",
-  },
-  detailInput: (readOnly: boolean) => ({
-    width: "100%",
-    padding: "10px 12px",
-    borderRadius: "10px",
-    border: "1px solid var(--x-color-line)",
-    background: readOnly ? "var(--x-color-panel-alt)" : "var(--x-color-panel)",
-    color: "var(--x-color-ink)",
-    boxSizing: "border-box" as const,
-    fontSize: "14px",
-  }),
-  detailSection: {
-    marginTop: "14px",
-    paddingTop: "10px",
-    borderTop: "1px dashed var(--x-color-line)",
-  },
-  detailSectionTitle: {
-    marginBottom: "6px",
+    width: "fit-content",
+    padding: "4px 10px",
+    borderRadius: "999px",
+    background: "rgba(255,255,255,0.75)",
+    fontSize: "12px",
     fontWeight: 800,
     color: "var(--x-color-accent-strong)",
   },
-  detailInfo: {
-    fontSize: "13px",
-    lineHeight: 1.6,
+  detailCard: {
+    display: "grid",
+    gap: "16px",
+    padding: "20px",
+    borderRadius: "22px",
+    border: "1px solid var(--x-color-line-soft)",
+    background: "var(--x-color-panel-strongest)",
+    boxShadow: "0 18px 40px var(--x-color-shadow-soft)",
+  },
+  detailHero: (isMobile: boolean) => ({
+    display: "grid",
+    gridTemplateColumns: isMobile ? "1fr" : "minmax(0,1fr) auto",
+    gap: "16px",
+    alignItems: "start",
+  }),
+  detailEyebrow: {
+    margin: 0,
+    fontSize: "12px",
+    fontWeight: 800,
+    letterSpacing: "0.14em",
+    textTransform: "uppercase" as const,
+    color: "var(--x-color-accent-strong)",
+  },
+  detailTitle: {
+    margin: "6px 0 0",
+    fontSize: "28px",
+    lineHeight: 1.1,
+    fontWeight: 900,
+  },
+  detailLead: {
+    margin: "8px 0 0",
+    fontSize: "14px",
+    lineHeight: 1.7,
     color: "var(--x-color-ink-muted)",
   },
-  lampList: {
-    marginTop: "6px",
-    paddingLeft: "18px",
-    fontSize: "13px",
-    color: "var(--x-color-ink)",
-  },
-  closeButton: {
-    marginTop: "18px",
-    width: "100%",
-    padding: "14px",
+  detailActions: (isMobile: boolean) => ({
+    display: "grid",
+    gridTemplateColumns: isMobile ? "1fr" : "repeat(2, minmax(140px,auto))",
+    gap: "10px",
+  }),
+  primaryAction: {
+    padding: "13px 16px",
     borderRadius: "14px",
     border: "none",
     background: "linear-gradient(135deg, var(--x-color-accent), var(--x-color-info))",
     color: "white",
     fontWeight: 900,
-    fontSize: "15px",
     cursor: "pointer",
+  },
+  secondaryAction: {
+    padding: "13px 16px",
+    borderRadius: "14px",
+    border: "1px solid var(--x-color-line)",
+    background: "var(--x-color-panel)",
+    color: "var(--x-color-ink)",
+    fontWeight: 800,
+    cursor: "pointer",
+  },
+  secondaryActionCompact: {
+    padding: "13px 16px",
+    borderRadius: "14px",
+    border: "1px solid var(--x-color-line)",
+    background: "var(--x-color-panel)",
+    color: "var(--x-color-ink)",
+    fontWeight: 800,
+    cursor: "pointer",
+    whiteSpace: "nowrap" as const,
+  },
+  dangerAction: {
+    padding: "13px 16px",
+    borderRadius: "14px",
+    border: "1px solid rgba(220, 38, 38, 0.18)",
+    background: "rgba(254, 226, 226, 0.8)",
+    color: "var(--x-color-danger)",
+    fontWeight: 900,
+    cursor: "pointer",
+  },
+  infoGrid: {
+    display: "grid",
+    gridTemplateColumns: "repeat(auto-fit,minmax(180px,1fr))",
+    gap: "12px",
+  },
+  infoCard: {
+    display: "grid",
+    gap: "6px",
+    padding: "14px",
+    borderRadius: "16px",
+    border: "1px solid var(--x-color-line-soft)",
+    background: "var(--x-color-panel)",
+  },
+  infoLabel: {
+    margin: 0,
+    fontSize: "12px",
+    fontWeight: 700,
+    color: "var(--x-color-ink-muted)",
+  },
+  infoValue: {
+    margin: 0,
+    fontSize: "15px",
+    lineHeight: 1.5,
+    color: "var(--x-color-ink)",
+    wordBreak: "break-word" as const,
+  },
+  detailSection: {
+    display: "grid",
+    gap: "12px",
+    paddingTop: "4px",
+  },
+  detailSectionHeader: {
+    display: "flex",
+    alignItems: "center",
+    justifyContent: "space-between",
+    gap: "10px",
+  },
+  detailSectionTitle: {
+    margin: 0,
+    fontSize: "18px",
+    fontWeight: 900,
+    color: "var(--x-color-accent-strong)",
+  },
+  listSection: {
+    display: "grid",
+    gap: "10px",
+  },
+  listCard: {
+    display: "grid",
+    gap: "4px",
+    padding: "14px",
+    borderRadius: "16px",
+    border: "1px solid var(--x-color-line-soft)",
+    background: "var(--x-color-panel)",
+  },
+  listTitle: {
+    margin: 0,
+    fontSize: "15px",
+    fontWeight: 800,
+    color: "var(--x-color-ink)",
+  },
+  listText: {
+    margin: 0,
+    fontSize: "13px",
+    lineHeight: 1.7,
+    color: "var(--x-color-ink-muted)",
+  },
+  emptyText: {
+    margin: 0,
+    fontSize: "14px",
+    color: "var(--x-color-ink-muted)",
+  },
+  inlineList: {
+    display: "grid",
+    gap: "4px",
+    marginTop: "6px",
+  },
+  lampList: {
+    margin: "6px 0 0",
+    paddingLeft: "18px",
+    fontSize: "13px",
+    lineHeight: 1.7,
+    color: "var(--x-color-ink)",
   },
 };

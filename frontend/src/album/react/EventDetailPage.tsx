@@ -1,12 +1,12 @@
 import { useEffect, useRef, useState } from "react";
 import type { CSSProperties } from "react";
-import { useParams } from "react-router-dom";
+import { useNavigate, useParams } from "react-router-dom";
 
 import { CacheMediaPlayer } from "../../components/CacheMediaPlayer";
 import { useEventData } from "../../event/shared/EventDataContext";
 import { fetchEventDetail } from "../../event/shared/api";
 import type { EventDetailRecord } from "../../event/shared/types";
-import { ensureDesignTokens } from "../../theme/designTokens";
+import { useEnsureDesignTokens } from "../../theme/designTokens";
 import { PhotoGrid } from "./PhotoGrid";
 import { EventCheckInPanel } from "./EventCheckInPanel";
 import { EditEventModal } from "./EditEventModal";
@@ -22,9 +22,10 @@ import {
 import { openBrochurePreviewModal } from "../../event/shared/brochurePreview";
 
 export function EventDetailPage() {
-  ensureDesignTokens();
+  useEnsureDesignTokens();
 
   const { eventId } = useParams();
+  const navigate = useNavigate();
   const { getEventById, refreshEvents } = useEventData();
   const { isMobile, user } = useUserState();
   const [detail, setDetail] = useState<EventDetailRecord | null>(null);
@@ -231,7 +232,7 @@ export function EventDetailPage() {
       </section>
 
       <section style={toolbarStyle(isMobile)}>
-        <button type="button" style={secondaryButtonStyle} onClick={() => (window.location.hash = "#/")}>
+        <button type="button" style={secondaryButtonStyle} onClick={() => navigate("/")}>
           返回首页
         </button>
         <div style={toolbarGroupStyle}>
@@ -241,7 +242,7 @@ export function EventDetailPage() {
             disabled={!detail.prev_event_id}
             onClick={() => {
               if (detail.prev_event_id) {
-                window.location.hash = `#/event/${detail.prev_event_id}`;
+                navigate(`/event/${detail.prev_event_id}`);
               }
             }}
           >
@@ -253,7 +254,7 @@ export function EventDetailPage() {
             disabled={!detail.next_event_id}
             onClick={() => {
               if (detail.next_event_id) {
-                window.location.hash = `#/event/${detail.next_event_id}`;
+                navigate(`/event/${detail.next_event_id}`);
               }
             }}
           >

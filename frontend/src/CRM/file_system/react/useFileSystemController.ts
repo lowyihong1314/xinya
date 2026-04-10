@@ -2,13 +2,14 @@ import { startTransition, useEffect, useMemo, useRef, useState } from "react";
 
 import { fetchAllUsers, fetchDepartments } from "../../user_control/react/api";
 import type { DepartmentRecord, UserRecord } from "../../user_control/react/types";
-import { ensureDesignTokens } from "../../../theme/designTokens";
+import { showConfirmDialog, showPromptDialog } from "../../../js/dialogs";
+import { useEnsureDesignTokens } from "../../../theme/designTokens";
 import * as api from "./api";
 import type { DirectoryResult, FileDetail, PermissionRow, SelectableItem, Toast, TrashRow, TreeResponse } from "./types";
 import { errorMessage, itemsPerPage, joinPath, triggerDownload } from "./utils";
 
 export function useFileSystemController() {
-  ensureDesignTokens();
+  useEnsureDesignTokens();
 
   const [tree, setTree] = useState<TreeResponse>({ directories: [], files: [] });
   const [directory, setDirectory] = useState<DirectoryResult | null>(null);
@@ -91,10 +92,16 @@ export function useFileSystemController() {
   const selectedItem = useMemo(() => {
     const selectedPath = selectedPaths[0];
     if (!selectedPath || !directory) return null;
+    const selectedFile = directory.files.find((item) => item.path === selectedPath);
+    if (selectedFile) {
+      return selectedFile;
+    }
+
+    const selectedDirectory = directory.directories.find((item) => item.path === selectedPath);
     return (
-      directory.files.find((item) => item.path === selectedPath) ??
-      directory.directories.find((item) => item.path === selectedPath) ??
-      null
+      selectedDirectory
+        ? { ...selectedDirectory, file_id: -1 as const, type: "dir" as const }
+        : null
     );
   }, [selectedPaths, directory]);
 
@@ -243,7 +250,11 @@ export function useFileSystemController() {
         }),
       onCreateFolder: () =>
         void (async () => {
-          const name = window.prompt("新文件夹名称");
+          const name = await showPromptDialog({
+            title: "新建文件夹",
+            message: "新文件夹名称",
+            placeholder: "文件夹名称",
+          });
           if (!name) return;
           await runAction(async () => {
             await api.createDirectory(joinPath(currentPath, name));
@@ -254,7 +265,12 @@ export function useFileSystemController() {
       onRename: () =>
         void (async () => {
           if (!selectedItem) return;
-          const newName = window.prompt("新的名称", selectedItem.name);
+          const newName = await showPromptDialog({
+            title: "重命名",
+            message: "新的名称",
+            initialValue: selectedItem.name,
+            placeholder: "名称",
+          });
           if (!newName || newName === selectedItem.name) return;
           await runAction(async () => {
             if (selectedItem.type === "dir") {
@@ -270,7 +286,12 @@ export function useFileSystemController() {
         void (async () => {
           const selectedFile = selectedItem && selectedItem.type === "file" ? selectedItem : null;
           if (!selectedFile) return;
-          const dirPath = window.prompt("移动到目录路径", currentPath);
+          const dirPath = await showPromptDialog({
+            title: "移动文件",
+            message: "移动到目录路径",
+            initialValue: currentPath,
+            placeholder: "/path/to/directory",
+          });
           if (!dirPath) return;
           await runAction(async () => {
             await api.moveFile(selectedFile.path, dirPath);
@@ -280,7 +301,7 @@ export function useFileSystemController() {
         })(),
       onDelete: () =>
         void (async () => {
-          if (!selectedPaths.length || !window.confirm("确认移动到回收站？")) return;
+          if (!selectedPaths.length || !(await showConfirmDialog({ message: "确认移动到回收站？", tone: "danger" }))) return;
           const selectedFiles = (directory?.files || []).filter((item) => selectedPaths.includes(item.path));
           const selectedDirs = (directory?.directories || []).filter((item) => selectedPaths.includes(item.path));
           await runAction(async () => {
@@ -304,14 +325,34 @@ export function useFileSystemController() {
         void (async () => {
           const selectedFile = selectedItem && selectedItem.type === "file" ? selectedItem : null;
           if (!selectedFile) return;
-          const minutes = Number(window.prompt("有效分钟数", "30") || 30);
-          const credit = Number(window.prompt("可下载次数", "1") || 1);
+          const minutesInput = await showPromptDialog({
+            title: "分享设置",
+            message: "有效分钟数",
+            initialValue: "30",
+            placeholder: "30",
+          });
+          if (minutesInput === null) return;
+          const creditInput = await showPromptDialog({
+            title: "分享设置",
+            message: "可下载次数",
+            initialValue: "1",
+            placeholder: "1",
+          });
+          if (creditInput === null) return;
+          const minutes = Number(minutesInput || 30);
+          const credit = Number(creditInput || 1);
           await runAction(async () => {
             const data = await api.createShare(selectedFile.file_id, minutes, credit);
             const shareUrl = `${window.location.origin}${data.share_url}`;
             await navigator.clipboard?.writeText(shareUrl).catch(() => undefined);
             showToast("success", `分享链接已生成${navigator.clipboard ? "并复制" : ""}`);
-            window.prompt("分享链接", shareUrl);
+            await showPromptDialog({
+              title: "分享链接",
+              message: "请复制下面的链接",
+              initialValue: shareUrl,
+              readOnly: true,
+              confirmText: "关闭",
+            });
           });
         })(),
       onRestoreTrash: (trashId: number) =>

@@ -7,9 +7,7 @@ import { hasUserPermission } from "../../app/permissions";
 import { CacheMediaPlayer } from "../../components/CacheMediaPlayer";
 import { API_BASE } from "../../js/apiBase";
 import { apiFetch } from "../../js/apiFetch";
-import { ensureDesignTokens } from "../../theme/designTokens";
-
-ensureDesignTokens();
+import { useEnsureDesignTokens } from "../../theme/designTokens";
 
 type FileRecord = {
   id: number;
@@ -103,6 +101,8 @@ export function ImageDetailPageRoute() {
 }
 
 export function ImageDetailPage({ isMobile, user }: { isMobile: boolean; user?: unknown }) {
+  useEnsureDesignTokens();
+
   const navigate = useNavigate();
   const { imageId } = useParams();
   const { file, event, mediaSource, loading, error, reloadCurrent } = useImageDetail(imageId);

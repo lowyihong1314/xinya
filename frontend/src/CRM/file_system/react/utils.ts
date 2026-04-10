@@ -1,3 +1,5 @@
+import { downloadBlob } from "../../../js/browserActions";
+
 export const itemsPerPage = 40;
 
 export function joinPath(base: string, segment: string) {
@@ -22,12 +24,5 @@ export function errorMessage(error: unknown) {
 }
 
 export function triggerDownload(blob: Blob, filename: string) {
-  const url = URL.createObjectURL(blob);
-  const anchor = document.createElement("a");
-  anchor.href = url;
-  anchor.download = filename;
-  document.body.appendChild(anchor);
-  anchor.click();
-  anchor.remove();
-  URL.revokeObjectURL(url);
+  downloadBlob(blob, filename);
 }

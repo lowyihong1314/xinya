@@ -31,7 +31,7 @@ CRM workspace area for admin-only features.
 - `Account`: finance and payment-related CRM flows
 - `CCTV`: monitoring modal and CRM CCTV page
 - `event`: event table management
-- `fahui`: lamp-payment review workspace for dharma events
+- `fahui`: dharma-event workspace with lamp-payment review and YLP order lookup
 - `file_system`: embedded file manager
 - `form`: registration-form workspace
 - `permanent_registration`: long-lived registration dashboards

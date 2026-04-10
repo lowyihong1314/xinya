@@ -52,19 +52,22 @@ function LegacyChangyouRoomRedirect() {
   return <Navigate to={roomId ? getChangyouRoomPath(roomId) : CHANGYOU_ROOM_PATH} replace />;
 }
 
-const portalMusicRoute: RouteObject = {
-  ...musicRoute,
-  children: musicRoute.children?.map((route) => {
-    const isPublicPlayerRoute = route.path === "changyou/room/player/:roomId";
-    if (!route.element || route.index || isPublicPlayerRoute) {
-      return route;
-    }
-    return {
-      ...route,
-      element: <RequirePortalAuth>{route.element}</RequirePortalAuth>,
-    };
-  }),
-};
+function wrapPortalMusicRoute(route: RouteObject): RouteObject {
+  if (route.index || !route.element || route.path === "changyou/room/player/:roomId") {
+    return route;
+  }
+
+  return {
+    ...route,
+    element: <RequirePortalAuth>{route.element}</RequirePortalAuth>,
+  };
+}
+
+const portalMusicRoute = {
+  path: musicRoute.path ?? "music",
+  element: musicRoute.element,
+  children: (musicRoute.children ?? []).map(wrapPortalMusicRoute),
+} satisfies RouteObject;
 
 export const musicPortalRouter = createHashRouter([
   {

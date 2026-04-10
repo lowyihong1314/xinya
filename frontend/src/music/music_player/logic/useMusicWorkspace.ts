@@ -2,6 +2,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 
 import { hasUserPermission } from "../../../app/permissions";
 import { useUserState } from "../../../app/UserState";
+import { showConfirmDialog } from "../../../js/dialogs";
 import {
   createAlbum,
   deleteAlbum,
@@ -426,7 +427,7 @@ export function useMusicWorkspace() {
 
   async function handleDeleteAlbum() {
     if (!selectedAlbumId) return;
-    if (!window.confirm("确定删除这个专辑吗？其中歌曲也会被移除。")) return;
+    if (!(await showConfirmDialog({ message: "确定删除这个专辑吗？其中歌曲也会被移除。", tone: "danger" }))) return;
     setSavingAlbum(true);
     try {
       await deleteAlbum(selectedAlbumId);
@@ -516,7 +517,7 @@ export function useMusicWorkspace() {
 
   async function handleDeleteTrack() {
     if (!editingMusicId) return;
-    if (!window.confirm("确定删除这首歌曲吗？")) return;
+    if (!(await showConfirmDialog({ message: "确定删除这首歌曲吗？", tone: "danger" }))) return;
     setSavingTrack(true);
     try {
       await deleteMusic(editingMusicId);

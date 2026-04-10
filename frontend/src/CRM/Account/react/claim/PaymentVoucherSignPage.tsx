@@ -5,12 +5,12 @@ import { useParams } from "react-router-dom";
 import { renderSignPreviewSvg, render_sign_modal } from "../../../../../../static/js/sign_tools.js";
 import { fetchPublicPaymentVoucher, submitPublicPaymentVoucherSign } from "./api";
 import type { ClaimRecord, PaymentVoucherPublicPayload } from "./types";
-import { designTokens, ensureDesignTokens } from "../../../../theme/designTokens";
+import { designTokens, useEnsureDesignTokens } from "../../../../theme/designTokens";
 
 type SignShape = { strokes?: Array<{ points?: Array<{ x: number; y: number; t?: number }> }> } | null;
 
 export function PaymentVoucherSignPage() {
-  ensureDesignTokens();
+  useEnsureDesignTokens();
 
   const { token = "" } = useParams();
   const previewRef = useRef<HTMLDivElement | null>(null);

@@ -1,5 +1,6 @@
 import type { CSSProperties, RefObject } from "react";
 
+import { showPromptDialog } from "../../../../js/dialogs";
 import type { AlbumRecord, MusicRecord } from "../../logic/types";
 import type { AlbumDraft, EditorMode, Toast, TrackDraft, WorkspaceScreen } from "../../logic/workspaceTypes";
 import { DesktopAlbumCollection } from "../desktop/DesktopAlbumCollection";
@@ -353,13 +354,17 @@ function AlbumsScreen({
   const totalAlbumHeat = albums.reduce((sum, album) => sum + Number(album.album_total_minutes ?? 0), 0);
   const hasSearch = Boolean(search.trim());
   const showAllTracksEntry = !hasSearch || filteredLibraryMusicCount > 0;
-  const handleCreateAlbumClick = () => {
+  const handleCreateAlbumClick = async () => {
     if (!isMobile) {
       void onCreateAlbum();
       return;
     }
 
-    const name = window.prompt("新专辑名称");
+    const name = await showPromptDialog({
+      title: "新专辑",
+      message: "新专辑名称",
+      placeholder: "请输入专辑名称",
+    });
     if (!name) return;
     void onCreateAlbum(name);
   };

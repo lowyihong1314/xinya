@@ -14,8 +14,18 @@ from models import db
 
 lamp_payment_registration = db.Table(
     "lamp_payment_registration",
-    Column("payment_id", BigInteger, ForeignKey("lamp_payment.id"), nullable=False),
-    Column("registration_id", BigInteger, ForeignKey("lamp_registration.id"), nullable=False),
+    Column(
+        "payment_id",
+        db.Integer,
+        ForeignKey("payment_data.id", ondelete="CASCADE"),
+        nullable=False,
+    ),
+    Column(
+        "registration_id",
+        BigInteger,
+        ForeignKey("lamp_registration.id", ondelete="CASCADE"),
+        nullable=False,
+    ),
 )
 
 
@@ -45,48 +55,11 @@ class LampRegistration(db.Model):
         onupdate=func.now(),
         nullable=False
     )
-
-
-# ===== LampPayment =====
-class LampPayment(db.Model):
-    __tablename__ = "lamp_payment"
-
-    id = Column(BigInteger, primary_key=True)
-
-    submitter_id = Column(
-        db.Integer,
-        db.ForeignKey("user_data.id", ondelete="SET NULL"),
-        nullable=True,
-        index=True,
-    )
-
-    # 统一 phone（原 payer_phone）
-    phone = Column(String(50), nullable=True)
-    payer_name = Column(String(200))
-
-    amount = Column(Numeric(10, 2), nullable=False)
-    method = Column(String(30))
-    paid_at = Column(DateTime)
-    note = Column(Text)
-
-    doc_path = Column(String(500))
-
-    created_at = Column(
-        DateTime,
-        server_default=func.now(),
-        nullable=False
-    )
-
-    registrations = db.relationship(
-        "LampRegistration",
+    payments = db.relationship(
+        "FahuiPayment",
         secondary=lamp_payment_registration,
-        backref=db.backref("payments", lazy="dynamic"),
-        lazy="joined",
-    )
-
-    submitter = db.relationship(
-        "User",
-        backref=db.backref("lamp_payments", lazy="dynamic"),
+        back_populates="lamp_registrations",
+        lazy="dynamic",
     )
 
     

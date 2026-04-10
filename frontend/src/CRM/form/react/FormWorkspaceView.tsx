@@ -3,6 +3,7 @@ import type { CSSProperties, ReactNode } from "react";
 import QRCode from "qrcode";
 
 import { CachedImage } from "../../../components/CachedMedia";
+import { downloadUrl } from "../../../js/browserActions";
 import { ExtraFieldEditor } from "./ExtraFieldEditor";
 import { FeePanel } from "./FeePanel";
 import type { ExtraFieldDraft } from "./ExtraFieldEditor";
@@ -46,13 +47,14 @@ async function exportMembersToExcel(formTitle: string, members: FormMember[], ex
       电话: member.phone || "",
       Email: member.email || "",
       性别: member.gender || "",
-      地址: member.address || "",
+      居住地址: member.address || "",
+      医疗备注: member.medical || "",
+      过敏: member.allergy || "",
+      其他备注: member.other_remark || "",
       家长1: member.parent_1 || "",
       家长1电话: member.parent_1_phone || "",
       家长2: member.parent_2 || "",
       家长2电话: member.parent_2_phone || "",
-      医疗备注: member.medical || "",
-      过敏: member.allergy || "",
       可用时段: Array.isArray(member.available_time_slot_json)
         ? member.available_time_slot_json
             .map((slot) => [slot.datetime || "", slot.end_datetime || ""].filter(Boolean).join(" ~ "))
@@ -292,6 +294,12 @@ export function FormWorkspaceView(props: {
                     }
                   />
                   <ConfigToggle
+                    label="居住地址"
+                    checked={Boolean(selectedForm.field_switches?.address ?? selectedForm.address)}
+                    disabled={!props.canEditForms}
+                    onChange={(next) => props.onPatchForm({ field_switches: { ...(selectedForm.field_switches || {}), address: next } })}
+                  />
+                  <ConfigToggle
                     label="医疗备注"
                     checked={Boolean(selectedForm.field_switches?.medical ?? selectedForm.medical)}
                     disabled={!props.canEditForms}
@@ -304,10 +312,12 @@ export function FormWorkspaceView(props: {
                     onChange={(next) => props.onPatchForm({ field_switches: { ...(selectedForm.field_switches || {}), allergy: next } })}
                   />
                   <ConfigToggle
-                    label="居住地址"
-                    checked={Boolean(selectedForm.field_switches?.address ?? selectedForm.address)}
+                    label="其他备注"
+                    checked={Boolean(selectedForm.field_switches?.other_remark ?? selectedForm.other_remark)}
                     disabled={!props.canEditForms}
-                    onChange={(next) => props.onPatchForm({ field_switches: { ...(selectedForm.field_switches || {}), address: next } })}
+                    onChange={(next) =>
+                      props.onPatchForm({ field_switches: { ...(selectedForm.field_switches || {}), other_remark: next } })
+                    }
                   />
                 </div>
               </section>
@@ -364,9 +374,10 @@ export function FormWorkspaceView(props: {
                   eyebrow="Extra Fields"
                   title={
                     <span style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
-                      <span>扩展字段</span>
+                      <span>表格内容</span>
                       <small style={{ color: "#6b7280", fontSize: 12, fontWeight: 400 }}>
-                        中文名, 手机号码, IC NAME, IC NO, AGE 这些字段已经是默认存在
+                        (中文姓名，英文姓名，NRIC，年龄，性别，邮箱，居住地址，医疗备注，过敏备注 ) 这9项已经默认存在表格里
+                        (紧急联络人，交通.... 等等 ， 其他各别事项请在下方增添）
                       </small>
                     </span>
                   }
@@ -525,10 +536,7 @@ function ShareFormView({
       return;
     }
 
-    const link = document.createElement("a");
-    link.href = qrCodeUrl;
-    link.download = downloadName ?? `form-${formId}-qrcode.png`;
-    link.click();
+    downloadUrl(qrCodeUrl, downloadName ?? `form-${formId}-qrcode.png`);
   }
 
   return (
@@ -615,9 +623,10 @@ function CreateFormModal({
     parental_form: false,
     parent_1: true,
     parent_2: false,
+    address: false,
     medical: false,
     allergy: false,
-    address: false,
+    other_remark: false,
   });
 
   return (
@@ -647,9 +656,10 @@ function CreateFormModal({
               parental_form: "家长同意书",
               parent_1: "家长 1",
               parent_2: "家长 2",
+              address: "居住地址",
               medical: "医疗备注",
               allergy: "过敏",
-              address: "居住地址",
+              other_remark: "其他备注",
             }).map(([key, label]) => (
               <ConfigToggle
                 key={key}
@@ -662,7 +672,7 @@ function CreateFormModal({
         </div>
 
         <div style={sectionStyle}>
-          <div style={sectionTitleStyle}>扩展字段</div>
+          <div style={sectionTitleStyle}>表格内容</div>
           <div style={stackStyle}>
             {extras.map((item, index) => (
               <ExtraFieldEditor
@@ -680,7 +690,7 @@ function CreateFormModal({
               style={secondaryButtonStyle}
               onClick={() => setExtras((prev) => [...prev, { label: "", field_type: "text", options: null, order: prev.length }])}
             >
-              添加扩展字段
+              添加表格内容
             </button>
           </div>
         </div>
@@ -755,7 +765,7 @@ function ExtraFieldPanel({
             />
           ))
         ) : (
-          <div style={placeholderStyle}>暂无扩展字段</div>
+          <div style={placeholderStyle}>暂无表格内容</div>
         )}
       </div>
     </div>
@@ -825,7 +835,7 @@ function MemberPanel({
                   <span style={chipStyle}>ID {member.id}</span>
                   <span style={chipStyle}>性别 {String(member.gender || "-")}</span>
                   <span style={chipStyle}>NRIC {String(member.nric || "-")}</span>
-                  <span style={chipStyle}>地址 {String(member.address || "-")}</span>
+                  <span style={chipStyle}>居住地址 {String(member.address || "-")}</span>
                   {Array.isArray(member.available_time_slot_json) ? (
                     <span style={chipStyle}>可用时段 {member.available_time_slot_json.length}</span>
                   ) : null}

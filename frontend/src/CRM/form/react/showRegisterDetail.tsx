@@ -1,9 +1,10 @@
 import { useMemo, useState } from "react";
 import type { CSSProperties, ReactNode } from "react";
-import { createRoot } from "react-dom/client";
 
 import { open_parental_form } from "../../../../../static/js/form/parental/modal.js";
+import { openOverlay } from "../../../app/OverlayProvider";
 import { CachedImage } from "../../../components/CachedMedia";
+import { showConfirmDialog } from "../../../js/dialogs";
 import { designTokens } from "../../../theme/designTokens";
 import { previewMemberNricChange } from "./api";
 import type {
@@ -220,13 +221,14 @@ function MemberDetailModal({
       { key: "phone", label: "电话", value: member.phone },
       { key: "email", label: "Email", value: member.email },
       { key: "gender", label: "性别", value: member.gender },
-      { key: "address", label: "地址", value: member.address, multiline: true },
+      { key: "address", label: "居住地址", value: member.address, multiline: true },
+      { key: "medical", label: "医疗备注", value: member.medical, multiline: true },
+      { key: "allergy", label: "过敏", value: member.allergy, multiline: true },
+      { key: "other_remark", label: "其他备注", value: member.other_remark, multiline: true },
       { key: "parent_1", label: "家长 1", value: member.parent_1 },
       { key: "parent_1_phone", label: "家长 1 电话", value: member.parent_1_phone },
       { key: "parent_2", label: "家长 2", value: member.parent_2 },
       { key: "parent_2_phone", label: "家长 2 电话", value: member.parent_2_phone },
-      { key: "medical", label: "医疗备注", value: member.medical, multiline: true },
-      { key: "allergy", label: "过敏", value: member.allergy, multiline: true },
     ],
     [member],
   );
@@ -281,7 +283,10 @@ function MemberDetailModal({
           member_id: member.id,
           new_nric: draftValues[nricField.key] ?? "",
         });
-        const shouldContinue = window.confirm(buildNricChangeConfirmMessage(preview));
+        const shouldContinue = await showConfirmDialog({
+          title: "确认修改身份证",
+          message: buildNricChangeConfirmMessage(preview),
+        });
         if (!shouldContinue) {
           return;
         }
@@ -398,7 +403,7 @@ function MemberDetailModal({
         ) : null}
 
         {editableExtraFields.length ? (
-          <Section title="扩展字段">
+          <Section title="表格内容">
             {editableExtraFields.map((field) => (
               <EditRow
                 key={field.key}
@@ -606,18 +611,7 @@ function formatDisplayValue(value: unknown) {
 }
 
 export function showRegisterDetail(options: ShowRegisterDetailOptions) {
-  const host = document.createElement("div");
-  document.body.appendChild(host);
-  const root = createRoot(host);
-
-  const close = () => {
-    queueMicrotask(() => {
-      root.unmount();
-      host.remove();
-    });
-  };
-
-  root.render(<MemberDetailModal {...options} onClose={close} />);
+  openOverlay((close) => <MemberDetailModal {...options} onClose={close} />);
 }
 
 const colors = designTokens.colors;

@@ -40,9 +40,10 @@ FIELD_SWITCH_KEYS = [
     "parent_2",
     "parent_1_phone",
     "parent_2_phone",
+    "address",
     "medical",
     "allergy",
-    "address",
+    "other_remark",
 ]
 
 ALLOWED_FEE_IMAGE_EXTENSIONS = {".png", ".jpg", ".jpeg", ".heic", ".heif"}
@@ -715,9 +716,10 @@ def create_form(data):
             parent_2=field_switches.get("parent_2", data.get("parent_2", False)),
             parent_1_phone=field_switches.get("parent_1_phone", data.get("parent_1", True)),
             parent_2_phone=field_switches.get("parent_2_phone", data.get("parent_2", False)),
+            address=field_switches.get("address", data.get("address", False)),
             medical=field_switches.get("medical", data.get("medical", False)),
             allergy=field_switches.get("allergy", data.get("allergy", False)),
-            address=field_switches.get("address", data.get("address", False)),
+            other_remark=field_switches.get("other_remark", data.get("other_remark", False)),
         )
         db.session.add(form)
         db.session.flush()
@@ -806,6 +808,7 @@ def register_member(form_id, data):
             parent_2_phone=data.get("parent_2_phone"),
             medical=data.get("medical"),
             allergy=data.get("allergy"),
+            other_remark=data.get("other_remark"),
             available_time_slot_json=data.get("available_time_slot_json"),
         )
         db.session.add(member_data)
@@ -1749,7 +1752,7 @@ def edit_form(form_id, data):
 
         switches = _extract_field_switches(data)
 
-        for key in ["email", "parental_form", "medical", "allergy", "address"]:
+        for key in ["email", "parental_form", "address", "medical", "allergy", "other_remark"]:
             if key in switches:
                 setattr(form, key, switches[key])
 

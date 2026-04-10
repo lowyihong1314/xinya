@@ -3,6 +3,7 @@ import type { CSSProperties } from "react";
 
 import { CachedImage } from "../../../components/CachedMedia";
 import { API_BASE } from "../../../js/apiBase";
+import { showPromptDialog } from "../../../js/dialogs";
 import type { DepartmentRecord, MemberRenewalRecord, PermissionRecord, UserRecord } from "./types";
 
 type Toast = { type: "success" | "error"; text: string } | null;
@@ -185,16 +186,23 @@ export function UserControlView(props: {
                       type="button"
                       style={secondaryButtonStyle}
                       onClick={() => {
-                        const currentName = props.selectedDepartment?.name || "";
-                        const nextName = window.prompt("请输入新的部门名称", currentName);
-                        if (nextName === null) {
-                          return;
-                        }
-                        const trimmed = nextName.trim();
-                        if (!trimmed || trimmed === currentName) {
-                          return;
-                        }
-                        props.onRenameDepartment(props.selectedDepartment!.id, trimmed);
+                        void (async () => {
+                          const currentName = props.selectedDepartment?.name || "";
+                          const nextName = await showPromptDialog({
+                            title: "部门改名",
+                            message: "请输入新的部门名称",
+                            initialValue: currentName,
+                            placeholder: "部门名称",
+                          });
+                          if (nextName === null) {
+                            return;
+                          }
+                          const trimmed = nextName.trim();
+                          if (!trimmed || trimmed === currentName) {
+                            return;
+                          }
+                          props.onRenameDepartment(props.selectedDepartment!.id, trimmed);
+                        })();
                       }}
                     >
                       改名

@@ -2,7 +2,7 @@ import { useState } from "react";
 import type { CSSProperties } from "react";
 
 import { useUserState } from "../../../app/UserState";
-import { ensureDesignTokens } from "../../../theme/designTokens";
+import { useEnsureDesignTokens } from "../../../theme/designTokens";
 import { MembershipRegistrationPage } from "./MembershipRegistrationPage";
 import { YouthClassRegistrationPage } from "./YouthClassRegistrationPage";
 
@@ -22,7 +22,7 @@ function resolveSectionKey(value: string | null): RegistrationSectionKey {
 }
 
 export function LongOpenRegistrationFormPage() {
-  ensureDesignTokens();
+  useEnsureDesignTokens();
 
   const { isMobile } = useUserState();
   const [activeSection, setActiveSection] = useState<RegistrationSectionKey>(() => resolveSectionKey(null));
