@@ -1631,7 +1631,7 @@ def edit_member(data):
             event_form_ids = nric_change["event_form_ids"]
             response_payload.update(nric_change["response_payload"])
             db.session.commit()
-        elif hasattr(latest, field):
+        elif isinstance(field, str) and hasattr(latest, field):
             setattr(latest, field, value)
             db.session.commit()
             updated_target = "RegisMemberData"

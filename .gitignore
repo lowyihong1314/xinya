@@ -5,3 +5,5 @@ database/
 _token.py
 _token.txt
 *.pyc
+static/vite/
+static/assets/
