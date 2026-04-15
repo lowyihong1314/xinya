@@ -5,7 +5,8 @@ React migration target for the CRM user control workspace.
 ## Files
 
 - `UserControlPage.tsx`: page entry that binds controller state to the view.
-- `UserControlView.tsx`: presentational workspace, user editor, permission modal, and reusable `UserCard`.
+- `UserControlView.tsx`: top-level workspace composition and pagination flow.
+- `view/`: split presentational pieces for the workspace, including the user editor, modals, `UserCard`, shared fields, and styles.
 - `useUserControlController.ts`: data loading, mutation orchestration, and local workspace state.
 - `api.ts`: department, user, permission, and renewal requests.
 - `types.ts`: department, permission, user, and member-renewal types.
@@ -26,7 +27,7 @@ React migration target for the CRM user control workspace.
 ## State rule
 
 - Keep data loading and mutations in `useUserControlController.ts`.
-- UI components should stay in `UserControlView.tsx`.
+- UI composition stays in `UserControlView.tsx`; reusable presentation pieces live under `view/`.
 - New colors must come from `frontend/src/theme/designTokens.ts`.
 
 ## Backend endpoints

@@ -18,9 +18,22 @@ os.makedirs(MUSIC_DIR, exist_ok=True)
 os.makedirs(CACHE_DIR, exist_ok=True)
 os.makedirs(ALBUM_IMAGE_DIR, exist_ok=True)
 
+ALLOWED_AUDIO_EXTENSIONS = {
+    ".mp3",
+    ".wav",
+    ".wma",
+    ".m4a",
+    ".aac",
+    ".ogg",
+    ".oga",
+    ".flac",
+    ".opus",
+    ".webm",
+}
+
 
 def allowed_audio_extension(filename):
-    return Path(filename).suffix.lower() in [".mp3", ".wav", ".wma"]
+    return Path(filename).suffix.lower() in ALLOWED_AUDIO_EXTENSIONS
 
 
 def save_music_upload(file_storage):
@@ -40,11 +53,17 @@ def replace_music_upload(file_storage, old_file_name=None):
 
 
 def detect_audio_mime(ext):
-    if ext == ".mp3":
-        return "audio/mpeg"
     if ext == ".wav":
         return "audio/wav"
-    return "audio/x-ms-wma"
+    if ext == ".wma":
+        return "audio/x-ms-wma"
+
+    mime_type, _ = mimetypes.guess_type(f"track{ext}")
+    if mime_type and mime_type.startswith("audio/"):
+        return mime_type
+    if ext == ".m4a":
+        return "audio/mp4"
+    return "application/octet-stream"
 
 
 def stream_music_file(music):

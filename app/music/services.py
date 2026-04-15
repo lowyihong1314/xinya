@@ -51,6 +51,9 @@ def upload_music(files, album_id, artist_id):
         db.session.add(music)
         saved_items.append(music)
 
+    if not saved_items:
+        return jsonify({"error": "仅支持 MP3/WAV/WMA/M4A/AAC/OGG/FLAC/OPUS/WEBM 音频"}), 400
+
     db.session.commit()
     return jsonify(
         {
@@ -179,7 +182,7 @@ def replace_music_file(music_id, file):
     if not file:
         return jsonify({"error": "没有选择文件"}), 400
     if not allowed_audio_extension(file.filename):
-        return jsonify({"error": "仅支持 MP3/WAV/WMA 音频"}), 400
+        return jsonify({"error": "仅支持 MP3/WAV/WMA/M4A/AAC/OGG/FLAC/OPUS/WEBM 音频"}), 400
 
     try:
         file_name, file_path, ext = replace_music_upload(file, music.file_name)

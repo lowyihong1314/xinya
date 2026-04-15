@@ -25,7 +25,7 @@ export function MusicListeningPanel({
           <div style={eyebrowStyle}>Listening Activity</div>
           <div style={titleStyle}>最近听歌记录</div>
           <div style={copyStyle}>
-            这里专门看最近收听情况和分钟统计。
+            这里会从歌曲、听众、时段和单次时长几个角度拆开看最近收听情况。
           </div>
         </div>
 
@@ -47,13 +47,10 @@ export function MusicListeningPanel({
 
       <ListeningActivityChart
         isMobile={isMobile}
-        title="歌曲收听图表"
-        subtitle={`按歌曲总分钟汇总，悬停 bar 可看每位听众分钟数。时区：${timezone}。`}
         timezone={timezone}
         loading={loading}
         sessions={sessions}
         emptyText="暂时还没有收听记录。"
-        defaultCollapsed={false}
       />
     </section>
   );

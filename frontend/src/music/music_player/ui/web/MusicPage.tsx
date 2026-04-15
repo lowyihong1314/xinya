@@ -1,22 +1,137 @@
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useLocation, useNavigate } from "react-router-dom";
 
 import { useAppChrome } from "../../../../router/AppChromeContext";
 import { useEnsureDesignTokens } from "../../../../theme/designTokens";
 import { MusicPlaybackWorkspace } from "./MusicPlaybackWorkspace";
 import { MusicWorkspacePanel } from "./MusicWorkspacePanel";
 import { useMusicWorkspace } from "../../logic/useMusicWorkspace";
+import {
+  parseMusicPlayerRouteStateFromLocation,
+  patchMusicPlayerRouteState,
+  type MusicPlayerRouteState,
+} from "../../logic/routeState";
 
 export function MusicPage() {
   useEnsureDesignTokens();
 
-  const [activeSection, setActiveSection] = useState<"browse" | "player" | "queue" | "history">("browse");
   const [layoutMetrics, setLayoutMetrics] = useState({
     contentHeight: null as number | null,
     stickyTop: 84,
   });
   const shellRef = useRef<HTMLDivElement | null>(null);
+  const location = useLocation();
+  const navigate = useNavigate();
   const { navbarHeight } = useAppChrome();
-  const { state, actions } = useMusicWorkspace();
+  const routeState = useMemo(
+    () =>
+      parseMusicPlayerRouteStateFromLocation(
+        location.pathname,
+        new URLSearchParams(location.search),
+      ),
+    [location.pathname, location.search],
+  );
+
+  const updateRouteState = useCallback(
+    (patch: Partial<MusicPlayerRouteState>, options?: { replace?: boolean }) => {
+      const currentParams = new URLSearchParams(location.search);
+      const next = patchMusicPlayerRouteState(location.pathname, currentParams, patch);
+      const currentSearch = currentParams.toString();
+      const nextSearch = next.searchParams.toString();
+      if (next.pathname === location.pathname && nextSearch === currentSearch) {
+        return;
+      }
+      navigate(
+        {
+          pathname: next.pathname,
+          search: nextSearch ? `?${nextSearch}` : "",
+        },
+        { replace: options?.replace ?? false },
+      );
+    },
+    [location.pathname, location.search, navigate],
+  );
+
+  const routeActions = useMemo(
+    () => ({
+      setSearch: (value: string, options?: { replace?: boolean }) => {
+        updateRouteState({ search: value, albumPage: 1, trackPage: 1 }, options);
+      },
+      setAlbumPage: (page: number, options?: { replace?: boolean }) => {
+        updateRouteState({ albumPage: Math.max(1, page) }, options);
+      },
+      setTrackPage: (
+        page: number,
+        options?: { replace?: boolean },
+      ) => {
+        updateRouteState({ trackPage: Math.max(1, page) }, options);
+      },
+      openAlbums: (options?: { replace?: boolean }) => {
+        updateRouteState(
+          {
+            screen: "albums",
+            editorMode: null,
+            albumId: null,
+            musicId: null,
+          },
+          options,
+        );
+      },
+      openAlbumTracks: (
+        albumId: number | null,
+        options?: { replace?: boolean; resetTrackPage?: boolean },
+      ) => {
+        updateRouteState(
+          {
+            screen: "tracks",
+            editorMode: null,
+            albumId,
+            musicId: null,
+            trackPage: options?.resetTrackPage === false ? routeState.trackPage : 1,
+          },
+          options,
+        );
+      },
+      openAlbumEditor: (albumId: number, options?: { replace?: boolean }) => {
+        updateRouteState(
+          {
+            screen: "editor",
+            editorMode: "album",
+            albumId,
+            musicId: null,
+          },
+          options,
+        );
+      },
+      openTrackEditor: (
+        musicId: number,
+        albumId: number | null,
+        options?: { replace?: boolean },
+      ) => {
+        updateRouteState(
+          {
+            screen: "editor",
+            editorMode: "track",
+            musicId,
+            albumId,
+          },
+          options,
+        );
+      },
+    }),
+    [routeState.trackPage, updateRouteState],
+  );
+
+  const { state, actions } = useMusicWorkspace({
+    routeState,
+    routeActions,
+  });
+
+  useEffect(() => {
+    if (routeState.section === "history" && !state.canViewListening) {
+      updateRouteState({ section: "browse" }, { replace: true });
+    }
+  }, [routeState.section, state.canViewListening, updateRouteState]);
 
   useEffect(() => {
     const shell = shellRef.current;
@@ -67,8 +182,8 @@ export function MusicPage() {
       <div style={layoutStyle(state.isMobile)}>
         <MusicPlaybackWorkspace
           isMobile={state.isMobile}
-          activeSection={activeSection}
-          onSectionChange={setActiveSection}
+          activeSection={routeState.section === "history" && !state.canViewListening ? "browse" : routeState.section}
+          onSectionChange={(section) => updateRouteState({ section })}
           viewportHeight={layoutMetrics.contentHeight}
           stickyTop={layoutMetrics.stickyTop}
           canViewListening={state.canViewListening}
@@ -132,11 +247,11 @@ export function MusicPage() {
               onUploadMusic={actions.handleUploadMusic}
               onSelectTrack={(musicId) => {
                 actions.handleSelectTrack(musicId);
-                setActiveSection("player");
+                updateRouteState({ section: "player" });
               }}
               onQueueTrack={(musicId) => {
                 actions.handleQueueTrack(musicId);
-                setActiveSection("queue");
+                updateRouteState({ section: "queue" });
               }}
               onSaveTrack={actions.handleSaveTrack}
               onDeleteTrack={actions.handleDeleteTrack}

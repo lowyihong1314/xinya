@@ -41,12 +41,41 @@ import {
   type TrackDraft,
   type WorkspaceScreen,
 } from "./workspaceTypes";
+import type { MusicPlayerRouteState } from "./routeState";
 
 const ALBUMS_PER_PAGE = 8;
 const TRACKS_PER_PAGE = 20;
 const CURRENT_STORAGE_KEY = "xinya.music.current.id";
 
-export function useMusicWorkspace() {
+type RouteNavigationOptions = {
+  replace?: boolean;
+};
+
+type TrackRouteNavigationOptions = RouteNavigationOptions & {
+  resetTrackPage?: boolean;
+};
+
+type MusicWorkspaceRouteActions = {
+  setSearch: (value: string, options?: RouteNavigationOptions) => void;
+  setAlbumPage: (page: number, options?: RouteNavigationOptions) => void;
+  setTrackPage: (page: number, options?: RouteNavigationOptions) => void;
+  openAlbums: (options?: RouteNavigationOptions) => void;
+  openAlbumTracks: (albumId: number | null, options?: TrackRouteNavigationOptions) => void;
+  openAlbumEditor: (albumId: number, options?: RouteNavigationOptions) => void;
+  openTrackEditor: (
+    musicId: number,
+    albumId: number | null,
+    options?: RouteNavigationOptions,
+  ) => void;
+};
+
+export function useMusicWorkspace({
+  routeState,
+  routeActions,
+}: {
+  routeState: MusicPlayerRouteState;
+  routeActions: MusicWorkspaceRouteActions;
+}) {
   const { user, isMobile } = useUserState();
   const {
     currentMusicId,
@@ -68,11 +97,8 @@ export function useMusicWorkspace() {
   const [musics, setMusics] = useState<MusicRecord[]>([]);
   const [playlists] = useState<PlaylistRecord[]>([]);
   const [playlistDraft, setPlaylistDraft] = useState<PlaylistDraft>(EMPTY_PLAYLIST_DRAFT);
-  const [selectedAlbumId, setSelectedAlbumId] = useState<number | null>(null);
   const [selectedAlbumDetail, setSelectedAlbumDetail] = useState<AlbumRecord | null>(null);
-  const [editingMusicId, setEditingMusicId] = useState<number | null>(null);
   const [editingMusicDetail, setEditingMusicDetail] = useState<MusicRecord | null>(null);
-  const [search, setSearch] = useState("");
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [savingAlbum, setSavingAlbum] = useState(false);
@@ -86,10 +112,15 @@ export function useMusicWorkspace() {
   const [newAlbumName, setNewAlbumName] = useState("");
   const [albumDraft, setAlbumDraft] = useState<AlbumDraft>(EMPTY_ALBUM_DRAFT);
   const [trackDraft, setTrackDraft] = useState<TrackDraft>(EMPTY_TRACK_DRAFT);
-  const [screen, setScreen] = useState<WorkspaceScreen>("albums");
-  const [editorMode, setEditorMode] = useState<EditorMode>(null);
-  const [albumPage, setAlbumPage] = useState(1);
-  const [trackPage, setTrackPage] = useState(1);
+  const {
+    screen,
+    editorMode,
+    albumId: selectedAlbumId,
+    musicId: editingMusicId,
+    search,
+    albumPage,
+    trackPage,
+  } = routeState;
 
   const allMusicsSorted = useMemo(
     () => [...libraryMusics].sort((a, b) => (b.play_minutes ?? 0) - (a.play_minutes ?? 0)),
@@ -175,17 +206,111 @@ export function useMusicWorkspace() {
   }, []);
 
   useEffect(() => {
-    setAlbumPage((current) => Math.min(current, totalAlbumPages));
-  }, [totalAlbumPages]);
+    if (albumPage > totalAlbumPages) {
+      routeActions.setAlbumPage(totalAlbumPages, { replace: true });
+    }
+  }, [albumPage, routeActions, totalAlbumPages]);
 
   useEffect(() => {
-    setTrackPage((current) => Math.min(current, totalTrackPages));
-  }, [totalTrackPages]);
+    if (trackPage > totalTrackPages) {
+      routeActions.setTrackPage(totalTrackPages, { replace: true });
+    }
+  }, [routeActions, totalTrackPages, trackPage]);
 
   useEffect(() => {
-    setAlbumPage(1);
-    setTrackPage(1);
-  }, [normalizedSearch]);
+    if (selectedAlbumId == null) {
+      setSelectedAlbumDetail(null);
+      setMusics(libraryMusics);
+      if (editorMode !== "album") {
+        setAlbumDraft(EMPTY_ALBUM_DRAFT);
+      }
+      return;
+    }
+
+    let cancelled = false;
+    setRefreshing(true);
+
+    void fetchAlbum(selectedAlbumId)
+      .then((album) => {
+        if (cancelled) {
+          return;
+        }
+        setSelectedAlbumDetail(album);
+        setMusics(album.music_list || []);
+        if (editorMode === "album") {
+          setAlbumDraft({
+            name: album.name || "",
+            description: album.description || "",
+          });
+        }
+      })
+      .catch((error) => {
+        if (cancelled) {
+          return;
+        }
+        setSelectedAlbumDetail(null);
+        setMusics([]);
+        setToast({
+          type: "error",
+          text: error instanceof Error ? error.message : "读取专辑失败",
+        });
+        routeActions.openAlbums({ replace: true });
+      })
+      .finally(() => {
+        if (!cancelled) {
+          setRefreshing(false);
+        }
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [editorMode, libraryMusics, routeActions, selectedAlbumId]);
+
+  useEffect(() => {
+    if (editingMusicId == null) {
+      setEditingMusicDetail(null);
+      if (editorMode !== "track") {
+        setTrackDraft(EMPTY_TRACK_DRAFT);
+      }
+      return;
+    }
+
+    let cancelled = false;
+    setRefreshing(true);
+
+    void fetchMusicDetail(editingMusicId)
+      .then((detail) => {
+        if (cancelled) {
+          return;
+        }
+        setEditingMusicDetail(detail);
+        setTrackDraft({
+          title: detail.title || "",
+          album_id: detail.album_id ? String(detail.album_id) : "",
+        });
+      })
+      .catch((error) => {
+        if (cancelled) {
+          return;
+        }
+        setEditingMusicDetail(null);
+        setToast({
+          type: "error",
+          text: error instanceof Error ? error.message : "读取歌曲失败",
+        });
+        routeActions.openAlbumTracks(selectedAlbumId, { replace: true, resetTrackPage: false });
+      })
+      .finally(() => {
+        if (!cancelled) {
+          setRefreshing(false);
+        }
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [editingMusicId, editorMode, libraryMusics, routeActions, selectedAlbumId]);
 
   useEffect(() => {
     if (!toast) return;
@@ -237,9 +362,6 @@ export function useMusicWorkspace() {
       setLibraryMusics(allMusics);
       setPlaybackLibraryMusics(allMusics);
       setMusics(allMusics);
-      setSelectedAlbumId(null);
-      setSelectedAlbumDetail(null);
-      setScreen("albums");
       const storedCurrentId = (() => {
         try {
           const raw = window.localStorage.getItem(CURRENT_STORAGE_KEY);
@@ -264,7 +386,7 @@ export function useMusicWorkspace() {
     }
   }
 
-  async function refreshWorkspace(options?: { preserveScreen?: boolean }) {
+  async function refreshWorkspace(_options?: { preserveScreen?: boolean }) {
     setRefreshing(true);
     try {
       const responses = await Promise.all([
@@ -277,36 +399,17 @@ export function useMusicWorkspace() {
       setAlbums(albumList);
       setLibraryMusics(allMusics);
       setPlaybackLibraryMusics(allMusics);
+      if (selectedAlbumId == null) {
+        setMusics(allMusics);
+      }
 
       if (minuteLogPayload) {
         setMinuteLogs(minuteLogPayload.items || []);
         setListeningTimezone(minuteLogPayload.timezone || "Asia/Kuala_Lumpur");
       }
 
-      if (selectedAlbumId) {
-        const album = await fetchAlbum(selectedAlbumId);
-        setSelectedAlbumDetail(album);
-        setMusics(album.music_list || []);
-      } else {
-        setSelectedAlbumDetail(null);
-        setMusics(allMusics);
-      }
-
-      if (editingMusicId) {
-        const detail = await fetchMusicDetail(editingMusicId);
-        setEditingMusicDetail(detail);
-        setTrackDraft({
-          title: detail.title || "",
-          album_id: detail.album_id ? String(detail.album_id) : "",
-        });
-      }
-
       if (currentMusicId && !allMusics.some((music) => music.id === currentMusicId)) {
         setCurrentMusicId(null);
-      }
-
-      if (options?.preserveScreen !== true) {
-        setScreen(selectedAlbumId ? "tracks" : "albums");
       }
     } catch (error) {
       setToast({ type: "error", text: error instanceof Error ? error.message : "刷新失败" });
@@ -316,66 +419,16 @@ export function useMusicWorkspace() {
   }
 
   async function openAlbumTracks(albumId: number | null) {
-    setSelectedAlbumId(albumId);
-    setEditorMode(null);
-    setEditingMusicId(null);
     setEditingMusicDetail(null);
-    setTrackPage(1);
-    if (albumId == null) {
-      setSelectedAlbumDetail(null);
-      setMusics(libraryMusics);
-      setScreen("tracks");
-      return;
-    }
-    setRefreshing(true);
-    try {
-      const album = await fetchAlbum(albumId);
-      setSelectedAlbumDetail(album);
-      setMusics(album.music_list || []);
-      setScreen("tracks");
-    } catch (error) {
-      setToast({ type: "error", text: error instanceof Error ? error.message : "读取专辑失败" });
-    } finally {
-      setRefreshing(false);
-    }
+    routeActions.openAlbumTracks(albumId);
   }
 
   async function openAlbumEditor(albumId: number) {
-    setSelectedAlbumId(albumId);
-    setRefreshing(true);
-    try {
-      const album = await fetchAlbum(albumId);
-      setSelectedAlbumDetail(album);
-      setAlbumDraft({
-        name: album.name || "",
-        description: album.description || "",
-      });
-      setEditorMode("album");
-      setScreen("editor");
-    } catch (error) {
-      setToast({ type: "error", text: error instanceof Error ? error.message : "读取专辑失败" });
-    } finally {
-      setRefreshing(false);
-    }
+    routeActions.openAlbumEditor(albumId);
   }
 
   async function openTrackEditor(musicId: number) {
-    setEditingMusicId(musicId);
-    setRefreshing(true);
-    try {
-      const detail = await fetchMusicDetail(musicId);
-      setEditingMusicDetail(detail);
-      setTrackDraft({
-        title: detail.title || "",
-        album_id: detail.album_id ? String(detail.album_id) : "",
-      });
-      setEditorMode("track");
-      setScreen("editor");
-    } catch (error) {
-      setToast({ type: "error", text: error instanceof Error ? error.message : "读取歌曲失败" });
-    } finally {
-      setRefreshing(false);
-    }
+    routeActions.openTrackEditor(musicId, selectedAlbumId);
   }
 
   async function handleCreateAlbum(nameOverride?: string) {
@@ -394,7 +447,7 @@ export function useMusicWorkspace() {
       if (albumId) {
         await openAlbumEditor(albumId);
       } else {
-        setScreen("albums");
+        routeActions.openAlbums({ replace: true });
       }
     } catch (error) {
       setToast({ type: "error", text: error instanceof Error ? error.message : "创建专辑失败" });
@@ -431,11 +484,9 @@ export function useMusicWorkspace() {
     setSavingAlbum(true);
     try {
       await deleteAlbum(selectedAlbumId);
-      setSelectedAlbumId(null);
       setSelectedAlbumDetail(null);
       setAlbumDraft(EMPTY_ALBUM_DRAFT);
-      setScreen("albums");
-      setEditorMode(null);
+      routeActions.openAlbums({ replace: true });
       await refreshWorkspace({ preserveScreen: true });
       setToast({ type: "success", text: "专辑已删除" });
     } catch (error) {
@@ -522,11 +573,9 @@ export function useMusicWorkspace() {
     try {
       await deleteMusic(editingMusicId);
       setToast({ type: "success", text: "歌曲已删除" });
-      setEditingMusicId(null);
       setEditingMusicDetail(null);
       setTrackDraft(EMPTY_TRACK_DRAFT);
-      setScreen("tracks");
-      setEditorMode(null);
+      routeActions.openAlbumTracks(selectedAlbumId, { replace: true, resetTrackPage: false });
       await refreshWorkspace({ preserveScreen: true });
     } catch (error) {
       setToast({ type: "error", text: error instanceof Error ? error.message : "删除歌曲失败" });
@@ -595,13 +644,19 @@ export function useMusicWorkspace() {
       albumTrackCountMap,
     },
     actions: {
-      setSearch,
+      setSearch: (value: string) => {
+        routeActions.setSearch(value, { replace: true });
+      },
       setNewAlbumName,
       setAlbumDraft,
       setTrackDraft,
       setPlaylistDraft,
-      setAlbumPage,
-      setTrackPage,
+      setAlbumPage: (page: number) => {
+        routeActions.setAlbumPage(page, { replace: true });
+      },
+      setTrackPage: (page: number) => {
+        routeActions.setTrackPage(page, { replace: true });
+      },
       openAlbumTracks,
       openAlbumEditor,
       openTrackEditor,
@@ -616,18 +671,11 @@ export function useMusicWorkspace() {
       handleSaveTrack,
       handleDeleteTrack,
       handleReplaceSelected,
-      openAlbums: () => {
-        setScreen("albums");
-        setEditorMode(null);
-      },
+      openAlbums: () => routeActions.openAlbums(),
       backFromEditor: () => {
-        setScreen("tracks");
-        setEditorMode(null);
+        routeActions.openAlbumTracks(selectedAlbumId, { resetTrackPage: false });
       },
-      backToAlbums: () => {
-        setScreen("albums");
-        setEditorMode(null);
-      },
+      backToAlbums: () => routeActions.openAlbums(),
     },
   };
 }

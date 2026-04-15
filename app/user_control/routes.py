@@ -38,12 +38,14 @@ SELF_EDITABLE_USER_FIELDS = {
     "tng_number",
 }
 ADMIN_EXTRA_EDITABLE_USER_FIELDS = {
+    "username",
     "name_NRIC",
     "user_theme",
     "is_member",
 }
 BOOLEAN_USER_FIELDS = {"display", "is_member"}
 TEXT_USER_FIELDS = {
+    "username",
     "display_name",
     "email",
     "phone",
@@ -163,7 +165,11 @@ def _parse_nullable_bool(value, field_name):
     raise ValueError(f"{field_name} 字段格式无效")
 
 
-def _validate_unique_user_contact_fields(user, *, email=None, phone=None):
+def _validate_unique_user_fields(user, *, username=None, email=None, phone=None):
+    if username:
+        existing = User.query.filter(User.username == username, User.id != user.id).first()
+        if existing:
+            raise ValueError("这个用户名已被其他账号使用")
     if email:
         existing = User.query.filter(User.email == email, User.id != user.id).first()
         if existing:
@@ -174,10 +180,28 @@ def _validate_unique_user_contact_fields(user, *, email=None, phone=None):
             raise ValueError("这个 Phone 已被其他账号使用")
 
 
+def _move_profile_images(previous_username, next_username):
+    if not previous_username or not next_username or previous_username == next_username:
+        return
+
+    for suffix in (
+        "_profile_image_s.jpg",
+        "_profile_image.jpg",
+        "_profile_image_l.jpg",
+    ):
+        source_path = os.path.join(PROFILE_PATH, f"{previous_username}{suffix}")
+        if not os.path.exists(source_path):
+            continue
+        destination_path = os.path.join(PROFILE_PATH, f"{next_username}{suffix}")
+        os.replace(source_path, destination_path)
+
+
 def _apply_user_updates(user, data, *, allowed_fields):
     identity_keys = {"NRIC", "name_NRIC"}
     editable_keys = allowed_fields & set(data.keys())
 
+    previous_username = user.username
+    pending_username = user.username
     pending_email = user.email
     pending_phone = user.phone
 
@@ -191,8 +215,15 @@ def _apply_user_updates(user, data, *, allowed_fields):
             normalized = _normalize_user_text_value(data.get(key))
             if key == "user_theme" and normalized is None:
                 normalized = user.user_theme or "light"
+            if key == "username":
+                if normalized is None:
+                    raise ValueError("username 不能为空")
+                if any(char.isspace() for char in normalized):
+                    raise ValueError("username 不能包含空格")
             setattr(user, key, normalized)
-            if key == "email":
+            if key == "username":
+                pending_username = normalized
+            elif key == "email":
                 pending_email = normalized
             elif key == "phone":
                 pending_phone = normalized
@@ -200,7 +231,12 @@ def _apply_user_updates(user, data, *, allowed_fields):
         if hasattr(user, key):
             setattr(user, key, data.get(key))
 
-    _validate_unique_user_contact_fields(user, email=pending_email, phone=pending_phone)
+    _validate_unique_user_fields(
+        user,
+        username=pending_username,
+        email=pending_email,
+        phone=pending_phone,
+    )
 
     if identity_keys & editable_keys:
         target_member = user.nric_asset
@@ -211,6 +247,19 @@ def _apply_user_updates(user, data, *, allowed_fields):
             else getattr(target_member, "name_nric", None)
         )
         _sync_user_nric_member(user, target_nric, target_name_nric)
+
+    return previous_username, pending_username
+
+
+def _save_user_updates(user, data, *, allowed_fields):
+    previous_username, next_username = _apply_user_updates(
+        user,
+        data,
+        allowed_fields=allowed_fields,
+    )
+    db.session.flush()
+    _move_profile_images(previous_username, next_username)
+    db.session.commit()
 
 
 def _member_has_registration_footprint(member):
@@ -583,28 +632,18 @@ def edit_user_data():
         if not user:
             return jsonify({"status": "error", "message": "用户不存在"}), 404
 
-        for field in ["display_name", "email", "phone", "user_theme"]:
-            if field in data:
-                setattr(user, field, data[field])
-
-        if "is_member" in data:
-            user.is_member = bool(data.get("is_member"))
-
-        if "NRIC" in data or "name_NRIC" in data:
-            target_member = user.nric_asset
-            target_nric = data.get("NRIC") if "NRIC" in data else getattr(target_member, "nric", None)
-            target_name_nric = (
-                data.get("name_NRIC")
-                if "name_NRIC" in data
-                else getattr(target_member, "name_nric", None)
-            )
-            _sync_user_nric_member(user, target_nric, target_name_nric)
-
-        db.session.commit()
+        _save_user_updates(
+            user,
+            data,
+            allowed_fields=SELF_EDITABLE_USER_FIELDS | ADMIN_EXTRA_EDITABLE_USER_FIELDS,
+        )
         return jsonify({"status": "success", "message": "用户信息更新成功"})
     except ValueError as exc:
         db.session.rollback()
         return jsonify({"status": "error", "message": str(exc)}), 400
+    except IntegrityError:
+        db.session.rollback()
+        return jsonify({"status": "error", "message": "资料更新失败，可能是用户名、Email 或 Phone 已重复"}), 400
     except Exception as exc:
         db.session.rollback()
         return jsonify({"status": "error", "message": f"更新失败: {str(exc)}"}), 500
@@ -1056,9 +1095,7 @@ def update_user(user_id):
         if can_edit_others:
             allowed_fields |= ADMIN_EXTRA_EDITABLE_USER_FIELDS
 
-        _apply_user_updates(user, data, allowed_fields=allowed_fields)
-
-        db.session.commit()
+        _save_user_updates(user, data, allowed_fields=allowed_fields)
         return jsonify({"status": "success", "message": "用户信息更新成功"})
     except ValueError as exc:
         db.session.rollback()

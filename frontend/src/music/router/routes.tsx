@@ -14,7 +14,7 @@ export const musicRoute: RouteObject = {
   element: <Outlet />,
   children: [
     { index: true, element: <Navigate to="music_player" replace /> },
-    { path: "music_player", element: IS_APK ? <MusicPageApk /> : <MusicPage /> },
+    { path: "music_player/*", element: IS_APK ? <MusicPageApk /> : <MusicPage /> },
     { path: "changyou", element: <ChangyouPage /> },
     { path: "changyou/:entryId", element: <ChangyouDetailPage /> },
     { path: "changyou/room", element: <ChangyouRoomPage /> },

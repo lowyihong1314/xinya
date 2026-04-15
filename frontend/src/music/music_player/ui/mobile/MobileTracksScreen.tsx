@@ -2,6 +2,7 @@ import type { CSSProperties, RefObject } from "react";
 
 import { formatMusicHeat } from "../../logic/musicHeatUtils";
 import type { MusicRecord } from "../../logic/types";
+import { musicAudioUploadAccept } from "../shared/audioUpload";
 
 export function MobileTracksScreen({
   albumName,
@@ -107,7 +108,7 @@ export function MobileTracksScreen({
               <input
                 ref={fileInputRef}
                 type="file"
-                accept=".mp3,.wav,.wma"
+                accept={musicAudioUploadAccept}
                 multiple
                 hidden
                 onChange={(event) => void onUploadMusic(event.target.files)}
@@ -270,8 +271,8 @@ function trackCardStyle(active: boolean): CSSProperties {
     gap: "10px",
     padding: "12px",
     borderRadius: "16px",
-    border: `1px solid ${active ? "var(--x-color-accent-border)" : "rgba(216,223,235,0.9)"}`,
-    background: active ? "var(--x-color-accent-soft)" : "rgba(255,255,255,0.98)",
+    border: `1px solid ${active ? "var(--x-color-accent-border)" : "var(--x-color-line)"}`,
+    background: active ? "var(--x-color-accent-soft)" : "var(--x-color-panel)",
   };
 }
 
@@ -293,7 +294,7 @@ const trackIndexStyle: CSSProperties = {
   borderRadius: "14px",
   display: "grid",
   placeItems: "center",
-  background: "rgba(15,118,110,0.1)",
+  background: "var(--x-color-accent-tint)",
   color: "var(--x-color-accent-strong)",
   fontWeight: 800,
   fontFamily: "var(--x-font-mono)",

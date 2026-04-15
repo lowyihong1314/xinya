@@ -284,7 +284,6 @@ function StatCard({
 
 const pageStyle = {
   minHeight: "calc(100vh - 60px)",
-  padding: "24px",
   background:
     "radial-gradient(circle at top left, rgba(15,118,110,0.16), transparent 28%), linear-gradient(180deg, var(--x-color-canvas), var(--x-color-canvas-alt))",
 } as const;

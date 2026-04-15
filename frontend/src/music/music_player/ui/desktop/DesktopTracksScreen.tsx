@@ -2,6 +2,7 @@ import type { CSSProperties, RefObject } from "react";
 
 import { formatMusicHeat } from "../../logic/musicHeatUtils";
 import type { MusicRecord } from "../../logic/types";
+import { musicAudioUploadAccept } from "../shared/audioUpload";
 
 export function DesktopTracksScreen({
   albumName,
@@ -107,7 +108,7 @@ export function DesktopTracksScreen({
               <input
                 ref={fileInputRef}
                 type="file"
-                accept=".mp3,.wav,.wma"
+                accept={musicAudioUploadAccept}
                 multiple
                 hidden
                 onChange={(event) => void onUploadMusic(event.target.files)}

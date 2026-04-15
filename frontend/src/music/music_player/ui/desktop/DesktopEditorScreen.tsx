@@ -4,6 +4,7 @@ import { buildMusicCoverCacheKey } from "../../logic/musicCoverUtils";
 import type { AlbumRecord, MusicRecord } from "../../logic/types";
 import type { AlbumDraft, EditorMode, TrackDraft } from "../../logic/workspaceTypes";
 import { MusicCoverImage } from "../shared/MusicCoverImage";
+import { musicAudioUploadAccept } from "../shared/audioUpload";
 
 export function DesktopEditorScreen({
   editorMode,
@@ -133,13 +134,13 @@ export function DesktopEditorScreen({
                 alt={editingMusicDetail?.title ?? ""}
                 style={albumArtStyle}
               />
-              <input
-                ref={replaceInputRef}
-                type="file"
-                accept=".mp3,.wav,.wma"
-                hidden
-                onChange={(event) => void onReplaceSelected(event.target.files?.[0] || null)}
-              />
+            <input
+              ref={replaceInputRef}
+              type="file"
+              accept={musicAudioUploadAccept}
+              hidden
+              onChange={(event) => void onReplaceSelected(event.target.files?.[0] || null)}
+            />
               <button type="button" style={primaryButtonStyle} onClick={onPickReplaceFile} disabled={replacingFile}>
                 {replacingFile ? "替换中…" : "更换音频"}
               </button>

@@ -4,6 +4,7 @@ import { buildMusicCoverCacheKey } from "../../logic/musicCoverUtils";
 import type { AlbumRecord, MusicRecord } from "../../logic/types";
 import type { AlbumDraft, EditorMode, TrackDraft } from "../../logic/workspaceTypes";
 import { MusicCoverImage } from "../shared/MusicCoverImage";
+import { musicAudioUploadAccept } from "../shared/audioUpload";
 
 export function MobileEditorScreen({
   editorMode,
@@ -129,7 +130,7 @@ export function MobileEditorScreen({
             <input
               ref={replaceInputRef}
               type="file"
-              accept=".mp3,.wav,.wma"
+              accept={musicAudioUploadAccept}
               hidden
               onChange={(event) => void onReplaceSelected(event.target.files?.[0] || null)}
             />

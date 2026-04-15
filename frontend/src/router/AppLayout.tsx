@@ -29,7 +29,7 @@ export function AppLayout() {
 
   const location = useLocation();
   const navigate = useNavigate();
-  const { user } = useUserState();
+  const { user, isMobile } = useUserState();
   const lastPrimaryPathRef = useRef("/");
   const navbarRef = useRef<HTMLElement | null>(null);
   const isInsideMusicRouter = location.pathname.startsWith(MUSIC_ROOT_PATH);
@@ -145,7 +145,9 @@ export function AppLayout() {
           ) : null}
         </nav>
 
-        <Outlet />
+        <div style={appContentStyle(isMobile)}>
+          <Outlet />
+        </div>
       </div>
     </AppChromeProvider>
   );
@@ -185,5 +187,12 @@ function navButtonStyle(active: boolean): CSSProperties {
     transition: "background 0.2s, transform 0.1s",
     border: "none",
     background: active ? "rgba(255,255,255,0.32)" : "transparent",
+  };
+}
+
+function appContentStyle(isMobile: boolean): CSSProperties {
+  return {
+    minWidth: 0,
+    padding: isMobile ? "0" : undefined,
   };
 }

@@ -50,10 +50,10 @@ function mobileBottomNavStyle(columnCount: number): CSSProperties {
     gridTemplateColumns: `repeat(${columnCount}, minmax(0, 1fr))`,
     gap: "8px",
     padding: "8px 12px calc(8px + env(safe-area-inset-bottom, 0px))",
-    background: "linear-gradient(180deg, rgba(238,243,249,0.76), rgba(255,255,255,0.98))",
+    background: "linear-gradient(180deg, var(--x-color-panel-glass), var(--x-color-panel-strong))",
     borderTop: "1px solid var(--x-color-line)",
     backdropFilter: "blur(18px)",
-    boxShadow: "0 -10px 30px var(--x-color-shadow-soft)",
+    boxShadow: "0 -10px 30px var(--x-color-shadow)",
   };
 }
 
@@ -64,7 +64,7 @@ function mobileTabButtonStyle(active: boolean): CSSProperties {
     display: "grid",
     placeItems: "center",
     padding: 0,
-    border: "none",
+    border: active ? "1px solid var(--x-color-line-soft)" : "1px solid transparent",
     borderRadius: "16px",
     background: active ? "var(--x-color-panel)" : "transparent",
     color: active ? "var(--x-color-accent-strong)" : "var(--x-color-ink-muted)",
@@ -79,9 +79,10 @@ function tabIconShellStyle(active: boolean): CSSProperties {
     borderRadius: "14px",
     display: "grid",
     placeItems: "center",
-    background: active ? "var(--x-color-accent-soft)" : "rgba(246,248,252,0.96)",
+    background: active ? "var(--x-color-accent-soft)" : "var(--x-color-panel-alt)",
     color: active ? "var(--x-color-accent-strong)" : "var(--x-color-ink-muted)",
     fontSize: "14px",
+    boxShadow: active ? "0 10px 20px var(--x-color-shadow-soft)" : "none",
   };
 }
 

@@ -85,7 +85,9 @@ export function MusicPlayerPanel({
         <div style={playerBodyStyle}>
           <div style={playerHeaderRowStyle}>
             <div style={eyebrowStyle}>播放器</div>
-            <span style={statePillStyle(Boolean(currentMusic), isPlaying)}>{playbackStateLabel}</span>
+            <div style={playerHeaderActionsStyle}>
+              <span style={statePillStyle(Boolean(currentMusic), isPlaying)}>{playbackStateLabel}</span>
+            </div>
           </div>
           <h2 style={playerTitleStyle(compact)}>{currentMusic?.title || "选择一首歌曲开始播放"}</h2>
           <p style={playerSubtitleStyle(compact)}>{resolvedAlbumName}</p>
@@ -251,6 +253,14 @@ const playerHeaderRowStyle: CSSProperties = {
   alignItems: "center",
   gap: "10px",
   flexWrap: "wrap",
+};
+
+const playerHeaderActionsStyle: CSSProperties = {
+  display: "flex",
+  alignItems: "center",
+  gap: "8px",
+  flexWrap: "wrap",
+  justifyContent: "flex-end",
 };
 
 const eyebrowStyle: CSSProperties = {

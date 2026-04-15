@@ -86,12 +86,12 @@ const albumCardStyle: CSSProperties = {
   display: "grid",
   gridTemplateColumns: "104px minmax(0, 1fr)",
   gap: "12px",
-  alignItems: "stretch",
+  alignItems: "center",
   minHeight: "108px",
   padding: "10px",
   borderRadius: "16px",
-  border: "1px solid rgba(216,223,235,0.9)",
-  background: "rgba(255,255,255,0.98)",
+  border: "1px solid var(--x-color-line)",
+  background: "var(--x-color-panel)",
 };
 
 const albumSummaryCardStyle: CSSProperties = {
@@ -103,26 +103,28 @@ const albumSummaryCardStyle: CSSProperties = {
 
 const albumOpenButtonStyle: CSSProperties = {
   width: "100%",
-  height: "100%",
+  aspectRatio: "1 / 1",
+  alignSelf: "center",
+  overflow: "hidden",
+  borderRadius: "14px",
+  display: "block",
 };
 
 const albumArtStyle: CSSProperties = {
   width: "100%",
   height: "100%",
-  minHeight: "88px",
-  borderRadius: "14px",
   objectFit: "cover",
+  objectPosition: "center",
   display: "block",
 };
 
 const albumArtPlaceholderStyle: CSSProperties = {
   width: "100%",
-  height: "100%",
-  minHeight: "88px",
+  aspectRatio: "1 / 1",
   borderRadius: "14px",
   display: "grid",
   placeItems: "center",
-  background: "linear-gradient(160deg, rgba(15,118,110,0.16), rgba(18,52,59,0.92))",
+  background: "linear-gradient(160deg, var(--x-color-accent-tint-strong), var(--x-color-nav-start))",
   color: "rgba(255,255,255,0.88)",
   fontWeight: 800,
   letterSpacing: "0.08em",
