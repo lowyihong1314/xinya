@@ -186,6 +186,7 @@ export function MusicPage() {
           onSectionChange={(section) => updateRouteState({ section })}
           viewportHeight={layoutMetrics.contentHeight}
           stickyTop={layoutMetrics.stickyTop}
+          pinnedAllSongsCacheIds={state.pinnedAllSongsCacheIds}
           canViewListening={state.canViewListening}
           listeningLoading={state.listeningLoading}
           listeningTimezone={state.listeningTimezone}

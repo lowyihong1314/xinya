@@ -23,6 +23,8 @@ import {
   groupMinuteLogsIntoSessions,
   sumSessionMinutes,
 } from "./listeningActivity";
+import { buildMusicAudioRevision, warmPinnedMusicAudioTracks } from "./musicAudioCache";
+import { getPinnedAllSongsCacheCandidates, sortAllSongsByListOrder } from "./musicListOrder";
 import { useMusicPlayback } from "./MusicPlaybackContext";
 import type {
   AlbumRecord,
@@ -123,8 +125,20 @@ export function useMusicWorkspace({
   } = routeState;
 
   const allMusicsSorted = useMemo(
-    () => [...libraryMusics].sort((a, b) => (b.play_minutes ?? 0) - (a.play_minutes ?? 0)),
+    () => sortAllSongsByListOrder(libraryMusics),
     [libraryMusics],
+  );
+  const pinnedAllSongsCacheTracks = useMemo(
+    () => getPinnedAllSongsCacheCandidates(allMusicsSorted),
+    [allMusicsSorted],
+  );
+  const pinnedAllSongsCacheIds = useMemo(
+    () => pinnedAllSongsCacheTracks.map((music) => music.id),
+    [pinnedAllSongsCacheTracks],
+  );
+  const pinnedAllSongsCacheSignature = useMemo(
+    () => pinnedAllSongsCacheTracks.map((music) => buildMusicAudioRevision(music)).join("|"),
+    [pinnedAllSongsCacheTracks],
   );
   const normalizedSearch = search.trim().toLowerCase();
 
@@ -352,6 +366,23 @@ export function useMusicWorkspace({
       cancelled = true;
     };
   }, [canViewListening]);
+
+  useEffect(() => {
+    if (!pinnedAllSongsCacheTracks.length) {
+      return;
+    }
+
+    let cancelled = false;
+    void warmPinnedMusicAudioTracks(pinnedAllSongsCacheTracks).catch((error) => {
+      if (!cancelled) {
+        console.warn("Pinned all-songs audio prewarm failed", error);
+      }
+    });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [pinnedAllSongsCacheSignature]);
 
   async function loadInitial() {
     setLoading(true);
@@ -632,6 +663,7 @@ export function useMusicWorkspace({
       listeningTimezone,
       listeningSummary,
       listeningSessions,
+      pinnedAllSongsCacheIds,
       savingAlbum,
       savingTrack,
       uploadingMusic: uploadingMusicState,

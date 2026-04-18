@@ -1,21 +1,109 @@
 import { useEffect, useMemo, useState } from "react";
-import type { CSSProperties, ReactNode } from "react";
+import type { MouseEvent as ReactMouseEvent } from "react";
 import QRCode from "qrcode";
 import { useNavigate } from "react-router-dom";
 
-import { useUserState } from "../../../../app/UserState";
-import { IS_APK } from "../../../../js/apiBase";
-import { useBaseNavbarVisibility } from "../../../../router/AppChromeContext";
-import { useEnsureDesignTokens } from "../../../../theme/designTokens";
+import { useUserState } from "../../../../../app/UserState";
+import { IS_APK } from "../../../../../js/apiBase";
+import { useBaseNavbarVisibility } from "../../../../../router/AppChromeContext";
+import { useEnsureDesignTokens } from "../../../../../theme/designTokens";
 import {
   CHANGYOU_ROOM_PATH,
   getChangyouPublicRoomPath,
   getChangyouRoomPath,
   getChangyouRoomPlayerPath,
-} from "../../../router/paths";
-import { buildProjectionBlocks, ensureProjectionBlocks, splitBlocksForDoublePage, type LyricProjectionBlock } from "../projection";
-import { fetchSongbookEntries, fetchSongbookEntry } from "../api";
-import { connectChangyouRoom } from "./socket";
+} from "../../../../router/paths";
+import { fetchSongbookEntries, fetchSongbookEntry, saveMySongbookEdit } from "../../api";
+import { buildProjectionBlocks, splitBlocksForDoublePage } from "../../projection";
+import type { SongbookEntry, SongbookVersionOption } from "../../types";
+import {
+  APK_PUBLIC_ROOM_BASE_URL,
+  CHORD_FAMILY_OPTIONS,
+  CHORD_FAMILY_STORAGE_KEY,
+  DEFAULT_FONT_SIZE,
+  FONT_SIZE_STORAGE_KEY,
+  HIDE_NAV_STORAGE_KEY,
+  MAX_FONT_SIZE,
+  MIN_FONT_SIZE,
+  SONG_CARD_BATCH_DESKTOP,
+  SONG_CARD_BATCH_MOBILE,
+  buildProjectionPayload,
+  buildVersionHelperText,
+  formatSongTitle,
+  formatVersionMeta,
+  getProjectionBlocks,
+  isProjectionForEntry,
+  transformChordContent,
+  type ChordFamily,
+  type ControllerPage,
+} from "./helpers";
+import { CollapseCard, ProjectionColumn, ProjectionLyricsContextMenu } from "./components";
+import {
+  backButtonStyle,
+  controlCardStyle,
+  controlHeadingStyle,
+  controlHintStyle,
+  controlTitleStyle,
+  controlToolbarRowStyle,
+  controlToolbarStyle,
+  currentProjectionMetaStyle,
+  editorStyle,
+  editorWrapStyle,
+  emptyStateStyle,
+  errorStyle,
+  ghostButtonStyle,
+  hintStyle,
+  mainColumnStyle,
+  notifyInputCompactStyle,
+  notifyInputStyle,
+  pageBatchInfoStyle,
+  pageChipStyle,
+  pageInnerStyle,
+  pageStyle,
+  pageToolbarActionsStyle,
+  pageToolbarStyle,
+  primaryButtonStyle,
+  projectionHubStyle,
+  projectionPreviewCardStyle,
+  projectionPreviewHeaderStyle,
+  projectionStageStyle,
+  projectionTopStyle,
+  qrCaptionStyle,
+  qrCardStyle,
+  qrPlaceholderStyle,
+  qrStyle,
+  roomActionRowStyle,
+  roomCardGridStyle,
+  roomCardMetaStyle,
+  roomCardStyle,
+  roomCardTitleStyle,
+  roomSummaryHintStyle,
+  roomSummaryLineStyle,
+  roomSummaryStyle,
+  sectionTitleStyle,
+  secondaryButtonStyle,
+  settingsBlockStyle,
+  settingsLabelStyle,
+  setupSummaryMetaStyle,
+  setupSummaryStyle,
+  setupSummaryTitleStyle,
+  smallGhostButtonStyle,
+  smallPrimaryButtonStyle,
+  smallSecondaryButtonStyle,
+  stateStyle,
+  togglePillStyle,
+  topBarActionsStyle,
+  topBarStyle,
+  variantChipStyle,
+  versionCardGridStyle,
+  versionCardMetaStyle,
+  versionCardStyle,
+  versionCardTitleStyle,
+  workflowSwitchStyle,
+  workflowTabStyle,
+  chipRowStyle,
+} from "./styles";
+import { connectChangyouRoom } from "../socket";
 import {
   fetchChangyouRoom,
   fetchChangyouRoomCurrent,
@@ -23,161 +111,14 @@ import {
   notifyChangyouRoom,
   projectChangyouRoomPage,
   type ChangyouRoom,
-  type ChangyouRoomProjection,
   updateChangyouRoomMarker,
-} from "./api";
-import type { SongbookEntry, SongbookVersionOption } from "../types";
-
-const FONT_SIZE_STORAGE_KEY = "xinya.changyou.fontSize";
-const HIDE_NAV_STORAGE_KEY = "xinya.changyou.hideNav";
-const CHORD_FAMILY_STORAGE_KEY = "xinya.changyou.chordFamily";
-const DEFAULT_FONT_SIZE = 18;
-const MIN_FONT_SIZE = 14;
-const MAX_FONT_SIZE = 30;
-const SONG_CARD_BATCH_DESKTOP = 18;
-const SONG_CARD_BATCH_MOBILE = 10;
-const APK_PUBLIC_ROOM_BASE_URL = "http://utbabuddha.com";
-
-type ChordFamily = "original" | "C" | "D" | "E" | "F" | "G" | "A" | "B";
-type ControllerPage = "songs" | "projection" | "control";
-
-const CHORD_FAMILY_OPTIONS: ChordFamily[] = ["original", "C", "D", "E", "F", "G", "A", "B"];
-const FAMILY_OFFSETS: Record<Exclude<ChordFamily, "original">, number> = {
-  C: 0,
-  D: 2,
-  E: 4,
-  F: 5,
-  G: 7,
-  A: 9,
-  B: 11,
-};
-const SHARP_NAMES = ["C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "A#", "B"];
-const FLAT_NAMES = ["C", "Db", "D", "Eb", "E", "F", "Gb", "G", "Ab", "A", "Bb", "B"];
-const NOTE_INDEX: Record<string, number> = {
-  C: 0,
-  "B#": 0,
-  "C#": 1,
-  Db: 1,
-  D: 2,
-  "D#": 3,
-  Eb: 3,
-  E: 4,
-  Fb: 4,
-  F: 5,
-  "E#": 5,
-  "F#": 6,
-  Gb: 6,
-  G: 7,
-  "G#": 8,
-  Ab: 8,
-  A: 9,
-  "A#": 10,
-  Bb: 10,
-  B: 11,
-  Cb: 11,
-};
-
-function getPreferredNoteName(index: number, family: Exclude<ChordFamily, "original">) {
-  if (family === "F") return FLAT_NAMES[index];
-  return SHARP_NAMES[index];
-}
-
-function transposeRoot(root: string, offset: number, family: Exclude<ChordFamily, "original">) {
-  const noteIndex = NOTE_INDEX[root.trim()];
-  if (noteIndex == null) return root;
-  return getPreferredNoteName((noteIndex + offset + 12) % 12, family);
-}
-
-function transposeChordToken(token: string, targetFamily: Exclude<ChordFamily, "original">) {
-  const trimmed = token.trim();
-  if (!trimmed || trimmed === "|" || trimmed === "/") return token;
-  const match = trimmed.match(/^([A-G](?:#|b)?)([^/]*?)(?:\/([A-G](?:#|b)?))?$/);
-  if (!match) return token;
-  const [, root, suffix = "", bass] = match;
-  const offset = FAMILY_OFFSETS[targetFamily];
-  const nextRoot = transposeRoot(root, offset, targetFamily);
-  const nextBass = bass ? transposeRoot(bass, offset, targetFamily) : null;
-  return `${nextRoot}${suffix}${nextBass ? `/${nextBass}` : ""}`;
-}
-
-function isChordLikeToken(token: string) {
-  return /^([A-G](?:#|b)?)([^/]*?)(?:\/([A-G](?:#|b)?))?$/.test(token.trim());
-}
-
-function isChordLine(line: string) {
-  const pieces = line.split(/(\s+|\|)/).filter(Boolean);
-  const meaningful = pieces.filter((piece) => piece.trim() && piece !== "|");
-  if (!meaningful.length) return false;
-  return meaningful.every(isChordLikeToken);
-}
-
-function transposeChordLine(line: string, targetFamily: Exclude<ChordFamily, "original">) {
-  let result = "";
-  let token = "";
-  const flush = () => {
-    if (!token) return;
-    result += isChordLikeToken(token) ? transposeChordToken(token, targetFamily) : token;
-    token = "";
-  };
-  for (const char of line) {
-    if (char === "|" || char === " " || char === "\t") {
-      flush();
-      result += char;
-    } else {
-      token += char;
-    }
-  }
-  flush();
-  return result;
-}
-
-function transformChordContent(content: string, targetFamily: ChordFamily) {
-  if (targetFamily === "original") return content;
-  return content
-    .split("\n")
-    .map((line) => (isChordLine(line) ? transposeChordLine(line, targetFamily) : line))
-    .join("\n");
-}
-
-function buildVersionHelperText(entry: SongbookEntry | null) {
-  if (!entry) return "当前显示原版内容。";
-  if (entry.active_version === "user") {
-    return `当前显示 ${entry.active_editor_name || "个人"} 版本，可继续另存为自己的编辑版。`;
-  }
-  return "当前显示原版内容，可以切换到其他成员共享的编辑版。";
-}
-
-function formatVersionMeta(option: SongbookVersionOption) {
-  if (option.kind === "base") return "默认原版";
-  if (option.is_me) return "我的编辑版";
-  return option.editor_name || "成员版本";
-}
-
-function formatSongTitle(entry: SongbookEntry | null) {
-  if (!entry) return "未投放";
-  return `${entry.song_number ? `${entry.song_number}. ` : ""}${entry.title}`;
-}
-
-function isProjectionForEntry(room: ChangyouRoom | null, entry: SongbookEntry | null) {
-  if (!room || !entry) return false;
-  const roomEditorId = room.editor_user_id || null;
-  const entryEditorId = entry.active_version === "user" ? entry.active_editor_user_id || null : null;
-  return (
-    room.song_entry_id === entry.id &&
-    (room.version_kind || "base") === (entry.active_version || "base") &&
-    roomEditorId === entryEditorId
-  );
-}
-
-function getProjectionBlocks(projection: ChangyouRoomProjection | null | undefined, fallbackContent: string) {
-  return ensureProjectionBlocks((projection?.blocks as LyricProjectionBlock[] | undefined) || [], fallbackContent);
-}
+} from "../api";
 
 export function ChangyouRoomController({ roomId }: { roomId: string }) {
   useEnsureDesignTokens();
 
   const navigate = useNavigate();
-  const { isMobile } = useUserState();
+  const { isAuthenticated, isMobile, openLogin } = useUserState();
   const [room, setRoom] = useState<ChangyouRoom | null>(null);
   const [rooms, setRooms] = useState<ChangyouRoom[]>([]);
   const [entries, setEntries] = useState<SongbookEntry[]>([]);
@@ -210,6 +151,14 @@ export function ChangyouRoomController({ roomId }: { roomId: string }) {
   const [workflowPage, setWorkflowPage] = useState<ControllerPage>("songs");
   const [songBatchIndex, setSongBatchIndex] = useState(0);
   const [projectingSong, setProjectingSong] = useState(false);
+  const [preparingProjectionEdit, setPreparingProjectionEdit] = useState(false);
+  const [editingProjection, setEditingProjection] = useState(false);
+  const [savingProjectionEdit, setSavingProjectionEdit] = useState(false);
+  const [projectionEditorValue, setProjectionEditorValue] = useState("");
+  const [projectionLyricsMenu, setProjectionLyricsMenu] = useState<{
+    x: number;
+    y: number;
+  } | null>(null);
 
   const selectedSongId = selectedEntry?.id || null;
 
@@ -232,6 +181,30 @@ export function ChangyouRoomController({ roomId }: { roomId: string }) {
       window.localStorage.setItem(HIDE_NAV_STORAGE_KEY, hideNav ? "1" : "0");
     }
   }, [hideNav]);
+
+  useEffect(() => {
+    if (!projectionLyricsMenu) {
+      return;
+    }
+
+    const handlePointerDown = () => setProjectionLyricsMenu(null);
+    const handleScroll = () => setProjectionLyricsMenu(null);
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Escape") {
+        setProjectionLyricsMenu(null);
+      }
+    };
+
+    window.addEventListener("pointerdown", handlePointerDown);
+    window.addEventListener("scroll", handleScroll, true);
+    window.addEventListener("keydown", handleKeyDown);
+
+    return () => {
+      window.removeEventListener("pointerdown", handlePointerDown);
+      window.removeEventListener("scroll", handleScroll, true);
+      window.removeEventListener("keydown", handleKeyDown);
+    };
+  }, [projectionLyricsMenu]);
 
   async function loadEntry(targetEntryId: number, options?: { versionKind?: "base" | "user"; editorUserId?: number | null }) {
     const response = await fetchSongbookEntry(targetEntryId, options);
@@ -417,20 +390,96 @@ export function ChangyouRoomController({ roomId }: { roomId: string }) {
     [currentProjectedBlocks],
   );
 
-  function buildProjectionPayload(targetEntry: SongbookEntry, targetChordFamily: ChordFamily, markerIndex: number | null = null) {
-    const content = transformChordContent(targetEntry.content || "", targetChordFamily);
-    const blocks = buildProjectionBlocks(content);
-    return {
-      song_entry_id: targetEntry.id,
-      version_kind: targetEntry.active_version || "base",
-      editor_user_id: targetEntry.active_version === "user" ? targetEntry.active_editor_user_id || null : null,
-      page_index: 0,
-      page_count: 1,
-      page_label: "整首歌词",
-      content,
-      blocks,
-      marker_index: markerIndex,
-    };
+  useEffect(() => {
+    setEditingProjection(false);
+    setPreparingProjectionEdit(false);
+    setSavingProjectionEdit(false);
+    setProjectionEditorValue("");
+    setProjectionLyricsMenu(null);
+  }, [projectedEntry?.id]);
+
+  function handleProjectionLyricsContextMenu(event: ReactMouseEvent<HTMLDivElement>) {
+    event.preventDefault();
+    const menuWidth = 168;
+    const menuHeight = 56;
+    const viewportWidth = typeof window !== "undefined" ? window.innerWidth : event.clientX + menuWidth;
+    const viewportHeight = typeof window !== "undefined" ? window.innerHeight : event.clientY + menuHeight;
+    const x = Math.max(12, Math.min(event.clientX, viewportWidth - menuWidth - 12));
+    const y = Math.max(12, Math.min(event.clientY, viewportHeight - menuHeight - 12));
+    setProjectionLyricsMenu({ x, y });
+  }
+
+  async function handleBeginProjectionEdit() {
+    setProjectionLyricsMenu(null);
+    if (!projectedEntry) return;
+    if (!isAuthenticated) {
+      openLogin(`${window.location.pathname}${window.location.search}${window.location.hash}`);
+      return;
+    }
+
+    setPreparingProjectionEdit(true);
+    setError("");
+    try {
+      const entry =
+        selectedEntry && isProjectionForEntry(room, selectedEntry)
+          ? selectedEntry
+          : await loadEntry(
+              projectedEntry.id,
+              room?.version_kind === "user"
+                ? { versionKind: "user", editorUserId: room.editor_user_id || null }
+                : { versionKind: "base" },
+            );
+      setProjectionEditorValue(entry.content || "");
+      setEditingProjection(true);
+      setWorkflowPage("control");
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "打开编辑失败");
+    } finally {
+      setPreparingProjectionEdit(false);
+    }
+  }
+
+  async function handleSaveProjectionEdit() {
+    if (!roomId || !room || !projectedEntry) return;
+    if (!projectionEditorValue.trim()) {
+      setError("歌词内容不能为空。");
+      return;
+    }
+    if (!isAuthenticated) {
+      openLogin(`${window.location.pathname}${window.location.search}${window.location.hash}`);
+      return;
+    }
+
+    setSavingProjectionEdit(true);
+    setError("");
+    try {
+      const saveResponse = await saveMySongbookEdit(projectedEntry.id, projectionEditorValue);
+      const savedEntry = saveResponse.entry;
+      setSelectedEntry(savedEntry);
+
+      const nextProjection = buildProjectionPayload(savedEntry, chordFamily);
+      const markerIndex = roomProjection?.marker_index ?? null;
+      const safeMarkerIndex =
+        markerIndex != null && nextProjection.blocks[markerIndex]?.highlightable ? markerIndex : null;
+      const projectionResponse = await projectChangyouRoomPage(roomId, {
+        ...nextProjection,
+        marker_index: safeMarkerIndex,
+      });
+
+      setRoom(projectionResponse.room);
+      setProjectedEntry(projectionResponse.entry || null);
+      setProjectionEditorValue(savedEntry.content || "");
+      setEditingProjection(false);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "保存编辑失败");
+    } finally {
+      setSavingProjectionEdit(false);
+    }
+  }
+
+  function handleCancelProjectionEdit() {
+    setEditingProjection(false);
+    setProjectionEditorValue("");
   }
 
   async function handleSelectSong(songId: number) {
@@ -599,32 +648,6 @@ export function ChangyouRoomController({ roomId }: { roomId: string }) {
 
   if (loading) return <div style={stateStyle}>加载房间中…</div>;
   if (!room) return <div style={stateStyle}>{error || "房间不存在或已过期。"}</div>;
-
-  function renderCurrentProjectionColumn(blocks: LyricProjectionBlock[]) {
-    return (
-      <div style={projectionColumnCompactStyle}>
-        {blocks.map((block, blockIndex) => {
-          const projectedBlockIndex = currentProjectedBlocks.findIndex((item) => item.id === block.id);
-          const resolvedIndex = projectedBlockIndex >= 0 ? projectedBlockIndex : blockIndex;
-          const active = roomProjection?.marker_index === resolvedIndex;
-          const clickable = Boolean(block.highlightable);
-          return (
-            <button
-              key={block.id || `${resolvedIndex}`}
-              type="button"
-              onClick={() => {
-                if (!clickable) return;
-                void handleUpdateMarker(resolvedIndex);
-              }}
-              style={projectionBlockStyle(active, clickable)}
-            >
-              <pre style={projectionBlockTextStyle(fontSize)}>{block.text}</pre>
-            </button>
-          );
-        })}
-      </div>
-    );
-  }
 
   return (
     <div style={pageStyle(hideNav)}>
@@ -961,16 +984,78 @@ export function ChangyouRoomController({ roomId }: { roomId: string }) {
                     </div>
                     {projectedEntry ? (
                       <span style={pageChipStyle(true)}>
-                        {roomProjection?.marker_index != null ? `已标记 ${roomProjection.marker_index + 1}` : "未开始标记"}
+                        {savingProjectionEdit
+                          ? "保存中..."
+                          : preparingProjectionEdit
+                            ? "准备编辑..."
+                            : editingProjection
+                              ? "编辑中"
+                              : roomProjection?.marker_index != null
+                                ? `已标记 ${roomProjection.marker_index + 1}`
+                                : "未开始标记"}
                       </span>
                     ) : null}
                   </div>
                   {!projectedEntry ? (
                     <div style={emptyStateStyle}>还没有投放歌词。</div>
+                  ) : preparingProjectionEdit ? (
+                    <div style={emptyStateStyle}>正在准备可编辑内容…</div>
+                  ) : editingProjection ? (
+                    <div style={editorWrapStyle}>
+                      <textarea
+                        value={projectionEditorValue}
+                        onChange={(event) => setProjectionEditorValue(event.target.value)}
+                        style={editorStyle(fontSize)}
+                      />
+                      <div style={hintStyle}>
+                        保存后会直接写入“我的编辑版”，并立刻重新投放到当前房间。
+                      </div>
+                      <div style={pageToolbarActionsStyle}>
+                        <button
+                          type="button"
+                          onClick={() => void handleSaveProjectionEdit()}
+                          style={primaryButtonStyle}
+                          disabled={savingProjectionEdit || !projectionEditorValue.trim()}
+                        >
+                          {savingProjectionEdit ? "保存并投放中..." : "保存为我的编辑版"}
+                        </button>
+                        <button
+                          type="button"
+                          onClick={handleCancelProjectionEdit}
+                          style={secondaryButtonStyle}
+                          disabled={savingProjectionEdit}
+                        >
+                          取消
+                        </button>
+                      </div>
+                    </div>
                   ) : (
-                    <div style={projectionStageStyle(isMobile, currentProjectedColumns.right.length > 0)}>
-                      {renderCurrentProjectionColumn(currentProjectedColumns.left)}
-                      {currentProjectedColumns.right.length ? renderCurrentProjectionColumn(currentProjectedColumns.right) : null}
+                    <div
+                      style={projectionStageStyle(isMobile, currentProjectedColumns.right.length > 0)}
+                      onContextMenu={handleProjectionLyricsContextMenu}
+                    >
+                      <ProjectionColumn
+                        blocks={currentProjectedColumns.left}
+                        currentProjectedBlocks={currentProjectedBlocks}
+                        activeMarkerIndex={roomProjection?.marker_index}
+                        fontSize={fontSize}
+                        onSelectMarker={(resolvedIndex, clickable) => {
+                          if (!clickable) return;
+                          void handleUpdateMarker(resolvedIndex);
+                        }}
+                      />
+                      {currentProjectedColumns.right.length ? (
+                        <ProjectionColumn
+                          blocks={currentProjectedColumns.right}
+                          currentProjectedBlocks={currentProjectedBlocks}
+                          activeMarkerIndex={roomProjection?.marker_index}
+                          fontSize={fontSize}
+                          onSelectMarker={(resolvedIndex, clickable) => {
+                            if (!clickable) return;
+                            void handleUpdateMarker(resolvedIndex);
+                          }}
+                        />
+                      ) : null}
                     </div>
                   )}
                 </section>
@@ -979,849 +1064,10 @@ export function ChangyouRoomController({ roomId }: { roomId: string }) {
           </section>
         </main>
       </div>
+      <ProjectionLyricsContextMenu
+        menu={projectionLyricsMenu}
+        onEdit={() => void handleBeginProjectionEdit()}
+      />
     </div>
   );
 }
-
-function CollapseCard({
-  title,
-  subtitle,
-  open = true,
-  onToggle,
-  children,
-}: {
-  title: string;
-  subtitle?: string;
-  open?: boolean;
-  onToggle?: () => void;
-  children: ReactNode;
-}) {
-  return (
-    <section style={collapseCardStyle}>
-      <button type="button" onClick={onToggle} style={collapseHeaderStyle}>
-        <div>
-          <div style={sectionTitleStyle}>{title}</div>
-          {subtitle ? <div style={collapseSubtitleStyle}>{subtitle}</div> : null}
-        </div>
-        {onToggle ? <span style={collapseArrowStyle}>{open ? "收起" : "展开"}</span> : null}
-      </button>
-      {open ? <div style={collapseBodyStyle}>{children}</div> : null}
-    </section>
-  );
-}
-
-function MiniStat({ label, value }: { label: string; value: string }) {
-  return (
-    <div style={miniStatStyle}>
-      <div style={miniStatLabelStyle}>{label}</div>
-      <div style={miniStatValueStyle}>{value}</div>
-    </div>
-  );
-}
-
-const pageStyle = (hideNav: boolean): CSSProperties => ({
-  minHeight: hideNav ? "100vh" : "calc(100vh - 60px)",
-  padding: "20px",
-  background:
-    "radial-gradient(circle at top left, rgba(15,118,110,0.12), transparent 24%), linear-gradient(180deg, var(--x-color-canvas), var(--x-color-canvas-alt))",
-  boxSizing: "border-box",
-  overflowX: "hidden",
-});
-
-const pageInnerStyle: CSSProperties = {
-  width: "100%",
-  maxWidth: "1600px",
-  margin: "0 auto",
-  display: "grid",
-  gap: "16px",
-};
-
-const topBarStyle = (isMobile: boolean): CSSProperties => ({
-  display: "flex",
-  justifyContent: "space-between",
-  alignItems: isMobile ? "stretch" : "center",
-  flexDirection: isMobile ? "column" : "row",
-  gap: "12px",
-});
-
-const topBarActionsStyle: CSSProperties = {
-  display: "flex",
-  gap: "10px",
-  flexWrap: "wrap",
-};
-
-const backButtonStyle = (isMobile: boolean): CSSProperties => ({
-  alignSelf: "flex-start",
-  padding: "12px 16px",
-  borderRadius: "999px",
-  border: "1px solid var(--x-color-line)",
-  background: "var(--x-color-panel)",
-  color: "var(--x-color-ink)",
-  fontWeight: 800,
-  cursor: "pointer",
-  width: isMobile ? "100%" : undefined,
-});
-
-const ghostButtonStyle: CSSProperties = {
-  padding: "12px 16px",
-  borderRadius: "14px",
-  border: "1px solid var(--x-color-line)",
-  background: "var(--x-color-panel-strongest)",
-  color: "var(--x-color-ink)",
-  fontWeight: 800,
-  cursor: "pointer",
-};
-
-const togglePillStyle: CSSProperties = {
-  display: "inline-flex",
-  alignItems: "center",
-  gap: "8px",
-  padding: "10px 14px",
-  borderRadius: "999px",
-  background: "var(--x-color-panel-strongest)",
-  border: "1px solid var(--x-color-line-soft)",
-  color: "var(--x-color-ink-muted)",
-  fontWeight: 700,
-};
-
-const layoutStyle = (isMobile: boolean): CSSProperties => ({
-  display: "grid",
-  gridTemplateColumns: isMobile ? "1fr" : "minmax(0, 1.8fr) minmax(320px, 0.9fr)",
-  gap: "18px",
-  alignItems: "start",
-});
-
-const mainColumnStyle: CSSProperties = {
-  display: "grid",
-  gap: "16px",
-};
-
-const heroCardStyle: CSSProperties = {
-  padding: "24px",
-  borderRadius: "28px",
-  background: "linear-gradient(145deg, rgba(255,255,255,0.9), rgba(240,248,255,0.82))",
-  border: "1px solid var(--x-color-line-soft)",
-  boxShadow: "0 20px 40px var(--x-color-shadow-soft)",
-  display: "grid",
-  gap: "18px",
-};
-
-const workflowSwitchStyle = (isMobile: boolean): CSSProperties => ({
-  display: "grid",
-  gridTemplateColumns: isMobile ? "1fr" : "repeat(3, minmax(0, 1fr))",
-  gap: "12px",
-});
-
-const workflowTabStyle = (active: boolean): CSSProperties => ({
-  padding: "16px 18px",
-  borderRadius: "20px",
-  border: active ? "1px solid rgba(15,118,110,0.26)" : "1px solid var(--x-color-line-soft)",
-  background: active
-    ? "linear-gradient(180deg, rgba(15,118,110,0.14), rgba(255,255,255,0.94))"
-    : "rgba(255,255,255,0.78)",
-  color: "var(--x-color-ink)",
-  fontWeight: 900,
-  cursor: "pointer",
-  boxShadow: active ? "0 16px 30px rgba(15,118,110,0.1)" : "none",
-});
-
-const heroHeaderStyle: CSSProperties = {
-  display: "grid",
-  gridTemplateColumns: "minmax(0, 1.4fr) minmax(260px, 1fr)",
-  gap: "18px",
-};
-
-const heroTitleWrapStyle: CSSProperties = {
-  display: "grid",
-  gap: "10px",
-};
-
-const eyebrowStyle: CSSProperties = {
-  fontSize: "12px",
-  letterSpacing: "0.16em",
-  textTransform: "uppercase",
-  color: "var(--x-color-ink-muted)",
-  fontWeight: 800,
-};
-
-const heroTitleStyle = (isMobile: boolean): CSSProperties => ({
-  margin: 0,
-  fontSize: isMobile ? "34px" : "44px",
-  lineHeight: 1.05,
-  color: "var(--x-color-ink)",
-});
-
-const heroCopyStyle: CSSProperties = {
-  margin: 0,
-  fontSize: "14px",
-  lineHeight: 1.8,
-  color: "var(--x-color-ink-muted)",
-};
-
-const heroStatGridStyle: CSSProperties = {
-  display: "grid",
-  gridTemplateColumns: "repeat(2, minmax(0, 1fr))",
-  gap: "10px",
-};
-
-const metaWrapStyle: CSSProperties = {
-  display: "flex",
-  flexWrap: "wrap",
-  gap: "10px",
-};
-
-const metaPillStyle: CSSProperties = {
-  padding: "10px 14px",
-  borderRadius: "999px",
-  background: "rgba(255,255,255,0.76)",
-  border: "1px solid var(--x-color-line-soft)",
-  color: "var(--x-color-ink-muted)",
-  fontSize: "12px",
-  fontWeight: 800,
-};
-
-const miniStatStyle: CSSProperties = {
-  padding: "14px",
-  borderRadius: "18px",
-  background: "rgba(255,255,255,0.72)",
-  border: "1px solid var(--x-color-line-soft)",
-  display: "grid",
-  gap: "4px",
-};
-
-const miniStatLabelStyle: CSSProperties = {
-  fontSize: "11px",
-  color: "var(--x-color-ink-muted)",
-  textTransform: "uppercase",
-  letterSpacing: "0.08em",
-};
-
-const miniStatValueStyle: CSSProperties = {
-  fontSize: "15px",
-  fontWeight: 800,
-  color: "var(--x-color-ink)",
-};
-
-const projectionHubStyle: CSSProperties = {
-  display: "grid",
-  gap: "16px",
-};
-
-const projectionTopStyle = (isMobile: boolean): CSSProperties => ({
-  display: "grid",
-  gridTemplateColumns: isMobile ? "1fr" : "minmax(0, 1fr) 170px",
-  gap: "14px",
-  padding: "18px",
-  borderRadius: "24px",
-  background: "linear-gradient(180deg, var(--x-color-panel-strongest), var(--x-color-panel))",
-  border: "1px solid var(--x-color-line-soft)",
-  boxShadow: "0 18px 34px var(--x-color-shadow-soft)",
-});
-
-const roomSummaryStyle: CSSProperties = {
-  display: "grid",
-  gap: "10px",
-};
-
-const roomSummaryLineStyle: CSSProperties = {
-  fontSize: "18px",
-  fontWeight: 900,
-  color: "var(--x-color-ink)",
-};
-
-const roomSummaryHintStyle: CSSProperties = {
-  fontSize: "13px",
-  lineHeight: 1.7,
-  color: "var(--x-color-ink-muted)",
-};
-
-const roomActionRowStyle: CSSProperties = {
-  display: "flex",
-  gap: "10px",
-  flexWrap: "wrap",
-};
-
-const qrCardStyle: CSSProperties = {
-  borderRadius: "22px",
-  border: "1px solid var(--x-color-line-soft)",
-  background: "rgba(255,255,255,0.86)",
-  display: "grid",
-  placeItems: "center",
-  alignContent: "center",
-  gap: "8px",
-  padding: "12px",
-};
-
-const qrStyle: CSSProperties = {
-  width: "100%",
-  maxWidth: "124px",
-  borderRadius: "16px",
-  background: "white",
-};
-
-const qrPlaceholderStyle: CSSProperties = {
-  width: "124px",
-  height: "124px",
-  borderRadius: "18px",
-  display: "grid",
-  placeItems: "center",
-  background: "var(--x-color-panel-glass)",
-  color: "var(--x-color-ink-muted)",
-  fontWeight: 800,
-};
-
-const qrCaptionStyle: CSSProperties = {
-  fontSize: "12px",
-  fontWeight: 800,
-  color: "var(--x-color-ink-muted)",
-};
-
-const collapseCardStyle: CSSProperties = {
-  borderRadius: "24px",
-  background: "linear-gradient(180deg, var(--x-color-panel-strongest), var(--x-color-panel))",
-  border: "1px solid var(--x-color-line-soft)",
-  boxShadow: "0 18px 34px var(--x-color-shadow-soft)",
-  overflow: "hidden",
-};
-
-const collapseHeaderStyle: CSSProperties = {
-  width: "100%",
-  padding: "18px",
-  border: "none",
-  background: "transparent",
-  display: "flex",
-  justifyContent: "space-between",
-  alignItems: "center",
-  textAlign: "left",
-  cursor: "pointer",
-};
-
-const collapseSubtitleStyle: CSSProperties = {
-  marginTop: "6px",
-  fontSize: "13px",
-  lineHeight: 1.6,
-  color: "var(--x-color-ink-muted)",
-};
-
-const collapseArrowStyle: CSSProperties = {
-  fontSize: "13px",
-  fontWeight: 800,
-  color: "var(--x-color-ink-muted)",
-};
-
-const collapseBodyStyle: CSSProperties = {
-  padding: "0 18px 18px",
-  display: "grid",
-  gap: "14px",
-};
-
-const controlCardStyle: CSSProperties = {
-  padding: "12px 14px",
-  borderRadius: "20px",
-  background: "linear-gradient(135deg, rgba(8,47,73,0.96), rgba(15,118,110,0.92))",
-  border: "1px solid rgba(125,211,252,0.14)",
-  boxShadow: "0 14px 28px rgba(8,47,73,0.18)",
-  display: "grid",
-  gap: "10px",
-};
-
-const sectionTitleStyle: CSSProperties = {
-  fontSize: "20px",
-  fontWeight: 900,
-  color: "var(--x-color-ink)",
-};
-
-const sectionLabelStyle: CSSProperties = {
-  fontSize: "12px",
-  letterSpacing: "0.1em",
-  textTransform: "uppercase",
-  color: "var(--x-color-ink-muted)",
-  fontWeight: 800,
-};
-
-const roomCardGridStyle: CSSProperties = {
-  display: "grid",
-  gridTemplateColumns: "repeat(auto-fit, minmax(180px, 1fr))",
-  gap: "12px",
-};
-
-const roomCardStyle = (active: boolean): CSSProperties => ({
-  padding: "16px",
-  borderRadius: "18px",
-  border: active ? "1px solid rgba(15,118,110,0.28)" : "1px solid var(--x-color-line-soft)",
-  background: active ? "rgba(15,118,110,0.12)" : "rgba(255,255,255,0.78)",
-  display: "grid",
-  gap: "6px",
-  textAlign: "left",
-  cursor: "pointer",
-});
-
-const roomCardTitleStyle: CSSProperties = {
-  fontWeight: 900,
-  color: "var(--x-color-ink)",
-};
-
-const roomCardMetaStyle: CSSProperties = {
-  fontSize: "12px",
-  color: "var(--x-color-ink-muted)",
-};
-
-const versionCardGridStyle: CSSProperties = {
-  display: "grid",
-  gridTemplateColumns: "repeat(auto-fit, minmax(180px, 1fr))",
-  gap: "12px",
-};
-
-const versionCardStyle = (active: boolean): CSSProperties => ({
-  padding: "16px",
-  borderRadius: "18px",
-  border: active ? "1px solid rgba(59,130,246,0.28)" : "1px solid var(--x-color-line-soft)",
-  background: active ? "rgba(59,130,246,0.12)" : "rgba(255,255,255,0.78)",
-  display: "grid",
-  gap: "6px",
-  textAlign: "left",
-  cursor: "pointer",
-});
-
-const versionCardTitleStyle: CSSProperties = {
-  fontWeight: 900,
-  color: "var(--x-color-ink)",
-};
-
-const versionCardMetaStyle: CSSProperties = {
-  fontSize: "12px",
-  lineHeight: 1.6,
-  color: "var(--x-color-ink-muted)",
-};
-
-const setupSummaryStyle: CSSProperties = {
-  padding: "18px",
-  borderRadius: "20px",
-  border: "1px solid var(--x-color-line-soft)",
-  background: "rgba(255,255,255,0.78)",
-  display: "grid",
-  gap: "8px",
-};
-
-const setupSummaryTitleStyle: CSSProperties = {
-  fontSize: "18px",
-  fontWeight: 900,
-  color: "var(--x-color-ink)",
-};
-
-const setupSummaryMetaStyle: CSSProperties = {
-  fontSize: "13px",
-  lineHeight: 1.7,
-  color: "var(--x-color-ink-muted)",
-};
-
-const pageToolbarStyle = (isMobile: boolean): CSSProperties => ({
-  display: "flex",
-  justifyContent: "space-between",
-  alignItems: isMobile ? "stretch" : "center",
-  flexDirection: isMobile ? "column" : "row",
-  gap: "10px",
-});
-
-const pageBatchInfoStyle: CSSProperties = {
-  fontSize: "13px",
-  fontWeight: 800,
-  color: "var(--x-color-ink-muted)",
-};
-
-const pageToolbarActionsStyle: CSSProperties = {
-  display: "flex",
-  gap: "10px",
-  flexWrap: "wrap",
-};
-
-const pageGridStyle = (isMobile: boolean): CSSProperties => ({
-  display: "grid",
-  gridTemplateColumns: isMobile ? "1fr" : "repeat(2, minmax(0, 1fr))",
-  gap: "12px",
-});
-
-const pageCardStyle = (active: boolean): CSSProperties => ({
-  padding: "16px",
-  borderRadius: "20px",
-  border: active ? "1px solid rgba(245,158,11,0.3)" : "1px solid var(--x-color-line-soft)",
-  background: active ? "linear-gradient(180deg, rgba(251,191,36,0.14), rgba(255,255,255,0.92))" : "rgba(255,255,255,0.82)",
-  display: "grid",
-  gap: "10px",
-  textAlign: "left",
-  cursor: "pointer",
-});
-
-const pageCardTopStyle: CSSProperties = {
-  display: "flex",
-  justifyContent: "space-between",
-  alignItems: "center",
-  gap: "10px",
-};
-
-const pageCardTitleStyle: CSSProperties = {
-  fontSize: "16px",
-  fontWeight: 900,
-  color: "var(--x-color-ink)",
-};
-
-const pageCardSnippetStyle: CSSProperties = {
-  fontSize: "13px",
-  lineHeight: 1.7,
-  color: "var(--x-color-ink-muted)",
-  display: "-webkit-box",
-  WebkitLineClamp: 3,
-  WebkitBoxOrient: "vertical",
-  overflow: "hidden",
-};
-
-const pageChipStyle = (active: boolean): CSSProperties => ({
-  padding: "6px 10px",
-  borderRadius: "999px",
-  background: active ? "rgba(245,158,11,0.18)" : "rgba(15,23,42,0.08)",
-  color: active ? "#92400e" : "var(--x-color-ink-muted)",
-  fontSize: "11px",
-  fontWeight: 900,
-});
-
-const pageActiveBadgeStyle: CSSProperties = {
-  fontSize: "11px",
-  fontWeight: 900,
-  color: "#92400e",
-};
-
-const controlToolbarStyle = (isMobile: boolean): CSSProperties => ({
-  display: "grid",
-  gridTemplateColumns: isMobile ? "1fr" : "auto minmax(0, 1fr)",
-  alignItems: "center",
-  gap: "10px",
-});
-
-const controlHeadingStyle: CSSProperties = {
-  display: "grid",
-  gap: "2px",
-  alignContent: "center",
-};
-
-const controlTitleStyle: CSSProperties = {
-  fontSize: "15px",
-  fontWeight: 900,
-  color: "#f0fdfa",
-};
-
-const controlHintStyle: CSSProperties = {
-  fontSize: "11px",
-  lineHeight: 1.5,
-  color: "rgba(240,253,250,0.72)",
-};
-
-const controlToolbarRowStyle: CSSProperties = {
-  display: "flex",
-  flexWrap: "wrap",
-  gap: "8px",
-  alignItems: "center",
-  justifyContent: "flex-end",
-};
-
-const primaryButtonStyle: CSSProperties = {
-  padding: "13px 18px",
-  borderRadius: "14px",
-  border: "none",
-  background: "linear-gradient(135deg, var(--x-color-accent), var(--x-color-info))",
-  color: "white",
-  fontWeight: 800,
-  cursor: "pointer",
-};
-
-const smallPrimaryButtonStyle: CSSProperties = {
-  padding: "9px 12px",
-  borderRadius: "12px",
-  border: "none",
-  background: "linear-gradient(135deg, #f97316, #f59e0b)",
-  color: "white",
-  fontSize: "12px",
-  fontWeight: 900,
-  cursor: "pointer",
-  whiteSpace: "nowrap",
-};
-
-const secondaryButtonStyle: CSSProperties = {
-  padding: "13px 18px",
-  borderRadius: "14px",
-  border: "1px solid rgba(15,118,110,0.2)",
-  background: "rgba(255,255,255,0.88)",
-  color: "var(--x-color-ink)",
-  fontWeight: 800,
-  cursor: "pointer",
-};
-
-const smallSecondaryButtonStyle: CSSProperties = {
-  padding: "9px 12px",
-  borderRadius: "12px",
-  border: "1px solid rgba(191,219,254,0.24)",
-  background: "rgba(255,255,255,0.14)",
-  color: "#eff6ff",
-  fontSize: "12px",
-  fontWeight: 900,
-  cursor: "pointer",
-  whiteSpace: "nowrap",
-};
-
-const smallGhostButtonStyle: CSSProperties = {
-  padding: "9px 12px",
-  borderRadius: "12px",
-  border: "1px solid rgba(226,232,240,0.16)",
-  background: "rgba(15,23,42,0.18)",
-  color: "rgba(240,253,250,0.9)",
-  fontSize: "12px",
-  fontWeight: 800,
-  cursor: "pointer",
-  whiteSpace: "nowrap",
-};
-
-const dangerButtonStyle: CSSProperties = {
-  padding: "13px 18px",
-  borderRadius: "14px",
-  border: "1px solid rgba(220,38,38,0.2)",
-  background: "rgba(254,226,226,0.92)",
-  color: "#991b1b",
-  fontWeight: 800,
-  cursor: "pointer",
-};
-
-const keyHintStyle: CSSProperties = {
-  fontSize: "13px",
-  lineHeight: 1.7,
-  color: "rgba(226,232,240,0.82)",
-};
-
-const notifyRowStyle = (isMobile: boolean): CSSProperties => ({
-  display: "grid",
-  gridTemplateColumns: isMobile ? "1fr" : "minmax(0, 1fr) auto",
-  gap: "10px",
-});
-
-const notifyInputStyle: CSSProperties = {
-  width: "100%",
-  padding: "13px 16px",
-  borderRadius: "14px",
-  border: "1px solid rgba(148,163,184,0.24)",
-  background: "rgba(255,255,255,0.94)",
-  boxSizing: "border-box",
-};
-
-const notifyInputCompactStyle: CSSProperties = {
-  flex: "1 1 220px",
-  minWidth: "180px",
-  padding: "9px 12px",
-  borderRadius: "12px",
-  border: "1px solid rgba(191,219,254,0.18)",
-  background: "rgba(255,255,255,0.94)",
-  boxSizing: "border-box",
-  fontSize: "12px",
-};
-
-const projectionPreviewCardStyle: CSSProperties = {
-  padding: 0,
-  borderRadius: 0,
-  background: "transparent",
-  border: "none",
-  boxShadow: "none",
-  display: "grid",
-  gap: "12px",
-};
-
-const projectionPreviewHeaderStyle: CSSProperties = {
-  display: "flex",
-  justifyContent: "space-between",
-  alignItems: "center",
-  gap: "12px",
-  flexWrap: "wrap",
-};
-
-const currentProjectionMetaStyle: CSSProperties = {
-  marginTop: "6px",
-  fontSize: "13px",
-  lineHeight: 1.7,
-  color: "var(--x-color-ink-muted)",
-};
-
-const projectionStageStyle = (isMobile: boolean, hasRightColumn: boolean): CSSProperties => ({
-  minHeight: isMobile ? "auto" : "68vh",
-  display: "grid",
-  gridTemplateColumns: isMobile || !hasRightColumn ? "1fr" : "repeat(2, minmax(0, 1fr))",
-  gap: isMobile ? "16px" : "28px",
-  alignItems: "start",
-});
-
-const projectionColumnCompactStyle: CSSProperties = {
-  display: "grid",
-  gap: "6px",
-  alignContent: "start",
-};
-
-const projectionBlockStyle = (active: boolean, clickable: boolean): CSSProperties => ({
-  width: "100%",
-  padding: "0",
-  borderRadius: "14px",
-  border: "none",
-  background: active ? "rgba(250,204,21,0.14)" : "transparent",
-  boxShadow: "none",
-  cursor: clickable ? "pointer" : "default",
-  textAlign: "left",
-});
-
-const projectionBlockTextStyle = (fontSize: number): CSSProperties => ({
-  margin: 0,
-  whiteSpace: "pre-wrap",
-  wordBreak: "break-word",
-  fontSize: `${fontSize}px`,
-  lineHeight: 1.8,
-  color: "var(--x-color-ink)",
-  tabSize: 8,
-  MozTabSize: 8,
-  fontFamily: '"SFMono-Regular", Consolas, "Liberation Mono", Menlo, monospace',
-  overflowWrap: "anywhere",
-  overflowX: "auto",
-  boxSizing: "border-box",
-});
-
-const sideCardStyle: CSSProperties = {
-  padding: "18px",
-  borderRadius: "24px",
-  background: "linear-gradient(180deg, var(--x-color-panel-strongest), var(--x-color-panel))",
-  border: "1px solid var(--x-color-line-soft)",
-  boxShadow: "0 16px 34px var(--x-color-shadow-soft)",
-  display: "grid",
-  gap: "14px",
-};
-
-const settingsBlockStyle: CSSProperties = {
-  display: "grid",
-  gap: "10px",
-};
-
-const settingsLabelStyle: CSSProperties = {
-  fontSize: "13px",
-  fontWeight: 800,
-  color: "var(--x-color-ink)",
-};
-
-const chipRowStyle: CSSProperties = {
-  display: "flex",
-  gap: "8px",
-  flexWrap: "wrap",
-};
-
-const variantChipStyle = (active: boolean): CSSProperties => ({
-  padding: "10px 12px",
-  borderRadius: "999px",
-  border: active ? "1px solid rgba(15,118,110,0.24)" : "1px solid var(--x-color-line)",
-  background: active ? "rgba(15,118,110,0.12)" : "var(--x-color-panel-strongest)",
-  color: "var(--x-color-ink)",
-  fontWeight: 800,
-  cursor: "pointer",
-});
-
-const hintStyle: CSSProperties = {
-  fontSize: "12px",
-  lineHeight: 1.7,
-  color: "var(--x-color-ink-muted)",
-};
-
-const fontControlRowStyle: CSSProperties = {
-  display: "grid",
-  gridTemplateColumns: "auto 1fr auto",
-  gap: "10px",
-  alignItems: "center",
-};
-
-const fontButtonStyle: CSSProperties = {
-  padding: "10px 14px",
-  borderRadius: "14px",
-  border: "1px solid var(--x-color-line)",
-  background: "var(--x-color-panel-strongest)",
-  fontWeight: 800,
-  cursor: "pointer",
-};
-
-const fontValueStyle: CSSProperties = {
-  textAlign: "center",
-  fontWeight: 900,
-  color: "var(--x-color-ink)",
-};
-
-const actionStackStyle: CSSProperties = {
-  display: "grid",
-  gap: "10px",
-};
-
-const editorWrapStyle: CSSProperties = {
-  display: "grid",
-  gap: "10px",
-};
-
-const editorStyle = (fontSize: number): CSSProperties => ({
-  width: "100%",
-  minHeight: "420px",
-  padding: "18px",
-  borderRadius: "18px",
-  border: "1px solid var(--x-color-line)",
-  background: "rgba(255,255,255,0.95)",
-  color: "var(--x-color-ink)",
-  boxSizing: "border-box",
-  fontSize: `${fontSize}px`,
-  lineHeight: 1.8,
-  fontFamily: '"SFMono-Regular", Consolas, "Liberation Mono", Menlo, monospace',
-  tabSize: 8,
-  MozTabSize: 8,
-});
-
-const contentStyle = (fontSize: number): CSSProperties => ({
-  margin: 0,
-  minHeight: "320px",
-  maxHeight: "60vh",
-  overflow: "auto",
-  padding: "18px",
-  borderRadius: "20px",
-  background: "rgba(255,255,255,0.92)",
-  border: "1px solid var(--x-color-line-soft)",
-  boxSizing: "border-box",
-  whiteSpace: "pre-wrap",
-  wordBreak: "break-word",
-  fontSize: `${fontSize}px`,
-  lineHeight: 1.8,
-  color: "var(--x-color-ink)",
-  tabSize: 8,
-  MozTabSize: 8,
-  fontFamily: '"SFMono-Regular", Consolas, "Liberation Mono", Menlo, monospace',
-});
-
-const stateStyle: CSSProperties = {
-  minHeight: "40vh",
-  display: "grid",
-  placeItems: "center",
-  color: "var(--x-color-ink-muted)",
-};
-
-const errorStyle: CSSProperties = {
-  padding: "14px 16px",
-  borderRadius: "16px",
-  background: "rgba(254,226,226,0.9)",
-  border: "1px solid rgba(220,38,38,0.18)",
-  color: "#991b1b",
-  fontWeight: 700,
-};
-
-const emptyStateStyle: CSSProperties = {
-  minHeight: "120px",
-  borderRadius: "18px",
-  background: "rgba(255,255,255,0.78)",
-  border: "1px dashed var(--x-color-line-soft)",
-  display: "grid",
-  placeItems: "center",
-  gap: "10px",
-  color: "var(--x-color-ink-muted)",
-  padding: "18px",
-  textAlign: "center",
-};

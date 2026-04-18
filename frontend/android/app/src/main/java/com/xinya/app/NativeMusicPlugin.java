@@ -47,6 +47,7 @@ public class NativeMusicPlugin extends Plugin {
     private final List<NativeMusicRepository.MusicRecord> musics = new ArrayList<>();
     private final Map<Integer, NativeMusicRepository.MusicRecord> musicById = new LinkedHashMap<>();
     private final List<Integer> queueIds = new ArrayList<>();
+    private final Map<Integer, String> cachedTrackUrls = new LinkedHashMap<>();
     private Integer storedCurrentMusicId = null;
     private String repeatMode = "off";
     private boolean shuffleEnabled = false;
@@ -161,6 +162,32 @@ public class NativeMusicPlugin extends Plugin {
             return;
         }
         resolve(call, buildSnapshot());
+    }
+
+    @PluginMethod
+    public void setCachedTrackSources(PluginCall call) {
+        JSArray items = call.getArray("items");
+        Map<Integer, String> nextCachedTrackUrls = new LinkedHashMap<>();
+
+        if (items != null) {
+            for (int index = 0; index < items.length(); index++) {
+                JSONObject item = items.optJSONObject(index);
+                if (item == null) continue;
+                int trackId = item.optInt("id", -1);
+                String url = item.optString("url", "").trim();
+                if (trackId > 0 && !url.isEmpty()) {
+                    nextCachedTrackUrls.put(trackId, url);
+                }
+            }
+        }
+
+        synchronized (stateLock) {
+            cachedTrackUrls.clear();
+            cachedTrackUrls.putAll(nextCachedTrackUrls);
+        }
+
+        syncPlaylistPreservingState();
+        resolve(call);
     }
 
     @PluginMethod
@@ -665,10 +692,14 @@ public class NativeMusicPlugin extends Plugin {
             for (Integer queueId : queueIds) {
                 NativeMusicRepository.MusicRecord music = musicById.get(queueId);
                 if (music == null) continue;
+                String playbackUrl = cachedTrackUrls.get(music.id);
+                if (playbackUrl == null || playbackUrl.trim().isEmpty()) {
+                    playbackUrl = baseUrlSnapshot + "/api/music/download/" + music.id;
+                }
                 playlistItems.add(
                     new MusicService.PlaylistItem(
                         music.id,
-                        baseUrlSnapshot + "/api/music/download/" + music.id,
+                        playbackUrl,
                         music.title,
                         music.album != null && music.album.name != null ? music.album.name : DEFAULT_ALBUM_LABEL,
                         resolveMusicCoverUrl(music)

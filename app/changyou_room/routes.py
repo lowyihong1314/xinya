@@ -6,6 +6,7 @@ from urllib.parse import quote
 from flask import Blueprint, jsonify, request
 from flask_login import current_user, login_required
 
+from app.auth import CHANGYOU_ROOM_CONTROL_PERMISSION, get_current_user_permissions
 from app.extensions import socket_broker
 from app.redis_client import redis_client
 from models.songbook import SongbookEntry
@@ -36,6 +37,38 @@ def _normalize_user_id(value):
     except (TypeError, ValueError):
         return None
     return normalized or None
+
+
+def _current_user_has_room_control_permission():
+    if not current_user.is_authenticated:
+        return False
+    try:
+        return CHANGYOU_ROOM_CONTROL_PERMISSION in get_current_user_permissions(current_user)
+    except Exception as exc:
+        print(f"[唱游房间权限] 读取用户权限失败: {exc}")
+        return False
+
+
+def _current_user_owns_room(room: dict | None):
+    if not room:
+        return False
+    current_user_id = _normalize_user_id(getattr(current_user, "id", None))
+    return bool(current_user_id and room.get("creator_id") == current_user_id)
+
+
+def _current_user_can_control_room(room: dict | None = None):
+    if not current_user.is_authenticated:
+        return False
+    if _current_user_owns_room(room):
+        return True
+    return _current_user_has_room_control_permission()
+
+
+def _room_control_permission_denied():
+    return (
+        jsonify({"error": f"只有房间创建者或拥有 {CHANGYOU_ROOM_CONTROL_PERMISSION} 权限的用户才可以控制房间"}),
+        403,
+    )
 
 
 def _serialize_room(room_id: str, data: dict):
@@ -234,8 +267,7 @@ def get_room(room_id):
     room = _fetch_room(room_id)
     if not room:
         return jsonify({"error": "房间不存在或已过期"}), 404
-    user_id = _normalize_user_id(getattr(current_user, "id", None))
-    role = "controller" if user_id and room["creator_id"] == user_id else "player"
+    role = "controller" if _current_user_can_control_room(room) else "player"
     room["role"] = role
     return jsonify({"room": room})
 
@@ -246,9 +278,8 @@ def push_room_song(room_id):
     room = _fetch_room(room_id)
     if not room:
         return jsonify({"error": "房间不存在或已过期"}), 404
-    current_user_id = _normalize_user_id(getattr(current_user, "id", None))
-    if room["creator_id"] != current_user_id:
-        return jsonify({"error": "只有创建者可以控制房间"}), 403
+    if not _current_user_can_control_room(room):
+        return _room_control_permission_denied()
 
     data = request.get_json() or {}
     song_entry_id = int(data.get("song_entry_id") or 0)
@@ -283,9 +314,8 @@ def project_room_page(room_id):
     room = _fetch_room(room_id)
     if not room:
         return jsonify({"error": "房间不存在或已过期"}), 404
-    current_user_id = _normalize_user_id(getattr(current_user, "id", None))
-    if room["creator_id"] != current_user_id:
-        return jsonify({"error": "只有创建者可以控制房间"}), 403
+    if not _current_user_can_control_room(room):
+        return _room_control_permission_denied()
 
     data = request.get_json() or {}
     song_entry_id = int(data.get("song_entry_id") or 0)
@@ -331,9 +361,8 @@ def update_room_marker(room_id):
     room = _fetch_room(room_id)
     if not room:
         return jsonify({"error": "房间不存在或已过期"}), 404
-    current_user_id = _normalize_user_id(getattr(current_user, "id", None))
-    if room["creator_id"] != current_user_id:
-        return jsonify({"error": "只有创建者可以控制房间"}), 403
+    if not _current_user_can_control_room(room):
+        return _room_control_permission_denied()
 
     data = request.get_json() or {}
     marker_index_raw = data.get("marker_index")
@@ -354,9 +383,8 @@ def notify_room(room_id):
     room = _fetch_room(room_id)
     if not room:
         return jsonify({"error": "房间不存在或已过期"}), 404
-    current_user_id = _normalize_user_id(getattr(current_user, "id", None))
-    if room["creator_id"] != current_user_id:
-        return jsonify({"error": "只有创建者可以控制房间"}), 403
+    if not _current_user_can_control_room(room):
+        return _room_control_permission_denied()
 
     data = request.get_json() or {}
     kind = str(data.get("kind") or "text").strip().lower()

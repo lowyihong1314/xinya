@@ -4,7 +4,10 @@ from flask import jsonify
 from flask_login import current_user
 
 from app.extensions import login_manager
-from models.user_data import User
+from models import db
+from models.user_data import Permission, User
+
+CHANGYOU_ROOM_CONTROL_PERMISSION = "changyou_contorl"
 
 permission_names = [
     "department",
@@ -25,6 +28,7 @@ permission_names = [
     "music_edit",
     "edit_info",
     "info_tree_hole",
+    CHANGYOU_ROOM_CONTROL_PERMISSION,
 ]
 
 
@@ -44,6 +48,22 @@ def get_current_user_permissions(user):
         for perm in getattr(dept, "permissions", []):
             permissions.add(perm.name)
     return permissions
+
+
+def ensure_known_permissions():
+    try:
+        existing_names = {permission.name for permission in Permission.query.all()}
+        missing_names = [name for name in permission_names if name not in existing_names]
+        if not missing_names:
+            return []
+
+        db.session.add_all([Permission(name=name, ref=name) for name in missing_names])
+        db.session.commit()
+        return missing_names
+    except Exception as exc:
+        db.session.rollback()
+        print(f"[权限初始化] 同步权限失败: {exc}")
+        return []
 
 
 def permission_required(permission_name):

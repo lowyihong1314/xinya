@@ -3,6 +3,7 @@ from importlib import import_module
 from flask import Flask
 from flask_cors import CORS
 
+from app.auth import ensure_known_permissions
 from app.blueprints import register_blueprints
 from app.cli import register_cli
 from app.extensions import (
@@ -48,4 +49,6 @@ def create_app(socket=False):
 
     register_blueprints(app)
     register_web_routes(app)
+    with app.app_context():
+        ensure_known_permissions()
     return app

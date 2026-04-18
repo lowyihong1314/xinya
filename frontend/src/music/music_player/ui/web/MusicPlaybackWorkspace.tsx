@@ -3,7 +3,14 @@ import type { CSSProperties, ReactNode } from "react";
 
 import { API_BASE } from "../../../../js/apiBase";
 import { useEnsureDesignTokens } from "../../../../theme/designTokens";
+import {
+  PINNED_ALL_SONGS_AUDIO_CACHE_SCOPE,
+  QUEUE_NEXT_AUDIO_CACHE_SCOPE,
+  getCachedMusicAudioUrl,
+  warmMusicAudioTrack,
+} from "../../logic/musicAudioCache";
 import { resolveTrackAlbumName } from "../../logic/musicCoverUtils";
+import { resolveNextQueuedTrack } from "../../logic/musicQueueCache";
 import { useMusicPlayback } from "../../logic/MusicPlaybackContext";
 import { DesktopMusicSectionSidebar } from "../desktop/DesktopMusicSectionSidebar";
 import { MobileMusicShell } from "../mobile/MobileMusicShell";
@@ -22,6 +29,7 @@ export function MusicPlaybackWorkspace({
   browsePane,
   viewportHeight,
   stickyTop,
+  pinnedAllSongsCacheIds,
   canViewListening,
   listeningLoading,
   listeningTimezone,
@@ -35,6 +43,7 @@ export function MusicPlaybackWorkspace({
   browsePane: ReactNode;
   viewportHeight: number | null;
   stickyTop: number;
+  pinnedAllSongsCacheIds: number[];
   canViewListening: boolean;
   listeningLoading: boolean;
   listeningTimezone: string;
@@ -70,13 +79,28 @@ export function MusicPlaybackWorkspace({
   const lastSourceRef = useRef<string | null>(null);
   const playAttemptRef = useRef(0);
   const setIsPlayingStateRef = useRef(setIsPlayingState);
+  const pinnedAllSongsCacheSet = useMemo(
+    () => new Set(pinnedAllSongsCacheIds),
+    [pinnedAllSongsCacheIds],
+  );
   const [currentTime, setCurrentTime] = useState(0);
   const [duration, setDuration] = useState(0);
+  const [audioSource, setAudioSource] = useState<{
+    trackId: number | null;
+    src: string | null;
+  }>({
+    trackId: null,
+    src: null,
+  });
   const visibleQueue = useMemo(
     () => (orderedQueue.length ? orderedQueue : queue),
     [orderedQueue, queue],
   );
-  const audioSrc = currentMusic ? `${API_BASE}/api/music/download/${currentMusic.id}` : null;
+  const nextQueuedTrack = useMemo(
+    () => resolveNextQueuedTrack(visibleQueue, currentMusicId, repeatMode),
+    [visibleQueue, currentMusicId, repeatMode],
+  );
+  const audioSrc = audioSource.src;
   const currentAlbumName = currentMusic
     ? resolveTrackAlbumName(currentMusic.id, libraryMusics, albums) || "未分配专辑"
     : "从左侧进入找歌后开始播放";
@@ -109,6 +133,45 @@ export function MusicPlaybackWorkspace({
   }, [currentMusic]);
 
   useEffect(() => {
+    if (!currentMusic) {
+      setAudioSource({ trackId: null, src: null });
+      return;
+    }
+
+    const directUrl = `${API_BASE}/api/music/download/${currentMusic.id}`;
+    const isPinnedTrack = pinnedAllSongsCacheSet.has(currentMusic.id);
+    const cachedUrl = getCachedMusicAudioUrl(currentMusic);
+
+    setAudioSource({
+      trackId: currentMusic.id,
+      src: cachedUrl || directUrl,
+    });
+
+    if (!isPinnedTrack || cachedUrl) {
+      return;
+    }
+
+    void warmMusicAudioTrack(currentMusic, {
+      scope: PINNED_ALL_SONGS_AUDIO_CACHE_SCOPE,
+    })
+      .catch((error) => {
+        console.warn("Pinned all-songs playback cache warmup failed", error);
+      });
+  }, [currentMusic, pinnedAllSongsCacheSet]);
+
+  useEffect(() => {
+    if (!nextQueuedTrack) {
+      return;
+    }
+
+    void warmMusicAudioTrack(nextQueuedTrack, {
+      scope: QUEUE_NEXT_AUDIO_CACHE_SCOPE,
+    }).catch((error) => {
+      console.warn("Queue-next audio prewarm failed", error);
+    });
+  }, [nextQueuedTrack]);
+
+  useEffect(() => {
     const audio = audioRef.current;
     if (!audio) {
       return;
@@ -136,6 +199,9 @@ export function MusicPlaybackWorkspace({
   useEffect(() => {
     const audio = audioRef.current;
     if (!audio) return;
+    if (audioSource.trackId !== (currentMusic?.id ?? null)) {
+      return;
+    }
 
     if (!audioSrc) {
       playAttemptRef.current += 1;
@@ -198,7 +264,7 @@ export function MusicPlaybackWorkspace({
       cancelled = true;
       audio.removeEventListener("canplay", handleCanPlay);
     };
-  }, [audioSrc, autoplayKey]);
+  }, [audioSource.trackId, audioSrc, autoplayKey, currentMusic?.id]);
 
   useEffect(() => {
     return () => {

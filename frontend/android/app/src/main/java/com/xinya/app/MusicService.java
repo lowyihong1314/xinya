@@ -31,6 +31,7 @@ import com.google.android.exoplayer2.Player;
 import com.google.android.exoplayer2.audio.AudioAttributes;
 import com.google.android.exoplayer2.source.ConcatenatingMediaSource;
 import com.google.android.exoplayer2.source.ProgressiveMediaSource;
+import com.google.android.exoplayer2.upstream.DefaultDataSource;
 import com.google.android.exoplayer2.upstream.DefaultHttpDataSource;
 
 import java.io.IOException;
@@ -653,15 +654,17 @@ public class MusicService extends Service {
     // ── Internal helpers ─────────────────────────────────────────────────────
 
     private ProgressiveMediaSource buildMediaSource(String url, String cookieHeader) {
-        DefaultHttpDataSource.Factory factory = new DefaultHttpDataSource.Factory()
+        DefaultHttpDataSource.Factory httpFactory = new DefaultHttpDataSource.Factory()
             .setAllowCrossProtocolRedirects(true);
 
         String cookie = cookieHeader != null ? cookieHeader : CookieManager.getInstance().getCookie(url);
         if (cookie != null && !cookie.isEmpty()) {
             Map<String, String> headers = new HashMap<>();
             headers.put("Cookie", cookie);
-            factory.setDefaultRequestProperties(headers);
+            httpFactory.setDefaultRequestProperties(headers);
         }
+
+        DefaultDataSource.Factory factory = new DefaultDataSource.Factory(this, httpFactory);
 
         return new ProgressiveMediaSource.Factory(factory)
             .createMediaSource(MediaItem.fromUri(url));
