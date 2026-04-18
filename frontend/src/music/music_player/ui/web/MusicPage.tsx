@@ -6,6 +6,7 @@ import { useEnsureDesignTokens } from "../../../../theme/designTokens";
 import { MusicPlaybackWorkspace } from "./MusicPlaybackWorkspace";
 import { MusicWorkspacePanel } from "./MusicWorkspacePanel";
 import { useMusicWorkspace } from "../../logic/useMusicWorkspace";
+import { musicPlayerLightThemeStyle } from "../shared/musicPlayerLightTheme";
 import {
   parseMusicPlayerRouteStateFromLocation,
   patchMusicPlayerRouteState,
@@ -270,6 +271,7 @@ export function MusicPage() {
 }
 
 const pageShellStyle = (isMobile: boolean) => ({
+  ...musicPlayerLightThemeStyle,
   minHeight: "100%",
   padding: isMobile ? "12px 12px calc(92px + env(safe-area-inset-bottom, 0px))" : "24px",
   background:

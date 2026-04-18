@@ -30,6 +30,14 @@ def register_web_routes(app):
     def music_portal():
         return render_template("music_portal.html")
 
+    @app.route("/privacy")
+    def privacy_policy_short():
+        return redirect("/privacy-policy")
+
+    @app.route("/privacy-policy")
+    def privacy_policy():
+        return render_template("privacy_policy.html")
+
     @app.route("/template/long-open-registration-form")
     def long_open_registration_form_template():
         return render_template("form/long_open_registration_form_public.html")

@@ -1,0 +1,299 @@
+<!DOCTYPE html>
+<html lang="zh-Hans">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>UTBA 隐私权政策</title>
+    <meta
+      name="description"
+      content="UTBA 应用与网站的隐私权政策，说明我们如何处理账户资料、报名资料、支付资料、设备缓存与儿童相关数据。"
+    />
+    <style>
+      :root {
+        --bg: #edf3f7;
+        --panel: rgba(255, 255, 255, 0.96);
+        --ink: #142132;
+        --muted: #5d6b7b;
+        --line: rgba(20, 33, 50, 0.1);
+        --accent: #0f766e;
+        --accent-soft: rgba(15, 118, 110, 0.1);
+        --shadow: rgba(15, 23, 42, 0.1);
+      }
+
+      * {
+        box-sizing: border-box;
+      }
+
+      html,
+      body {
+        margin: 0;
+        padding: 0;
+        background:
+          radial-gradient(circle at top left, rgba(15, 118, 110, 0.14), transparent 28%),
+          linear-gradient(180deg, #f4f8fb 0%, var(--bg) 100%);
+        color: var(--ink);
+        font-family:
+          "Avenir Next",
+          "PingFang SC",
+          "Noto Sans SC",
+          "Segoe UI",
+          sans-serif;
+      }
+
+      a {
+        color: var(--accent);
+      }
+
+      .shell {
+        width: min(960px, calc(100% - 32px));
+        margin: 0 auto;
+        padding: 40px 0 56px;
+      }
+
+      .hero,
+      .section {
+        background: var(--panel);
+        border: 1px solid var(--line);
+        border-radius: 24px;
+        box-shadow: 0 18px 40px var(--shadow);
+      }
+
+      .hero {
+        padding: 28px 28px 24px;
+        margin-bottom: 18px;
+      }
+
+      .eyebrow {
+        display: inline-flex;
+        align-items: center;
+        gap: 8px;
+        padding: 8px 12px;
+        border-radius: 999px;
+        background: var(--accent-soft);
+        color: var(--accent);
+        font-size: 12px;
+        font-weight: 700;
+        letter-spacing: 0.08em;
+        text-transform: uppercase;
+      }
+
+      h1 {
+        margin: 16px 0 10px;
+        font-size: clamp(30px, 5vw, 48px);
+        line-height: 1.08;
+      }
+
+      .subtitle {
+        margin: 0;
+        color: var(--muted);
+        line-height: 1.7;
+        font-size: 15px;
+      }
+
+      .meta {
+        margin-top: 18px;
+        display: grid;
+        gap: 8px;
+        color: var(--muted);
+        font-size: 14px;
+      }
+
+      .section {
+        padding: 24px 28px;
+        margin-bottom: 16px;
+      }
+
+      h2 {
+        margin: 0 0 12px;
+        font-size: 22px;
+      }
+
+      p,
+      li {
+        color: #273446;
+        line-height: 1.8;
+        font-size: 15px;
+      }
+
+      ul {
+        margin: 10px 0 0;
+        padding-left: 20px;
+      }
+
+      .grid {
+        display: grid;
+        gap: 14px;
+      }
+
+      .card {
+        padding: 16px 18px;
+        border-radius: 18px;
+        background: #f8fbfd;
+        border: 1px solid var(--line);
+      }
+
+      .card h3 {
+        margin: 0 0 8px;
+        font-size: 16px;
+      }
+
+      .footer {
+        margin-top: 20px;
+        color: var(--muted);
+        font-size: 13px;
+        text-align: center;
+      }
+
+      @media (max-width: 640px) {
+        .shell {
+          width: min(100% - 20px, 960px);
+          padding-top: 20px;
+          padding-bottom: 32px;
+        }
+
+        .hero,
+        .section {
+          padding-left: 18px;
+          padding-right: 18px;
+          border-radius: 18px;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <main class="shell">
+      <section class="hero">
+        <div class="eyebrow">UTBA · Privacy Policy</div>
+        <h1>隐私权政策</h1>
+        <p class="subtitle">
+          本隐私权政策适用于 UTBA
+          移动应用（Android 包名：<strong>com.utba.app</strong>）以及与该应用配套的网站与服务，包括
+          <strong>https://utbabuddha.com</strong>。
+          本页面说明我们会收集哪些资料、如何使用这些资料、如何保存资料，以及您可如何与我们联系。
+        </p>
+        <div class="meta">
+          <div>生效日期：2026 年 4 月 18 日</div>
+          <div>适用范围：UTBA Android App、UTBA 公开报名页、UTBA 音乐与会员相关服务</div>
+          <div>联系邮箱：<a href="mailto:yukang@utbabuddha.com">yukang@utbabuddha.com</a></div>
+        </div>
+      </section>
+
+      <section class="section">
+        <h2>1. 我们可能处理的资料</h2>
+        <div class="grid">
+          <div class="card">
+            <h3>账户与身份资料</h3>
+            <p>
+              当您注册、登录或维护账户资料时，我们可能处理您主动提供的用户名、姓名、邮箱、电话号码、密码，以及您在个人资料中填写的其他信息。
+            </p>
+          </div>
+          <div class="card">
+            <h3>报名、会员与活动资料</h3>
+            <p>
+              当您提交会员申请、课程报名或活动表格时，我们可能处理身份证件或识别资料、年龄、地址、家长或紧急联络人资料、医疗或过敏备注，以及您在表格中主动填写的其他内容。
+            </p>
+          </div>
+          <div class="card">
+            <h3>支付与凭证资料</h3>
+            <p>
+              当您进行付款、上传付款证明或处理会务付款时，我们可能处理付款人姓名、电话号码、付款状态、付款凭证图片及相关订单资料。
+            </p>
+          </div>
+          <div class="card">
+            <h3>设备、日志与缓存资料</h3>
+            <p>
+              为了维持登录状态、加载音频内容及改善服务稳定性，我们可能处理 IP 地址、浏览器或 WebView 请求信息、会话 Cookie、基础错误日志，以及您设备上的音频与媒体缓存文件。
+            </p>
+          </div>
+          <div class="card">
+            <h3>音乐播放与使用记录</h3>
+            <p>
+              当您使用音乐相关功能时，我们可能处理播放状态、播放队列、音频缓存、以及必要的听歌记录或统计数据，用于提供播放服务和后台管理功能。
+            </p>
+          </div>
+        </div>
+      </section>
+
+      <section class="section">
+        <h2>2. 我们如何使用这些资料</h2>
+        <ul>
+          <li>提供登录、账户识别、权限控制与用户支持服务。</li>
+          <li>处理报名、会员申请、课程安排、活动管理与相关通知。</li>
+          <li>处理付款、核对付款凭证、保存财务或报名记录。</li>
+          <li>提供音乐播放、后台播放、播放缓存与相关统计功能。</li>
+          <li>排查错误、提升系统稳定性、安全性与服务体验。</li>
+          <li>在符合法律义务或内部管理需要时保存必要记录。</li>
+        </ul>
+      </section>
+
+      <section class="section">
+        <h2>3. 我们不会处理的敏感设备权限</h2>
+        <p>
+          当前版本应用主要使用网络访问、后台媒体播放与设备唤醒相关能力。根据当前 Android
+          配置，我们不会主动请求通讯录、精确定位、相机、麦克风、短信或通话记录权限来提供核心功能。
+        </p>
+      </section>
+
+      <section class="section">
+        <h2>4. 儿童与未成年人资料</h2>
+        <p>
+          如果应用中的课程、报名或会员服务涉及未满 13
+          周岁的儿童，相关资料应由家长、监护人或被授权的成年人代为提交。我们仅在提供报名、课程、联络、安全记录与支付处理所必需的范围内处理这些资料。
+        </p>
+        <p>
+          如果您是家长或监护人，并希望查询、更正或删除儿童相关资料，请通过本页面底部的联系方式与我们联系。
+        </p>
+      </section>
+
+      <section class="section">
+        <h2>5. 资料共享与披露</h2>
+        <ul>
+          <li>我们不会出售您的个人资料。</li>
+          <li>我们可能仅在提供服务所需的范围内，与托管、基础设施、邮件、支付或技术支持服务提供方共享必要资料。</li>
+          <li>当法律法规、执法要求或安全需要时，我们可能依法披露相关资料。</li>
+        </ul>
+      </section>
+
+      <section class="section">
+        <h2>6. 资料保存与安全</h2>
+        <p>
+          我们会采取合理的技术与管理措施来保护资料安全，包括访问控制、登录会话管理、服务端保存与必要的本地缓存管理。资料会在实现本政策所述目的所需期间内保存，或按照法律、财务、会务与内部管理要求保存。
+        </p>
+      </section>
+
+      <section class="section">
+        <h2>7. 您的权利</h2>
+        <p>在适用法律允许的范围内，您可请求：</p>
+        <ul>
+          <li>查询我们持有的您的资料；</li>
+          <li>更正不准确或不完整的资料；</li>
+          <li>删除不再必要或您希望撤回的资料；</li>
+          <li>了解特定资料的处理方式。</li>
+        </ul>
+      </section>
+
+      <section class="section">
+        <h2>8. 联系我们</h2>
+        <p>
+          如果您对本隐私权政策或您的个人资料处理方式有任何疑问，请通过以下方式联系：
+        </p>
+        <ul>
+          <li>邮箱：<a href="mailto:yukang@utbabuddha.com">yukang@utbabuddha.com</a></li>
+          <li>网站：<a href="https://utbabuddha.com">https://utbabuddha.com</a></li>
+          <li>电话：012-739 6596</li>
+        </ul>
+      </section>
+
+      <section class="section">
+        <h2>9. 政策更新</h2>
+        <p>
+          我们可能会因服务调整、功能变化或法律要求而更新本隐私权政策。更新后的版本会发布在本页面，并自页面标示的生效日期起适用。
+        </p>
+      </section>
+
+      <div class="footer">
+        隐私权政策入口：<a href="/privacy-policy">/privacy-policy</a>
+      </div>
+    </main>
+  </body>
+</html>

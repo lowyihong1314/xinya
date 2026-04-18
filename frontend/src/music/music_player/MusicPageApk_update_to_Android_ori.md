@@ -50,7 +50,7 @@ MusicPageApk.tsx  ──calls──▶  NativeMusicPlugin (JS bridge)
 Create `frontend/android/app/src/main/java/com/xinya/app/NativeMusicPlugin.java`:
 
 ```java
-package com.xinya.app;
+package com.utba.app;
 
 import android.content.ComponentName;
 import android.content.Context;
@@ -143,7 +143,7 @@ public class NativeMusicPlugin extends Plugin {
 Create `frontend/android/app/src/main/java/com/xinya/app/MusicService.java`:
 
 ```java
-package com.xinya.app;
+package com.utba.app;
 
 import android.app.Notification;
 import android.app.NotificationChannel;
@@ -339,7 +339,7 @@ In `frontend/android/app/src/main/AndroidManifest.xml`:
 ## Step 4 — Register Plugin in MainActivity.java
 
 ```java
-package com.xinya.app;
+package com.utba.app;
 
 import com.getcapacitor.BridgeActivity;
 import com.getcapacitor.Plugin;

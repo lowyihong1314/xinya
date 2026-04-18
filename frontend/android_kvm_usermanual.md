@@ -20,8 +20,8 @@
 |------|-----|
 | AVD 名称 | `xinya_api35_atd` |
 | adb 序列号 | `emulator-5554` |
-| App 包名 | `com.xinya.app` |
-| MainActivity | `com.xinya.app/.MainActivity` |
+| App 包名 | `com.utba.app` |
+| MainActivity | `com.utba.app/.MainActivity` |
 | Android 版本 | 15（API 35） |
 | JDK | `/home/yukang/android-build/jdk/jdk-21.0.3+9` |
 | Android SDK | `/home/yukang/android-build/sdk` |
@@ -66,7 +66,7 @@ cd android
 ./gradlew assembleDebug    # 编译 debug APK
 
 # 安装（签名不同时先卸载）
-adb -s emulator-5554 uninstall com.xinya.app 2>/dev/null || true
+adb -s emulator-5554 uninstall com.utba.app 2>/dev/null || true
 adb -s emulator-5554 install android/app/build/outputs/apk/debug/app-debug.apk
 ```
 
@@ -74,7 +74,7 @@ adb -s emulator-5554 install android/app/build/outputs/apk/debug/app-debug.apk
 
 ```bash
 adb -s emulator-5554 logcat -c   # 清空旧日志
-adb -s emulator-5554 shell am start -n com.xinya.app/.MainActivity
+adb -s emulator-5554 shell am start -n com.utba.app/.MainActivity
 sleep 5   # 等 WebView 加载完
 ```
 
@@ -82,7 +82,7 @@ sleep 5   # 等 WebView 加载完
 
 ```bash
 # 获取 App PID 并转发端口（一条命令）
-PID=$(adb -s emulator-5554 shell pidof com.xinya.app | tr -d '\r') && \
+PID=$(adb -s emulator-5554 shell pidof com.utba.app | tr -d '\r') && \
 adb -s emulator-5554 forward tcp:9222 localabstract:webview_devtools_remote_$PID && \
 echo "PID=$PID, devtools ready"
 
@@ -215,7 +215,7 @@ export PATH=$PATH:/home/yukang/android-build/sdk/platform-tools
 adb -s emulator-5554 logcat -c
 
 # 只看本 App 的日志
-PID=$(adb -s emulator-5554 shell pidof com.xinya.app | tr -d '\r')
+PID=$(adb -s emulator-5554 shell pidof com.utba.app | tr -d '\r')
 adb -s emulator-5554 logcat --pid="$PID"
 
 # 过滤关键信息（Capacitor 插件、音乐播放）
@@ -280,12 +280,12 @@ cd android && ./gradlew assembleDebug
 export PATH=$PATH:/home/yukang/android-build/sdk/platform-tools
 
 # 安装 APK（签名不同先卸载）
-adb -s emulator-5554 uninstall com.xinya.app 2>/dev/null || true
+adb -s emulator-5554 uninstall com.utba.app 2>/dev/null || true
 adb -s emulator-5554 install <apk路径>
 
 # 启动 / 停止 App
-adb -s emulator-5554 shell am start -n com.xinya.app/.MainActivity
-adb -s emulator-5554 shell am force-stop com.xinya.app
+adb -s emulator-5554 shell am start -n com.utba.app/.MainActivity
+adb -s emulator-5554 shell am force-stop com.utba.app
 
 # 模拟按键（返回/Home/解锁）
 adb -s emulator-5554 shell input keyevent 4    # 返回
@@ -345,14 +345,14 @@ export PATH=$JAVA_HOME/bin:$PATH
 
 **`adb install` 报签名冲突？**
 ```bash
-adb -s emulator-5554 uninstall com.xinya.app
+adb -s emulator-5554 uninstall com.utba.app
 adb -s emulator-5554 install <apk>
 ```
 
 **WebView 调试连不上？**
 ```bash
 # App 每次重启 PID 变化，需重新 forward
-PID=$(adb -s emulator-5554 shell pidof com.xinya.app | tr -d '\r')
+PID=$(adb -s emulator-5554 shell pidof com.utba.app | tr -d '\r')
 adb -s emulator-5554 forward tcp:9222 localabstract:webview_devtools_remote_$PID
 ```
 
