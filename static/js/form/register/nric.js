@@ -1,7 +1,7 @@
 import { open_parental_form } from "../parental/modal.js";
 import { getMaxZIndex } from "../../get_Max_zindex.js";
 import { openFormFieldsModal } from "./form_fields.js";
-import { createField } from "./utils.js";
+import { createField, isFormRegistrationClosed } from "./utils.js";
 import {
   clearRegisterProfile,
   loadRegisterProfile,
@@ -10,6 +10,7 @@ import {
 
 export function openNricModal(form, options = {}) {
   const { onBack = null } = options;
+  const registrationClosed = isFormRegistrationClosed(form);
   const savedProfile = loadRegisterProfile();
   const overlay = document.createElement("div");
   Object.assign(overlay.style, {
@@ -281,6 +282,11 @@ export function openNricModal(form, options = {}) {
   });
 
   nextBtn.onclick = async () => {
+    if (isFormRegistrationClosed(form)) {
+      alert("报名已截止，无法继续报名");
+      return;
+    }
+
     updateDerived();
 
     const name = (inputName.value || "").trim();
@@ -353,7 +359,19 @@ export function openNricModal(form, options = {}) {
   });
   left.append(backBtn, clearBtn);
 
-  footer.append(left, nextBtn);
+  const closedText = document.createElement("div");
+  closedText.textContent = "报名已截止";
+  Object.assign(closedText.style, {
+    padding: "10px 12px",
+    borderRadius: "12px",
+    fontWeight: "900",
+    fontSize: "14px",
+    background: "rgba(239,68,68,.08)",
+    border: "1px solid rgba(239,68,68,.22)",
+    color: "rgb(185,28,28)",
+  });
+
+  footer.append(left, registrationClosed ? closedText : nextBtn);
   modal.append(header, body, footer);
   overlay.appendChild(modal);
   document.body.appendChild(overlay);

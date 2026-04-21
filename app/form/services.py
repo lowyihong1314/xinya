@@ -10,6 +10,7 @@ from flask import abort, jsonify, render_template, request, send_file
 from flask_login import current_user
 from werkzeug.utils import secure_filename
 
+from app.timezone import malaysia_now
 from app.paths import DATA_ROOT, PROJECT_ROOT, STATIC_ROOT
 from app.redis_client import redis_client
 from .pdf import merge_html_files_to_pdf
@@ -55,11 +56,21 @@ MEMBERSHIP_FEE_SCOPE = "membership"
 YOUTH_CLASS_FEE_SCOPE = "youth_class"
 
 
+def _is_form_registration_closed(form):
+    return bool(form.expired and malaysia_now().date() > form.expired)
+
+
+def _inject_public_registration_status(form_data, form):
+    form_data["registration_closed"] = _is_form_registration_closed(form)
+    return form_data
+
+
 def form_index_response(form_id):
     form = RegisForm.query.get_or_404(form_id)
     custom_tpl = f"form/custom_template/{form_id}.html"
     tpl_path = os.path.join(PROJECT_ROOT, "templates", custom_tpl)
     form_data = form.to_dict_event(is_public=True)
+    _inject_public_registration_status(form_data, form)
 
     if os.path.exists(tpl_path):
         return render_template(custom_tpl, form=form_data)
@@ -784,6 +795,9 @@ def _get_or_create_member_by_nric(nric, *, name_nric=None):
 
 def register_member(form_id, data):
     form = RegisForm.query.get_or_404(form_id)
+    if _is_form_registration_closed(form):
+        return jsonify({"status": "error", "message": "报名已截止，无法继续报名"}), 400
+
     for field in ["name", "name_cn", "nric", "phone", "gender"]:
         if not data.get(field):
             return jsonify({"status": "error", "message": f"缺少字段: {field}"}), 400

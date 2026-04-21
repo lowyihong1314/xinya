@@ -1,7 +1,12 @@
 import { getMaxZIndex } from "../../get_Max_zindex.js";
 import { hasBrochureFile, openBrochurePreviewModal } from "./brochure.js";
 import { openNricModal } from "./nric.js";
-import { addMinutes, fmtClock, fmtDateTime } from "./utils.js";
+import {
+  addMinutes,
+  fmtClock,
+  fmtDateTime,
+  isFormRegistrationClosed,
+} from "./utils.js";
 import {
   available_time_slot_json,
   setAvailableTimeSlotJson,
@@ -10,6 +15,7 @@ import {
 
 export function openFlowModal(form, options = {}) {
   const { onBack = null } = options;
+  const registrationClosed = isFormRegistrationClosed(form);
   const nextEvent =
     Array.isArray(form.events) && form.events.length
       ? form.events[form.events.length - 1]
@@ -82,9 +88,21 @@ export function openFlowModal(form, options = {}) {
     border: "1px solid rgba(102,126,234,.18)",
     fontSize: "13px",
   });
-  hint.textContent = flows.length
-    ? "这是活动流程，确认没问题就按「下一步」。"
-    : "这个活动还没有设置流程，你可以直接按「下一步」。";
+  if (registrationClosed) {
+    Object.assign(hint.style, {
+      background: "rgba(239,68,68,.08)",
+      border: "1px solid rgba(239,68,68,.22)",
+      color: "rgb(185,28,28)",
+      fontWeight: "800",
+    });
+    hint.textContent = form?.expired
+      ? `报名已截止，截止日期：${form.expired}`
+      : "报名已截止";
+  } else {
+    hint.textContent = flows.length
+      ? "这是活动流程，确认没问题就按「下一步」。"
+      : "这个活动还没有设置流程，你可以直接按「下一步」。";
+  }
   body.appendChild(hint);
 
   const slotItems = [];
@@ -118,11 +136,12 @@ export function openFlowModal(form, options = {}) {
     const tick = document.createElement("input");
     tick.type = "checkbox";
     tick.checked = true;
+    tick.disabled = registrationClosed;
     Object.assign(tick.style, {
       width: "18px",
       height: "18px",
       marginTop: "2px",
-      cursor: "pointer",
+      cursor: registrationClosed ? "default" : "pointer",
       accentColor: "rgb(102,126,234)",
     });
 
@@ -236,6 +255,11 @@ export function openFlowModal(form, options = {}) {
     color: "#fff",
   });
   nextBtn.onclick = () => {
+    if (isFormRegistrationClosed(form)) {
+      alert("报名已截止，无法继续报名");
+      return;
+    }
+
     setAvailableTimeSlotJson(
       slotItems
         .filter((x) => x.checked && x.startISO && x.endISO)
@@ -258,7 +282,19 @@ export function openFlowModal(form, options = {}) {
     });
   };
 
-  actionWrap.append(nextBtn);
+  const closedText = document.createElement("div");
+  closedText.textContent = "报名已截止";
+  Object.assign(closedText.style, {
+    padding: "10px 12px",
+    borderRadius: "12px",
+    fontWeight: "900",
+    fontSize: "14px",
+    background: "rgba(239,68,68,.08)",
+    border: "1px solid rgba(239,68,68,.22)",
+    color: "rgb(185,28,28)",
+  });
+
+  actionWrap.append(registrationClosed ? closedText : nextBtn);
   footer.append(dateInfo, actionWrap);
   modal.append(header, body, footer);
   overlay.appendChild(modal);

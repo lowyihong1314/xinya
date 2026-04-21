@@ -1,6 +1,6 @@
 import { getMaxZIndex } from "../../get_Max_zindex.js";
 import { openFlowModal } from "./flow.js";
-import { checkImageOk } from "./utils.js";
+import { checkImageOk, isFormRegistrationClosed } from "./utils.js";
 
 export async function handleEntry(form) {
   const ogMeta = document.querySelector('meta[property="og:image"]');
@@ -17,6 +17,7 @@ export async function handleEntry(form) {
 
 export function openPosterModal(posterUrl, form, options = {}) {
   const { onBack = null } = options;
+  const registrationClosed = isFormRegistrationClosed(form);
   const modal = document.createElement("div");
   Object.assign(modal.style, {
     position: "fixed",
@@ -91,6 +92,8 @@ export function openPosterModal(posterUrl, form, options = {}) {
     display: "flex",
     alignItems: "center",
     gap: "10px",
+    flexWrap: "wrap",
+    justifyContent: "flex-end",
   });
 
   const backBtn = document.createElement("button");
@@ -146,14 +149,38 @@ export function openPosterModal(posterUrl, form, options = {}) {
     color: "#fff",
   });
   nextBtn.onclick = () => {
+    if (isFormRegistrationClosed(form)) {
+      alert("报名已截止，无法继续报名");
+      return;
+    }
+
     modal.remove();
     openFlowModal(form, {
       onBack: () => openPosterModal(posterUrl, form, options),
     });
   };
 
+  const closedText = document.createElement("div");
+  closedText.textContent = form?.expired
+    ? `报名已截止（截止日期：${form.expired}）`
+    : "报名已截止";
+  Object.assign(closedText.style, {
+    padding: "10px 12px",
+    borderRadius: "12px",
+    fontWeight: "900",
+    fontSize: "14px",
+    background: "rgba(239,68,68,.08)",
+    border: "1px solid rgba(239,68,68,.22)",
+    color: "rgb(185,28,28)",
+  });
+
   left.appendChild(backBtn);
-  right.append(downloadBtn, nextBtn);
+  right.append(downloadBtn);
+  if (registrationClosed) {
+    right.appendChild(closedText);
+  } else {
+    right.appendChild(nextBtn);
+  }
   footer.append(left, right);
   card.append(header, body, footer);
   modal.appendChild(card);

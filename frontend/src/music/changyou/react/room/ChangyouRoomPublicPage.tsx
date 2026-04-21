@@ -4,7 +4,7 @@ import { useNavigate, useParams } from "react-router-dom";
 
 import { useBaseNavbarVisibility } from "../../../../router/AppChromeContext";
 import { CHANGYOU_ROOM_PATH } from "../../../router/paths";
-import { ensureProjectionBlocks, splitBlocksForDoublePage, type LyricProjectionBlock } from "../projection";
+import { ensureProjectionBlocks, isChordLine, splitBlocksForDoublePage, type LyricProjectionBlock } from "../projection";
 import type { SongbookEntry } from "../types";
 import { connectChangyouRoom } from "./socket";
 import { fetchChangyouRoomCurrent, type ChangyouRoom, type ChangyouRoomNotification } from "./api";
@@ -18,6 +18,7 @@ const CONTENT_WIDTH_STORAGE_KEY = "xinya.changyou.room.contentWidth";
 const COLUMN_GAP_STORAGE_KEY = "xinya.changyou.room.columnGap";
 const MARGIN_TOP_STORAGE_KEY = "xinya.changyou.room.marginTop";
 const TEXT_GLOW_STORAGE_KEY = "xinya.changyou.room.textGlow";
+const SHOW_CHORD_STORAGE_KEY = "xinya.changyou.room.showChord";
 
 const DEFAULT_FONT_SIZE = 26;
 const MIN_FONT_SIZE = 4;
@@ -111,6 +112,14 @@ function readStoredNumber(storageKey: string, fallback: number, min: number, max
   return Math.min(max, Math.max(min, saved));
 }
 
+function readStoredBoolean(storageKey: string, fallback: boolean) {
+  if (typeof window === "undefined") return fallback;
+  const saved = window.localStorage.getItem(storageKey);
+  if (saved === "true") return true;
+  if (saved === "false") return false;
+  return fallback;
+}
+
 function isWideChar(char: string) {
   return /[\u1100-\u115F\u2E80-\uA4CF\uAC00-\uD7A3\uF900-\uFAFF\uFE10-\uFE19\uFE30-\uFE6F\uFF00-\uFF60\uFFE0-\uFFE6]/.test(char);
 }
@@ -162,6 +171,101 @@ function buildTextBlockStyle(options: {
     textAlign: "left" as const,
     textShadow: options.textShadow,
   };
+}
+
+function buildVisibleProjectionBlocks(blocks: LyricProjectionBlock[], showChord: boolean) {
+  if (showChord) return blocks;
+
+  return blocks.flatMap((block) => {
+    const lines = block.lines.filter((line) => !isChordLine(line));
+    if (!lines.some((line) => line.trim())) return [];
+
+    return [
+      {
+        ...block,
+        lines,
+        text: lines.join("\n"),
+        highlightable: lines.some((line) => line.trim() && !isSectionBoundary(line)),
+        weight: Math.max(1, lines.reduce((sum, line) => sum + estimateLineWeight(line), 0)),
+      },
+    ];
+  });
+}
+
+function getSettingsChrome(backgroundThemeKey: BackgroundThemeKey) {
+  switch (backgroundThemeKey) {
+    case "obsidian":
+      return {
+        surface: "rgba(2,6,23,0.86)",
+        surfaceStrong: "rgba(3,7,18,0.92)",
+        border: "rgba(96,165,250,0.24)",
+        softBorder: "rgba(148,163,184,0.24)",
+        text: "#f8fafc",
+        mutedText: "rgba(226,232,240,0.74)",
+        label: "rgba(191,219,254,0.82)",
+        buttonBg: "rgba(15,23,42,0.86)",
+        accentBg: "rgba(59,130,246,0.18)",
+        accentBorder: "rgba(96,165,250,0.34)",
+        shadow: "0 24px 60px rgba(2,6,23,0.4)",
+      };
+    case "paper":
+      return {
+        surface: "rgba(255,251,235,0.9)",
+        surfaceStrong: "rgba(255,247,237,0.96)",
+        border: "rgba(217,119,6,0.22)",
+        softBorder: "rgba(180,83,9,0.18)",
+        text: "#1f2937",
+        mutedText: "rgba(120,53,15,0.76)",
+        label: "rgba(146,64,14,0.86)",
+        buttonBg: "rgba(255,255,255,0.76)",
+        accentBg: "rgba(245,158,11,0.18)",
+        accentBorder: "rgba(217,119,6,0.34)",
+        shadow: "0 24px 54px rgba(120,53,15,0.18)",
+      };
+    case "forest":
+      return {
+        surface: "rgba(6,24,20,0.84)",
+        surfaceStrong: "rgba(4,20,15,0.92)",
+        border: "rgba(52,211,153,0.24)",
+        softBorder: "rgba(110,231,183,0.2)",
+        text: "#ecfdf5",
+        mutedText: "rgba(209,250,229,0.72)",
+        label: "rgba(167,243,208,0.82)",
+        buttonBg: "rgba(11,43,36,0.88)",
+        accentBg: "rgba(16,185,129,0.18)",
+        accentBorder: "rgba(52,211,153,0.34)",
+        shadow: "0 24px 60px rgba(4,20,15,0.42)",
+      };
+    case "sunset":
+      return {
+        surface: "rgba(49,18,55,0.84)",
+        surfaceStrong: "rgba(31,17,71,0.92)",
+        border: "rgba(251,146,60,0.28)",
+        softBorder: "rgba(244,114,182,0.2)",
+        text: "#fff7ed",
+        mutedText: "rgba(254,215,170,0.78)",
+        label: "rgba(253,186,116,0.84)",
+        buttonBg: "rgba(91,35,51,0.88)",
+        accentBg: "rgba(251,146,60,0.2)",
+        accentBorder: "rgba(251,146,60,0.36)",
+        shadow: "0 24px 60px rgba(49,18,55,0.4)",
+      };
+    case "midnight":
+    default:
+      return {
+        surface: "rgba(7,17,31,0.84)",
+        surfaceStrong: "rgba(11,21,40,0.92)",
+        border: "rgba(45,212,191,0.24)",
+        softBorder: "rgba(148,163,184,0.22)",
+        text: "#f8fafc",
+        mutedText: "rgba(226,232,240,0.72)",
+        label: "rgba(191,219,254,0.8)",
+        buttonBg: "rgba(15,23,42,0.86)",
+        accentBg: "rgba(20,184,166,0.18)",
+        accentBorder: "rgba(45,212,191,0.34)",
+        shadow: "0 24px 60px rgba(2,6,23,0.38)",
+      };
+  }
 }
 
 function ProjectionColumn(props: {
@@ -327,6 +431,9 @@ export function ChangyouRoomPublicPage({
   const [textGlowLevel, setTextGlowLevel] = useState<TextGlowLevel>(() =>
     readStoredChoice(TEXT_GLOW_STORAGE_KEY, ["off", "soft", "strong"], "soft"),
   );
+  const [showChord, setShowChord] = useState<boolean>(() =>
+    readStoredBoolean(SHOW_CHORD_STORAGE_KEY, false),
+  );
   const [roomUpdateTick, setRoomUpdateTick] = useState(0);
   const activeProjectionBlockRef = useRef<HTMLDivElement | null>(null);
 
@@ -425,6 +532,11 @@ export function ChangyouRoomPublicPage({
   }, [textGlowLevel]);
 
   useEffect(() => {
+    if (typeof window === "undefined") return;
+    window.localStorage.setItem(SHOW_CHORD_STORAGE_KEY, String(showChord));
+  }, [showChord]);
+
+  useEffect(() => {
     if (loading || error) return;
     setSettingsHintVisible(true);
     const timer = window.setTimeout(() => {
@@ -502,9 +614,13 @@ export function ChangyouRoomPublicPage({
     () => ensureProjectionBlocks((room?.projection?.blocks as LyricProjectionBlock[] | undefined) || [], projectionSourceContent),
     [room?.projection?.blocks, projectionSourceContent],
   );
+  const visibleProjectionBlocks = useMemo(
+    () => buildVisibleProjectionBlocks(projectionBlocks, showChord),
+    [projectionBlocks, showChord],
+  );
   const doubleProjectionBlocks = useMemo(
-    () => splitBlocksForDoublePage(projectionBlocks),
-    [projectionBlocks],
+    () => splitBlocksForDoublePage(visibleProjectionBlocks),
+    [visibleProjectionBlocks],
   );
   const activeMarkerIndex = room?.projection?.marker_index ?? null;
 
@@ -551,7 +667,7 @@ export function ChangyouRoomPublicPage({
       window.cancelAnimationFrame(frameB);
       window.clearTimeout(settleTimer);
     };
-  }, [roomUpdateTick, layoutMode, activeMarkerIndex, fontSize, lineHeight]);
+  }, [roomUpdateTick, layoutMode, activeMarkerIndex, fontSize, lineHeight, showChord]);
 
   function resetDisplaySettings() {
     setLayoutMode("single");
@@ -563,6 +679,7 @@ export function ChangyouRoomPublicPage({
     setLineHeight(DEFAULT_LINE_HEIGHT);
     setColumnGap(DEFAULT_COLUMN_GAP);
     setTextGlowLevel("soft");
+    setShowChord(false);
   }
 
   if (loading) {
@@ -602,7 +719,7 @@ export function ChangyouRoomPublicPage({
         }
       `}</style>
       <div style={ambientGlowStyle(backgroundTheme.overlay)} />
-      {showBackButton && onBack ? (
+      {!settingsOpen && showBackButton && onBack ? (
         <button type="button" onClick={onBack} style={appBackButtonStyle(backgroundThemeKey)}>
           ← 返回
         </button>
@@ -631,7 +748,7 @@ export function ChangyouRoomPublicPage({
           </div>
         </div>
       ) : null}
-      {songTitle ? (
+      {songTitle && !settingsOpen ? (
         <div style={songTitleDockWrapStyle}>
           {songTitleCollapsed ? (
             <button
@@ -656,45 +773,89 @@ export function ChangyouRoomPublicPage({
           )}
         </div>
       ) : null}
-      <div style={settingsWrapStyle}>
-        {settingsHintVisible ? <div style={settingsHintStyle}>设置在这里</div> : null}
-        <button
-          type="button"
-          aria-label="显示字体设置"
-          onClick={() => setSettingsOpen((open) => !open)}
-          style={settingsButtonStyle(settingsHintVisible)}
-        >
-          <svg viewBox="0 0 24 24" style={settingsIconStyle} aria-hidden="true">
-            <path
-              d="M19.14 12.94a7.43 7.43 0 0 0 .05-.94 7.43 7.43 0 0 0-.05-.94l2.03-1.58a.5.5 0 0 0 .12-.64l-1.92-3.32a.5.5 0 0 0-.6-.22l-2.39.96a7.28 7.28 0 0 0-1.63-.94l-.36-2.54a.5.5 0 0 0-.5-.42h-3.84a.5.5 0 0 0-.5.42l-.36 2.54c-.58.23-1.13.54-1.63.94l-2.39-.96a.5.5 0 0 0-.6.22L2.7 8.84a.5.5 0 0 0 .12.64l2.03 1.58a7.43 7.43 0 0 0-.05.94c0 .32.02.63.05.94L2.82 14.52a.5.5 0 0 0-.12.64l1.92 3.32a.5.5 0 0 0 .6.22l2.39-.96c.5.4 1.05.71 1.63.94l.36 2.54a.5.5 0 0 0 .5.42h3.84a.5.5 0 0 0 .5-.42l.36-2.54c.58-.23 1.13-.54 1.63-.94l2.39.96a.5.5 0 0 0 .6-.22l1.92-3.32a.5.5 0 0 0-.12-.64ZM12 15.5A3.5 3.5 0 1 1 12 8.5a3.5 3.5 0 0 1 0 7Z"
-              fill="currentColor"
-            />
-          </svg>
-        </button>
-        {settingsOpen ? (
-          <div style={settingsPanelStyle}>
+      {!settingsOpen ? (
+        <div style={settingsWrapStyle}>
+          {settingsHintVisible ? <div style={settingsHintStyle(backgroundThemeKey)}>设置在这里</div> : null}
+          <button
+            type="button"
+            aria-label="打开设置页"
+            onClick={() => setSettingsOpen(true)}
+            style={settingsButtonStyle(backgroundThemeKey, settingsHintVisible)}
+          >
+            <svg viewBox="0 0 24 24" style={settingsIconStyle} aria-hidden="true">
+              <path
+                d="M19.14 12.94a7.43 7.43 0 0 0 .05-.94 7.43 7.43 0 0 0-.05-.94l2.03-1.58a.5.5 0 0 0 .12-.64l-1.92-3.32a.5.5 0 0 0-.6-.22l-2.39.96a7.28 7.28 0 0 0-1.63-.94l-.36-2.54a.5.5 0 0 0-.5-.42h-3.84a.5.5 0 0 0-.5.42l-.36 2.54c-.58.23-1.13.54-1.63.94l-2.39-.96a.5.5 0 0 0-.6.22L2.7 8.84a.5.5 0 0 0 .12.64l2.03 1.58a7.43 7.43 0 0 0-.05.94c0 .32.02.63.05.94L2.82 14.52a.5.5 0 0 0-.12.64l1.92 3.32a.5.5 0 0 0 .6.22l2.39-.96c.5.4 1.05.71 1.63.94l.36 2.54a.5.5 0 0 0 .5.42h3.84a.5.5 0 0 0 .5-.42l.36-2.54c.58-.23 1.13-.54 1.63-.94l2.39.96a.5.5 0 0 0 .6-.22l1.92-3.32a.5.5 0 0 0-.12-.64ZM12 15.5A3.5 3.5 0 1 1 12 8.5a3.5 3.5 0 0 1 0 7Z"
+                fill="currentColor"
+              />
+            </svg>
+          </button>
+        </div>
+      ) : null}
+
+      {settingsOpen ? (
+        <div style={settingsPageShellStyle}>
+          <button type="button" onClick={() => setSettingsOpen(false)} style={appBackButtonStyle(backgroundThemeKey)}>
+            ← 返回
+          </button>
+          <div style={settingsPageHeaderStyle(backgroundThemeKey)}>
+            <div style={settingsPageEyebrowStyle(backgroundThemeKey)}>显示设置</div>
+            <div style={settingsPageHeadingStyle(backgroundThemeKey)}>公开页显示设置</div>
+            <div style={settingsPageSummaryStyle(backgroundThemeKey)}>
+              在这里切换歌词与 chord、版面布局、背景主题和字体参数。
+            </div>
+          </div>
+          <div style={settingsPageCardStyle(backgroundThemeKey)}>
             <div style={settingsGroupStyle}>
-              <div style={settingsTitleStyle}>显示模式</div>
+              <div style={settingsTitleStyle(backgroundThemeKey)}>Chord</div>
+              <div style={settingsCaptionStyle(backgroundThemeKey)}>默认只显示歌词，点这里才会把 chord 一起显示出来</div>
               <div style={twoColumnButtonGridStyle}>
-                <button type="button" onClick={() => setLayoutMode("single")} style={modeButtonStyle(layoutMode === "single")}>
+                <button
+                  type="button"
+                  onClick={() => setShowChord(false)}
+                  style={modeButtonStyle(!showChord, backgroundThemeKey)}
+                >
+                  仅歌词
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setShowChord(true)}
+                  style={modeButtonStyle(showChord, backgroundThemeKey)}
+                >
+                  显示 Chord
+                </button>
+              </div>
+            </div>
+
+            <div style={settingsGroupStyle}>
+              <div style={settingsTitleStyle(backgroundThemeKey)}>显示模式</div>
+              <div style={twoColumnButtonGridStyle}>
+                <button
+                  type="button"
+                  onClick={() => setLayoutMode("single")}
+                  style={modeButtonStyle(layoutMode === "single", backgroundThemeKey)}
+                >
                   单页模式
                 </button>
-                <button type="button" onClick={() => setLayoutMode("double")} style={modeButtonStyle(layoutMode === "double")}>
+                <button
+                  type="button"
+                  onClick={() => setLayoutMode("double")}
+                  style={modeButtonStyle(layoutMode === "double", backgroundThemeKey)}
+                >
                   双页模式
                 </button>
               </div>
             </div>
 
             <div style={settingsGroupStyle}>
-              <div style={settingsTitleStyle}>背景主题</div>
-              <div style={settingsCaptionStyle}>文字会自动切成适合这个背景的反差色</div>
+              <div style={settingsTitleStyle(backgroundThemeKey)}>背景主题</div>
+              <div style={settingsCaptionStyle(backgroundThemeKey)}>文字会自动切成适合这个背景的反差色</div>
               <div style={swatchGridStyle}>
                 {(Object.entries(BACKGROUND_THEMES) as Array<[BackgroundThemeKey, (typeof BACKGROUND_THEMES)[BackgroundThemeKey]]>).map(([key, theme]) => (
                   <button
                     key={key}
                     type="button"
                     onClick={() => setBackgroundThemeKey(key)}
-                    style={swatchButtonStyle(backgroundThemeKey === key)}
+                    style={swatchButtonStyle(backgroundThemeKey === key, backgroundThemeKey)}
                   >
                     <span style={themePreviewStyle(theme.page)} />
                     <span>{theme.label}</span>
@@ -704,14 +865,14 @@ export function ChangyouRoomPublicPage({
             </div>
 
             <div style={settingsGroupStyle}>
-              <div style={settingsTitleStyle}>内容宽度</div>
+              <div style={settingsTitleStyle(backgroundThemeKey)}>内容宽度</div>
               <div style={threeColumnButtonGridStyle}>
                 {(Object.entries(CONTENT_WIDTH_PRESETS) as Array<[ContentWidthMode, (typeof CONTENT_WIDTH_PRESETS)[ContentWidthMode]]>).map(([key, preset]) => (
                   <button
                     key={key}
                     type="button"
                     onClick={() => setContentWidthMode(key)}
-                    style={modeButtonStyle(contentWidthMode === key)}
+                    style={modeButtonStyle(contentWidthMode === key, backgroundThemeKey)}
                   >
                     {preset.label}
                   </button>
@@ -720,10 +881,15 @@ export function ChangyouRoomPublicPage({
             </div>
 
             <div style={settingsGroupStyle}>
-              <div style={settingsTitleStyle}>文字光效</div>
+              <div style={settingsTitleStyle(backgroundThemeKey)}>文字光效</div>
               <div style={threeColumnButtonGridStyle}>
                 {(Object.entries(TEXT_GLOW_PRESETS) as Array<[TextGlowLevel, (typeof TEXT_GLOW_PRESETS)[TextGlowLevel]]>).map(([key, preset]) => (
-                  <button key={key} type="button" onClick={() => setTextGlowLevel(key)} style={modeButtonStyle(textGlowLevel === key)}>
+                  <button
+                    key={key}
+                    type="button"
+                    onClick={() => setTextGlowLevel(key)}
+                    style={modeButtonStyle(textGlowLevel === key, backgroundThemeKey)}
+                  >
                     {preset.label}
                   </button>
                 ))}
@@ -737,6 +903,7 @@ export function ChangyouRoomPublicPage({
               max={MAX_FONT_SIZE}
               step={1}
               value={fontSize}
+              backgroundThemeKey={backgroundThemeKey}
               onChange={(value) => setFontSize(value)}
               onDecrease={() => setFontSize((value) => Math.max(MIN_FONT_SIZE, value - 2))}
               onIncrease={() => setFontSize((value) => Math.min(MAX_FONT_SIZE, value + 2))}
@@ -749,6 +916,7 @@ export function ChangyouRoomPublicPage({
               max={MAX_LINE_HEIGHT}
               step={0.05}
               value={lineHeight}
+              backgroundThemeKey={backgroundThemeKey}
               onChange={(value) => setLineHeight(Number(value.toFixed(2)))}
             />
 
@@ -759,6 +927,7 @@ export function ChangyouRoomPublicPage({
               max={MAX_OUTER_PADDING}
               step={1}
               value={outerPadding}
+              backgroundThemeKey={backgroundThemeKey}
               onChange={(value) => setOuterPadding(value)}
             />
 
@@ -769,6 +938,7 @@ export function ChangyouRoomPublicPage({
               max={MAX_MARGIN_TOP}
               step={1}
               value={marginTop}
+              backgroundThemeKey={backgroundThemeKey}
               onChange={(value) => setMarginTop(value)}
             />
 
@@ -779,19 +949,18 @@ export function ChangyouRoomPublicPage({
               max={MAX_COLUMN_GAP}
               step={1}
               value={columnGap}
+              backgroundThemeKey={backgroundThemeKey}
               onChange={(value) => setColumnGap(value)}
             />
 
             <div style={settingsFooterStyle}>
-              <button type="button" onClick={resetDisplaySettings} style={resetButtonStyle}>
+              <button type="button" onClick={resetDisplaySettings} style={resetButtonStyle(backgroundThemeKey)}>
                 重置 UI
               </button>
             </div>
           </div>
-        ) : null}
-      </div>
-
-      {!entry ? (
+        </div>
+      ) : !entry ? (
         <div style={stateShellStyle(backgroundTheme.page, textColor)}>等待歌词…</div>
       ) : layoutMode === "double" ? (
         <div style={contentShellStyle(widthPreset.maxWidth, outerPadding, marginTop)}>
@@ -818,7 +987,7 @@ export function ChangyouRoomPublicPage({
         <div style={contentShellStyle(widthPreset.maxWidth, outerPadding, marginTop)}>
           <div style={singlePageStyle(outerPadding, marginTop, singleBlockStyle)}>
             <ProjectionColumn
-              blocks={projectionBlocks}
+              blocks={visibleProjectionBlocks}
               projectionBlocks={projectionBlocks}
               activeMarkerIndex={activeMarkerIndex}
               backgroundThemeKey={backgroundThemeKey}
@@ -839,20 +1008,31 @@ function SettingSlider(props: {
   max: number;
   step: number;
   value: number;
+  backgroundThemeKey: BackgroundThemeKey;
   onChange: (value: number) => void;
   onDecrease?: () => void;
   onIncrease?: () => void;
 }) {
   return (
     <div style={settingsGroupStyle}>
-      <div style={settingsTitleStyle}>{props.title}</div>
-      <div style={sliderValueStyle}>{props.valueLabel}</div>
+      <div style={settingsTitleStyle(props.backgroundThemeKey)}>{props.title}</div>
+      <div style={sliderValueStyle(props.backgroundThemeKey)}>{props.valueLabel}</div>
       {props.onDecrease || props.onIncrease ? (
         <div style={twoColumnButtonGridStyle}>
-          <button type="button" onClick={props.onDecrease} style={adjustButtonStyle} disabled={!props.onDecrease}>
+          <button
+            type="button"
+            onClick={props.onDecrease}
+            style={adjustButtonStyle(props.backgroundThemeKey)}
+            disabled={!props.onDecrease}
+          >
             A-
           </button>
-          <button type="button" onClick={props.onIncrease} style={adjustButtonStyle} disabled={!props.onIncrease}>
+          <button
+            type="button"
+            onClick={props.onIncrease}
+            style={adjustButtonStyle(props.backgroundThemeKey)}
+            disabled={!props.onIncrease}
+          >
             A+
           </button>
         </div>
@@ -1113,53 +1293,110 @@ const songTitleCollapsedButtonStyle = (backgroundThemeKey: BackgroundThemeKey) =
   backdropFilter: "blur(12px)",
 });
 
-const settingsHintStyle = {
-  padding: "12px 16px",
-  borderRadius: "999px",
-  background: "rgba(15,23,42,0.92)",
-  color: "#f8fafc",
-  border: "1px solid rgba(45,212,191,0.28)",
-  boxShadow: "0 20px 44px rgba(2,6,23,0.38)",
-  fontSize: "14px",
-  fontWeight: 900,
-  letterSpacing: "0.04em",
-  animation: "changyou-room-setting-label 4.2s ease forwards",
-  pointerEvents: "none" as const,
+const settingsHintStyle = (backgroundThemeKey: BackgroundThemeKey) => {
+  const chrome = getSettingsChrome(backgroundThemeKey);
+  return {
+    padding: "12px 16px",
+    borderRadius: "999px",
+    background: chrome.surfaceStrong,
+    color: chrome.text,
+    border: `1px solid ${chrome.accentBorder}`,
+    boxShadow: chrome.shadow,
+    fontSize: "14px",
+    fontWeight: 900,
+    letterSpacing: "0.04em",
+    animation: "changyou-room-setting-label 4.2s ease forwards",
+    pointerEvents: "none" as const,
+  };
 };
 
-const settingsButtonStyle = (highlighted: boolean) => ({
+const settingsButtonStyle = (backgroundThemeKey: BackgroundThemeKey, highlighted: boolean) => {
+  const chrome = getSettingsChrome(backgroundThemeKey);
+  return {
   width: "52px",
   height: "52px",
   display: "grid",
   placeItems: "center",
   borderRadius: "999px",
-  border: "1px solid rgba(148,163,184,0.28)",
-  background: "rgba(15,23,42,0.78)",
-  color: "#f8fafc",
-  boxShadow: "0 18px 40px rgba(2,6,23,0.34)",
+  border: `1px solid ${chrome.softBorder}`,
+  background: chrome.surface,
+  color: chrome.text,
+  boxShadow: chrome.shadow,
   backdropFilter: "blur(14px)",
   cursor: "pointer",
   animation: highlighted ? "changyou-room-setting-burst 1.05s ease-in-out 3" : undefined,
-});
+  };
+};
 
 const settingsIconStyle = {
   width: "24px",
   height: "24px",
 };
 
-const settingsPanelStyle = {
-  width: "min(320px, calc(100vw - 32px))",
-  maxHeight: "calc(100vh - 100px)",
-  overflowY: "auto" as const,
-  padding: "16px",
-  borderRadius: "24px",
-  border: "1px solid rgba(148,163,184,0.22)",
-  background: "rgba(15,23,42,0.92)",
-  color: "#f8fafc",
-  boxShadow: "0 22px 48px rgba(2,6,23,0.38)",
-  backdropFilter: "blur(16px)",
+const settingsPageShellStyle = {
+  position: "relative" as const,
+  zIndex: 2,
+  minHeight: "100vh",
+  width: "100%",
+  boxSizing: "border-box" as const,
+  padding: "92px 16px 36px",
   display: "grid",
-  gap: "14px",
+  justifyItems: "center" as const,
+  alignContent: "start" as const,
+  gap: "18px",
+};
+
+const settingsPageHeaderStyle = (backgroundThemeKey: BackgroundThemeKey) => {
+  const chrome = getSettingsChrome(backgroundThemeKey);
+  return {
+    width: "min(760px, calc(100vw - 32px))",
+    padding: "22px 24px",
+    borderRadius: "28px",
+    border: `1px solid ${chrome.border}`,
+    background: chrome.surfaceStrong,
+    color: chrome.text,
+    boxShadow: chrome.shadow,
+    backdropFilter: "blur(16px)",
+    display: "grid",
+    gap: "10px",
+  };
+};
+
+const settingsPageEyebrowStyle = (backgroundThemeKey: BackgroundThemeKey) => ({
+  fontSize: "12px",
+  fontWeight: 900,
+  letterSpacing: "0.12em",
+  textTransform: "uppercase" as const,
+  color: getSettingsChrome(backgroundThemeKey).label,
+});
+
+const settingsPageHeadingStyle = (backgroundThemeKey: BackgroundThemeKey) => ({
+  fontSize: "clamp(26px, 4vw, 38px)",
+  lineHeight: 1.08,
+  fontWeight: 900,
+  color: getSettingsChrome(backgroundThemeKey).text,
+});
+
+const settingsPageSummaryStyle = (backgroundThemeKey: BackgroundThemeKey) => ({
+  fontSize: "14px",
+  lineHeight: 1.6,
+  color: getSettingsChrome(backgroundThemeKey).mutedText,
+});
+
+const settingsPageCardStyle = (backgroundThemeKey: BackgroundThemeKey) => {
+  const chrome = getSettingsChrome(backgroundThemeKey);
+  return {
+    width: "min(760px, calc(100vw - 32px))",
+    padding: "20px",
+    borderRadius: "28px",
+    border: `1px solid ${chrome.border}`,
+    background: chrome.surface,
+    color: chrome.text,
+    boxShadow: chrome.shadow,
+    backdropFilter: "blur(16px)",
+    display: "grid",
+    gap: "14px",
+  };
 };
 
 const settingsGroupStyle = {
@@ -1167,24 +1404,24 @@ const settingsGroupStyle = {
   gap: "10px",
 };
 
-const settingsTitleStyle = {
+const settingsTitleStyle = (backgroundThemeKey: BackgroundThemeKey) => ({
   fontSize: "13px",
   letterSpacing: "0.08em",
   textTransform: "uppercase" as const,
-  color: "rgba(191,219,254,0.78)",
-};
+  color: getSettingsChrome(backgroundThemeKey).label,
+});
 
-const sliderValueStyle = {
+const sliderValueStyle = (backgroundThemeKey: BackgroundThemeKey) => ({
   fontSize: "22px",
   fontWeight: 900,
-  color: "#f8fafc",
-};
+  color: getSettingsChrome(backgroundThemeKey).text,
+});
 
-const settingsCaptionStyle = {
+const settingsCaptionStyle = (backgroundThemeKey: BackgroundThemeKey) => ({
   fontSize: "12px",
   lineHeight: 1.5,
-  color: "rgba(226,232,240,0.72)",
-};
+  color: getSettingsChrome(backgroundThemeKey).mutedText,
+});
 
 const twoColumnButtonGridStyle = {
   display: "grid",
@@ -1204,29 +1441,35 @@ const swatchGridStyle = {
   gap: "10px",
 };
 
-const modeButtonStyle = (active: boolean) => ({
-  padding: "12px 10px",
-  borderRadius: "14px",
-  border: active ? "1px solid rgba(45,212,191,0.34)" : "1px solid rgba(148,163,184,0.24)",
-  background: active ? "rgba(20,184,166,0.18)" : "rgba(30,41,59,0.92)",
-  color: "#f8fafc",
-  fontWeight: 800,
-  cursor: "pointer",
-});
+const modeButtonStyle = (active: boolean, backgroundThemeKey: BackgroundThemeKey) => {
+  const chrome = getSettingsChrome(backgroundThemeKey);
+  return {
+    padding: "12px 10px",
+    borderRadius: "14px",
+    border: active ? `1px solid ${chrome.accentBorder}` : `1px solid ${chrome.softBorder}`,
+    background: active ? chrome.accentBg : chrome.buttonBg,
+    color: chrome.text,
+    fontWeight: 800,
+    cursor: "pointer",
+  };
+};
 
-const swatchButtonStyle = (active: boolean) => ({
-  display: "flex",
-  alignItems: "center",
-  gap: "10px",
-  padding: "12px",
-  borderRadius: "14px",
-  border: active ? "1px solid rgba(45,212,191,0.34)" : "1px solid rgba(148,163,184,0.24)",
-  background: active ? "rgba(20,184,166,0.18)" : "rgba(30,41,59,0.92)",
-  color: "#f8fafc",
-  fontWeight: 700,
-  cursor: "pointer",
-  textAlign: "left" as const,
-});
+const swatchButtonStyle = (active: boolean, backgroundThemeKey: BackgroundThemeKey) => {
+  const chrome = getSettingsChrome(backgroundThemeKey);
+  return {
+    display: "flex",
+    alignItems: "center",
+    gap: "10px",
+    padding: "12px",
+    borderRadius: "14px",
+    border: active ? `1px solid ${chrome.accentBorder}` : `1px solid ${chrome.softBorder}`,
+    background: active ? chrome.accentBg : chrome.buttonBg,
+    color: chrome.text,
+    fontWeight: 700,
+    cursor: "pointer",
+    textAlign: "left" as const,
+  };
+};
 
 const themePreviewStyle = (background: string) => ({
   width: "18px",
@@ -1237,14 +1480,17 @@ const themePreviewStyle = (background: string) => ({
   flexShrink: 0,
 });
 
-const adjustButtonStyle = {
-  padding: "12px 14px",
-  borderRadius: "14px",
-  border: "1px solid rgba(148,163,184,0.24)",
-  background: "rgba(30,41,59,0.92)",
-  color: "#f8fafc",
-  fontWeight: 800,
-  cursor: "pointer",
+const adjustButtonStyle = (backgroundThemeKey: BackgroundThemeKey) => {
+  const chrome = getSettingsChrome(backgroundThemeKey);
+  return {
+    padding: "12px 14px",
+    borderRadius: "14px",
+    border: `1px solid ${chrome.softBorder}`,
+    background: chrome.buttonBg,
+    color: chrome.text,
+    fontWeight: 800,
+    cursor: "pointer",
+  };
 };
 
 const sliderStyle = {
@@ -1256,15 +1502,21 @@ const settingsFooterStyle = {
   justifyContent: "flex-end",
 };
 
-const resetButtonStyle = {
+const resetButtonStyle = (backgroundThemeKey: BackgroundThemeKey) => ({
   padding: "12px 16px",
   borderRadius: "14px",
-  border: "1px solid rgba(251,113,133,0.3)",
-  background: "rgba(159,18,57,0.16)",
-  color: "#ffe4e6",
+  border:
+    backgroundThemeKey === "paper"
+      ? "1px solid rgba(225,29,72,0.24)"
+      : "1px solid rgba(251,113,133,0.3)",
+  background:
+    backgroundThemeKey === "paper"
+      ? "rgba(244,63,94,0.1)"
+      : "rgba(159,18,57,0.16)",
+  color: backgroundThemeKey === "paper" ? "#9f1239" : "#ffe4e6",
   fontWeight: 800,
   cursor: "pointer",
-};
+});
 
 const contentShellStyle = (maxWidth: string, outerPadding: number, marginTop: number) => ({
   position: "relative" as const,
