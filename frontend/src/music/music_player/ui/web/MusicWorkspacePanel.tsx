@@ -2,13 +2,14 @@ import type { CSSProperties, RefObject } from "react";
 
 import { showPromptDialog } from "../../../../js/dialogs";
 import type { AlbumRecord, MusicRecord } from "../../logic/types";
-import type { AlbumDraft, EditorMode, Toast, TrackDraft, WorkspaceScreen } from "../../logic/workspaceTypes";
+import type { AlbumDraft, EditorMode, MusicUploadDraft, Toast, TrackDraft, WorkspaceScreen } from "../../logic/workspaceTypes";
 import { DesktopAlbumCollection } from "../desktop/DesktopAlbumCollection";
 import { DesktopEditorScreen } from "../desktop/DesktopEditorScreen";
 import { DesktopTracksScreen } from "../desktop/DesktopTracksScreen";
 import { MobileAlbumCollection } from "../mobile/MobileAlbumCollection";
 import { MobileEditorScreen } from "../mobile/MobileEditorScreen";
 import { MobileTracksScreen } from "../mobile/MobileTracksScreen";
+import { MusicSearchInput } from "../shared/MusicSearchInput";
 
 type MusicWorkspacePanelProps = {
   isMobile: boolean;
@@ -32,7 +33,6 @@ type MusicWorkspacePanelProps = {
   currentMusicId: number | null;
   editingMusicDetail: MusicRecord | null;
   search: string;
-  newAlbumName: string;
   albumDraft: AlbumDraft;
   trackDraft: TrackDraft;
   toast: Toast;
@@ -46,11 +46,9 @@ type MusicWorkspacePanelProps = {
   uploadingMusic: boolean;
   replacingFile: boolean;
   canManage: boolean;
-  fileInputRef: RefObject<HTMLInputElement | null>;
   coverInputRef: RefObject<HTMLInputElement | null>;
   replaceInputRef: RefObject<HTMLInputElement | null>;
   onChangeSearch: (value: string) => void;
-  onChangeNewAlbumName: (value: string) => void;
   onChangeAlbumDraft: (draft: AlbumDraft) => void;
   onChangeTrackDraft: (draft: TrackDraft) => void;
   onCreateAlbum: (nameOverride?: string) => Promise<void>;
@@ -64,7 +62,7 @@ type MusicWorkspacePanelProps = {
   onSaveAlbum: () => Promise<void>;
   onPickCover: () => void;
   onCoverSelected: (file: File | null) => Promise<void>;
-  onUploadMusic: (files: FileList | null) => Promise<void>;
+  onUploadMusic: (upload: MusicUploadDraft | null) => Promise<void>;
   onSelectTrack: (musicId: number) => void;
   onQueueTrack: (musicId: number) => void;
   onSaveTrack: () => Promise<void>;
@@ -99,7 +97,6 @@ export function MusicWorkspacePanel(props: MusicWorkspacePanelProps) {
     currentMusicId,
     editingMusicDetail,
     search,
-    newAlbumName,
     albumDraft,
     trackDraft,
     toast,
@@ -110,11 +107,9 @@ export function MusicWorkspacePanel(props: MusicWorkspacePanelProps) {
     uploadingMusic,
     replacingFile,
     canManage,
-    fileInputRef,
     coverInputRef,
     replaceInputRef,
     onChangeSearch,
-    onChangeNewAlbumName,
     onChangeAlbumDraft,
     onChangeTrackDraft,
     onCreateAlbum,
@@ -175,12 +170,10 @@ export function MusicWorkspacePanel(props: MusicWorkspacePanelProps) {
           pagedAlbums={pagedAlbums}
           albumPage={albumPage}
           totalAlbumPages={totalAlbumPages}
-          newAlbumName={newAlbumName}
           canManage={canManage}
           canViewListening={canViewListening}
           listeningSummary={listeningSummary}
           search={search}
-          onChangeNewAlbumName={onChangeNewAlbumName}
           onChangeSearch={onChangeSearch}
           onCreateAlbum={onCreateAlbum}
           onOpenAlbumTracks={onOpenAlbumTracks}
@@ -203,7 +196,6 @@ export function MusicWorkspacePanel(props: MusicWorkspacePanelProps) {
               trackPage={trackPage}
               totalTrackPages={totalTrackPages}
               canManage={canManage}
-              fileInputRef={fileInputRef}
               onOpenAlbums={onOpenAlbums}
               onBackToAlbums={onBackToAlbums}
               onChangeSearch={onChangeSearch}
@@ -228,7 +220,6 @@ export function MusicWorkspacePanel(props: MusicWorkspacePanelProps) {
               trackPage={trackPage}
               totalTrackPages={totalTrackPages}
               canManage={canManage}
-              fileInputRef={fileInputRef}
               onOpenAlbums={onOpenAlbums}
               onBackToAlbums={onBackToAlbums}
               onChangeSearch={onChangeSearch}
@@ -314,12 +305,10 @@ function AlbumsScreen({
   pagedAlbums,
   albumPage,
   totalAlbumPages,
-  newAlbumName,
   canManage,
   canViewListening,
   listeningSummary,
   search,
-  onChangeNewAlbumName,
   onChangeSearch,
   onCreateAlbum,
   onOpenAlbumTracks,
@@ -335,7 +324,6 @@ function AlbumsScreen({
   pagedAlbums: AlbumRecord[];
   albumPage: number;
   totalAlbumPages: number;
-  newAlbumName: string;
   canManage: boolean;
   canViewListening: boolean;
   listeningSummary: {
@@ -343,7 +331,6 @@ function AlbumsScreen({
     uniqueListeners: number;
   };
   search: string;
-  onChangeNewAlbumName: (value: string) => void;
   onChangeSearch: (value: string) => void;
   onCreateAlbum: (nameOverride?: string) => Promise<void>;
   onOpenAlbumTracks: (albumId: number | null) => Promise<void>;
@@ -355,11 +342,6 @@ function AlbumsScreen({
   const hasSearch = Boolean(search.trim());
   const showAllTracksEntry = !hasSearch || filteredLibraryMusicCount > 0;
   const handleCreateAlbumClick = async () => {
-    if (!isMobile) {
-      void onCreateAlbum();
-      return;
-    }
-
     const name = await showPromptDialog({
       title: "新专辑",
       message: "新专辑名称",
@@ -386,27 +368,8 @@ function AlbumsScreen({
           </div>
         ) : null}
 
-        {canManage && !isMobile ? (
-          <div style={createBarStyle(isMobile)}>
-            <input
-              value={newAlbumName}
-              onChange={(event) => onChangeNewAlbumName(event.target.value)}
-              placeholder="新专辑名称"
-              style={inputStyle}
-            />
-            <button type="button" style={primaryButtonStyle} onClick={() => void onCreateAlbum()}>
-              创建专辑
-            </button>
-          </div>
-        ) : null}
-
         <div style={searchRowStyle(canManage)}>
-          <input
-            value={search}
-            onInput={(event) => onChangeSearch((event.target as HTMLInputElement).value)}
-            placeholder="搜索歌曲 / 专辑"
-            style={inputStyle}
-          />
+          <MusicSearchInput value={search} onChange={onChangeSearch} />
           {canManage ? (
             <button type="button" style={primaryButtonStyle} onClick={handleCreateAlbumClick}>
               创建专辑
@@ -602,30 +565,12 @@ const sectionCopyStyle: CSSProperties = {
   color: "var(--x-color-ink-muted)",
 };
 
-const createBarStyle = (isMobile: boolean): CSSProperties => ({
-  display: "grid",
-  gap: "12px",
-  gridTemplateColumns: isMobile ? "1fr" : "minmax(0, 1fr) auto",
-});
-
 const searchRowStyle = (canManage: boolean): CSSProperties => ({
   display: "grid",
   gap: "12px",
   gridTemplateColumns: canManage ? "minmax(0, 1fr) auto" : "1fr",
   alignItems: "center",
 });
-
-const inputStyle: CSSProperties = {
-  width: "100%",
-  minHeight: "46px",
-  padding: "0 14px",
-  borderRadius: "14px",
-  border: "1px solid var(--x-color-line)",
-  background: "var(--x-color-panel)",
-  color: "var(--x-color-ink)",
-  font: "inherit",
-  boxSizing: "border-box",
-};
 
 const primaryButtonStyle: CSSProperties = {
   minHeight: "46px",

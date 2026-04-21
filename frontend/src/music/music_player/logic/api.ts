@@ -4,6 +4,7 @@ import type {
   MinuteLogsResponse,
   MusicRecord,
 } from "./types";
+import type { MusicUploadDraft } from "./workspaceTypes";
 import { apiFetch } from "../../../js/apiFetch";
 
 async function parseJson<T>(response: Response): Promise<T> {
@@ -123,10 +124,11 @@ export async function uploadAlbumCover(albumId: number, file: File) {
   return parseJson<{ success?: boolean; cover_url?: string }>(response);
 }
 
-export async function uploadMusic(albumId: number, files: File[]) {
+export async function uploadMusic(albumId: number, upload: MusicUploadDraft) {
   const form = new FormData();
   form.append("album_id", String(albumId));
-  files.forEach((file) => form.append("files", file));
+  form.append("title", upload.title);
+  form.append("files", upload.file);
   const response = await apiFetch("/api/music/upload", {
     method: "POST",
     credentials: "include",

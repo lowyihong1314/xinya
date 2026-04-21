@@ -17,6 +17,8 @@ def upload_music():
         request.files.getlist("files"),
         request.form.get("album_id"),
         request.form.get("artist_id"),
+        request.form.get("title"),
+        request.form.getlist("titles"),
     )
 
 

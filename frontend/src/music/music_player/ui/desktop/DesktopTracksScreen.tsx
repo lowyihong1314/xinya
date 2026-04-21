@@ -1,8 +1,10 @@
-import type { CSSProperties, RefObject } from "react";
+import type { CSSProperties } from "react";
 
 import { formatMusicHeat } from "../../logic/musicHeatUtils";
 import type { MusicRecord } from "../../logic/types";
-import { musicAudioUploadAccept } from "../shared/audioUpload";
+import type { MusicUploadDraft } from "../../logic/workspaceTypes";
+import { MusicSearchInput } from "../shared/MusicSearchInput";
+import { showMusicUploadDialog } from "../shared/MusicUploadDialog";
 
 export function DesktopTracksScreen({
   albumName,
@@ -14,7 +16,6 @@ export function DesktopTracksScreen({
   trackPage,
   totalTrackPages,
   canManage,
-  fileInputRef,
   onOpenAlbums,
   onBackToAlbums,
   onChangeSearch,
@@ -36,7 +37,6 @@ export function DesktopTracksScreen({
   trackPage: number;
   totalTrackPages: number;
   canManage: boolean;
-  fileInputRef: RefObject<HTMLInputElement | null>;
   onOpenAlbums: () => void;
   onBackToAlbums: () => void;
   onChangeSearch: (value: string) => void;
@@ -44,11 +44,18 @@ export function DesktopTracksScreen({
   onSelectTrack: (musicId: number) => void;
   onOpenAlbumEditor: () => Promise<void>;
   onOpenTrackEditor: (musicId: number) => Promise<void>;
-  onUploadMusic: (files: FileList | null) => Promise<void>;
+  onUploadMusic: (upload: MusicUploadDraft | null) => Promise<void>;
   uploadingMusic: boolean;
   hasSelectedAlbum: boolean;
   onQueueTrack: (musicId: number) => void;
 }) {
+  async function handleAddMusicClick() {
+    if (uploadingMusic) return;
+    const upload = await showMusicUploadDialog();
+    if (!upload) return;
+    await onUploadMusic(upload);
+  }
+
   return (
     <div style={screenStackStyle}>
       <section style={sectionCardStyle}>
@@ -97,31 +104,16 @@ export function DesktopTracksScreen({
         ) : null}
 
         <div style={searchRowStyle(canManage && hasSelectedAlbum)}>
-          <input
-            value={search}
-            onInput={(event) => onChangeSearch((event.target as HTMLInputElement).value)}
-            placeholder="搜索歌曲 / 专辑"
-            style={inputStyle}
-          />
+          <MusicSearchInput value={search} onChange={onChangeSearch} />
           {canManage && hasSelectedAlbum ? (
-            <>
-              <input
-                ref={fileInputRef}
-                type="file"
-                accept={musicAudioUploadAccept}
-                multiple
-                hidden
-                onChange={(event) => void onUploadMusic(event.target.files)}
-              />
-              <button
-                type="button"
-                style={primaryButtonStyle}
-                onClick={() => fileInputRef.current?.click()}
-                disabled={uploadingMusic}
-              >
-                {uploadingMusic ? "上传中…" : "添加歌曲"}
-              </button>
-            </>
+            <button
+              type="button"
+              style={primaryButtonStyle}
+              onClick={() => void handleAddMusicClick()}
+              disabled={uploadingMusic}
+            >
+              {uploadingMusic ? "上传中…" : "添加歌曲"}
+            </button>
           ) : null}
         </div>
 
@@ -220,18 +212,6 @@ const searchRowStyle = (showUpload: boolean): CSSProperties => ({
   gridTemplateColumns: showUpload ? "minmax(0, 1fr) auto" : "1fr",
   alignItems: "center",
 });
-
-const inputStyle: CSSProperties = {
-  width: "100%",
-  minHeight: "46px",
-  padding: "0 14px",
-  borderRadius: "14px",
-  border: "1px solid var(--x-color-line)",
-  background: "var(--x-color-panel)",
-  color: "var(--x-color-ink)",
-  font: "inherit",
-  boxSizing: "border-box",
-};
 
 const primaryButtonStyle: CSSProperties = {
   minHeight: "46px",

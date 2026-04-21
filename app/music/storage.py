@@ -20,15 +20,45 @@ os.makedirs(ALBUM_IMAGE_DIR, exist_ok=True)
 
 ALLOWED_AUDIO_EXTENSIONS = {
     ".mp3",
+    ".mp4",
     ".wav",
+    ".wave",
     ".wma",
     ".m4a",
+    ".m4b",
     ".aac",
     ".ogg",
     ".oga",
     ".flac",
     ".opus",
     ".webm",
+    ".aif",
+    ".aiff",
+    ".amr",
+    ".3gp",
+    ".3g2",
+}
+
+SUPPORTED_AUDIO_FORMATS_LABEL = "MP3/MP4/WAV/WMA/M4A/M4B/AAC/OGG/FLAC/OPUS/WEBM/AIFF/AMR/3GP"
+
+AUDIO_MIME_OVERRIDES = {
+    ".mp4": "audio/mp4",
+    ".m4a": "audio/mp4",
+    ".m4b": "audio/mp4",
+    ".wav": "audio/wav",
+    ".wave": "audio/wav",
+    ".wma": "audio/x-ms-wma",
+    ".ogg": "audio/ogg",
+    ".oga": "audio/ogg",
+    ".opus": "audio/ogg",
+    ".flac": "audio/flac",
+    ".webm": "audio/webm",
+    ".aac": "audio/aac",
+    ".aif": "audio/aiff",
+    ".aiff": "audio/aiff",
+    ".amr": "audio/amr",
+    ".3gp": "audio/3gpp",
+    ".3g2": "audio/3gpp2",
 }
 
 
@@ -53,16 +83,12 @@ def replace_music_upload(file_storage, old_file_name=None):
 
 
 def detect_audio_mime(ext):
-    if ext == ".wav":
-        return "audio/wav"
-    if ext == ".wma":
-        return "audio/x-ms-wma"
+    if ext in AUDIO_MIME_OVERRIDES:
+        return AUDIO_MIME_OVERRIDES[ext]
 
     mime_type, _ = mimetypes.guess_type(f"track{ext}")
     if mime_type and mime_type.startswith("audio/"):
         return mime_type
-    if ext == ".m4a":
-        return "audio/mp4"
     return "application/octet-stream"
 
 
@@ -75,8 +101,10 @@ def stream_music_file(music):
     if ext == ".wma":
         return _stream_wma_as_mp3(file_path, music)
 
-    mime_type, _ = mimetypes.guess_type(file_path)
-    if mime_type is None:
+    mime_type = detect_audio_mime(ext)
+    if mime_type == "application/octet-stream":
+        mime_type, _ = mimetypes.guess_type(file_path)
+    if not mime_type:
         mime_type = "application/octet-stream"
 
     return send_file(

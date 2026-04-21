@@ -80,16 +80,20 @@ export function MusicPage() {
       },
       openAlbumTracks: (
         albumId: number | null,
-        options?: { replace?: boolean; resetTrackPage?: boolean },
+        options?: { clearSearch?: boolean; replace?: boolean; resetTrackPage?: boolean },
       ) => {
+        const routePatch: Partial<MusicPlayerRouteState> = {
+          screen: "tracks",
+          editorMode: null,
+          albumId,
+          musicId: null,
+          trackPage: options?.resetTrackPage === false ? routeState.trackPage : 1,
+        };
+        if (options?.clearSearch) {
+          routePatch.search = "";
+        }
         updateRouteState(
-          {
-            screen: "tracks",
-            editorMode: null,
-            albumId,
-            musicId: null,
-            trackPage: options?.resetTrackPage === false ? routeState.trackPage : 1,
-          },
+          routePatch,
           options,
         );
       },
@@ -217,7 +221,6 @@ export function MusicPage() {
               currentMusicId={state.currentMusicId}
               editingMusicDetail={state.editingMusicDetail}
               search={state.search}
-              newAlbumName={state.newAlbumName}
               albumDraft={state.albumDraft}
               trackDraft={state.trackDraft}
               toast={state.toast}
@@ -228,11 +231,9 @@ export function MusicPage() {
               uploadingMusic={state.uploadingMusic}
               replacingFile={state.replacingFile}
               canManage={state.canManage}
-              fileInputRef={state.fileInputRef}
               coverInputRef={state.coverInputRef}
               replaceInputRef={state.replaceInputRef}
               onChangeSearch={actions.setSearch}
-              onChangeNewAlbumName={actions.setNewAlbumName}
               onChangeAlbumDraft={actions.setAlbumDraft}
               onChangeTrackDraft={actions.setTrackDraft}
               onCreateAlbum={actions.handleCreateAlbum}

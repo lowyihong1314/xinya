@@ -10,6 +10,11 @@ export type TrackDraft = {
   album_id: string;
 };
 
+export type MusicUploadDraft = {
+  title: string;
+  file: File;
+};
+
 export type PlaylistDraft = {
   name: string;
   description: string;
@@ -22,4 +27,3 @@ export type EditorMode = "album" | "track" | null;
 export const EMPTY_ALBUM_DRAFT: AlbumDraft = { name: "", description: "" };
 export const EMPTY_TRACK_DRAFT: TrackDraft = { title: "", album_id: "" };
 export const EMPTY_PLAYLIST_DRAFT: PlaylistDraft = { name: "", description: "" };
-

@@ -38,6 +38,7 @@ import {
   EMPTY_TRACK_DRAFT,
   type AlbumDraft,
   type EditorMode,
+  type MusicUploadDraft,
   type PlaylistDraft,
   type Toast,
   type TrackDraft,
@@ -54,6 +55,7 @@ type RouteNavigationOptions = {
 };
 
 type TrackRouteNavigationOptions = RouteNavigationOptions & {
+  clearSearch?: boolean;
   resetTrackPage?: boolean;
 };
 
@@ -90,7 +92,6 @@ export function useMusicWorkspace({
   const canManage = hasUserPermission(user, "music_edit");
   const canViewListening = canManage;
 
-  const fileInputRef = useRef<HTMLInputElement | null>(null);
   const coverInputRef = useRef<HTMLInputElement | null>(null);
   const replaceInputRef = useRef<HTMLInputElement | null>(null);
 
@@ -111,7 +112,6 @@ export function useMusicWorkspace({
   const [minuteLogs, setMinuteLogs] = useState<MinuteLogRecord[]>([]);
   const [listeningLoading, setListeningLoading] = useState(false);
   const [listeningTimezone, setListeningTimezone] = useState("Asia/Kuala_Lumpur");
-  const [newAlbumName, setNewAlbumName] = useState("");
   const [albumDraft, setAlbumDraft] = useState<AlbumDraft>(EMPTY_ALBUM_DRAFT);
   const [trackDraft, setTrackDraft] = useState<TrackDraft>(EMPTY_TRACK_DRAFT);
   const {
@@ -451,7 +451,7 @@ export function useMusicWorkspace({
 
   async function openAlbumTracks(albumId: number | null) {
     setEditingMusicDetail(null);
-    routeActions.openAlbumTracks(albumId);
+    routeActions.openAlbumTracks(albumId, { clearSearch: albumId != null });
   }
 
   async function openAlbumEditor(albumId: number) {
@@ -463,7 +463,7 @@ export function useMusicWorkspace({
   }
 
   async function handleCreateAlbum(nameOverride?: string) {
-    const name = (nameOverride ?? newAlbumName).trim();
+    const name = (nameOverride ?? "").trim();
     if (!name) {
       setToast({ type: "error", text: "请输入专辑名称" });
       return;
@@ -472,7 +472,6 @@ export function useMusicWorkspace({
     try {
       const payload = await createAlbum(name);
       const albumId = payload.album?.id || payload.id;
-      setNewAlbumName("");
       setToast({ type: "success", text: "专辑已创建" });
       await refreshWorkspace({ preserveScreen: true });
       if (albumId) {
@@ -542,18 +541,17 @@ export function useMusicWorkspace({
     }
   }
 
-  async function handleUploadMusic(files: FileList | null) {
-    if (!selectedAlbumId || !files?.length) return;
+  async function handleUploadMusic(upload: MusicUploadDraft | null) {
+    if (!selectedAlbumId || !upload) return;
     setUploadingMusicState(true);
     try {
-      await uploadMusic(selectedAlbumId, Array.from(files));
+      await uploadMusic(selectedAlbumId, upload);
       setToast({ type: "success", text: "歌曲已添加" });
       await refreshWorkspace({ preserveScreen: true });
     } catch (error) {
       setToast({ type: "error", text: error instanceof Error ? error.message : "上传歌曲失败" });
     } finally {
       setUploadingMusicState(false);
-      if (fileInputRef.current) fileInputRef.current.value = "";
     }
   }
 
@@ -650,7 +648,6 @@ export function useMusicWorkspace({
       currentMusicId,
       editingMusicDetail,
       search,
-      newAlbumName,
       albumDraft,
       trackDraft,
       playlistDraft,
@@ -670,7 +667,6 @@ export function useMusicWorkspace({
       replacingFile,
       screen,
       editorMode,
-      fileInputRef,
       coverInputRef,
       replaceInputRef,
       albumTrackCountMap,
@@ -679,7 +675,6 @@ export function useMusicWorkspace({
       setSearch: (value: string) => {
         routeActions.setSearch(value, { replace: true });
       },
-      setNewAlbumName,
       setAlbumDraft,
       setTrackDraft,
       setPlaylistDraft,

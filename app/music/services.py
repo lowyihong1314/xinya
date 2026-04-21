@@ -20,6 +20,7 @@ from models.music import (
 from .storage import (
     ALBUM_IMAGE_DIR,
     MUSIC_DIR,
+    SUPPORTED_AUDIO_FORMATS_LABEL,
     allowed_audio_extension,
     delete_music_cache,
     delete_music_file,
@@ -30,18 +31,26 @@ from .storage import (
 )
 
 
-def upload_music(files, album_id, artist_id):
+def upload_music(files, album_id, artist_id, title=None, titles=None):
     if not files:
         return jsonify({"error": "没有选择文件"}), 400
 
+    titles = titles or []
     saved_items = []
-    for file in files:
+    for index, file in enumerate(files):
         if not file or not allowed_audio_extension(file.filename):
             continue
 
+        if index < len(titles):
+            title_override = titles[index]
+        elif len(files) == 1:
+            title_override = title
+        else:
+            title_override = ""
+        music_title = (title_override or "").strip() or file.filename
         file_name, file_path, ext = save_music_upload(file)
         music = Music(
-            title=file.filename,
+            title=music_title,
             album_id=album_id or None,
             artist_id=artist_id or None,
             file_name=file_name,
@@ -52,7 +61,7 @@ def upload_music(files, album_id, artist_id):
         saved_items.append(music)
 
     if not saved_items:
-        return jsonify({"error": "仅支持 MP3/WAV/WMA/M4A/AAC/OGG/FLAC/OPUS/WEBM 音频"}), 400
+        return jsonify({"error": f"仅支持 {SUPPORTED_AUDIO_FORMATS_LABEL} 音频"}), 400
 
     db.session.commit()
     return jsonify(
@@ -182,7 +191,7 @@ def replace_music_file(music_id, file):
     if not file:
         return jsonify({"error": "没有选择文件"}), 400
     if not allowed_audio_extension(file.filename):
-        return jsonify({"error": "仅支持 MP3/WAV/WMA/M4A/AAC/OGG/FLAC/OPUS/WEBM 音频"}), 400
+        return jsonify({"error": f"仅支持 {SUPPORTED_AUDIO_FORMATS_LABEL} 音频"}), 400
 
     try:
         file_name, file_path, ext = replace_music_upload(file, music.file_name)
