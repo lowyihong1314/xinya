@@ -8,6 +8,11 @@ function getLatestEvent(form) {
     : null;
 }
 
+function getPosterUrl() {
+  const ogMeta = document.querySelector('meta[property="og:image"]');
+  return String(ogMeta?.getAttribute("content") || "").trim();
+}
+
 function createSection(title, description = "") {
   const section = document.createElement("section");
   Object.assign(section.style, {
@@ -142,6 +147,8 @@ export function openEventDetailModal(form, options = {}) {
   const registrationClosed = isFormRegistrationClosed(form);
   const startDT = eventData?.datetime ? new Date(eventData.datetime) : null;
   const endDT = eventData?.end_datetime ? new Date(eventData.end_datetime) : null;
+  const posterUrl = getPosterUrl();
+  const hasFlows = Boolean(Array.isArray(eventData?.event_flows) && eventData.event_flows.length);
 
   const overlay = document.createElement("div");
   Object.assign(overlay.style, {
@@ -214,6 +221,45 @@ export function openEventDetailModal(form, options = {}) {
     display: "grid",
     gap: "14px",
   });
+
+  if (posterUrl) {
+    const posterSection = createSection("活动海报");
+    const posterWrap = document.createElement("div");
+    Object.assign(posterWrap.style, {
+      display: "grid",
+      gap: "8px",
+    });
+
+    const posterLink = document.createElement("a");
+    posterLink.href = posterUrl;
+    posterLink.target = "_blank";
+    posterLink.rel = "noreferrer";
+    posterLink.textContent = "新窗口打开海报";
+    Object.assign(posterLink.style, {
+      fontSize: "12px",
+      fontWeight: "800",
+      color: "#4338ca",
+      textDecoration: "none",
+      justifySelf: "start",
+    });
+
+    const posterImage = document.createElement("img");
+    posterImage.src = posterUrl;
+    posterImage.alt = "活动海报";
+    Object.assign(posterImage.style, {
+      width: "100%",
+      maxHeight: "420px",
+      objectFit: "contain",
+      borderRadius: "14px",
+      border: "1px solid rgba(15,23,42,.08)",
+      background: "rgba(255,255,255,.86)",
+      boxShadow: "0 12px 26px rgba(0,0,0,.10)",
+    });
+
+    posterWrap.append(posterLink, posterImage);
+    posterSection.appendChild(posterWrap);
+    body.appendChild(posterSection);
+  }
 
   const overview = createSection("活动资料", "这里展示当前表单关联的活动基本信息。");
   const overviewGrid = createFactGrid();
@@ -290,20 +336,9 @@ export function openEventDetailModal(form, options = {}) {
     justifyContent: "flex-end",
   });
 
-  const backBtn = document.createElement("button");
-  backBtn.type = "button";
-  backBtn.textContent = onBack ? "返回" : "关闭";
-  applyGhostButtonStyle(backBtn);
-  backBtn.onclick = () => {
-    overlay.remove();
-    if (typeof onBack === "function") {
-      onBack();
-    }
-  };
-
   const nextBtn = document.createElement("button");
   nextBtn.type = "button";
-  nextBtn.textContent = "继续查看流程";
+  nextBtn.textContent = hasFlows ? "继续查看流程" : "下一步";
   applyPrimaryButtonStyle(nextBtn);
   nextBtn.onclick = () => {
     if (registrationClosed) {
@@ -331,7 +366,17 @@ export function openEventDetailModal(form, options = {}) {
     color: "rgb(185,28,28)",
   });
 
-  left.appendChild(backBtn);
+  if (typeof onBack === "function") {
+    const backBtn = document.createElement("button");
+    backBtn.type = "button";
+    backBtn.textContent = "返回";
+    applyGhostButtonStyle(backBtn);
+    backBtn.onclick = () => {
+      overlay.remove();
+      onBack();
+    };
+    left.appendChild(backBtn);
+  }
   right.appendChild(registrationClosed ? closedText : nextBtn);
   footer.append(left, right);
 
