@@ -26,10 +26,38 @@ export function openFlowModal(form, options = {}) {
     nextEvent && Array.isArray(nextEvent.event_flows)
       ? nextEvent.event_flows
       : [];
+  const sorted = flows.length
+    ? [...flows].sort((a, b) => (Number(a.no) || 0) - (Number(b.no) || 0))
+    : [];
 
   const startDT = nextEvent?.datetime ? new Date(nextEvent.datetime) : null;
   const endDT = nextEvent?.end_datetime ? new Date(nextEvent.end_datetime) : null;
   let cumulative = 0;
+
+  function proceedToNextStep() {
+    if (hasBrochureFile(nextEvent)) {
+      openBrochurePreviewModal(form, nextEvent, {
+        onBack:
+          typeof onBack === "function"
+            ? onBack
+            : () => openFlowModal(form, options),
+      });
+      return;
+    }
+
+    openNricModal(form, {
+      onBack:
+        typeof onBack === "function"
+          ? onBack
+          : () => openFlowModal(form, options),
+    });
+  }
+
+  if (!sorted.length) {
+    setAvailableTimeSlotJson([]);
+    proceedToNextStep();
+    return;
+  }
 
   const overlay = document.createElement("div");
   Object.assign(overlay.style, {
@@ -103,12 +131,8 @@ export function openFlowModal(form, options = {}) {
       ? "这是活动流程，确认没问题就按「下一步」。"
       : "这个活动还没有设置流程，你可以直接按「下一步」。";
   }
-  body.appendChild(hint);
-
   const slotItems = [];
-  const sorted = flows.length
-    ? [...flows].sort((a, b) => (Number(a.no) || 0) - (Number(b.no) || 0))
-    : [];
+  body.appendChild(hint);
 
   sorted.forEach((f, idx) => {
     const row = document.createElement("div");
@@ -223,24 +247,24 @@ export function openFlowModal(form, options = {}) {
     flexWrap: "wrap",
   });
 
-  // const backBtn = document.createElement("button");
-  // backBtn.type = "button";
-  // backBtn.textContent = "返回";
-  // Object.assign(backBtn.style, {
-  //   border: "1px solid rgba(148,163,184,.28)",
-  //   borderRadius: "12px",
-  //   padding: "10px 14px",
-  //   cursor: "pointer",
-  //   fontWeight: "800",
-  //   background: "#fff",
-  //   color: "#334155",
-  // });
-  // backBtn.onclick = () => {
-  //   overlay.remove();
-  //   if (typeof onBack === "function") {
-  //     onBack();
-  //   }
-  // };
+  const backBtn = document.createElement("button");
+  backBtn.type = "button";
+  backBtn.textContent = "返回";
+  Object.assign(backBtn.style, {
+    border: "1px solid rgba(148,163,184,.28)",
+    borderRadius: "12px",
+    padding: "10px 14px",
+    cursor: "pointer",
+    fontWeight: "800",
+    background: "#fff",
+    color: "#334155",
+  });
+  backBtn.onclick = () => {
+    overlay.remove();
+    if (typeof onBack === "function") {
+      onBack();
+    }
+  };
 
   const nextBtn = document.createElement("button");
   nextBtn.type = "button";
@@ -271,15 +295,7 @@ export function openFlowModal(form, options = {}) {
 
     console.log("available_time_slot_json =", available_time_slot_json);
     overlay.remove();
-    if (hasBrochureFile(nextEvent)) {
-      openBrochurePreviewModal(form, nextEvent, {
-        onBack: () => openFlowModal(form, options),
-      });
-      return;
-    }
-    openNricModal(form, {
-      onBack: () => openFlowModal(form, options),
-    });
+    proceedToNextStep();
   };
 
   const closedText = document.createElement("div");
@@ -294,7 +310,7 @@ export function openFlowModal(form, options = {}) {
     color: "rgb(185,28,28)",
   });
 
-  actionWrap.append(registrationClosed ? closedText : nextBtn);
+  actionWrap.append(backBtn, registrationClosed ? closedText : nextBtn);
   footer.append(dateInfo, actionWrap);
   modal.append(header, body, footer);
   overlay.appendChild(modal);

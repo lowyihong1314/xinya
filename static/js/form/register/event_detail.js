@@ -2,19 +2,6 @@ import { getMaxZIndex } from "../../get_Max_zindex.js";
 import { openFlowModal } from "./flow.js";
 import { fmtDateTime, isFormRegistrationClosed } from "./utils.js";
 
-const BUILTIN_FIELD_LABELS = [
-  ["email", "邮箱"],
-  ["parental_form", "家长同意书"],
-  ["parent_1", "紧急联络人 1"],
-  ["parent_1_phone", "紧急联络人 1 电话"],
-  ["parent_2", "紧急联络人 2"],
-  ["parent_2_phone", "紧急联络人 2 电话"],
-  ["address", "居住地址"],
-  ["medical", "医疗备注"],
-  ["allergy", "过敏资料"],
-  ["other_remark", "其他备注"],
-];
-
 function getLatestEvent(form) {
   return Array.isArray(form?.events) && form.events.length
     ? form.events[form.events.length - 1]
@@ -106,34 +93,6 @@ function createFact(label, value) {
   return card;
 }
 
-function createChipList(items) {
-  const list = document.createElement("div");
-  Object.assign(list.style, {
-    display: "flex",
-    flexWrap: "wrap",
-    gap: "8px",
-  });
-
-  items.forEach((item) => {
-    const chip = document.createElement("span");
-    chip.textContent = item;
-    Object.assign(chip.style, {
-      display: "inline-flex",
-      alignItems: "center",
-      padding: "7px 10px",
-      borderRadius: "999px",
-      background: "rgba(99,102,241,.08)",
-      border: "1px solid rgba(99,102,241,.14)",
-      color: "#4338ca",
-      fontSize: "12px",
-      fontWeight: "800",
-    });
-    list.appendChild(chip);
-  });
-
-  return list;
-}
-
 function createBulletList(items) {
   const list = document.createElement("div");
   Object.assign(list.style, {
@@ -177,33 +136,12 @@ function buildFeeLine(fee) {
   }
   return parts.join(" · ");
 }
-
-function buildFieldSummary(form) {
-  const enabledBuiltin = BUILTIN_FIELD_LABELS.filter(([key]) => Boolean(form?.[key])).map(([, label]) => label);
-  const extraFields = Array.isArray(form?.extra_field_configs)
-    ? form.extra_field_configs
-        .slice()
-        .sort((left, right) => (Number(left?.order) || 0) - (Number(right?.order) || 0))
-        .map((field) => {
-          const label = String(field?.label || "未命名字段").trim();
-          const type = String(field?.field_type || "text").trim();
-          const options = Array.isArray(field?.options) && field.options.length
-            ? `（${field.options.join(" / ")}）`
-            : "";
-          return `${label} [${type}]${options}`;
-        })
-    : [];
-
-  return { enabledBuiltin, extraFields };
-}
-
 export function openEventDetailModal(form, options = {}) {
   const { onBack = null } = options;
   const eventData = getLatestEvent(form);
   const registrationClosed = isFormRegistrationClosed(form);
   const startDT = eventData?.datetime ? new Date(eventData.datetime) : null;
   const endDT = eventData?.end_datetime ? new Date(eventData.end_datetime) : null;
-  const fieldSummary = buildFieldSummary(form);
 
   const overlay = document.createElement("div");
   Object.assign(overlay.style, {
@@ -260,7 +198,7 @@ export function openEventDetailModal(form, options = {}) {
   });
 
   const subtitle = document.createElement("div");
-  subtitle.textContent = "先确认活动资料、地点、说明和报名内容，再继续进入流程与填写。";
+  subtitle.textContent = "先确认活动资料、地点和说明，再继续进入流程与填写。";
   Object.assign(subtitle.style, {
     fontSize: "13px",
     lineHeight: "1.6",
@@ -315,34 +253,6 @@ export function openEventDetailModal(form, options = {}) {
       ),
     );
     body.appendChild(feeSection);
-  }
-
-  if (fieldSummary.enabledBuiltin.length || fieldSummary.extraFields.length) {
-    const fieldSection = createSection("填写内容", "报名人接下来会被要求填写这些资料。");
-    if (fieldSummary.enabledBuiltin.length) {
-      const builtinLabel = document.createElement("div");
-      builtinLabel.textContent = "基础字段";
-      Object.assign(builtinLabel.style, {
-        fontSize: "12px",
-        fontWeight: "900",
-        color: "#64748b",
-      });
-      fieldSection.appendChild(builtinLabel);
-      fieldSection.appendChild(createChipList(fieldSummary.enabledBuiltin));
-    }
-    if (fieldSummary.extraFields.length) {
-      const extraLabel = document.createElement("div");
-      extraLabel.textContent = "附加字段";
-      Object.assign(extraLabel.style, {
-        fontSize: "12px",
-        fontWeight: "900",
-        color: "#64748b",
-        marginTop: fieldSummary.enabledBuiltin.length ? "4px" : "0",
-      });
-      fieldSection.appendChild(extraLabel);
-      fieldSection.appendChild(createBulletList(fieldSummary.extraFields));
-    }
-    body.appendChild(fieldSection);
   }
 
   if (eventData?.brochure_path) {
