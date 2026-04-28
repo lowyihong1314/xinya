@@ -3,13 +3,22 @@ import type { CSSProperties } from "react";
 import { useSearchParams } from "react-router-dom";
 
 import { useUserState } from "../../../app/UserState";
-import { designTokens, useEnsureDesignTokens } from "../../../theme/designTokens";
+import { CRMNavigationTile } from "../../shared/CRMNavigationTile";
+import { useEnsureDesignTokens } from "../../../theme/designTokens";
+import { AssetWorkspace } from "./asset/AssetWorkspace";
 import { ClaimWorkspace } from "./claim/ClaimWorkspace";
 import { IncomeWorkspace } from "./income/IncomeWorkspace";
 import { RegisterWorkspace } from "./register/RegisterWorkspace";
+import { SalesIncomeWorkspace } from "./sales/SalesIncomeWorkspace";
 import { SummarizeExpenseWorkspace } from "./summarize_expense/SummarizeExpenseWorkspace";
 
-type FinanceTabKey = "claim_req" | "income_req" | "register" | "summarize_expense";
+type FinanceTabKey =
+  | "claim_req"
+  | "income_req"
+  | "register"
+  | "summarize_expense"
+  | "asset"
+  | "sales_income";
 
 const FINANCE_TABS: Array<{
   key: FinanceTabKey;
@@ -40,6 +49,18 @@ const FINANCE_TABS: Array<{
     title: "支出分析",
     icon: "fa-solid fa-chart-pie",
     description: "按活动归类支出，没有活动的申请统一归到未关联活动。",
+  },
+  {
+    key: "asset",
+    title: "资产库存",
+    icon: "fa-solid fa-boxes-stacked",
+    description: "仓库、size 库存、库存单据和流动确认。",
+  },
+  {
+    key: "sales_income",
+    title: "销售收入",
+    icon: "fa-solid fa-cash-register",
+    description: "从仓库库存直接销售或退回，并自动联动库存流水。",
   },
 ];
 
@@ -73,24 +94,19 @@ export function FinancePage() {
         {FINANCE_TABS.map((tab) => {
           const active = tab.key === activeTab;
           return (
-            <button
+            <CRMNavigationTile
               key={tab.key}
-              type="button"
               onClick={() => {
                 const nextParams = new URLSearchParams(searchParams);
                 nextParams.set("account_router", tab.key);
                 setSearchParams(nextParams);
               }}
-              style={tabButtonStyle(active, isMobile)}
-            >
-              <span style={tabIconStyle(active)}>
-                <i className={tab.icon} />
-              </span>
-              <span style={tabCopyStyle}>
-                <span style={tabTitleStyle(active)}>{tab.title}</span>
-                <span style={tabDescriptionStyle}>{tab.description}</span>
-              </span>
-            </button>
+              icon={tab.icon}
+              title={tab.title}
+              description={tab.description}
+              active={active}
+              isMobile={isMobile}
+            />
           );
         })}
       </section>
@@ -100,13 +116,12 @@ export function FinancePage() {
         {activeTab === "register" ? <RegisterWorkspace /> : null}
         {activeTab === "income_req" ? <IncomeWorkspace /> : null}
         {activeTab === "summarize_expense" ? <SummarizeExpenseWorkspace /> : null}
+        {activeTab === "asset" ? <AssetWorkspace /> : null}
+        {activeTab === "sales_income" ? <SalesIncomeWorkspace /> : null}
       </section>
     </div>
   );
 }
-
-const colors = designTokens.colors;
-const radius = designTokens.radius;
 
 const pageStyle: CSSProperties = {
   display: "grid",
@@ -116,61 +131,11 @@ const pageStyle: CSSProperties = {
 function tabsStyle(isMobile: boolean): CSSProperties {
   return {
     display: "grid",
-    gridTemplateColumns: isMobile ? "1fr" : "repeat(auto-fit, minmax(260px, 1fr))",
+    gridTemplateColumns: isMobile ? "1fr" : "repeat(auto-fit, minmax(min(100%, 180px), 180px))",
     gap: "14px",
+    justifyContent: "start",
   };
 }
-
-function tabButtonStyle(active: boolean, isMobile: boolean): CSSProperties {
-  return {
-    display: "grid",
-    gridTemplateColumns: isMobile ? "44px minmax(0, 1fr)" : "52px minmax(0, 1fr)",
-    gap: "14px",
-    alignItems: "start",
-    padding: isMobile ? "14px" : "16px",
-    borderRadius: radius.md,
-    border: active ? `1px solid ${colors.accentBorder}` : `1px solid ${colors.lineSoft}`,
-    background: active
-      ? `linear-gradient(145deg, ${colors.accentTint}, ${colors.infoTint})`
-      : colors.panelStrong,
-    cursor: "pointer",
-    textAlign: "left",
-  };
-}
-
-function tabIconStyle(active: boolean): CSSProperties {
-  return {
-    width: "52px",
-    height: "52px",
-    display: "grid",
-    placeItems: "center",
-    borderRadius: radius.md,
-    background: active
-      ? `linear-gradient(135deg, ${colors.accent}, ${colors.info})`
-      : colors.panelAlt,
-    color: active ? colors.panel : colors.ink,
-    fontSize: "18px",
-  };
-}
-
-const tabCopyStyle: CSSProperties = {
-  display: "grid",
-  gap: "6px",
-};
-
-function tabTitleStyle(active: boolean): CSSProperties {
-  return {
-    fontSize: "16px",
-    fontWeight: 700,
-    color: active ? colors.accentStrong : colors.ink,
-  };
-}
-
-const tabDescriptionStyle: CSSProperties = {
-  fontSize: "13px",
-  lineHeight: 1.55,
-  color: colors.inkMuted,
-};
 
 function workspaceStyle(isMobile: boolean): CSSProperties {
   return {

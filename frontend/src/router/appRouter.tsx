@@ -4,6 +4,7 @@ import { LongOpenRegistrationFormPage } from "../CRM/long_open_registration_form
 import { CRMPage } from "../CRM/react/CRMPage";
 import { crmRoute } from "../CRM/react/routes";
 import { LONG_OPEN_REGISTRATION_FORM_PATH } from "../CRM/react/crmModules";
+import { FahuiIntakePage } from "../CRM/fahui/FahuiIntakePage";
 import { HomeAlbumPage } from "../album/react/HomeAlbumPage";
 import { EventDetailPage } from "../album/react/EventDetailPage";
 import { ImageDetailPageRoute } from "../album/react/ImageDetailPage";
@@ -56,6 +57,7 @@ export const appRouter = createHashRouter([
       { path: "profile", element: <Navigate to="/profile/overview" replace /> },
       { path: "profile/:section", element: <ProfilePage /> },
       musicRoute,
+      { path: "ylp-registration", element: <FahuiIntakePage /> },
       { path: "lamp-registration", element: <LampPage /> },
       { path: "event/:eventId", element: <EventDetailPage /> },
       { path: "image/:imageId", element: <ImageDetailPageRoute /> },

@@ -4,6 +4,7 @@ Reusable UI helpers shared across CRM modules.
 
 ## Files
 
+- `CRMNavigationTile.tsx`: shared CRM navigation tile used by home cards, module navigation, and finance sub-tabs. It keeps only icon + title visible and uses the native `title` tooltip for descriptions.
 - `showEventPicker.tsx`: modal event picker that returns the chosen event record through a promise.
 
 ## Event picker behavior

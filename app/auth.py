@@ -15,6 +15,8 @@ permission_names = [
     "account_submit",
     "account_read",
     "account_edit",
+    "asset_read",
+    "asset_edit",
     "member",
     "member_edit",
     "form_read",

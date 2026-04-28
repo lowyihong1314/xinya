@@ -13,6 +13,7 @@ MODEL_MODULES = (
     "models.file_manager_DB",
     "models.music",
     "models.finance",
+    "models.asset",
     "models.lampRegistration",
     "models.fahui",
     "models.songbook",

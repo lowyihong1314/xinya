@@ -5,6 +5,7 @@ CRM dharma-event workspace with YLP/Lamp entry selection, payment review, and YL
 ## Files
 
 - `FahuiPage.tsx`: selection-first dharma-event workspace with page-level detail views for payment review and YLP order lookup.
+- `FahuiIntakePage.tsx`: public-facing YLP intake page for creating a customer order or appending new paiwei items onto an existing order by phone ownership.
 - `api.ts`: unified FAHUI review APIs plus YLP order/detail fetches.
 - `types.ts`: shared FAHUI payment types and YLP order/detail types.
 
@@ -17,6 +18,7 @@ This module now covers:
 - YLP order search by version and keyword
 - page-level detail views with Back navigation instead of modal overlays
 - YLP order detail lookup and quotation download
+- public YLP intake flow that writes directly into `orders`, `order_items`, and `item_form_data`
 
 ## Backend endpoints
 
@@ -25,8 +27,11 @@ This module now covers:
 - `/api/payment/review/:paymentId/revoke`
 - `/api/payment/review/:paymentId`
 - `/api/fahui_router/versions`
+- `/api/fahui_router/orders`
 - `/api/fahui_router/orders/search`
 - `/api/fahui_router/orders/:orderId`
+- `/api/fahui_router/orders/by-phone`
+- `/api/board_router/orders/:orderId/items`
 - `/api/payment/orders/:orderId/payments`
 - `/api/payment/orders/:orderId/quotation`
 

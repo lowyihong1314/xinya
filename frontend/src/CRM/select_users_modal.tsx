@@ -4,7 +4,7 @@ import { openOverlay } from "../app/OverlayProvider";
 import { CachedImage } from "../components/CachedMedia";
 import { apiFetch } from "../js/apiFetch";
 
-type UserRecord = {
+export type UserRecord = {
   id: number;
   username?: string | null;
   display_name?: string | null;
@@ -169,6 +169,144 @@ function SelectUsersDialog({ maxId, onClose }: SelectUsersDialogProps) {
   );
 }
 
+type SelectCounterpartyDialogProps = {
+  title?: string;
+  onClose: (selectedUser: UserRecord | null) => void;
+};
+
+function SelectCounterpartyDialog({
+  title,
+  onClose,
+}: SelectCounterpartyDialogProps) {
+  const [users, setUsers] = useState<UserRecord[]>([]);
+  const [selectedId, setSelectedId] = useState<number | null>(null);
+  const [query, setQuery] = useState("");
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState("");
+
+  useEffect(() => {
+    let active = true;
+
+    void (async () => {
+      setLoading(true);
+      setError("");
+      try {
+        const nextUsers = await fetchUsers();
+        if (!active) {
+          return;
+        }
+        setUsers(nextUsers);
+      } catch (loadError) {
+        if (active) {
+          setError(loadError instanceof Error ? loadError.message : "读取用户失败");
+        }
+      } finally {
+        if (active) {
+          setLoading(false);
+        }
+      }
+    })();
+
+    return () => {
+      active = false;
+    };
+  }, []);
+
+  const filteredUsers = useMemo(() => {
+    const keyword = query.trim().toLowerCase();
+
+    return users.filter((user) => {
+      if (!keyword) {
+        return true;
+      }
+      return [
+        user.display_name,
+        user.username,
+      ]
+        .map((value) => String(value || "").toLowerCase())
+        .some((value) => value.includes(keyword));
+    });
+  }, [query, users]);
+
+  const selectedUser =
+    filteredUsers.find((user) => user.id === selectedId) ||
+    users.find((user) => user.id === selectedId) ||
+    null;
+
+  return (
+    <div style={overlayStyle} onClick={() => onClose(null)}>
+      <div style={modalStyle} onClick={(event) => event.stopPropagation()}>
+        <div style={headerStyle}>
+          <div>
+            <div style={eyebrowStyle}>Counterparty Picker</div>
+            <div style={titleStyle}>{title || "选择往来对象"}</div>
+          </div>
+          <button type="button" style={closeIconStyle} onClick={() => onClose(null)}>
+            关闭
+          </button>
+        </div>
+
+        <input
+          value={query}
+          onChange={(event) => setQuery(event.target.value)}
+          placeholder="搜索姓名 / 用户名"
+          style={searchInputStyle}
+        />
+
+        <div style={metaStyle}>
+          {selectedUser
+            ? `已选 ${selectedUser.display_name || selectedUser.username || ""}`
+            : `可见 ${filteredUsers.length} 个用户`}
+        </div>
+
+        <div style={listStyle}>
+          {loading ? <div style={stateStyle}>加载中…</div> : null}
+          {!loading && error ? <div style={stateStyle}>{error}</div> : null}
+          {!loading && !error && !filteredUsers.length ? <div style={stateStyle}>没有匹配的用户</div> : null}
+
+          {!loading && !error
+            ? filteredUsers.map((user) => {
+                const selected = user.id === selectedId;
+                return (
+                  <button
+                    key={user.id}
+                    type="button"
+                    style={cardStyle(selected)}
+                    onClick={() => setSelectedId(user.id)}
+                  >
+                    <CachedImage
+                      src={`/api/user_control/get_profile_image/${user.id}`}
+                      cacheKey={`select-counterparty-avatar:${user.id}`}
+                      resolveRelativeToApi
+                      alt=""
+                      style={avatarStyle}
+                    />
+                    <div style={nameStyle}>{user.display_name || user.username || ""}</div>
+                    <div style={usernameStyle}>{user.username || "-"}</div>
+                  </button>
+                );
+              })
+            : null}
+        </div>
+
+        <div style={footerStyle}>
+          <button type="button" style={cancelButtonStyle} onClick={() => onClose(null)}>
+            取消
+          </button>
+          <button
+            type="button"
+            style={confirmButtonStyle}
+            disabled={!selectedUser}
+            onClick={() => onClose(selectedUser)}
+          >
+            确定
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 export function select_users_modal(maxId = Infinity) {
   return new Promise<number[]>((resolve) => {
     openOverlay((close) => (
@@ -181,6 +319,28 @@ export function select_users_modal(maxId = Infinity) {
       />
     ));
   });
+}
+
+export function select_counterparty_modal(options?: {
+  title?: string;
+}) {
+  return new Promise<UserRecord | null>((resolve) => {
+    openOverlay((close) => (
+      <SelectCounterpartyDialog
+        title={options?.title}
+        onClose={(selectedUser) => {
+          close();
+          resolve(selectedUser);
+        }}
+      />
+    ));
+  });
+}
+
+export function select_single_user_modal(options?: {
+  title?: string;
+}) {
+  return select_counterparty_modal(options);
 }
 
 const overlayStyle = {

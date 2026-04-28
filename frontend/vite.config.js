@@ -18,21 +18,21 @@ export default defineConfig(({ command, mode }) => {
       proxy: {
         // 例：后端 API 前缀
         "^/api(/|$)": {
-          target: "http://localhost:5015",
+          target: "http://localhost:5102",
           changeOrigin: true,
         },
         "^/static(/|$)": {
-          target: "http://localhost:5015",
+          target: "http://localhost:5102",
           changeOrigin: true,
         },
 
         // 你提到的媒体路由（按你的实际路径二选一或都留着）
         "^/media(/|$)": {
-          target: "http://localhost:5015",
+          target: "http://localhost:5102",
           changeOrigin: true,
         },
         "^/media_file(/|$)": {
-          target: "http://localhost:5015",
+          target: "http://localhost:5102",
           changeOrigin: true,
         },
       },

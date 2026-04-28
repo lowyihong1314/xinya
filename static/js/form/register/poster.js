@@ -1,5 +1,5 @@
 import { getMaxZIndex } from "../../get_Max_zindex.js";
-import { openFlowModal } from "./flow.js";
+import { openEventDetailModal } from "./event_detail.js";
 import { checkImageOk, isFormRegistrationClosed } from "./utils.js";
 
 export async function handleEntry(form) {
@@ -12,7 +12,7 @@ export async function handleEntry(form) {
     return;
   }
 
-  openFlowModal(form);
+  openEventDetailModal(form);
 }
 
 export function openPosterModal(posterUrl, form, options = {}) {
@@ -155,7 +155,7 @@ export function openPosterModal(posterUrl, form, options = {}) {
     }
 
     modal.remove();
-    openFlowModal(form, {
+    openEventDetailModal(form, {
       onBack: () => openPosterModal(posterUrl, form, options),
     });
   };

@@ -156,6 +156,29 @@ export type YlpVersionResponse = {
   data?: string[];
 };
 
+export type YlpOrdersByPhoneResponse = {
+  status?: string;
+  message?: string;
+  error?: string;
+  data?: {
+    phone?: string;
+    items?: YlpOrderSummary[];
+  };
+};
+
+export type YlpOrderCreateResponse = {
+  success?: boolean;
+  message?: string;
+  duplicated?: boolean;
+  order?: YlpOrderSummary | null;
+};
+
+export type YlpOrderItemMutationResponse = {
+  success?: boolean;
+  message?: string;
+  item_id?: number | null;
+};
+
 export type YlpPaymentRecord = {
   id: number;
   order_id?: number | null;

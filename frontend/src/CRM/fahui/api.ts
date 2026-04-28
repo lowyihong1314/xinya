@@ -1,8 +1,11 @@
 import type {
   PaymentActionResponse,
   PaymentListResponse,
+  YlpOrderCreateResponse,
   YlpOrderDetailResponse,
+  YlpOrderItemMutationResponse,
   YlpOrderListResponse,
+  YlpOrdersByPhoneResponse,
   YlpPaymentRecord,
   YlpVersionResponse,
 } from "./types";
@@ -108,6 +111,50 @@ export async function fetchYlpOrderDetail(orderId: number) {
   });
 
   return parseJson<YlpOrderDetailResponse>(response);
+}
+
+export async function fetchYlpOrdersByPhone(phone: string) {
+  const search = new URLSearchParams();
+  search.set("phone", phone);
+
+  const response = await apiFetch(`/api/fahui_router/orders/by-phone?${search.toString()}`, {
+    credentials: "include",
+  });
+
+  return parseJson<YlpOrdersByPhoneResponse>(response);
+}
+
+export async function createYlpOrder(payload: {
+  version: string;
+  name: string;
+  customer_name?: string;
+  member_name?: string;
+  phone: string;
+  email?: string;
+}) {
+  const response = await apiFetch("/api/fahui_router/orders", {
+    method: "POST",
+    credentials: "include",
+    headers: {
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify(payload),
+  });
+
+  return parseJson<YlpOrderCreateResponse>(response);
+}
+
+export async function createYlpOrderItem(orderId: number, payload: Record<string, unknown>) {
+  const response = await apiFetch(`/api/board_router/orders/${orderId}/items`, {
+    method: "POST",
+    credentials: "include",
+    headers: {
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify(payload),
+  });
+
+  return parseJson<YlpOrderItemMutationResponse>(response);
 }
 
 export async function fetchYlpPayments(orderId: number) {

@@ -1,7 +1,8 @@
-import { NavLink, Outlet, useLocation, useNavigate } from "react-router-dom";
+import { Outlet, useLocation, useNavigate } from "react-router-dom";
 import type { CSSProperties } from "react";
 
 import { useUserState } from "../../app/UserState";
+import { CRMNavigationTile } from "../shared/CRMNavigationTile";
 import { useEnsureDesignTokens } from "../../theme/designTokens";
 import {
   CRM_MODULES,
@@ -41,23 +42,18 @@ export function CRMPage() {
     <div style={pageShellStyle}>
       <section style={contentStyle(isMobile)}>
         {!isMobile ? (
-          <nav style={moduleNavStyle(false)}>
+          <nav style={moduleNavStyle}>
             {CRM_MODULES.map((module) => {
               const active = location.pathname === buildCRMModulePath(module.key);
               return (
-                <NavLink
+                <CRMNavigationTile
                   key={module.key}
                   to={buildCRMModuleHref(module.key, searchParams)}
-                  style={moduleButtonStyle(active, false)}
-                >
-                  <span style={moduleIconStyle(active)}>
-                    <i className={module.icon} />
-                  </span>
-                  <span style={moduleButtonCopyStyle}>
-                    <span style={moduleButtonTitleStyle(active)}>{module.title}</span>
-                    <span style={moduleButtonDescriptionStyle(active)}>{module.description}</span>
-                  </span>
-                </NavLink>
+                  icon={module.icon}
+                  title={module.title}
+                  description={module.description}
+                  active={active}
+                />
               );
             })}
           </nav>
@@ -76,7 +72,6 @@ export function CRMPage() {
               </button>
               <div style={mobileHeaderCopyStyle}>
                 <div style={mobileHeaderTitleStyle}>{activeModule.title}</div>
-                <div style={mobileHeaderDescriptionStyle}>{activeModule.description}</div>
               </div>
             </header>
           ) : null}
@@ -106,74 +101,21 @@ const eyebrowStyle: CSSProperties = {
 function contentStyle(isMobile: boolean): CSSProperties {
   return {
     display: "grid",
-    gridTemplateColumns: isMobile ? "1fr" : "minmax(260px, 320px) minmax(0, 1fr)",
+    gridTemplateColumns: isMobile ? "1fr" : "max-content minmax(0, 1fr)",
     gap: "22px",
     alignItems: "start",
   };
 }
 
-function moduleNavStyle(isMobile: boolean): CSSProperties {
-  return {
-    display: "grid",
-    gap: "12px",
-    position: isMobile ? "static" : "sticky",
-    top: isMobile ? undefined : "84px",
-  };
-}
-
-function moduleButtonStyle(active: boolean, isMobile: boolean): CSSProperties {
-  return {
-    display: "grid",
-    gridTemplateColumns: isMobile ? "44px minmax(0, 1fr)" : "56px minmax(0, 1fr)",
-    gap: "14px",
-    alignItems: "start",
-    padding: isMobile ? "14px" : "16px",
-    borderRadius: "var(--x-radius-md)",
-    border: active ? "1px solid var(--x-color-accent-border)" : "1px solid var(--x-color-line-soft)",
-    background: active
-      ? "linear-gradient(145deg, var(--x-color-accent-tint-strong), var(--x-color-info-tint))"
-      : "var(--x-color-panel-strong)",
-    boxShadow: active ? "0 18px 36px var(--x-color-shadow-strong)" : "0 10px 24px var(--x-color-shadow-soft)",
-    cursor: "pointer",
-    textAlign: "left",
-  };
-}
-
-function moduleIconStyle(active: boolean): CSSProperties {
-  return {
-    width: "56px",
-    height: "56px",
-    display: "grid",
-    placeItems: "center",
-    borderRadius: "16px",
-    background: active
-      ? "linear-gradient(135deg, var(--x-color-accent), var(--x-color-info))"
-      : "var(--x-color-panel-alt)",
-    color: active ? "white" : "var(--x-color-ink)",
-    fontSize: "20px",
-  };
-}
-
-const moduleButtonCopyStyle: CSSProperties = {
+const moduleNavStyle: CSSProperties = {
   display: "grid",
-  gap: "6px",
+  gap: "12px",
+  width: "max-content",
+  maxWidth: "100%",
+  justifySelf: "start",
+  position: "sticky",
+  top: "84px",
 };
-
-function moduleButtonTitleStyle(active: boolean): CSSProperties {
-  return {
-    fontSize: "16px",
-    fontWeight: 700,
-    color: active ? "var(--x-color-accent-strong)" : "var(--x-color-ink)",
-  };
-}
-
-function moduleButtonDescriptionStyle(active: boolean): CSSProperties {
-  return {
-    fontSize: "13px",
-    lineHeight: 1.6,
-    color: active ? "var(--x-color-ink)" : "var(--x-color-ink-muted)",
-  };
-}
 
 function workspaceStyle(isMobile: boolean, isMobileHome: boolean): CSSProperties {
   return {
@@ -216,40 +158,6 @@ const mobileHeaderTitleStyle: CSSProperties = {
   fontSize: "22px",
   fontWeight: 800,
   lineHeight: 1.1,
-};
-
-const mobileHeaderDescriptionStyle: CSSProperties = {
-  fontSize: "13px",
-  lineHeight: 1.6,
-  color: "var(--x-color-ink-muted)",
-};
-
-const workspaceHeaderStyle: CSSProperties = {
-  display: "flex",
-  justifyContent: "space-between",
-  gap: "16px",
-  alignItems: "end",
-  paddingBottom: "16px",
-  marginBottom: "20px",
-  borderBottom: "1px solid var(--x-color-line-soft)",
-};
-
-const workspaceEyebrowStyle: CSSProperties = {
-  fontSize: "12px",
-  letterSpacing: "0.14em",
-  textTransform: "uppercase",
-  color: "var(--x-color-ink-muted)",
-};
-
-const workspaceTitleStyle: CSSProperties = {
-  margin: "8px 0 0",
-  fontSize: "28px",
-  lineHeight: 1.1,
-};
-
-const workspaceHintStyle: CSSProperties = {
-  fontSize: "13px",
-  color: "var(--x-color-ink-muted)",
 };
 
 function gateStyle(isMobile: boolean): CSSProperties {
