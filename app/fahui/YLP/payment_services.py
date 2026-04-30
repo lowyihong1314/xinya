@@ -28,7 +28,7 @@ from models.fahui import FahuiOrder, FahuiPayment
 from .receipt import build_receipt_bytes, send_raw_to_printer
 from .services import user_can_view_order
 from .shared import (
-    ACTIVE_ORDER_VERSION,
+    active_order_version,
     item_price_decimal,
     latest_payment,
     order_total_amount,
@@ -98,7 +98,7 @@ def create_payment_record(order_id: int):
     order = FahuiOrder.query.get(order_id)
     if not order:
         return jsonify({"success": False, "message": "订单不存在"}), 404
-    if order.version != ACTIVE_ORDER_VERSION:
+    if order.version != active_order_version():
         return jsonify({"success": False, "message": "订单版本已过期"}), 400
 
     if not current_user.is_authenticated and payment_mode.lower() in {"bank", "qr"}:

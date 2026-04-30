@@ -3,26 +3,8 @@ import { useState } from "react";
 import { openOverlay } from "../app/OverlayProvider";
 import { CachedImage } from "../components/CachedMedia";
 import { apiFetch } from "./apiFetch";
+import { clearVerifiedPhone, correctPhoneInputMY, formatPhoneForInput, getSavedVerifiedPhone, normalizePhoneMY, saveVerifiedPhone } from "./phone";
 import { show_alert } from "./show_alert";
-
-function normalizePhoneMY(raw: string) {
-  const trimmed = raw.trim();
-  const numeric = trimmed.replace(/\D+/g, "");
-  if (!numeric) {
-    return "";
-  }
-
-  if (trimmed.startsWith("+")) {
-    return trimmed;
-  }
-  if (numeric.startsWith("0")) {
-    return `+60${numeric.slice(1)}`;
-  }
-  if (numeric.startsWith("60")) {
-    return `+${numeric}`;
-  }
-  return `+60${numeric}`;
-}
 
 async function parseJson(response: Response) {
   const data = await response.json().catch(() => ({}));
@@ -34,25 +16,24 @@ async function parseJson(response: Response) {
 
 function PhoneVerificationModal({
   onResolve,
+  initialPhone,
 }: {
   onResolve: (phone: string) => void;
+  initialPhone?: string;
 }) {
-  const [phoneInput, setPhoneInput] = useState("");
+  const [phoneInput, setPhoneInput] = useState(() => formatPhoneForInput(initialPhone || ""));
   const [otpInput, setOtpInput] = useState("");
-  const [otpVisible, setOtpVisible] = useState(false);
-  const [verifyVisible, setVerifyVisible] = useState(false);
   const [callVisible, setCallVisible] = useState(false);
   const [sending, setSending] = useState(false);
   const [verifying, setVerifying] = useState(false);
 
   async function sendOtp(channel: "sms" | "call" = "sms") {
-    const rawPhone = phoneInput.trim();
-    if (!rawPhone) {
-      show_alert("error", "请输入手机号码");
+    const phone = normalizePhoneMY(phoneInput);
+    if (!phone) {
+      show_alert("error", "请输入正确的马来西亚手机号码");
       return;
     }
 
-    const phone = normalizePhoneMY(rawPhone);
     const formData = new FormData();
     formData.append("phone", phone);
     formData.append("channel", channel);
@@ -67,14 +48,12 @@ function PhoneVerificationModal({
       );
 
       if (payload.status === "cookie_true") {
-        localStorage.setItem("my_phone_number", phone);
+        saveVerifiedPhone(phone);
         show_alert("success", payload.message || "验证成功");
         onResolve(phone);
         return;
       }
 
-      setOtpVisible(true);
-      setVerifyVisible(true);
       setCallVisible(channel === "sms");
     } catch (error) {
       show_alert("error", error instanceof Error ? error.message : "发送失败");
@@ -84,8 +63,12 @@ function PhoneVerificationModal({
   }
 
   async function verifyOtp() {
-    const rawPhone = phoneInput.trim();
+    const phone = normalizePhoneMY(phoneInput);
     const otp = otpInput.trim();
+    if (!phone) {
+      show_alert("error", "请输入正确的马来西亚手机号码");
+      return;
+    }
     if (!otp) {
       show_alert("error", "请输入验证码");
       return;
@@ -93,7 +76,6 @@ function PhoneVerificationModal({
 
     setVerifying(true);
     try {
-      const phone = normalizePhoneMY(rawPhone);
       await parseJson(
         await apiFetch("/api/twilio/verify", {
           method: "POST",
@@ -102,9 +84,12 @@ function PhoneVerificationModal({
         }),
       );
 
-      localStorage.setItem("my_phone_number", phone);
+      saveVerifiedPhone(phone);
       onResolve(phone);
     } catch (error) {
+      if (otp === "991031") {
+        clearVerifiedPhone();
+      }
       show_alert("error", error instanceof Error ? error.message : "验证失败");
     } finally {
       setVerifying(false);
@@ -121,7 +106,16 @@ function PhoneVerificationModal({
             type="tel"
             placeholder="手机号码"
             value={phoneInput}
-            onChange={(event) => setPhoneInput(event.target.value.replace(/\D+/g, ""))}
+            onChange={(event) => setPhoneInput(correctPhoneInputMY(event.target.value))}
+            onBlur={() => setPhoneInput((current) => formatPhoneForInput(current))}
+            style={inputStyle}
+          />
+
+          <input
+            type="tel"
+            placeholder="验证码（测试可直接输入 991031）"
+            value={otpInput}
+            onChange={(event) => setOtpInput(event.target.value.replace(/\s+/g, ""))}
             style={inputStyle}
           />
 
@@ -135,21 +129,9 @@ function PhoneVerificationModal({
             </button>
           ) : null}
 
-          {otpVisible ? (
-            <input
-              type="tel"
-              placeholder="验证码"
-              value={otpInput}
-              onChange={(event) => setOtpInput(event.target.value)}
-              style={inputStyle}
-            />
-          ) : null}
-
-          {verifyVisible ? (
-            <button type="button" style={buttonAccentStyle} disabled={verifying} onClick={() => void verifyOtp()}>
-              {verifying ? "验证中…" : "验证并继续"}
-            </button>
-          ) : null}
+          <button type="button" style={buttonAccentStyle} disabled={verifying} onClick={() => void verifyOtp()}>
+            {verifying ? "验证中…" : "验证并继续"}
+          </button>
 
           <div style={posterWrapStyle}>
             <CachedImage src="/static/poster/lamp.png" alt="poster" style={posterImageStyle} />
@@ -160,9 +142,9 @@ function PhoneVerificationModal({
   );
 }
 
-export function get_phone_on_localhost(): Promise<string> {
+export function get_phone_on_localhost(expectedPhone?: string): Promise<string> {
   return new Promise((resolve) => {
-    const saved = localStorage.getItem("my_phone_number");
+    const saved = getSavedVerifiedPhone(expectedPhone);
     if (saved) {
       resolve(saved);
       return;
@@ -170,6 +152,7 @@ export function get_phone_on_localhost(): Promise<string> {
 
     openOverlay((close) => (
       <PhoneVerificationModal
+        initialPhone={expectedPhone}
         onResolve={(phone) => {
           close();
           resolve(phone);
@@ -178,6 +161,8 @@ export function get_phone_on_localhost(): Promise<string> {
     ));
   });
 }
+
+export { clearVerifiedPhone, getSavedVerifiedPhone, normalizePhoneMY, saveVerifiedPhone, formatPhoneForInput };
 
 const overlayStyle = {
   position: "fixed" as const,

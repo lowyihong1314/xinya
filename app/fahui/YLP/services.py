@@ -16,7 +16,7 @@ from models.fahui import (
     FahuiPrintPdf,
 )
 from .shared import (
-    ACTIVE_ORDER_VERSION,
+    active_order_version,
     format_created_at,
     format_datetime,
     item_price_int,
@@ -280,7 +280,16 @@ def create_order_shell(data: dict) -> tuple[dict, int]:
     if not name or not phone:
         return {"status": "error", "message": "name and phone are required"}, 400
 
-    version = normalize_version(data.get("version")) or ACTIVE_ORDER_VERSION
+    version = normalize_version(data.get("version")) or active_order_version()
+    member_name = None
+    if current_user and current_user.is_authenticated:
+        member_name = (
+            getattr(current_user, "display_name", None)
+            or getattr(current_user, "username", None)
+            or getattr(current_user, "email", None)
+        )
+    else:
+        member_name = (data.get("member_name") or None)
 
     existing = (
         db.session.query(FahuiOrder)
@@ -303,7 +312,7 @@ def create_order_shell(data: dict) -> tuple[dict, int]:
         email=data.get("email"),
         name=name,
         customer_name=data.get("customer_name"),
-        member_name=data.get("member_name"),
+        member_name=member_name,
         phone=phone,
         version=version,
         status=data.get("status"),

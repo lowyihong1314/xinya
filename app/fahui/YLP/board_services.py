@@ -13,7 +13,7 @@ from .services import (
     serialize_print_pdf,
     user_can_view_order,
 )
-from .shared import ACTIVE_ORDER_VERSION, normalize_version
+from .shared import active_order_version, normalize_version
 from models import db
 from models.fahui import (
     FahuiBoardData,
@@ -330,7 +330,7 @@ def list_versions() -> list[str]:
 
 
 def list_orders_by_version(version: str) -> list[dict]:
-    normalized_version = normalize_version(version) or version or ACTIVE_ORDER_VERSION
+    normalized_version = normalize_version(version) or version or active_order_version()
     orders = (
         FahuiOrder.query.options(
             selectinload(FahuiOrder.items).selectinload(FahuiOrderItem.form_data),
@@ -589,7 +589,7 @@ def delete_order_batch(data: dict) -> tuple[dict, int]:
 
 def clone_order_to_version(data: dict) -> tuple[dict, int]:
     order_id = _coerce_int(data.get("order_id"))
-    new_version = normalize_version(data.get("new_version") or data.get("version")) or ACTIVE_ORDER_VERSION
+    new_version = normalize_version(data.get("new_version") or data.get("version")) or active_order_version()
     if not order_id:
         return {"error": "order_id and new_version are required"}, 400
 

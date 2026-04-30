@@ -125,10 +125,8 @@ export async function fetchYlpOrdersByPhone(phone: string) {
 }
 
 export async function createYlpOrder(payload: {
-  version: string;
   name: string;
   customer_name?: string;
-  member_name?: string;
   phone: string;
   email?: string;
 }) {
@@ -155,6 +153,35 @@ export async function createYlpOrderItem(orderId: number, payload: Record<string
   });
 
   return parseJson<YlpOrderItemMutationResponse>(response);
+}
+
+export async function deleteYlpOrderItem(orderId: number, itemId: number) {
+  const response = await apiFetch(`/api/board_router/orders/${orderId}/items/${itemId}`, {
+    method: "DELETE",
+    credentials: "include",
+  });
+
+  return parseJson<YlpOrderItemMutationResponse>(response);
+}
+
+export async function updateYlpOrderCustomer(
+  orderId: number,
+  payload: {
+    customer_name?: string;
+    email?: string;
+    phone?: string;
+  },
+) {
+  const response = await apiFetch(`/api/board_router/orders/${orderId}/customer`, {
+    method: "POST",
+    credentials: "include",
+    headers: {
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify(payload),
+  });
+
+  return parseJson<{ success?: boolean; message?: string }>(response);
 }
 
 export async function fetchYlpPayments(orderId: number) {

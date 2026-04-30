@@ -7,7 +7,12 @@ from ..common.payment import normalize_fahui_payment_status
 from models.fahui import FahuiOrder, FahuiOrderItem, FahuiPayment
 
 
-ACTIVE_ORDER_VERSION = "2025_YLP"
+def active_order_version(reference: datetime | None = None) -> str:
+    target = reference or datetime.utcnow()
+    return f"{target.year}_YLP"
+
+
+ACTIVE_ORDER_VERSION = active_order_version()
 
 
 def normalize_version(version: object) -> str | None:

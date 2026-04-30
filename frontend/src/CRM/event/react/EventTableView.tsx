@@ -334,7 +334,7 @@ export function EventTableView(props: {
                     <h4 style={sectionTitleStyle}>活动资料</h4>
                   </div>
                   <div style={inlineNoteStyle}>
-                    {canEditEvent ? (props.saving ? "保存中…" : "修改会立即同步到后端") : "当前为只读模式"}
+                    {canEditEvent ? (props.saving ? "自动保存中…" : "修改会自动保存") : "当前为只读模式"}
                   </div>
                 </div>
                 <div style={formGridStyle(isMobile)}>
@@ -342,45 +342,45 @@ export function EventTableView(props: {
                     label="活动名称"
                     value={props.selectedEvent.event_name || ""}
                     readOnly={!canEditEvent}
-                    onCommit={(value) => props.onUpdateEvent({ event_name: value })}
+                    onChange={(value) => props.onUpdateEvent({ event_name: value })}
                   />
                   <Field
                     label="开始时间"
                     value={props.selectedEvent.datetime || ""}
                     readOnly={!canEditEvent}
-                    onCommit={(value) => props.onUpdateEvent({ datetime: value })}
+                    onChange={(value) => props.onUpdateEvent({ datetime: value })}
                     type="datetime-local"
                   />
                   <Field
                     label="结束时间"
                     value={props.selectedEvent.end_datetime || ""}
                     readOnly={!canEditEvent}
-                    onCommit={(value) => props.onUpdateEvent({ end_datetime: value || undefined })}
+                    onChange={(value) => props.onUpdateEvent({ end_datetime: value || undefined })}
                     type="datetime-local"
                   />
                   <Field
                     label="地点"
                     value={props.selectedEvent.location || ""}
                     readOnly={!canEditEvent}
-                    onCommit={(value) => props.onUpdateEvent({ location: value })}
+                    onChange={(value) => props.onUpdateEvent({ location: value })}
                   />
                   <Field
                     label="类型"
                     value={props.selectedEvent.type || ""}
                     readOnly={!canEditEvent}
-                    onCommit={(value) => props.onUpdateEvent({ type: value })}
+                    onChange={(value) => props.onUpdateEvent({ type: value })}
                   />
                   <Field
                     label="对象"
                     value={props.selectedEvent.target || ""}
                     readOnly={!canEditEvent}
-                    onCommit={(value) => props.onUpdateEvent({ target: value })}
+                    onChange={(value) => props.onUpdateEvent({ target: value })}
                   />
                   <Field
                     label="活动说明"
                     value={props.selectedEvent.purpose || ""}
                     readOnly={!canEditEvent}
-                    onCommit={(value) => props.onUpdateEvent({ purpose: value })}
+                    onChange={(value) => props.onUpdateEvent({ purpose: value })}
                     textarea
                     wide
                   />
@@ -678,7 +678,7 @@ function formatEventNavDate(datetime?: string | null) {
 function Field({
   label,
   value,
-  onCommit,
+  onChange,
   type,
   textarea,
   wide,
@@ -687,7 +687,7 @@ function Field({
 }: {
   label: string;
   value: string;
-  onCommit: (value: string) => void;
+  onChange: (value: string) => void;
   type?: string;
   textarea?: boolean;
   wide?: boolean;
@@ -701,12 +701,12 @@ function Field({
         <textarea
           rows={5}
           style={textareaStyle}
-          defaultValue={value}
+          value={value}
           readOnly={readOnly}
           placeholder={placeholder}
-          onBlur={(event) => {
+          onChange={(event) => {
             if (!readOnly) {
-              onCommit(event.target.value);
+              onChange(event.target.value);
             }
           }}
         />
@@ -714,12 +714,12 @@ function Field({
         <input
           type={type}
           style={inputStyle}
-          defaultValue={value}
+          value={value}
           readOnly={readOnly}
           placeholder={placeholder}
-          onBlur={(event) => {
+          onChange={(event) => {
             if (!readOnly) {
-              onCommit(event.target.value);
+              onChange(event.target.value);
             }
           }}
         />

@@ -1,8 +1,9 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useState } from "react";
 import { startTransition } from "react";
 
 import { open_parental_form } from "../../../../../static/js/form/parental/modal.js";
 import { showConfirmDialog } from "../../../js/dialogs";
+import { useDebouncedAutosave } from "../../shared/useDebouncedAutosave";
 import { showEventPicker } from "../../shared/showEventPicker";
 import { showRegisterDetail } from "./showRegisterDetail";
 import {
@@ -28,6 +29,7 @@ import type { ExtraFieldConfig, FormCreatePayload, FormFee, FormFieldSwitches, F
 import { useFormRealtime } from "./useFormRealtime";
 
 type Toast = { type: "success" | "error"; text: string } | null;
+const SUMMARY_SAVE_DEBOUNCE_MS = 600;
 
 function normalizeFieldSwitches(form: FormRecord | null): FormRecord | null {
   if (!form) {
@@ -54,6 +56,17 @@ function normalizeFieldSwitches(form: FormRecord | null): FormRecord | null {
   };
 }
 
+function mergeFormPatch(form: FormRecord, patch: Partial<FormRecord>) {
+  return normalizeFieldSwitches({
+    ...form,
+    ...patch,
+    field_switches: {
+      ...(form.field_switches || {}),
+      ...patch.field_switches,
+    },
+  } as FormRecord) as FormRecord;
+}
+
 export function useFormWorkspace(options?: { enabled?: boolean; canEditMembers?: boolean; preferredFormId?: number | null }) {
   const enabled = options?.enabled ?? true;
   const canEditMembers = options?.canEditMembers ?? true;
@@ -69,8 +82,28 @@ export function useFormWorkspace(options?: { enabled?: boolean; canEditMembers?:
   const [toast, setToast] = useState<Toast>(null);
   const [realtimeEnabled, setRealtimeEnabled] = useState(false);
 
+  const autosave = useDebouncedAutosave<number, Partial<FormRecord>>({
+    debounceMs: SUMMARY_SAVE_DEBOUNCE_MS,
+    mergePatch: (current, next) => ({
+      ...current,
+      ...next,
+      field_switches: {
+        ...(current.field_switches || {}),
+        ...(next.field_switches || {}),
+      },
+    }),
+    persist: async (formId, patch) => {
+      await editForm(formId, patch);
+      setToast({ type: "success", text: "表单信息已更新" });
+    },
+    onError: (error) => {
+      setToast({ type: "error", text: getErrorMessage(error, "更新表单信息失败") });
+    },
+  });
+
   useEffect(() => {
     if (!enabled) {
+      autosave.clearPending();
       setForms([]);
       setSelectedFormId(null);
       setSelectedForm(null);
@@ -104,6 +137,23 @@ export function useFormWorkspace(options?: { enabled?: boolean; canEditMembers?:
     return error instanceof Error ? error.message : fallback;
   }
 
+  function applyLocalFormPatch(formId: number, patch: Partial<FormRecord>) {
+    setSelectedForm((prev) => {
+      if (!prev || prev.id !== formId) {
+        return prev;
+      }
+      return mergeFormPatch(prev, patch);
+    });
+    setForms((prev) =>
+      prev.map((item) => {
+        if (item.id !== formId) {
+          return item;
+        }
+        return mergeFormPatch(item, patch);
+      }),
+    );
+  }
+
   async function loadForms(preferredFormId?: number | null) {
     if (!enabled) {
       setLoading(false);
@@ -112,6 +162,7 @@ export function useFormWorkspace(options?: { enabled?: boolean; canEditMembers?:
 
     setLoading(true);
     try {
+      await autosave.flush();
       const payload = await fetchForms();
       const nextForms = Array.isArray(payload.forms) ? payload.forms : [];
       setForms(nextForms.map((form) => normalizeFieldSwitches(form) as FormRecord));
@@ -137,6 +188,10 @@ export function useFormWorkspace(options?: { enabled?: boolean; canEditMembers?:
   async function openForm(formId: number, existingForms = forms) {
     if (!enabled) {
       return;
+    }
+
+    if (selectedFormId && selectedFormId !== formId) {
+      await autosave.flush();
     }
 
     setSelectedFormId(formId);
@@ -168,6 +223,7 @@ export function useFormWorkspace(options?: { enabled?: boolean; canEditMembers?:
     if (!selectedFormId) {
       return;
     }
+    await autosave.flush();
     await openForm(selectedFormId);
     await loadForms(selectedFormId);
   }
@@ -188,6 +244,7 @@ export function useFormWorkspace(options?: { enabled?: boolean; canEditMembers?:
       return;
     }
     try {
+      autosave.clearPending(formId);
       await removeForm(formId);
       const nextForms = forms.filter((item) => item.id !== formId);
       setForms(nextForms);
@@ -207,38 +264,11 @@ export function useFormWorkspace(options?: { enabled?: boolean; canEditMembers?:
   }
 
   async function patchSelectedForm(patch: Partial<FormRecord>) {
-    if (!selectedFormId || !selectedForm) {
+    if (!selectedFormId) {
       return;
     }
-    try {
-      await editForm(selectedFormId, patch);
-      const nextForm = normalizeFieldSwitches({
-        ...selectedForm,
-        ...patch,
-        field_switches: {
-          ...(selectedForm.field_switches || {}),
-          ...patch.field_switches,
-        },
-      });
-      setSelectedForm(nextForm);
-      setForms((prev) =>
-        prev.map((item) =>
-          item.id === selectedFormId
-            ? (normalizeFieldSwitches({
-                ...item,
-                ...patch,
-                field_switches: {
-                  ...(item.field_switches || {}),
-                  ...patch.field_switches,
-                },
-              }) as FormRecord)
-            : item,
-        ),
-      );
-      setToast({ type: "success", text: "表单信息已更新" });
-    } catch (err) {
-      setToast({ type: "error", text: getErrorMessage(err, "更新表单信息失败") });
-    }
+    applyLocalFormPatch(selectedFormId, patch);
+    autosave.schedule(selectedFormId, patch);
   }
 
   async function handleAddFee(payload: {

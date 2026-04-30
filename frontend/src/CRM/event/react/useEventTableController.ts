@@ -3,6 +3,7 @@ import { startTransition, useEffect, useMemo, useState } from "react";
 import { smartImageURL } from "../../../js/get_img";
 import { showConfirmDialog } from "../../../js/dialogs";
 import { useEventData } from "../../../event/shared/EventDataContext";
+import { useDebouncedAutosave } from "../../shared/useDebouncedAutosave";
 import { select_users_modal } from "../../select_users_modal";
 import { fetchForms } from "../../form/react/api";
 import type { FormRecord } from "../../form/react/types";
@@ -14,6 +15,7 @@ type Toast = { type: "success" | "error"; text: string } | null;
 const PAGE_SIZE = 6;
 const ALL_EVENT_TYPE_FILTER = "__all__";
 const BLANK_EVENT_TYPE_FILTER = "__blank__";
+const EVENT_EDITOR_DEBOUNCE_MS = 600;
 
 export function useEventTableController() {
   const { events, loading, error, refreshEvents } = useEventData();
@@ -29,10 +31,41 @@ export function useEventTableController() {
   const [realtimeEnabled, setRealtimeEnabled] = useState(false);
   const [imageUrl, setImageUrl] = useState<string | null>(null);
   const [forms, setForms] = useState<FormRecord[]>([]);
+  const [eventDrafts, setEventDrafts] = useState<Record<number, EventMutationPayload>>({});
+
+  const mergedEvents = useMemo(
+    () =>
+      events.map((event) =>
+        eventDrafts[event.id]
+          ? {
+              ...event,
+              ...eventDrafts[event.id],
+            }
+          : event,
+      ),
+    [eventDrafts, events],
+  );
+
+  const autosave = useDebouncedAutosave<number, EventMutationPayload>({
+    debounceMs: EVENT_EDITOR_DEBOUNCE_MS,
+    mergePatch: (current, next) => ({
+      ...current,
+      ...next,
+    }),
+    persist: async (eventId, patch) => {
+      await persistEventPatch(eventId, patch);
+      setToast({ type: "success", text: "活动已更新" });
+    },
+    onError: (err) => {
+      setToast({ type: "error", text: err instanceof Error ? err.message : "保存失败" });
+    },
+  });
 
   useEffect(() => {
-    setSelectedEventId((prev) => prev ?? events[0]?.id ?? null);
-  }, [events]);
+    setSelectedEventId((prev) =>
+      prev && mergedEvents.some((event) => event.id === prev) ? prev : mergedEvents[0]?.id ?? null,
+    );
+  }, [mergedEvents]);
 
   useEffect(() => {
     if (!toast) {
@@ -60,26 +93,26 @@ export function useEventTableController() {
   useEventTableRealtime({
     enabled: realtimeEnabled,
     onRefresh: () => {
-      void refreshEvents();
+      void refreshEventRows();
     },
   });
 
   const eventTypeOptions = useMemo(() => {
     const values = Array.from(
       new Set(
-        events
+        mergedEvents
           .map((event) => String(event.type || "").trim())
           .filter(Boolean),
       ),
     ).sort((a, b) => a.localeCompare(b, "zh-Hans-CN"));
 
-    const hasBlank = events.some((event) => !String(event.type || "").trim());
+    const hasBlank = mergedEvents.some((event) => !String(event.type || "").trim());
     return [
       { value: ALL_EVENT_TYPE_FILTER, label: "全部类型" },
       ...(hasBlank ? [{ value: BLANK_EVENT_TYPE_FILTER, label: "未设置类型" }] : []),
       ...values.map((value) => ({ value, label: value })),
     ];
-  }, [events]);
+  }, [mergedEvents]);
 
   useEffect(() => {
     if (eventTypeOptions.some((option) => option.value === selectedType)) {
@@ -90,7 +123,7 @@ export function useEventTableController() {
 
   const filteredEvents = useMemo(() => {
     const keyword = query.trim().toLowerCase();
-    return events.filter((event) => {
+    return mergedEvents.filter((event) => {
       const eventType = String(event.type || "").trim();
       const typeMatched =
         selectedType === ALL_EVENT_TYPE_FILTER
@@ -118,7 +151,7 @@ export function useEventTableController() {
         organizerText.includes(keyword)
       );
     });
-  }, [events, query, selectedType]);
+  }, [mergedEvents, query, selectedType]);
 
   const totalPages = useMemo(
     () => Math.max(1, Math.ceil(filteredEvents.length / PAGE_SIZE)),
@@ -139,8 +172,8 @@ export function useEventTableController() {
   }, [totalPages]);
 
   const selectedEvent = useMemo(
-    () => events.find((event) => event.id === selectedEventId) ?? null,
-    [events, selectedEventId],
+    () => mergedEvents.find((event) => event.id === selectedEventId) ?? null,
+    [mergedEvents, selectedEventId],
   );
   const selectedEventForm = useMemo(() => {
     if (!selectedEvent) {
@@ -178,26 +211,75 @@ export function useEventTableController() {
     }
   }
 
-  async function updateEvent(patch: EventMutationPayload) {
-    if (!selectedEventId) {
-      return;
-    }
+  function applyLocalEventPatch(eventId: number, patch: EventMutationPayload) {
+    setEventDrafts((prev) => ({
+      ...prev,
+      [eventId]: {
+        ...(prev[eventId] || {}),
+        ...patch,
+      },
+    }));
+  }
 
+  function clearLocalEventPatch(eventId?: number) {
+    setEventDrafts((prev) => {
+      if (eventId === undefined) {
+        return Object.keys(prev).length ? {} : prev;
+      }
+      if (!(eventId in prev)) {
+        return prev;
+      }
+      const next = { ...prev };
+      delete next[eventId];
+      return next;
+    });
+  }
+
+  async function persistEventPatch(eventId: number, patch: EventMutationPayload) {
     setSaving(true);
     try {
-      const payload = await saveEvent({
-        event_id: selectedEventId,
+      await saveEvent({
+        event_id: eventId,
         ...patch,
       });
-      if (payload.data) {
-        await refreshEvents();
-      }
-      setToast({ type: "success", text: "活动已更新" });
-    } catch (err) {
-      setToast({ type: "error", text: err instanceof Error ? err.message : "保存失败" });
+      await refreshEvents();
+      clearLocalEventPatch(eventId);
     } finally {
       setSaving(false);
     }
+  }
+
+  async function flushPendingEventChanges() {
+    await autosave.flush();
+  }
+
+  async function refreshEventRows() {
+    const hadPendingChanges = autosave.hasPending();
+    await flushPendingEventChanges();
+    if (!hadPendingChanges) {
+      await refreshEvents();
+    }
+  }
+
+  async function loadEvents() {
+    const hadPendingChanges = autosave.hasPending();
+    await flushPendingEventChanges();
+    await Promise.all([hadPendingChanges ? Promise.resolve() : refreshEvents(), loadLinkedForms()]);
+  }
+
+  async function selectEvent(eventId: number) {
+    if (selectedEventId && selectedEventId !== eventId) {
+      await flushPendingEventChanges();
+    }
+    setSelectedEventId(eventId);
+  }
+
+  function updateEvent(patch: EventMutationPayload) {
+    if (!selectedEventId) {
+      return;
+    }
+    applyLocalEventPatch(selectedEventId, patch);
+    autosave.schedule(selectedEventId, patch);
   }
 
   async function addOrganizers() {
@@ -208,10 +290,17 @@ export function useEventTableController() {
     if (!selectedIds?.length) {
       return;
     }
-    await updateEvent({ organizers: selectedEvent.organizers, organizers_ids: selectedIds });
+    await flushPendingEventChanges();
+    try {
+      await persistEventPatch(selectedEvent.id, { organizers: selectedEvent.organizers, organizers_ids: selectedIds });
+      setToast({ type: "success", text: "活动已更新" });
+    } catch (err) {
+      setToast({ type: "error", text: err instanceof Error ? err.message : "保存失败" });
+    }
   }
 
   async function createNewEvent(payload: EventCreatePayload) {
+    await flushPendingEventChanges();
     setCreating(true);
     try {
       const response = await createEvent(payload);
@@ -243,7 +332,9 @@ export function useEventTableController() {
     }
 
     try {
+      await flushPendingEventChanges();
       await deleteEvent(selectedEvent.id);
+      clearLocalEventPatch(selectedEvent.id);
       setSelectedEventId(null);
       await refreshEvents();
       setToast({ type: "success", text: "活动已删除" });
@@ -256,6 +347,7 @@ export function useEventTableController() {
     if (!selectedEventId) {
       return;
     }
+    await flushPendingEventChanges();
     setUploadingBrochure(true);
     try {
       await uploadEventBrochure(selectedEventId, file);
@@ -272,6 +364,7 @@ export function useEventTableController() {
     if (!selectedEventId) {
       return;
     }
+    await flushPendingEventChanges();
     setUploadingBrochure(true);
     try {
       await saveEvent({
@@ -291,6 +384,7 @@ export function useEventTableController() {
     if (!selectedEventId) {
       return;
     }
+    await flushPendingEventChanges();
     setUploadingEventFile(true);
     try {
       await uploadEventFile(selectedEventId, file);
@@ -307,6 +401,7 @@ export function useEventTableController() {
     if (!selectedEventId) {
       return;
     }
+    await flushPendingEventChanges();
     try {
       await deleteEventFile(fileId);
       await refreshEvents();
@@ -324,7 +419,7 @@ export function useEventTableController() {
 
   return {
     state: {
-      events,
+      events: mergedEvents,
       filteredEvents,
       pagedEvents,
       selectedEvent,
@@ -348,10 +443,8 @@ export function useEventTableController() {
       setQuery,
       setSelectedType,
       setPage,
-      setSelectedEventId,
-      loadEvents: async () => {
-        await Promise.all([refreshEvents(), loadLinkedForms()]);
-      },
+      setSelectedEventId: selectEvent,
+      loadEvents,
       updateEvent,
       createNewEvent,
       removeSelectedEvent,

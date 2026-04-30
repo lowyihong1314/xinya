@@ -729,6 +729,10 @@ export function FahuiPage() {
     }
   }
 
+  function openYlpIntakePage() {
+    window.open("/#/ylp-registration", "_blank", "noopener,noreferrer");
+  }
+
   function renderSelectionView() {
     return (
       <>
@@ -738,6 +742,11 @@ export function FahuiPage() {
           <p style={styles.subtitle}>
             先选 YLP 或 Lamp，再进入对应流程。列表点击后直接进页面，不再用详情弹窗把内容包起来。
           </p>
+          <div style={styles.heroActions}>
+            <button type="button" style={styles.heroActionButton} onClick={openYlpIntakePage}>
+              打开牌位填写页
+            </button>
+          </div>
         </section>
 
         <section style={styles.choiceGrid(isMobile)}>
@@ -787,6 +796,13 @@ export function FahuiPage() {
             <p style={styles.workspaceEyebrow}>{getWorkspaceEyebrow(currentWorkspace)}</p>
             <h2 style={styles.workspaceTitle}>{title}</h2>
             <p style={styles.workspaceDescription}>{description}</p>
+            {currentWorkspace === "ylp" ? (
+              <div style={styles.workspaceActions}>
+                <button type="button" style={styles.secondaryActionCompact} onClick={openYlpIntakePage}>
+                  打开牌位填写页
+                </button>
+              </div>
+            ) : null}
           </section>
         </header>
 
@@ -1307,6 +1323,22 @@ const styles = {
     fontSize: "14px",
     color: "rgba(255,255,255,0.88)",
   },
+  heroActions: {
+    display: "flex",
+    flexWrap: "wrap" as const,
+    gap: "10px",
+    marginTop: "4px",
+  },
+  heroActionButton: {
+    padding: "12px 16px",
+    borderRadius: "14px",
+    border: "1px solid rgba(255,255,255,0.28)",
+    background: "rgba(255,255,255,0.18)",
+    color: "white",
+    fontWeight: 800,
+    cursor: "pointer",
+    backdropFilter: "blur(10px)",
+  },
   choiceGrid: (isMobile: boolean) => ({
     display: "grid",
     gridTemplateColumns: isMobile ? "1fr" : "repeat(2,minmax(0,1fr))",
@@ -1375,6 +1407,12 @@ const styles = {
   workspaceCopy: {
     display: "grid",
     gap: "6px",
+  },
+  workspaceActions: {
+    display: "flex",
+    flexWrap: "wrap" as const,
+    gap: "10px",
+    marginTop: "2px",
   },
   workspaceEyebrow: {
     margin: 0,
