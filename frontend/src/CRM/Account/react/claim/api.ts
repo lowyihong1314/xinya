@@ -3,6 +3,7 @@ import type {
   ClaimListResponse,
   PaymentVoucherPublicPayload,
   PaymentVoucherSharePayload,
+  ReadBillUploadResponse,
 } from "./types";
 import { apiFetch } from "../../../../js/apiFetch";
 
@@ -28,6 +29,18 @@ export async function submitClaim(formData: FormData) {
     credentials: "include",
   });
   return parseJson<{ request_id?: number }>(response);
+}
+
+export async function readClaimBill(file: File, model = "byteplus") {
+  const formData = new FormData();
+  formData.append("file", file);
+  formData.append("model", model);
+  const response = await apiFetch("/api/account/claim/read_bill", {
+    method: "POST",
+    body: formData,
+    credentials: "include",
+  });
+  return parseJson<ReadBillUploadResponse>(response);
 }
 
 export async function decideClaim(

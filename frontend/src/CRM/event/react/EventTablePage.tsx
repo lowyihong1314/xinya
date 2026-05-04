@@ -29,6 +29,7 @@ export function EventTablePage() {
       loading={state.loading}
       saving={state.saving}
       creating={state.creating}
+      posterUploading={state.uploadingPoster}
       brochureUploading={state.uploadingBrochure}
       attachmentUploading={state.uploadingEventFile}
       toast={state.toast}
@@ -45,6 +46,7 @@ export function EventTablePage() {
       onAddOrganizers={() => void actions.addOrganizers()}
       onCreateEvent={(payload) => actions.createNewEvent(payload)}
       onUpdateEvent={(patch) => void actions.updateEvent(patch)}
+      onUploadPoster={(file) => void actions.uploadPoster(file)}
       onUploadBrochure={(file) => void actions.uploadBrochure(file)}
       onRemoveBrochure={() => void actions.removeBrochure()}
       onUploadAttachment={(file) => void actions.uploadAttachment(file)}

@@ -60,16 +60,16 @@ export const CRM_MODULES: CRMModuleSpec[] = [
   },
   {
     key: 'register',
-    title: '创建报名表格',
+    title: '特别活动表格',
     icon: 'fas fa-clipboard-list',
-    description: '表单报名、注册与记录查询。',
+    description: '特别活动报名、注册与记录查询。',
     Component: FormWorkspacePage,
   },
   {
     key: 'permanent_registration',
-    title: '长期开放表格',
+    title: '长期活动表格',
     icon: 'fas fa-id-card-clip',
-    description: '会员与青少年班等长期开放报名表格工作台。',
+    description: '会员与青少年班等长期活动报名表格工作台。',
     Component: LongOpenRegistrationFormPage,
   },
   {

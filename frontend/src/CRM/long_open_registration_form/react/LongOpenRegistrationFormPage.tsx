@@ -34,8 +34,8 @@ export function LongOpenRegistrationFormPage() {
   return (
     <div style={pageStyle(isMobile)}>
       <section style={heroStyle(isMobile)}>
-        <div style={eyebrowStyle}>CRM / 长期开放表格</div>
-        <h1 style={titleStyle(isMobile)}>长期开放表格</h1>
+        <div style={eyebrowStyle}>CRM / 长期活动表格</div>
+        <h1 style={titleStyle(isMobile)}>长期活动表格</h1>
         <p style={descStyle(isMobile)}>
           把持续开放的报名入口集中在一起管理。公开入口现在只有一个，系统会按年龄把 13-17 岁分到青少年佛学班，把 18 岁以上分到会员报名。
         </p>

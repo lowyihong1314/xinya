@@ -17,6 +17,7 @@ from app.account.services import (
     get_payment_voucher_share_data,
     get_public_payment_voucher_data,
     list_claims_for_user,
+    read_bill_from_file,
     record_claim_decision,
     submit_public_payment_voucher_signature,
     update_claim_event,
@@ -72,6 +73,18 @@ def get_all_claim():
         )
     except AccountError as exc:
         return _error_response(exc)
+
+
+@account_bp.post("/claim/read_bill")
+def read_claim_bill():
+    try:
+        require_claim_submit_permission()
+        payload = read_bill_from_file(request.files.get("file"), request.form.get("model"))
+        return jsonify({"status": "success", **payload}), 200
+    except AccountError as exc:
+        return _error_response(exc)
+    except Exception as exc:
+        return jsonify({"status": "error", "message": str(exc)}), 500
 
 
 @account_bp.post("/claim_decision/<int:request_id>")

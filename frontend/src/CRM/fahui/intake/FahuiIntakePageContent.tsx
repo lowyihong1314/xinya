@@ -36,6 +36,7 @@ import {
 } from "./paiwei";
 
 type IntakeStep = "order" | "history" | "items";
+type ItemFlowStep = "order_info" | "drafts" | "saved" | "confirm";
 
 type OrderHistoryEntry = {
   summary: YlpOrderSummary;
@@ -176,9 +177,10 @@ export function FahuiIntakePage() {
 
   const { isAuthenticated, isMobile } = useUserState();
   const [currentStep, setCurrentStep] = useState<IntakeStep>("order");
+  const [itemFlowStep, setItemFlowStep] = useState<ItemFlowStep>("order_info");
   const [orderForm, setOrderForm] = useState<OrderFormState>(() => emptyOrderForm());
-  const [drafts, setDrafts] = useState<PaiweiDraft[]>(() => [createDraft()]);
-  const [currentDraftIndex, setCurrentDraftIndex] = useState(0);
+  const [drafts, setDrafts] = useState<PaiweiDraft[]>(() => []);
+  const [currentDraftIndex, setCurrentDraftIndex] = useState<number | null>(null);
   const [historyEntries, setHistoryEntries] = useState<OrderHistoryEntry[]>([]);
   const [activeOrderId, setActiveOrderId] = useState<number | null>(null);
   const [loadedSourceOrderId, setLoadedSourceOrderId] = useState<number | null>(null);
@@ -226,7 +228,15 @@ export function FahuiIntakePage() {
   }, []);
 
   useEffect(() => {
-    setCurrentDraftIndex((current) => Math.min(current, Math.max(0, drafts.length - 1)));
+    setCurrentDraftIndex((current) => {
+      if (!drafts.length) {
+        return null;
+      }
+      if (current == null) {
+        return null;
+      }
+      return Math.min(current, Math.max(0, drafts.length - 1));
+    });
   }, [drafts.length]);
 
   async function ensurePhoneAccess(rawPhone: string) {
@@ -261,9 +271,17 @@ export function FahuiIntakePage() {
     return text;
   }
 
-  function validateOrderFormState(form: OrderFormState) {
+  function validatePhoneOnly(form: OrderFormState) {
     if (!normalizePhoneMY(form.phone)) {
       return "请填写正确的马来西亚手机号码";
+    }
+    return null;
+  }
+
+  function validateOrderFormState(form: OrderFormState) {
+    const phoneValidationError = validatePhoneOnly(form);
+    if (phoneValidationError) {
+      return phoneValidationError;
     }
     if (!form.customerName.trim()) {
       return "请填写功德主姓名";
@@ -300,7 +318,7 @@ export function FahuiIntakePage() {
     setError("");
     setMessage("");
 
-    const validationError = validateOrderFormState(orderForm);
+    const validationError = validatePhoneOnly(orderForm);
     if (validationError) {
       setError(validationError);
       return;
@@ -314,17 +332,19 @@ export function FahuiIntakePage() {
       setOrderForm((current) => ({
         ...current,
         phone: formatPhoneForInput(verifiedPhone),
-        contactName: current.contactName.trim() || current.customerName.trim(),
       }));
       setHistoryEntries(nextEntries);
 
       if (nextEntries.length) {
         setCurrentStep("history");
       } else {
+        setDrafts([]);
+        setCurrentDraftIndex(null);
         setActiveOrderId(null);
         setLoadedSourceOrderId(null);
         setLoadedSourceVersion(null);
         setEditorNotice("没有查到历史资料，直接开始填写今年的牌位内容。");
+        setItemFlowStep("order_info");
         setCurrentStep("items");
       }
       scrollPageTop();
@@ -366,26 +386,35 @@ export function FahuiIntakePage() {
   }
 
   function addDraft(code: PaiweiCode) {
-    setDrafts((current) => [...current, createDraft(code)]);
-    setCurrentDraftIndex(drafts.length);
+    setDrafts((current) => {
+      const next = [...current, createDraft(code)];
+      setCurrentDraftIndex(next.length - 1);
+      return next;
+    });
   }
 
   function removeDraft(index: number) {
     setDrafts((current) => {
       if (current.length <= 1) {
-        return [createDraft()];
+        setCurrentDraftIndex(null);
+        return [];
       }
-      return current.filter((_, currentIndex) => currentIndex !== index);
+      const next = current.filter((_, currentIndex) => currentIndex !== index);
+      setCurrentDraftIndex((currentIndex) => {
+        if (currentIndex == null) {
+          return null;
+        }
+        if (currentIndex > index) {
+          return currentIndex - 1;
+        }
+        return Math.min(currentIndex, next.length - 1);
+      });
+      return next;
     });
-    setCurrentDraftIndex((current) => {
-      if (drafts.length <= 1) {
-        return 0;
-      }
-      if (current > index) {
-        return current - 1;
-      }
-      return Math.min(current, drafts.length - 2);
-    });
+  }
+
+  function closeDraftEditor() {
+    setCurrentDraftIndex(null);
   }
 
   async function openEntryForEditing(entry: OrderHistoryEntry, source: "current" | "legacy") {
@@ -398,7 +427,7 @@ export function FahuiIntakePage() {
       const nextDrafts = draftsFromOrderDetail(detail);
 
       setDrafts(nextDrafts);
-      setCurrentDraftIndex(0);
+      setCurrentDraftIndex(nextDrafts.length ? 0 : null);
       setLoadedSourceOrderId(detail?.id || entry.summary.id);
       setLoadedSourceVersion(detail?.version || entry.summary.version || null);
       setOrderForm((current) => ({
@@ -421,6 +450,7 @@ export function FahuiIntakePage() {
         );
       }
 
+      setItemFlowStep("order_info");
       setCurrentStep("items");
       scrollPageTop();
     } catch (nextError) {
@@ -433,13 +463,53 @@ export function FahuiIntakePage() {
   function startFreshCurrentYear() {
     setError("");
     setMessage("");
-    setDrafts([createDraft()]);
-    setCurrentDraftIndex(0);
+    setDrafts([]);
+    setCurrentDraftIndex(null);
     setLoadedSourceOrderId(null);
     setLoadedSourceVersion(null);
     setActiveOrderId(null);
     setEditorNotice(`正在填写 ${currentYearLabel} 年的新牌位资料。`);
+    setItemFlowStep("order_info");
     setCurrentStep("items");
+    scrollPageTop();
+  }
+
+  function handleContinueToItemDrafts() {
+    setError("");
+    const orderValidationError = validateOrderFormState(orderForm);
+    if (orderValidationError) {
+      setError(orderValidationError);
+      return;
+    }
+    setItemFlowStep("drafts");
+    scrollPageTop();
+  }
+
+  function handleContinueToItemConfirm() {
+    setError("");
+
+    if (!drafts.length) {
+      setError("请先添加至少一项牌位");
+      return;
+    }
+
+    for (const draft of drafts) {
+      const validationError = validateDraft(draft);
+      if (validationError) {
+        setError(validationError);
+        setCurrentDraftIndex(drafts.findIndex((item) => item.id === draft.id));
+        return;
+      }
+    }
+
+    setCurrentDraftIndex(null);
+    setItemFlowStep("saved");
+    scrollPageTop();
+  }
+
+  function handleContinueToSubmitConfirm() {
+    setError("");
+    setItemFlowStep("confirm");
     scrollPageTop();
   }
 
@@ -450,9 +520,15 @@ export function FahuiIntakePage() {
 
     const orderValidationError = validateOrderFormState(orderForm);
     if (orderValidationError) {
-      setCurrentStep("order");
+      setCurrentStep("items");
+      setItemFlowStep("order_info");
       setError(orderValidationError);
       scrollPageTop();
+      return;
+    }
+
+    if (!drafts.length) {
+      setError("请先添加至少一项牌位");
       return;
     }
 
@@ -460,7 +536,9 @@ export function FahuiIntakePage() {
       const validationError = validateDraft(draft);
       if (validationError) {
         setError(validationError);
+        setItemFlowStep("drafts");
         setCurrentDraftIndex(drafts.findIndex((item) => item.id === draft.id));
+        scrollPageTop();
         return;
       }
     }
@@ -523,8 +601,8 @@ export function FahuiIntakePage() {
         ...current,
         phone: formatPhoneForInput(verifiedPhone),
       }));
-      setDrafts([createDraft()]);
-      setCurrentDraftIndex(0);
+      setDrafts([]);
+      setCurrentDraftIndex(null);
       setActiveOrderId(orderId);
       setLoadedSourceOrderId(orderId);
       setLoadedSourceVersion(DEFAULT_VERSION);
@@ -592,11 +670,11 @@ export function FahuiIntakePage() {
                 <div style={sectionHeaderStyle}>
                   <div>
                     <div style={sectionTitleStyle}>订单资料</div>
-                    <div style={sectionCopyStyle}>先填写联络资料。下一步会先查这个手机号过去的牌位资料。</div>
+                    <div style={sectionCopyStyle}>先填写手机号码。系统会优先读取这个手机号过去的牌位资料。</div>
                   </div>
                 </div>
 
-                <div style={fieldGridStyle(isMobile)}>
+                <div style={singleFieldRowStyle}>
                   <label style={fieldStyle}>
                     <span style={labelStyle}>手机号码</span>
                     <input
@@ -611,41 +689,13 @@ export function FahuiIntakePage() {
                       }
                     />
                   </label>
-
-                  <label style={fieldStyle}>
-                    <span style={labelStyle}>功德主姓名</span>
-                    <input
-                      style={inputStyle}
-                      value={orderForm.customerName}
-                      placeholder="请填写功德主姓名"
-                      onChange={(event) => setOrderForm((current) => ({ ...current, customerName: event.target.value }))}
-                    />
-                  </label>
-
-                  <label style={fieldStyle}>
-                    <span style={labelStyle}>联络人姓名</span>
-                    <input
-                      style={inputStyle}
-                      value={orderForm.contactName}
-                      placeholder="不填写时会自动沿用功德主姓名"
-                      onChange={(event) => setOrderForm((current) => ({ ...current, contactName: event.target.value }))}
-                    />
-                  </label>
-
-                  <label style={fieldStyle}>
-                    <span style={labelStyle}>电子邮箱（选填）</span>
-                    <input
-                      style={inputStyle}
-                      value={orderForm.email}
-                      placeholder="可不填写"
-                      onChange={(event) => setOrderForm((current) => ({ ...current, email: event.target.value }))}
-                    />
-                  </label>
                 </div>
 
                 <div style={actionRowStyle(isMobile)}>
                   <div style={actionNoteStyle}>
-                    {isAuthenticated ? "已登录，会直接用当前身份进入下一步。" : "未登录时，下一步会先做手机验证。"}
+                    {isAuthenticated
+                      ? "已登录会直接读取这个手机号的资料。"
+                      : "未登录时，下一步会先验证这个手机号。"}
                   </div>
                   <button type="submit" style={primaryButtonStyle} disabled={advancing || historyLoading}>
                     {advancing || historyLoading ? "处理中…" : "下一步"}
@@ -842,14 +892,15 @@ export function FahuiIntakePage() {
               <section style={sectionCardStyle}>
                 <div style={sectionHeaderStyle}>
                   <div>
-                    <div style={sectionTitleStyle}>订单资料已完成</div>
-                    <div style={sectionCopyStyle}>如需修改订单资料，可先返回上一步。</div>
+                    <div style={sectionTitleStyle}>填写步骤</div>
+                    <div style={sectionCopyStyle}>依序完成今年订单资料、牌位内容，最后再做提交确认。</div>
                   </div>
                   <button
                     type="button"
                     style={secondaryButtonStyle}
                     onClick={() => {
                       setCurrentStep(historyEntries.length ? "history" : "order");
+                      setItemFlowStep("order_info");
                       scrollPageTop();
                     }}
                   >
@@ -857,13 +908,11 @@ export function FahuiIntakePage() {
                   </button>
                 </div>
 
-                <div style={detailGridStyle(isMobile)}>
-                  {orderSummary.map((item) => (
-                    <article key={item.label} style={detailCardStyle}>
-                      <div style={detailLabelStyle}>{item.label}</div>
-                      <div style={detailValueStyle}>{item.value}</div>
-                    </article>
-                  ))}
+                <div style={itemFlowRowStyle}>
+                  <span style={itemFlowPillStyle(itemFlowStep === "order_info")}>1. 今年订单资料</span>
+                  <span style={itemFlowPillStyle(itemFlowStep === "drafts")}>2. 牌位内容</span>
+                  <span style={itemFlowPillStyle(itemFlowStep === "saved")}>3. 已添加牌位</span>
+                  <span style={itemFlowPillStyle(itemFlowStep === "confirm")}>4. 提交确认</span>
                 </div>
 
                 {editorNotice ? <div style={infoBannerStyle}>{editorNotice}</div> : null}
@@ -876,49 +925,187 @@ export function FahuiIntakePage() {
                 ) : null}
               </section>
 
-              <PaiweiDraftEditor
-                isMobile={isMobile}
-                drafts={drafts}
-                currentIndex={currentDraftIndex}
-                totalAmount={totalAmount}
-                onSelectIndex={setCurrentDraftIndex}
-                onAddDraft={addDraft}
-                onRemoveDraft={removeDraft}
-                onUpdateDraft={updateDraft}
-                onChangeDraftCode={handleChangeDraftCode}
-              />
-
-              <section style={sectionCardStyle}>
-                <div style={sectionHeaderStyle}>
-                  <div>
-                    <div style={sectionTitleStyle}>提交确认</div>
-                    <div style={sectionCopyStyle}>请确认项目数量与金额无误后再提交。</div>
+              {itemFlowStep === "order_info" ? (
+                <section style={sectionCardStyle}>
+                  <div style={sectionHeaderStyle}>
+                    <div>
+                      <div style={sectionTitleStyle}>今年订单资料</div>
+                      <div style={sectionCopyStyle}>先补上今年这张订单的基本资料，再进入牌位填写。</div>
+                    </div>
                   </div>
-                  <div style={summaryPillStyle}>{`${drafts.length} 项 · RM ${totalAmount.toFixed(2)}`}</div>
-                </div>
 
-                <div style={reviewListStyle}>
-                  {drafts.map((draft, index) => {
-                    const template = getTemplate(draft.code);
-                    return (
-                      <button key={draft.id} type="button" style={reviewCardStyle} onClick={() => setCurrentDraftIndex(index)}>
-                        <div style={reviewTitleStyle}>
-                          <span>{`第 ${index + 1} 项 · ${template.title}`}</span>
-                          <span>{`RM ${getDraftTotalPrice(draft).toFixed(2)}`}</span>
-                        </div>
-                        <div style={reviewMetaStyle}>{summarizeDraft(draft) || "点击查看并继续填写这项内容"}</div>
+                  <div style={fieldGridStyle(isMobile)}>
+                    <label style={fieldStyle}>
+                      <span style={labelStyle}>手机号码</span>
+                      <input
+                        style={inputStyle}
+                        value={orderForm.phone}
+                        placeholder="例如 0123456789"
+                        onChange={(event) =>
+                          setOrderForm((current) => ({ ...current, phone: correctPhoneInputMY(event.target.value) }))
+                        }
+                        onBlur={() =>
+                          setOrderForm((current) => ({ ...current, phone: formatPhoneForInput(current.phone) }))
+                        }
+                      />
+                    </label>
+
+                    <label style={fieldStyle}>
+                      <span style={labelStyle}>功德主姓名</span>
+                      <input
+                        style={inputStyle}
+                        value={orderForm.customerName}
+                        placeholder="请填写功德主姓名"
+                        onChange={(event) => setOrderForm((current) => ({ ...current, customerName: event.target.value }))}
+                      />
+                    </label>
+
+                    <label style={fieldStyle}>
+                      <span style={labelStyle}>联络人姓名</span>
+                      <input
+                        style={inputStyle}
+                        value={orderForm.contactName}
+                        placeholder="不填写时会自动沿用功德主姓名"
+                        onChange={(event) => setOrderForm((current) => ({ ...current, contactName: event.target.value }))}
+                      />
+                    </label>
+
+                    <label style={fieldStyle}>
+                      <span style={labelStyle}>电子邮箱（选填）</span>
+                      <input
+                        style={inputStyle}
+                        value={orderForm.email}
+                        placeholder="可不填写"
+                        onChange={(event) => setOrderForm((current) => ({ ...current, email: event.target.value }))}
+                      />
+                    </label>
+                  </div>
+
+                  <div style={actionRowStyle(isMobile)}>
+                    <div style={actionNoteStyle}>确认这张订单资料后，再继续填写今年的牌位内容。</div>
+                    <button type="button" style={primaryButtonStyle} onClick={handleContinueToItemDrafts}>
+                      下一步：牌位内容
+                    </button>
+                  </div>
+                </section>
+              ) : null}
+
+              {itemFlowStep === "drafts" ? (
+                <>
+                  <PaiweiDraftEditor
+                    isMobile={isMobile}
+                    drafts={drafts}
+                    currentIndex={currentDraftIndex}
+                    totalAmount={totalAmount}
+                    showSavedList={false}
+                    onSelectIndex={setCurrentDraftIndex}
+                    onCloseEditor={closeDraftEditor}
+                    onAddDraft={addDraft}
+                    onRemoveDraft={removeDraft}
+                    onUpdateDraft={updateDraft}
+                    onChangeDraftCode={handleChangeDraftCode}
+                  />
+
+                  <section style={sectionCardStyle}>
+                    <div style={actionRowStyle(isMobile)}>
+                      <button type="button" style={secondaryButtonStyle} onClick={() => setItemFlowStep("order_info")}>
+                        返回订单资料
                       </button>
-                    );
-                  })}
-                </div>
+                      <button type="button" style={primaryButtonStyle} onClick={handleContinueToItemConfirm}>
+                        下一步：提交确认
+                      </button>
+                    </div>
+                  </section>
+                </>
+              ) : null}
 
-                <div style={actionRowStyle(isMobile)}>
-                  <div style={actionNoteStyle}>{itemStepSubmitNote}</div>
-                  <button type="submit" style={primaryButtonStyle} disabled={submitting}>
-                    {submitting ? "提交中…" : itemStepSubmitLabel}
-                  </button>
-                </div>
-              </section>
+              {itemFlowStep === "saved" ? (
+                <>
+                  <section style={sectionCardStyle}>
+                    <div style={sectionHeaderStyle}>
+                      <div>
+                        <div style={sectionTitleStyle}>已添加牌位</div>
+                        <div style={sectionCopyStyle}>这一页会集中显示目前已保存的全部牌位，方便统一查看和修改。</div>
+                      </div>
+                      <div style={summaryPillStyle}>{`${drafts.length} 项 · RM ${totalAmount.toFixed(2)}`}</div>
+                    </div>
+                  </section>
+
+                  <section style={sectionCardStyle}>
+                    <div style={reviewListStyle}>
+                      {drafts.map((draft, index) => {
+                        const template = getTemplate(draft.code);
+                        return (
+                          <button
+                            key={draft.id}
+                            type="button"
+                            style={reviewCardStyle}
+                            onClick={() => {
+                              setCurrentDraftIndex(index);
+                              setItemFlowStep("drafts");
+                              scrollPageTop();
+                            }}
+                          >
+                            <div style={reviewTitleStyle}>
+                              <span>{`第 ${index + 1} 项 · ${template.title}`}</span>
+                              <span>{`RM ${getDraftTotalPrice(draft).toFixed(2)}`}</span>
+                            </div>
+                            <div style={reviewMetaStyle}>{summarizeDraft(draft) || "点击返回补充这项资料"}</div>
+                          </button>
+                        );
+                      })}
+                    </div>
+                  </section>
+
+                  <section style={sectionCardStyle}>
+                    <div style={actionRowStyle(isMobile)}>
+                      <button type="button" style={secondaryButtonStyle} onClick={() => setItemFlowStep("drafts")}>
+                        返回牌位内容
+                      </button>
+                      <button type="button" style={primaryButtonStyle} onClick={handleContinueToSubmitConfirm}>
+                        下一步：提交确认
+                      </button>
+                    </div>
+                  </section>
+                </>
+              ) : null}
+
+              {itemFlowStep === "confirm" ? (
+                <>
+                  <section style={sectionCardStyle}>
+                    <div style={sectionHeaderStyle}>
+                      <div>
+                        <div style={sectionTitleStyle}>提交确认</div>
+                        <div style={sectionCopyStyle}>最后确认订单资料和总金额，没问题再提交。</div>
+                      </div>
+                      <div style={summaryPillStyle}>{`${drafts.length} 项 · RM ${totalAmount.toFixed(2)}`}</div>
+                    </div>
+
+                    <div style={detailGridStyle(isMobile)}>
+                      {orderSummary.map((item) => (
+                        <article key={item.label} style={detailCardStyle}>
+                          <div style={detailLabelStyle}>{item.label}</div>
+                          <div style={detailValueStyle}>{item.value}</div>
+                        </article>
+                      ))}
+                    </div>
+                  </section>
+
+                  <section style={sectionCardStyle}>
+                    <div style={actionRowStyle(isMobile)}>
+                      <button type="button" style={secondaryButtonStyle} onClick={() => setItemFlowStep("saved")}>
+                        返回已添加牌位
+                      </button>
+                      <div style={confirmActionGroupStyle(isMobile)}>
+                        <div style={actionNoteStyle}>{itemStepSubmitNote}</div>
+                        <button type="submit" style={primaryButtonStyle} disabled={submitting}>
+                          {submitting ? "提交中…" : itemStepSubmitLabel}
+                        </button>
+                      </div>
+                    </div>
+                  </section>
+                </>
+              ) : null}
             </form>
           ) : null}
         </section>
@@ -1034,6 +1221,23 @@ const sectionCopyStyle: CSSProperties = {
   lineHeight: 1.6,
 };
 
+const itemFlowRowStyle: CSSProperties = {
+  display: "flex",
+  flexWrap: "wrap",
+  gap: "10px",
+};
+
+function itemFlowPillStyle(active: boolean): CSSProperties {
+  return {
+    padding: "10px 14px",
+    borderRadius: "999px",
+    background: active ? "linear-gradient(135deg, #ba7330, #8f5624)" : "rgba(122, 84, 46, 0.08)",
+    color: active ? "#fff8ef" : "#6b4c2f",
+    fontSize: "13px",
+    fontWeight: 800,
+  };
+}
+
 function fieldGridStyle(isMobile: boolean): CSSProperties {
   return {
     display: "grid",
@@ -1041,6 +1245,12 @@ function fieldGridStyle(isMobile: boolean): CSSProperties {
     gap: "14px",
   };
 }
+
+const singleFieldRowStyle: CSSProperties = {
+  display: "grid",
+  gridTemplateColumns: "minmax(0, 1fr)",
+  gap: "14px",
+};
 
 const fieldStyle: CSSProperties = {
   display: "grid",
@@ -1214,6 +1424,15 @@ function actionRowStyle(isMobile: boolean): CSSProperties {
     alignItems: isMobile ? "stretch" : "center",
     flexDirection: isMobile ? "column" : "row",
     gap: "12px",
+  };
+}
+
+function confirmActionGroupStyle(isMobile: boolean): CSSProperties {
+  return {
+    display: "grid",
+    justifyItems: isMobile ? "stretch" : "end",
+    gap: "10px",
+    width: isMobile ? "100%" : "auto",
   };
 }
 

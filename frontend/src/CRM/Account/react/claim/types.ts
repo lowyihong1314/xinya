@@ -77,6 +77,42 @@ export type PaymentVoucherPublicPayload = {
   is_signed: boolean;
 };
 
+export type ReadBillReceiptItem = {
+  itemNumber?: string | number;
+  description?: string;
+  expenseCategory?: string;
+  quantity?: string | number;
+  lineTotal?: string | number;
+};
+
+export type ReadBillData = {
+  merchantName?: string | null;
+  receiptNumber?: string | null;
+  receiptDate?: string | null;
+  currency?: string | null;
+  expenseCategory?: string | null;
+  description?: string | null;
+  amountBeforeTax?: string | number | null;
+  taxAmount?: string | number | null;
+  totalAmount?: string | number | null;
+  receiptItems?: ReadBillReceiptItem[];
+};
+
+export type ReadBillMeta = {
+  confidence?: string | number | null;
+  needsReview?: boolean;
+  sampleId?: string;
+  source?: string;
+  storedFile?: string;
+};
+
+export type ReadBillUploadResponse = {
+  status?: string;
+  success?: boolean;
+  data?: ReadBillData;
+  meta?: ReadBillMeta;
+};
+
 export type ApproverUserProfile = {
   id: number;
   username?: string;

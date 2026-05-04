@@ -144,12 +144,12 @@ export function FormWorkspaceView(props: {
       <header style={headerStyle}>
         <div>
           <div style={eyebrowStyle}>Form Workspace</div>
-          <h3 style={titleStyle}>创建报名表格</h3>
+          <h3 style={titleStyle}>特别活动表格</h3>
         </div>
         <div style={headerActionsStyle}>
           {props.canEditForms ? (
             <button type="button" style={primaryButtonStyle} onClick={props.onOpenCreate}>
-              创建报名表
+              创建特别活动表
             </button>
           ) : null}
         </div>

@@ -1,6 +1,8 @@
 import json
 import mimetypes
 import os
+import urllib.error
+import urllib.request
 import uuid
 from datetime import datetime
 from pathlib import Path
@@ -20,6 +22,13 @@ from models.finance import (
     ReimbursementRequest,
 )
 from models.user_data import Department
+
+READ_BILL_UPLOAD_URL = os.environ.get(
+    "READ_BILL_UPLOAD_URL",
+    "https://nginx.yihong1031.com/read_bill_api/upload",
+)
+READ_BILL_ALLOWED_MODELS = {"auto", "byteplus", "local"}
+READ_BILL_IMAGE_EXTENSIONS = {".jpg", ".jpeg", ".png", ".webp", ".bmp", ".tif", ".tiff"}
 
 
 def _get_claim_or_raise(request_id):
@@ -53,6 +62,113 @@ def _normalize_attachment_name(raw_name, mime_type):
 
     stem = stem or cleaned or "attachment"
     return f"{stem}{extension}", extension
+
+
+def _is_read_bill_image(file_name, mime_type):
+    if str(mime_type or "").split(";")[0].strip().lower().startswith("image/"):
+        return True
+    return os.path.splitext(file_name or "")[1].lower() in READ_BILL_IMAGE_EXTENSIONS
+
+
+def _build_multipart_payload(fields, files):
+    boundary = f"----XinyaReadBill{uuid.uuid4().hex}"
+    chunks = []
+
+    for name, value in fields.items():
+        chunks.extend(
+            [
+                f"--{boundary}".encode("utf-8"),
+                f'Content-Disposition: form-data; name="{name}"'.encode("utf-8"),
+                b"",
+                str(value).encode("utf-8"),
+            ]
+        )
+
+    for name, file_info in files.items():
+        filename = str(file_info["filename"]).replace('"', '\\"')
+        content_type = file_info.get("content_type") or "application/octet-stream"
+        chunks.extend(
+            [
+                f"--{boundary}".encode("utf-8"),
+                f'Content-Disposition: form-data; name="{name}"; filename="{filename}"'.encode("utf-8"),
+                f"Content-Type: {content_type}".encode("utf-8"),
+                b"",
+                file_info["content"],
+            ]
+        )
+
+    chunks.append(f"--{boundary}--".encode("utf-8"))
+    chunks.append(b"")
+    return boundary, b"\r\n".join(chunks)
+
+
+def _extract_read_bill_error(payload, fallback):
+    if isinstance(payload, dict):
+        return payload.get("message") or payload.get("error") or fallback
+    return fallback
+
+
+def read_bill_from_file(uploaded_file, model=None):
+    if not (uploaded_file and uploaded_file.filename):
+        raise ValidationError("请先选择图片附件")
+
+    selected_model = str(model or os.environ.get("READ_BILL_DEFAULT_MODEL") or "byteplus").strip().lower()
+    if selected_model not in READ_BILL_ALLOWED_MODELS:
+        raise ValidationError("AI 识别模型错误")
+
+    filename, _extension = _normalize_attachment_name(uploaded_file.filename, uploaded_file.mimetype)
+    if not _is_read_bill_image(filename, uploaded_file.mimetype):
+        raise ValidationError("AI fillin 只支持图片附件")
+
+    content = uploaded_file.read()
+    if not content:
+        raise ValidationError("图片内容为空")
+
+    boundary, body = _build_multipart_payload(
+        {"model": selected_model},
+        {
+            "file": {
+                "filename": filename,
+                "content_type": uploaded_file.mimetype or "application/octet-stream",
+                "content": content,
+            }
+        },
+    )
+    request_obj = urllib.request.Request(
+        READ_BILL_UPLOAD_URL,
+        data=body,
+        method="POST",
+        headers={
+            "Accept": "application/json",
+            "Content-Type": f"multipart/form-data; boundary={boundary}",
+            "User-Agent": "Mozilla/5.0 XinyaClaimAI/1.0",
+        },
+    )
+
+    try:
+        with urllib.request.urlopen(request_obj, timeout=60) as response:
+            response_text = response.read().decode("utf-8", errors="replace")
+    except urllib.error.HTTPError as exc:
+        response_text = exc.read().decode("utf-8", errors="replace")
+        try:
+            error_payload = json.loads(response_text)
+        except Exception:
+            error_payload = None
+        raise ValidationError(_extract_read_bill_error(error_payload, f"AI fillin 失败（{exc.code}）")) from exc
+    except urllib.error.URLError as exc:
+        raise ValidationError(f"AI fillin 服务暂时无法连接：{exc.reason}") from exc
+
+    try:
+        payload = json.loads(response_text)
+    except Exception as exc:
+        raise ValidationError("AI fillin 返回格式错误") from exc
+
+    if not isinstance(payload, dict):
+        raise ValidationError("AI fillin 返回格式错误")
+    if payload.get("success") is False or payload.get("status") == "error":
+        raise ValidationError(_extract_read_bill_error(payload, "AI fillin 失败"))
+
+    return payload
 
 
 def _parse_json_text(raw_value, field_name):

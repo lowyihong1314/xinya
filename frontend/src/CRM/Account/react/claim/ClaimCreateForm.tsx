@@ -39,8 +39,10 @@ type ClaimCreateFormProps = {
   state: CreateState;
   user: AccountUser | null;
   submitting: boolean;
+  aiFilling: boolean;
   onBack: () => void;
   onChange: (value: CreateState | ((prev: CreateState) => CreateState)) => void;
+  onAiFill: () => void;
   onPickEvent: () => void;
   onSign: () => void;
   onSubmit: () => void;
@@ -52,13 +54,18 @@ export function ClaimCreateForm({
   state,
   user,
   submitting,
+  aiFilling,
   onBack,
   onChange,
+  onAiFill,
   onPickEvent,
   onSign,
   onSubmit,
   onFilesChange,
 }: ClaimCreateFormProps) {
+  const hasReadableImage = state.files.some(isReadableBillImage);
+  const aiFillDisabled = !hasReadableImage || aiFilling || submitting;
+
   return (
     <div className="claim-create-form" style={{ display: "grid", gap: "16px" }}>
       <div className="claim-create-form__header" style={panelHeaderStyle}>
@@ -155,6 +162,20 @@ export function ClaimCreateForm({
                 ? state.files.map((file) => `${file.name} (${Math.round(file.size / 1024)} KB)`).join(" / ")
                 : "未选择文件"}
             </div>
+            <div style={{ display: "flex", gap: "8px", flexWrap: "wrap", alignItems: "center" }}>
+              <button
+                type="button"
+                style={{
+                  ...buttonSecondaryStyle,
+                  opacity: aiFillDisabled ? 0.6 : 1,
+                  cursor: aiFillDisabled ? "not-allowed" : "pointer",
+                }}
+                onClick={onAiFill}
+                disabled={aiFillDisabled}
+              >
+                {aiFilling ? "AI reading..." : "AI fillin"}
+              </button>
+            </div>
           </div>
         </Field>
       </div>
@@ -176,6 +197,10 @@ export function ClaimCreateForm({
       </div>
     </div>
   );
+}
+
+function isReadableBillImage(file: File) {
+  return file.type.startsWith("image/") || /\.(jpe?g|png|webp|bmp|tiff?)$/i.test(file.name);
 }
 
 function Field({ label, wide, children }: { label: string; wide?: boolean; children: ReactNode }) {

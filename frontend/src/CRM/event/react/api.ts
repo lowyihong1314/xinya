@@ -6,6 +6,8 @@ import type {
   EventRecord,
 } from "./types";
 import { apiFetch } from "../../../js/apiFetch";
+import { setEventPoster as setSharedEventPoster, uploadEventMedia } from "../../../event/shared/api";
+import type { EventMediaUploadResponse } from "../../../event/shared/types";
 
 async function parseJson<T>(response: Response): Promise<T> {
   const data = (await response.json().catch(() => ({}))) as T & {
@@ -78,6 +80,23 @@ export async function uploadEventFile(eventId: number, file: File) {
   });
 
   return parseJson<{ status?: string; data?: EventAttachmentRecord; message?: string }>(response);
+}
+
+function extractUploadedFileId(payload: EventMediaUploadResponse) {
+  if (typeof payload.data?.file_id === "number") {
+    return payload.data.file_id;
+  }
+  return typeof payload.file_id === "number" ? payload.file_id : null;
+}
+
+export async function uploadEventPoster(eventId: number, file: File) {
+  const payload = await uploadEventMedia(eventId, file);
+  const fileId = extractUploadedFileId(payload);
+  if (!fileId) {
+    throw new Error(payload.message || "上传成功，但没有拿到海报文件");
+  }
+  await setSharedEventPoster(eventId, fileId);
+  return { fileId, message: payload.message };
 }
 
 export async function deleteEventFile(fileId: number) {

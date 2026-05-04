@@ -7,7 +7,15 @@ import { useDebouncedAutosave } from "../../shared/useDebouncedAutosave";
 import { select_users_modal } from "../../select_users_modal";
 import { fetchForms } from "../../form/react/api";
 import type { FormRecord } from "../../form/react/types";
-import { createEvent, deleteEvent, deleteEventFile, saveEvent, uploadEventBrochure, uploadEventFile } from "./api";
+import {
+  createEvent,
+  deleteEvent,
+  deleteEventFile,
+  saveEvent,
+  uploadEventBrochure,
+  uploadEventFile,
+  uploadEventPoster,
+} from "./api";
 import type { EventCreatePayload, EventMutationPayload, EventRecord } from "./types";
 import { useEventTableRealtime } from "./useEventTableRealtime";
 
@@ -26,6 +34,7 @@ export function useEventTableController() {
   const [saving, setSaving] = useState(false);
   const [creating, setCreating] = useState(false);
   const [uploadingBrochure, setUploadingBrochure] = useState(false);
+  const [uploadingPoster, setUploadingPoster] = useState(false);
   const [uploadingEventFile, setUploadingEventFile] = useState(false);
   const [toast, setToast] = useState<Toast>(null);
   const [realtimeEnabled, setRealtimeEnabled] = useState(false);
@@ -360,6 +369,23 @@ export function useEventTableController() {
     }
   }
 
+  async function uploadPoster(file: File) {
+    if (!selectedEventId) {
+      return;
+    }
+    await flushPendingEventChanges();
+    setUploadingPoster(true);
+    try {
+      await uploadEventPoster(selectedEventId, file);
+      await refreshEvents();
+      setToast({ type: "success", text: "活动海报已上传并切换" });
+    } catch (err) {
+      setToast({ type: "error", text: err instanceof Error ? err.message : "海报上传失败" });
+    } finally {
+      setUploadingPoster(false);
+    }
+  }
+
   async function removeBrochure() {
     if (!selectedEventId) {
       return;
@@ -434,6 +460,7 @@ export function useEventTableController() {
       saving,
       creating,
       uploadingBrochure,
+      uploadingPoster,
       uploadingEventFile,
       toast,
       realtimeEnabled,
@@ -448,6 +475,7 @@ export function useEventTableController() {
       updateEvent,
       createNewEvent,
       removeSelectedEvent,
+      uploadPoster,
       uploadBrochure,
       removeBrochure,
       uploadAttachment,

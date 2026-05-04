@@ -5,7 +5,7 @@ import { useUserState } from "../../../../app/UserState";
 import { showConfirmDialog, showPromptDialog } from "../../../../js/dialogs";
 import { showEventPicker } from "../../../shared/showEventPicker";
 import { render_sign_modal } from "../../../../../../static/js/sign_tools.js";
-import { decideClaim, deleteClaim, fetchClaims, submitClaim } from "./api";
+import { decideClaim, deleteClaim, fetchClaims, readClaimBill, submitClaim } from "./api";
 import { ClaimCreateForm, type CreateState } from "./ClaimCreateForm";
 import { ClaimDetail } from "./ClaimDetail";
 import { ClaimList } from "./ClaimList";
@@ -18,7 +18,7 @@ import {
   scrollPanelStyle,
   shellStyle,
 } from "./claimStyles";
-import type { AccountUser, ClaimRecord } from "./types";
+import type { AccountUser, ClaimRecord, ReadBillData } from "./types";
 
 type ViewState =
   | { kind: "list" }
@@ -50,6 +50,94 @@ function buildInitialCreateState(user: AccountUser | null): CreateState {
   };
 }
 
+function isReadableBillImage(file: File) {
+  return file.type.startsWith("image/") || /\.(jpe?g|png|webp|bmp|tiff?)$/i.test(file.name);
+}
+
+function stringValue(value: unknown) {
+  return value == null ? "" : String(value).trim();
+}
+
+function normalizeMoneyValue(value: unknown) {
+  if (value == null || value === "") {
+    return "";
+  }
+  if (typeof value === "number") {
+    return Number.isFinite(value) && value > 0 ? value.toFixed(2) : "";
+  }
+  const match = String(value).replace(/,/g, "").match(/-?\d+(?:\.\d+)?/);
+  if (!match) {
+    return "";
+  }
+  const amount = Number(match[0]);
+  return Number.isFinite(amount) && amount > 0 ? amount.toFixed(2) : "";
+}
+
+function toDateInputValue(date: Date) {
+  const yyyy = date.getFullYear();
+  const mm = String(date.getMonth() + 1).padStart(2, "0");
+  const dd = String(date.getDate()).padStart(2, "0");
+  return `${yyyy}-${mm}-${dd}`;
+}
+
+function normalizeReceiptDate(value: unknown) {
+  const rawValue = stringValue(value);
+  if (!rawValue) {
+    return "";
+  }
+
+  const isoMatch = rawValue.match(/^(\d{4})[-/.](\d{1,2})[-/.](\d{1,2})$/);
+  if (isoMatch) {
+    const [, yyyy, mm, dd] = isoMatch;
+    return `${yyyy}-${mm.padStart(2, "0")}-${dd.padStart(2, "0")}`;
+  }
+
+  const slashMatch = rawValue.match(/^(\d{1,2})[-/.](\d{1,2})[-/.](\d{4})$/);
+  if (slashMatch) {
+    const [, first, second, yyyy] = slashMatch;
+    const dd = Number(first) > 12 ? first : Number(second) > 12 ? second : first;
+    const mm = dd === first ? second : first;
+    return `${yyyy}-${mm.padStart(2, "0")}-${dd.padStart(2, "0")}`;
+  }
+
+  const parsed = new Date(rawValue);
+  return Number.isNaN(parsed.getTime()) ? "" : toDateInputValue(parsed);
+}
+
+function buildPurposeFromReadBill(data: ReadBillData) {
+  const merchantName = stringValue(data.merchantName);
+  const receiptNumber = stringValue(data.receiptNumber);
+  const expenseCategory = stringValue(data.expenseCategory);
+  const description = stringValue(data.description);
+  const itemSummary = (data.receiptItems || [])
+    .map((item) => {
+      const itemDescription = stringValue(item.description);
+      const lineTotal = normalizeMoneyValue(item.lineTotal);
+      return [itemDescription, lineTotal ? `RM ${lineTotal}` : ""].filter(Boolean).join(" ");
+    })
+    .filter(Boolean)
+    .slice(0, 6)
+    .join(" / ");
+
+  return [
+    merchantName ? `商家：${merchantName}` : "",
+    receiptNumber ? `收据号：${receiptNumber}` : "",
+    expenseCategory && expenseCategory !== "OTHER" ? `分类：${expenseCategory}` : "",
+    description ? `说明：${description}` : "",
+    itemSummary ? `项目：${itemSummary}` : "",
+  ]
+    .filter(Boolean)
+    .join("\n");
+}
+
+function formatConfidence(value: unknown) {
+  if (value == null || value === "") {
+    return "";
+  }
+  const numeric = Number(value);
+  return Number.isFinite(numeric) ? numeric.toFixed(2) : String(value);
+}
+
 export function ClaimWorkspace() {
   const { user, isMobile } = useUserState();
   const accountUser = (user as AccountUser | null) ?? null;
@@ -61,6 +149,7 @@ export function ClaimWorkspace() {
   const [createState, setCreateState] = useState<CreateState>(() => buildInitialCreateState(accountUser));
   const [loading, setLoading] = useState(true);
   const [submitting, setSubmitting] = useState(false);
+  const [aiFilling, setAiFilling] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [query, setQuery] = useState("");
@@ -187,6 +276,63 @@ export function ClaimWorkspace() {
       return;
     }
     setCreateState((prev) => ({ ...prev, signJsonData: nextSign }));
+  }
+
+  async function handleAiFillClaim() {
+    setError(null);
+    setMessage(null);
+
+    if (!canSubmitClaims) {
+      setError("你没有提交申请的权限");
+      return;
+    }
+
+    const receiptFile = createState.files.find(isReadableBillImage);
+    if (!receiptFile) {
+      setError("请先上传一张图片附件");
+      return;
+    }
+
+    setAiFilling(true);
+    try {
+      const result = await readClaimBill(receiptFile);
+      const data = result.data;
+      if (!data) {
+        throw new Error("AI fillin 没有返回识别结果");
+      }
+
+      const updates: Partial<Pick<CreateState, "amount" | "request_date" | "purpose">> = {};
+      const updatedFields: string[] = [];
+      const amount = normalizeMoneyValue(data.totalAmount);
+      const requestDate = normalizeReceiptDate(data.receiptDate);
+      const purpose = buildPurposeFromReadBill(data);
+
+      if (amount) {
+        updates.amount = amount;
+        updatedFields.push("金额");
+      }
+      if (requestDate) {
+        updates.request_date = requestDate;
+        updatedFields.push("日期");
+      }
+      if (purpose) {
+        updates.purpose = purpose;
+        updatedFields.push("用途说明");
+      }
+
+      if (!updatedFields.length) {
+        setError("AI fillin 没有识别到可填写内容，请手动输入");
+        return;
+      }
+
+      setCreateState((prev) => ({ ...prev, ...updates }));
+      const confidence = formatConfidence(result.meta?.confidence);
+      setMessage(`AI fillin 已填写：${updatedFields.join("、")}${confidence ? `（信心 ${confidence}）` : ""}`);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "AI fillin 失败");
+    } finally {
+      setAiFilling(false);
+    }
   }
 
   async function handleCreateSubmit() {
@@ -411,8 +557,10 @@ export function ClaimWorkspace() {
             state={createState}
             user={accountUser}
             submitting={submitting}
+            aiFilling={aiFilling}
             onBack={() => setView({ kind: "list" })}
             onChange={setCreateState}
+            onAiFill={() => void handleAiFillClaim()}
             onPickEvent={() => void handlePickEvent()}
             onSign={() => void handleSignClaim()}
             onSubmit={() => void handleCreateSubmit()}

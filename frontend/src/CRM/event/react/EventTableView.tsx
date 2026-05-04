@@ -33,6 +33,7 @@ export function EventTableView(props: {
   loading: boolean;
   saving: boolean;
   creating: boolean;
+  posterUploading: boolean;
   brochureUploading: boolean;
   attachmentUploading: boolean;
   toast: Toast;
@@ -47,6 +48,7 @@ export function EventTableView(props: {
   onAddOrganizers: () => void;
   onCreateEvent: (payload: EventCreatePayload) => Promise<boolean>;
   onUpdateEvent: (patch: EventMutationPayload) => void;
+  onUploadPoster: (file: File) => void;
   onUploadBrochure: (file: File) => void;
   onRemoveBrochure: () => void;
   onUploadAttachment: (file: File) => void;
@@ -59,6 +61,7 @@ export function EventTableView(props: {
   const [createOpen, setCreateOpen] = useState(false);
   const [draft, setDraft] = useState<CreateDraft>(() => createDefaultDraft());
   const [createError, setCreateError] = useState<string | null>(null);
+  const posterInputRef = useRef<HTMLInputElement | null>(null);
   const brochureInputRef = useRef<HTMLInputElement | null>(null);
   const attachmentInputRef = useRef<HTMLInputElement | null>(null);
 
@@ -384,6 +387,61 @@ export function EventTableView(props: {
                     textarea
                     wide
                   />
+                  <label style={wideFieldStyle}>
+                    <span style={fieldLabelStyle}>活动海报</span>
+                    <div style={attachmentCardStyle}>
+                      <div style={attachmentMetaWrapStyle}>
+                        <div style={attachmentTitleStyle}>
+                          {props.selectedEvent.event_image?.id ? "当前活动海报已设置" : "未设置活动海报"}
+                        </div>
+                        <div style={attachmentSubtitleStyle}>
+                          {props.selectedEvent.event_image?.id
+                            ? `当前封面来自活动 album，图片 ID #${props.selectedEvent.event_image.id}`
+                            : "上传图片后会自动进入活动 album，并切换为当前 event_image。"}
+                        </div>
+                      </div>
+                      <div style={attachmentActionRowStyle}>
+                        {props.imageUrl ? (
+                          <button
+                            type="button"
+                            style={secondaryButtonStyle}
+                            onClick={() => window.open(props.imageUrl || "", "_blank", "noopener,noreferrer")}
+                          >
+                            查看当前海报
+                          </button>
+                        ) : null}
+                        {canEditEvent ? (
+                          <>
+                            <button
+                              type="button"
+                              style={secondaryButtonStyle}
+                              disabled={props.posterUploading}
+                              onClick={() => posterInputRef.current?.click()}
+                            >
+                              {props.posterUploading
+                                ? "上传中…"
+                                : props.selectedEvent.event_image?.id
+                                  ? "替换海报"
+                                  : "上传海报"}
+                            </button>
+                            <input
+                              ref={posterInputRef}
+                              type="file"
+                              accept="image/*,.heic,.heif"
+                              style={hiddenInputStyle}
+                              onChange={(event) => {
+                                const file = event.target.files?.[0];
+                                if (file) {
+                                  props.onUploadPoster(file);
+                                }
+                                event.target.value = "";
+                              }}
+                            />
+                          </>
+                        ) : null}
+                      </div>
+                    </div>
+                  </label>
                   <label style={wideFieldStyle}>
                     <span style={fieldLabelStyle}>报名表格</span>
                     <div style={attachmentCardStyle}>
