@@ -1,4 +1,4 @@
-package com.utba.app;
+package com.xinya.app;
 
 import android.content.ComponentName;
 import android.content.Context;

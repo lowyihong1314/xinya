@@ -6,10 +6,10 @@ def resolvedVersionCode = versionCodeProp ? versionCodeProp.toInteger() : 1
 def resolvedVersionName = versionNameProp ?: "1.0"
 
 android {
-    namespace "com.utba.app"
+    namespace "com.xinya.app"
     compileSdk rootProject.ext.compileSdkVersion
     defaultConfig {
-        applicationId "com.utba.app"
+        applicationId "com.xinya.app"
         minSdkVersion rootProject.ext.minSdkVersion
         targetSdkVersion rootProject.ext.targetSdkVersion
         versionCode resolvedVersionCode

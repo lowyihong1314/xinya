@@ -91,42 +91,56 @@ cp android/app/build/outputs/apk/debug/app-debug.apk apk/UTBA.apk
 
 ---
 
-## 一键脚本（可选）
+## 推荐：使用一键脚本
 
-把以下内容存为 `frontend/build_apk.sh`：
+现有脚本是 `frontend/build_apk.sh`，会自动完成：
 
-```bash
-#!/bin/bash
-set -e
+- 构建 React APK bundle
+- 生成 Android launcher icon 和 splash logo
+- `npx cap sync android`
+- 打包 signed release APK 和 AAB
+- 复制成带时间戳的文件到 `frontend/apk/` 和 `frontend/aab/`
 
-export JAVA_HOME=~/android-build/jdk/jdk-21.0.3+9
-export ANDROID_HOME=~/android-build/sdk
-export PATH=$JAVA_HOME/bin:$PATH
-
-cd "$(dirname "$0")"
-
-echo "==> Building React bundle..."
-npm run build:apk
-
-echo "==> Syncing to Android..."
-npx cap sync android
-
-echo "==> Building APK..."
-cd android
-./gradlew assembleDebug
-
-echo "==> Copying APK..."
-cd ..
-VERSION=$(date +%Y%m%d)
-cp android/app/build/outputs/apk/debug/app-debug.apk "apk/UTBA_${VERSION}.apk"
-
-echo "Done! apk/UTBA_${VERSION}.apk"
-```
+从任意目录执行都可以：
 
 ```bash
-chmod +x frontend/build_apk.sh
-./frontend/build_apk.sh
+/home/yukang/flaskapp/xinya/frontend/build_apk.sh
 ```
+
+如果已经在项目目录：
+
+```bash
+cd /home/yukang/flaskapp/xinya/frontend
+./build_apk.sh
+```
+
+输出文件格式：
+
+```text
+frontend/apk/UTBA_BETA_YYYYMMDD_HHMM.apk
+frontend/aab/UTBA_BETA_YYYYMMDD_HHMM.aab
+```
+
+### 指定 Android 版本号
+
+脚本支持用环境变量传入 Android 版本：
+
+```bash
+VERSION_CODE=12 VERSION_NAME=1.2.3 ./build_apk.sh
+```
+
+从 `frontend/` 外面执行：
+
+```bash
+VERSION_CODE=12 VERSION_NAME=1.2.3 /home/yukang/flaskapp/xinya/frontend/build_apk.sh
+```
+
+说明：
+
+- `VERSION_CODE` 对应 Android `versionCode`，必须是正整数；每次发布新版通常要递增。
+- `VERSION_NAME` 对应 Android `versionName`，是用户看到的版本号，例如 `1.2.3`。
+- 如果不传，Gradle 默认使用 `versionCode=1`、`versionName=1.0`。
+- APK/AAB 文件名仍然使用时间戳，不会自动带上 `VERSION_NAME`。
 
 ---
 

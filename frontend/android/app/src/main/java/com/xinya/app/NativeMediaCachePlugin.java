@@ -1,4 +1,4 @@
-package com.utba.app;
+package com.xinya.app;
 
 import android.net.Uri;
 import android.os.Handler;

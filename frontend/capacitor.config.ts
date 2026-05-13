@@ -4,7 +4,7 @@ const androidScheme = process.env.CAP_ANDROID_SCHEME ?? "https";
 const allowCleartext = process.env.CAP_CLEARTEXT === "true";
 
 const config: CapacitorConfig = {
-  appId: "com.utba.app",
+  appId: "com.xinya.app",
   appName: "UTBA",
   // Points to the APK build output (npm run build:apk)
   webDir: "apk_dist",

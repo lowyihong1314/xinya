@@ -1,4 +1,4 @@
-package com.utba.app;
+package com.xinya.app;
 
 import com.getcapacitor.JSArray;
 import com.getcapacitor.JSObject;
