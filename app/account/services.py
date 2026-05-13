@@ -19,6 +19,7 @@ from models.event_data import EventData
 from models.finance import (
     ReimbursementApproverData,
     ReimbursementAttachment,
+    ReimbursementRequestChangeLog,
     ReimbursementRequest,
 )
 from models.user_data import Department
@@ -29,6 +30,15 @@ READ_BILL_UPLOAD_URL = os.environ.get(
 )
 READ_BILL_ALLOWED_MODELS = {"auto", "byteplus", "local"}
 READ_BILL_IMAGE_EXTENSIONS = {".jpg", ".jpeg", ".png", ".webp", ".bmp", ".tif", ".tiff"}
+CLAIM_EDIT_FIELD_LABELS = {
+    "applicant_name": "申请人",
+    "request_date": "日期",
+    "amount": "金额",
+    "department_name": "部门",
+    "purpose": "用途说明",
+    "event_id": "活动",
+    "attachment": "附件",
+}
 
 
 def _get_claim_or_raise(request_id):
@@ -36,6 +46,13 @@ def _get_claim_or_raise(request_id):
     if not request_obj:
         raise NotFound("找不到申请")
     return request_obj
+
+
+def _get_claim_attachment_or_raise(attachment_id):
+    attachment = ReimbursementAttachment.query.get(attachment_id)
+    if not attachment:
+        raise NotFound("找不到附件")
+    return attachment
 
 
 def _guess_extension(file_name, mime_type):
@@ -199,6 +216,31 @@ def _normalize_sign_json(sign_value, field_name="sign_json_data"):
     return json.dumps(sign_obj, ensure_ascii=False)
 
 
+def _stringify_change_value(value):
+    if value is None:
+        return ""
+    if hasattr(value, "isoformat"):
+        return value.isoformat()
+    return str(value)
+
+
+def _record_claim_change(request_obj, field_name, old_value, new_value, user):
+    old_text = _stringify_change_value(old_value)
+    new_text = _stringify_change_value(new_value)
+    if old_text == new_text:
+        return
+
+    db.session.add(
+        ReimbursementRequestChangeLog(
+            request_id=request_obj.id,
+            changed_by_user_id=getattr(user, "id", None),
+            field_name=CLAIM_EDIT_FIELD_LABELS.get(field_name, field_name),
+            old_value=old_text,
+            new_value=new_text,
+        )
+    )
+
+
 def _require_payment_voucher_access(request_obj, user):
     permissions = resolve_user_permissions(user)
     can_account = "account_read" in permissions or "account_edit" in permissions
@@ -259,6 +301,31 @@ def _resolve_claim_department_name(form):
     return str(department.name).strip()
 
 
+def _save_claim_attachment(request_obj, uploaded_file, current_user=None):
+    if not (uploaded_file and uploaded_file.filename):
+        return None
+
+    base_upload_path = DATA_ROOT / "NAS" / "UTBA" / "claim"
+    os.makedirs(base_upload_path, exist_ok=True)
+
+    filename, extension = _normalize_attachment_name(uploaded_file.filename, uploaded_file.mimetype)
+    attachment = ReimbursementAttachment(
+        request_id=request_obj.id,
+        uploader_user_id=getattr(current_user, "id", None),
+        file_path="",
+        file_name=filename,
+        mime_type=uploaded_file.mimetype,
+    )
+    db.session.add(attachment)
+    db.session.flush()
+
+    new_filename = f"{attachment.id}{extension}"
+    save_path = base_upload_path / new_filename
+    uploaded_file.save(save_path)
+    attachment.file_path = os.path.join("NAS", "UTBA", "claim", new_filename)
+    return attachment
+
+
 def create_claim_from_form(form, files, current_user=None):
     applicant_name = form.get("applicant_name")
     request_date_raw = form.get("request_date")
@@ -287,6 +354,8 @@ def create_claim_from_form(form, files, current_user=None):
         event_id = int(event_id_raw) if event_id_raw else None
     except Exception as exc:
         raise ValidationError("数据格式错误") from exc
+    if amount <= 0:
+        raise ValidationError("金额必须大于 0")
 
     request_obj = ReimbursementRequest(
         applicant_user_id=getattr(current_user, "id", None),
@@ -303,29 +372,8 @@ def create_claim_from_form(form, files, current_user=None):
     db.session.add(request_obj)
     db.session.flush()
 
-    base_upload_path = DATA_ROOT / "NAS" / "UTBA" / "claim"
-    os.makedirs(base_upload_path, exist_ok=True)
-
     for uploaded_file in files.getlist("files"):
-        if not (uploaded_file and uploaded_file.filename):
-            continue
-
-        filename, extension = _normalize_attachment_name(uploaded_file.filename, uploaded_file.mimetype)
-
-        attachment = ReimbursementAttachment(
-            request_id=request_obj.id,
-            uploader_user_id=getattr(current_user, "id", None),
-            file_path="",
-            file_name=filename,
-            mime_type=uploaded_file.mimetype,
-        )
-        db.session.add(attachment)
-        db.session.flush()
-
-        new_filename = f"{attachment.id}{extension}"
-        save_path = base_upload_path / new_filename
-        uploaded_file.save(save_path)
-        attachment.file_path = os.path.join("NAS", "UTBA", "claim", new_filename)
+        _save_claim_attachment(request_obj, uploaded_file, current_user)
 
     db.session.commit()
     return request_obj
@@ -379,6 +427,130 @@ def record_claim_decision(request_id, payload, user):
     request_obj.status = "rejected" if action == "reject" else "approved"
     db.session.commit()
     return request_obj
+
+
+def update_claim(request_id, payload, user):
+    request_obj = _get_claim_or_raise(request_id)
+    if not user_can_manage_claims(user):
+        raise PermissionDenied("没有权限编辑该申请")
+    if request_obj.is_locked:
+        raise PermissionDenied("该申请已锁定，不能修改")
+
+    payload = payload or {}
+
+    if "applicant_name" in payload:
+        applicant_name = str(payload.get("applicant_name") or "").strip()
+        if not applicant_name:
+            raise ValidationError("申请人不能为空")
+        if len(applicant_name) > 128:
+            raise ValidationError("申请人名称过长")
+        _record_claim_change(request_obj, "applicant_name", request_obj.applicant_name, applicant_name, user)
+        request_obj.applicant_name = applicant_name
+
+    if "request_date" in payload:
+        try:
+            request_date = datetime.strptime(str(payload.get("request_date") or ""), "%Y-%m-%d").date()
+        except Exception as exc:
+            raise ValidationError("日期格式错误") from exc
+        _record_claim_change(request_obj, "request_date", request_obj.request_date, request_date, user)
+        request_obj.request_date = request_date
+
+    if "amount" in payload:
+        try:
+            amount = float(payload.get("amount"))
+        except Exception as exc:
+            raise ValidationError("金额格式错误") from exc
+        if amount <= 0:
+            raise ValidationError("金额必须大于 0")
+        _record_claim_change(request_obj, "amount", request_obj.amount, amount, user)
+        request_obj.amount = amount
+
+    if "department_name" in payload:
+        department_name = str(payload.get("department_name") or "").strip()
+        if not department_name:
+            raise ValidationError("部门不能为空")
+        if len(department_name) > 100:
+            raise ValidationError("部门名称过长")
+        _record_claim_change(request_obj, "department_name", request_obj.department_name, department_name, user)
+        request_obj.department_name = department_name
+
+    if "purpose" in payload:
+        purpose = str(payload.get("purpose") or "").strip()
+        if not purpose:
+            raise ValidationError("用途说明不能为空")
+        _record_claim_change(request_obj, "purpose", request_obj.purpose, purpose, user)
+        request_obj.purpose = purpose
+
+    if "event_id" in payload:
+        raw_event_id = payload.get("event_id")
+        if raw_event_id in (None, "", 0, "0"):
+            _record_claim_change(request_obj, "event_id", request_obj.event_id, None, user)
+            request_obj.event_id = None
+        else:
+            try:
+                event_id = int(raw_event_id)
+            except Exception as exc:
+                raise ValidationError("event_id 格式错误") from exc
+            event = EventData.query.get(event_id)
+            if not event:
+                raise ValidationError("活动不存在")
+            _record_claim_change(request_obj, "event_id", request_obj.event_id, event.id, user)
+            request_obj.event_id = event.id
+
+    request_obj.updated_at = datetime.utcnow()
+    db.session.commit()
+    return request_obj
+
+
+def add_claim_attachments(request_id, files, user):
+    request_obj = _get_claim_or_raise(request_id)
+    can_manage = user_can_manage_claims(user)
+    if request_obj.applicant_user_id != user.id and not can_manage:
+        raise PermissionDenied("没有权限编辑该申请")
+    if request_obj.is_locked:
+        raise PermissionDenied("该申请已锁定，不能新增附件")
+
+    attachments = []
+    for uploaded_file in files.getlist("files"):
+        attachment = _save_claim_attachment(request_obj, uploaded_file, user)
+        if attachment:
+            attachments.append(attachment)
+            _record_claim_change(request_obj, "attachment", "", f"新增附件：{attachment.file_name or attachment.file_path}", user)
+
+    if not attachments:
+        raise ValidationError("请先选择附件")
+
+    request_obj.updated_at = datetime.utcnow()
+    db.session.commit()
+    return request_obj
+
+
+def delete_claim_attachment(attachment_id, user):
+    attachment = _get_claim_attachment_or_raise(attachment_id)
+    request_obj = attachment.request
+    can_manage = user_can_manage_claims(user)
+    if request_obj.applicant_user_id != user.id and not can_manage:
+        raise PermissionDenied("没有权限删除该附件")
+    if request_obj.is_locked:
+        raise PermissionDenied("该申请已锁定，不能删除附件")
+
+    request_id = request_obj.id
+    relative_path = str(attachment.file_path or "").strip()
+    display_name = attachment.file_name or attachment.file_path or f"附件 #{attachment.id}"
+    _record_claim_change(request_obj, "attachment", f"删除附件：{display_name}", "", user)
+    request_obj.updated_at = datetime.utcnow()
+    db.session.delete(attachment)
+    db.session.commit()
+
+    if relative_path:
+        file_path = DATA_ROOT / Path(relative_path)
+        try:
+            if file_path.is_file():
+                file_path.unlink()
+        except OSError:
+            pass
+
+    return _get_claim_or_raise(request_id)
 
 
 def update_claim_event(request_id, payload, user):

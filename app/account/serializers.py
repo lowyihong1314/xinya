@@ -46,6 +46,27 @@ def serialize_request_data(request_obj, with_children=True):
         for att in (request_obj.attachments or [])
     ]
 
+    data["change_logs"] = [
+        {
+            "id": log.id,
+            "field_name": log.field_name,
+            "old_value": log.old_value,
+            "new_value": log.new_value,
+            "changed_by_user_id": log.changed_by_user_id,
+            "changed_by_name": (
+                getattr(log.changed_by, "display_name", None)
+                or getattr(log.changed_by, "name_NRIC", None)
+                or getattr(log.changed_by, "username", None)
+            ),
+            "created_at": log.created_at.isoformat() if log.created_at else None,
+        }
+        for log in sorted(
+            (request_obj.change_logs or []),
+            key=lambda item: (item.created_at.isoformat() if item.created_at else "", item.id or 0),
+            reverse=True,
+        )
+    ]
+
     latest_by_user = {}
 
     def approval_sort_key(approver):

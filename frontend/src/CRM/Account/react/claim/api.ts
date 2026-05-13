@@ -64,12 +64,56 @@ export async function deleteClaim(requestId: number) {
   return parseJson<{ status?: string; message?: string }>(response);
 }
 
+export async function deleteClaimAttachment(attachmentId: number) {
+  const response = await apiFetch(`/api/account/claim/attachments/${attachmentId}`, {
+    method: "DELETE",
+    credentials: "include",
+  });
+  const payload = await parseJson<{ data?: ClaimRecord }>(response);
+  if (!payload.data) {
+    throw new Error("申请数据缺失");
+  }
+  return payload.data;
+}
+
 export async function updateClaimEvent(requestId: number, eventId: number | null) {
   const response = await apiFetch(`/api/account/claim/${requestId}/event`, {
     method: "PUT",
     headers: { "Content-Type": "application/json" },
     credentials: "include",
     body: JSON.stringify({ event_id: eventId }),
+  });
+  const payload = await parseJson<{ data?: ClaimRecord }>(response);
+  if (!payload.data) {
+    throw new Error("申请数据缺失");
+  }
+  return payload.data;
+}
+
+export async function updateClaim(
+  requestId: number,
+  payload: Partial<Pick<ClaimRecord, "applicant_name" | "amount" | "request_date" | "department_name" | "purpose" | "event_id">>,
+) {
+  const response = await apiFetch(`/api/account/claim/${requestId}`, {
+    method: "PUT",
+    headers: { "Content-Type": "application/json" },
+    credentials: "include",
+    body: JSON.stringify(payload),
+  });
+  const data = await parseJson<{ data?: ClaimRecord }>(response);
+  if (!data.data) {
+    throw new Error("申请数据缺失");
+  }
+  return data.data;
+}
+
+export async function uploadClaimAttachments(requestId: number, files: File[]) {
+  const formData = new FormData();
+  files.forEach((file) => formData.append("files", file));
+  const response = await apiFetch(`/api/account/claim/${requestId}/attachments`, {
+    method: "POST",
+    body: formData,
+    credentials: "include",
   });
   const payload = await parseJson<{ data?: ClaimRecord }>(response);
   if (!payload.data) {

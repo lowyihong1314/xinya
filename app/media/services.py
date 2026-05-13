@@ -47,12 +47,12 @@ def get_event_type_payload(file_id):
     if not file:
         abort(404, description="File not found")
 
-    ext = os.path.splitext(file.file_name)[1].lower()
+    ext = _resolve_album_file_ext(file)
     if ext in IMAGE_EXTS:
         mime = f"image/{ext.lstrip('.')}"
     elif ext in {".heic", ".heif"}:
         mime = "image/heic"
-    elif ext in {".mp4", ".mov", ".mts", ".avi", ".mkv"}:
+    elif ext in VIDEO_EXTS:
         mime = "video/mp4"
     else:
         mime = "application/octet-stream"
@@ -64,6 +64,49 @@ def get_event_type_payload(file_id):
         {"file_id": file_id, "file_name": file.file_name, "mime": mime},
     )
     return payload
+
+
+def _extension_from_file_type(file_type):
+    normalized = str(file_type or "").strip().lower().lstrip(".")
+    if not normalized:
+        return ""
+    return f".{normalized}"
+
+
+def _detect_image_extension(path):
+    if not os.path.exists(path):
+        return ""
+    try:
+        from PIL import Image
+
+        with Image.open(path) as image:
+            image_format = str(image.format or "").lower()
+    except Exception:
+        return ""
+
+    if image_format in {"jpeg", "jpg"}:
+        return ".jpg"
+    if image_format in {"png", "bmp", "tiff", "webp"}:
+        return f".{image_format if image_format != 'tiff' else 'tif'}"
+    return ""
+
+
+def _resolve_album_file_ext(file, filename=None, event_code=None):
+    safe_filename = filename or secure_filename(file.file_name)
+    ext = os.path.splitext(safe_filename)[1].lower()
+    if ext:
+        return ext
+
+    file_type_ext = _extension_from_file_type(getattr(file, "file_type", None))
+    if file_type_ext in IMAGE_EXTS or file_type_ext in VIDEO_EXTS or file_type_ext in {".heic", ".heif"}:
+        return file_type_ext
+
+    resolved_event_code = event_code or getattr(getattr(file, "event", None), "event_code", None)
+    if not resolved_event_code:
+        return ""
+
+    source_path = os.path.join(event_photo_base_dir(resolved_event_code), safe_filename)
+    return _detect_image_extension(source_path)
 
 
 def _safe_emit(event, data):
@@ -333,9 +376,9 @@ def get_event_image_payload(file_id, variant, force=False):
     if not file:
         abort(404, "File not found")
 
-    ext = os.path.splitext(file.file_name)[1].lower()
     event_code = file.event.event_code
     filename = secure_filename(file.file_name)
+    ext = _resolve_album_file_ext(file, filename, event_code)
     _emit_event_room(
         event_code,
         "get_event_image",

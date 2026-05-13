@@ -3,6 +3,7 @@ import { useRef, useState, type CSSProperties, type FormEvent } from "react";
 import { CachedImage } from "../../../components/CachedMedia";
 import { openPreviewModal } from "../../../js/attachment_preview";
 import { openBrochurePreviewModal } from "../../../event/shared/brochurePreview";
+import { buildEventTypeChoices } from "../../../event/shared/eventTypes";
 import type { EventCreatePayload, EventMutationPayload, EventRecord } from "./types";
 import type { FormRecord } from "../../form/react/types";
 
@@ -51,7 +52,7 @@ export function EventTableView(props: {
   onUploadPoster: (file: File) => void;
   onUploadBrochure: (file: File) => void;
   onRemoveBrochure: () => void;
-  onUploadAttachment: (file: File) => void;
+  onUploadAttachment: (files: File[]) => void;
   onRemoveAttachment: (fileId: number) => void;
   onDeleteEvent: () => void;
   onOpenFormContent: (formId: number) => void;
@@ -64,6 +65,11 @@ export function EventTableView(props: {
   const posterInputRef = useRef<HTMLInputElement | null>(null);
   const brochureInputRef = useRef<HTMLInputElement | null>(null);
   const attachmentInputRef = useRef<HTMLInputElement | null>(null);
+  const eventTypeChoices = buildEventTypeChoices(
+    props.eventTypeOptions
+      .map((option) => option.value)
+      .filter((value) => !String(value).startsWith("__")),
+  );
 
   async function handleCreateSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -86,6 +92,11 @@ export function EventTableView(props: {
 
   return (
     <div style={pageStyle}>
+      <datalist id="event-type-options">
+        {eventTypeChoices.map((value) => (
+          <option key={value} value={value} />
+        ))}
+      </datalist>
       <header style={headerStyle}>
         <div>
           <div style={eyebrowStyle}>Event Table</div>
@@ -185,6 +196,7 @@ export function EventTableView(props: {
               <label style={fieldStyle}>
                 <span style={fieldLabelStyle}>类型</span>
                 <input
+                  list="event-type-options"
                   style={inputStyle}
                   value={draft.type}
                   onChange={(event) => setDraft((prev) => ({ ...prev, type: event.target.value }))}
@@ -372,6 +384,7 @@ export function EventTableView(props: {
                     value={props.selectedEvent.type || ""}
                     readOnly={!canEditEvent}
                     onChange={(value) => props.onUpdateEvent({ type: value })}
+                    list="event-type-options"
                   />
                   <Field
                     label="对象"
@@ -578,11 +591,12 @@ export function EventTableView(props: {
                               <input
                                 ref={attachmentInputRef}
                                 type="file"
+                                multiple
                                 style={hiddenInputStyle}
                                 onChange={(event) => {
-                                  const file = event.target.files?.[0];
-                                  if (file) {
-                                    props.onUploadAttachment(file);
+                                  const files = Array.from(event.target.files || []);
+                                  if (files.length) {
+                                    props.onUploadAttachment(files);
                                   }
                                   event.target.value = "";
                                 }}
@@ -742,6 +756,7 @@ function Field({
   wide,
   placeholder,
   readOnly = false,
+  list,
 }: {
   label: string;
   value: string;
@@ -751,6 +766,7 @@ function Field({
   wide?: boolean;
   placeholder?: string;
   readOnly?: boolean;
+  list?: string;
 }) {
   return (
     <label style={wide ? wideFieldStyle : fieldStyle}>
@@ -771,6 +787,7 @@ function Field({
       ) : (
         <input
           type={type}
+          list={list}
           style={inputStyle}
           value={value}
           readOnly={readOnly}

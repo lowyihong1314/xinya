@@ -15,6 +15,27 @@ from app.media.constants import ALLOWED_EXTENSIONS, IMAGE_EXTS, VIDEO_EXTS
 JPEG_CACHE_SOURCE_EXTS = IMAGE_EXTS | {".heic", ".heif"}
 
 
+def _sniff_image_ext(img_path):
+    try:
+        with Image.open(img_path) as img:
+            image_format = str(img.format or "").lower()
+    except Exception:
+        return ""
+
+    if image_format in {"jpeg", "jpg"}:
+        return ".jpg"
+    if image_format in {"png", "bmp", "tiff", "webp"}:
+        return f".{image_format if image_format != 'tiff' else 'tif'}"
+    return ""
+
+
+def _resolve_jpeg_source_ext(img_path, ext):
+    if ext in JPEG_CACHE_SOURCE_EXTS:
+        return ext
+    sniffed = _sniff_image_ext(img_path)
+    return sniffed or ext
+
+
 def allowed_file(filename):
     return "." in filename and os.path.splitext(filename)[1].lower() in ALLOWED_EXTENSIONS
 
@@ -101,6 +122,7 @@ def jpeg_cache_path_for_source(img_path, cache_root=None):
     base_dir, filename = os.path.split(img_path)
     name, ext = os.path.splitext(filename)
     ext = ext.lower()
+    ext = _resolve_jpeg_source_ext(img_path, ext)
 
     if ext not in JPEG_CACHE_SOURCE_EXTS:
         raise ValueError(f"不支持的文件类型: {ext}")
@@ -125,6 +147,7 @@ def compress_new_cache_file(img_path, cache_root=None):
     _, filename = os.path.split(img_path)
     _, ext = os.path.splitext(filename)
     ext = ext.lower()
+    ext = _resolve_jpeg_source_ext(img_path, ext)
     tmp_path = f"{out_path}.tmp.{os.getpid()}"
 
     try:

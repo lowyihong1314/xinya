@@ -49,7 +49,7 @@ export function EventTablePage() {
       onUploadPoster={(file) => void actions.uploadPoster(file)}
       onUploadBrochure={(file) => void actions.uploadBrochure(file)}
       onRemoveBrochure={() => void actions.removeBrochure()}
-      onUploadAttachment={(file) => void actions.uploadAttachment(file)}
+      onUploadAttachment={(files) => void actions.uploadAttachment(files)}
       onRemoveAttachment={(fileId) => void actions.removeAttachment(fileId)}
       onDeleteEvent={() => void actions.removeSelectedEvent()}
       onOpenFormContent={(formId) => navigate(`/crm/register?form_id=${formId}`)}

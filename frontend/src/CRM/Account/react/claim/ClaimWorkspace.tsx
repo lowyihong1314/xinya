@@ -25,6 +25,8 @@ type ViewState =
   | { kind: "create" }
   | { kind: "detail"; claimId: number };
 
+type ClaimStatusFilter = "all" | "approved" | "unapproved";
+
 const PAGE_SIZE_DESKTOP = 8;
 const PAGE_SIZE_MOBILE = 6;
 
@@ -153,6 +155,7 @@ export function ClaimWorkspace() {
   const [message, setMessage] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [query, setQuery] = useState("");
+  const [statusFilter, setStatusFilter] = useState<ClaimStatusFilter>("all");
   const [page, setPage] = useState(1);
   const scrollPanelRef = useRef<HTMLDivElement | null>(null);
 
@@ -172,7 +175,7 @@ export function ClaimWorkspace() {
 
   useEffect(() => {
     setPage(1);
-  }, [query]);
+  }, [query, statusFilter]);
 
   useEffect(() => {
     if (!message && !error) {
@@ -202,11 +205,18 @@ export function ClaimWorkspace() {
   const filteredClaims = useMemo(() => {
     const keyword = query.trim().toLowerCase();
     const sorted = [...claims].sort((left, right) => right.id - left.id);
-    if (!keyword) {
-      return sorted;
-    }
-    return sorted.filter((claim) =>
-      [
+    return sorted.filter((claim) => {
+      const claimStatus = getClaimStatusForFilter(claim);
+      if (statusFilter === "approved" && claimStatus !== "approved") {
+        return false;
+      }
+      if (statusFilter === "unapproved" && claimStatus === "approved") {
+        return false;
+      }
+      if (!keyword) {
+        return true;
+      }
+      return [
         claim.id,
         claim.applicant_name,
         claim.purpose,
@@ -216,11 +226,12 @@ export function ClaimWorkspace() {
         claim.request_date,
         claim.status,
         claim.amount,
+        statusTextForFilter(claimStatus),
       ]
         .map((value) => String(value ?? "").toLowerCase())
-        .some((value) => value.includes(keyword)),
-    );
-  }, [claims, query]);
+        .some((value) => value.includes(keyword));
+    });
+  }, [claims, query, statusFilter]);
 
   const pageCount = Math.max(1, Math.ceil(filteredClaims.length / pageSize));
   const safePage = Math.min(page, pageCount);
@@ -500,7 +511,7 @@ export function ClaimWorkspace() {
 
   function handleClaimUpdated(nextClaim: ClaimRecord) {
     setClaims((prev) => prev.map((claim) => (claim.id === nextClaim.id ? nextClaim : claim)));
-    setMessage("活动已更新");
+    setMessage("申请已更新");
     setError(null);
   }
 
@@ -531,6 +542,8 @@ export function ClaimWorkspace() {
             claims={pagedClaims}
             query={query}
             onQueryChange={setQuery}
+            statusFilter={statusFilter}
+            onStatusFilterChange={setStatusFilter}
             page={safePage}
             pageCount={pageCount}
             total={filteredClaims.length}
@@ -585,4 +598,25 @@ export function ClaimWorkspace() {
       </div>
     </div>
   );
+}
+
+function getClaimStatusForFilter(claim: ClaimRecord) {
+  const approvers = claim.approver_data || [];
+  if (approvers.some((approver) => approver.reject)) {
+    return "rejected";
+  }
+  if (approvers.some((approver) => !approver.reject)) {
+    return "approved";
+  }
+  return "pending";
+}
+
+function statusTextForFilter(status: string) {
+  if (status === "approved") {
+    return "已批准";
+  }
+  if (status === "rejected") {
+    return "已拒绝";
+  }
+  return "待处理";
 }

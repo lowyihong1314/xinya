@@ -12,6 +12,8 @@ import type { AlbumFile, SharedEventRecord } from "../../event/shared/types";
 import { useEnsureDesignTokens } from "../../theme/designTokens";
 import { useUserState } from "../../app/UserState";
 
+const VIDEO_EXTENSIONS = new Set(["mp4", "mov", "mod", "m4v", "avi", "mkv", "webm", "flv", "mts", "m2ts", "3gp", "wmv"]);
+
 function formatDateKey(date: Date) {
   return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}-${String(date.getDate()).padStart(2, "0")}`;
 }
@@ -19,11 +21,13 @@ function formatDateKey(date: Date) {
 export function HomeAlbumPage() {
   useEnsureDesignTokens();
 
-  const { getEventsForMonth, loading, error, refreshEvents } = useEventData();
+  const { events, getEventsForMonth, loading, error, refreshEvents } = useEventData();
   const { isMobile } = useUserState();
   const now = new Date();
-  const [year, setYear] = useState(now.getFullYear());
+  const currentYear = now.getFullYear();
+  const [year, setYear] = useState(currentYear);
   const [month, setMonth] = useState(now.getMonth() + 1);
+  const yearOptions = useMemo(() => buildYearOptions(events, currentYear), [events, currentYear]);
   const monthEvents = useMemo(() => getEventsForMonth(year, month), [getEventsForMonth, year, month]);
   const eventMap = useMemo(() => buildEventMap(monthEvents, year, month), [monthEvents, year, month]);
   const calendar_data = useMemo(() => buildCalendarData(year, month, eventMap), [year, month, eventMap]);
@@ -51,7 +55,19 @@ export function HomeAlbumPage() {
             ◀
           </button>
           <div style={monthLabelStyle}>
-            {year} / {String(month).padStart(2, "0")}
+            <select
+              value={year}
+              onChange={(event) => setYear(Number(event.target.value))}
+              style={yearSelectStyle}
+              aria-label="选择年份"
+            >
+              {yearOptions.map((optionYear) => (
+                <option key={optionYear} value={optionYear}>
+                  {optionYear}
+                </option>
+              ))}
+            </select>
+            <span>/ {String(month).padStart(2, "0")}</span>
           </div>
           <button type="button" style={monthButtonStyle} onClick={() => changeMonth(1)}>
             ▶
@@ -146,7 +162,7 @@ function EventPreviewCard({ event, isMobile }: { event: SharedEventRecord; isMob
       const nextPreviewUrls = (
         await Promise.all(
           previewFiles.map(async (file) => {
-            if (["mp4", "mov"].includes(String(file.file_type || "").toLowerCase())) {
+            if (VIDEO_EXTENSIONS.has(String(file.file_type || "").toLowerCase())) {
               return null;
             }
             const url = await smartImageURL(file.id, "cache").catch(() => null);
@@ -380,6 +396,24 @@ function pickInitialDate(
   return future || Object.keys(eventMap).sort()[0] || null;
 }
 
+function buildYearOptions(events: SharedEventRecord[], currentYear: number) {
+  const years = new Set<number>([currentYear - 2, currentYear - 1, currentYear, currentYear + 1]);
+
+  events.forEach((event) => {
+    [event.datetime, event.end_datetime].forEach((value) => {
+      if (!value) {
+        return;
+      }
+      const date = new Date(value);
+      if (!Number.isNaN(date.getTime())) {
+        years.add(date.getFullYear());
+      }
+    });
+  });
+
+  return Array.from(years).sort((left, right) => right - left);
+}
+
 const pageStyle: CSSProperties = {
   minHeight: "calc(100vh - 60px)",
   paddingBottom: "32px",
@@ -423,9 +457,22 @@ const monthButtonStyle: CSSProperties = {
 
 const monthLabelStyle: CSSProperties = {
   minWidth: "110px",
-  textAlign: "center",
   color: "white",
   fontWeight: 700,
+  display: "inline-flex",
+  alignItems: "center",
+  justifyContent: "center",
+  gap: "8px",
+};
+
+const yearSelectStyle: CSSProperties = {
+  border: "1px solid rgba(255,255,255,0.5)",
+  borderRadius: "10px",
+  padding: "7px 8px",
+  background: "var(--x-color-panel)",
+  color: "var(--x-color-danger)",
+  fontWeight: 800,
+  outline: "none",
 };
 
 const secondaryButtonStyle: CSSProperties = {

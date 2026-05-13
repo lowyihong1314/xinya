@@ -34,6 +34,7 @@ const ACCEPTED_EXTENSIONS = new Set([
   "raw",
   "mp4",
   "mov",
+  "mod",
   "m4v",
   "avi",
   "mkv",

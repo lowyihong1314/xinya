@@ -88,6 +88,37 @@ class ReimbursementAttachment(db.Model):
     uploader = db.relationship("User", foreign_keys=[uploader_user_id])
 
 
+class ReimbursementRequestChangeLog(db.Model):
+    __tablename__ = "reimbursement_request_change_log"
+
+    id = db.Column(db.Integer, primary_key=True, autoincrement=True)
+
+    request_id = db.Column(
+        db.Integer,
+        db.ForeignKey("reimbursement_request.id", ondelete="CASCADE", onupdate="CASCADE"),
+        nullable=False,
+        index=True
+    )
+
+    changed_by_user_id = db.Column(
+        db.Integer,
+        db.ForeignKey("user_data.id", ondelete="SET NULL", onupdate="CASCADE"),
+        nullable=True,
+        index=True
+    )
+
+    field_name = db.Column(db.String(80), nullable=False)
+    old_value = db.Column(db.Text, nullable=True)
+    new_value = db.Column(db.Text, nullable=True)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow, nullable=False)
+
+    request = db.relationship(
+        "ReimbursementRequest",
+        backref=db.backref("change_logs", lazy=True, cascade="all, delete-orphan")
+    )
+    changed_by = db.relationship("User", foreign_keys=[changed_by_user_id])
+
+
 
 class ReimbursementApproverData(db.Model):
     __tablename__ = "reimbursement_approver_data"

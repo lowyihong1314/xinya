@@ -247,14 +247,21 @@ export function MusicPlaybackProvider({ children }: { children: ReactNode }) {
     if (!musicMap.has(musicId)) {
       return;
     }
+
     const nextQueueIds = normalizeQueue([...queueIds, musicId]);
-    const nextCurrentId = nextQueueIds[0] ?? null;
     setQueueIds(nextQueueIds);
-    setCurrentMusicIdState(nextCurrentId);
-    setHasPlaybackSession(nextCurrentId != null);
-    if (nextCurrentId != null) {
-      setAutoplayKey((value) => value + 1);
+
+    if (currentMusicId == null) {
+      const nextCurrentId = nextQueueIds[0] ?? null;
+      setCurrentMusicIdState(nextCurrentId);
+      setHasPlaybackSession(nextCurrentId != null);
+      if (nextCurrentId != null) {
+        setAutoplayKey((value) => value + 1);
+      }
+      return;
     }
+
+    setHasPlaybackSession(true);
   }
 
   function removeFromQueue(musicId: number) {

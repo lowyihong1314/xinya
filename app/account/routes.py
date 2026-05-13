@@ -10,16 +10,19 @@ from app.account.permissions import (
 )
 from app.account.serializers import serialize_request_data
 from app.account.services import (
+    add_claim_attachments,
     build_payment_voucher_context,
     build_public_payment_voucher_context,
     create_claim_from_form,
     delete_claim,
+    delete_claim_attachment,
     get_payment_voucher_share_data,
     get_public_payment_voucher_data,
     list_claims_for_user,
     read_bill_from_file,
     record_claim_decision,
     submit_public_payment_voucher_signature,
+    update_claim,
     update_claim_event,
 )
 
@@ -118,6 +121,79 @@ def delete_claim_route(request_id):
         user = require_claim_edit_permission()
         delete_claim(request_id, user)
         return jsonify({"status": "success", "message": "申请已删除"}), 200
+    except AccountError as exc:
+        return _error_response(exc)
+    except Exception as exc:
+        from models import db
+
+        db.session.rollback()
+        return jsonify({"status": "error", "message": str(exc)}), 500
+
+
+@account_bp.put("/claim/<int:request_id>")
+def update_claim_route(request_id):
+    try:
+        user = require_claim_edit_permission()
+        payload = request.get_json(silent=True) or {}
+        request_obj = update_claim(request_id, payload, user)
+        return (
+            jsonify(
+                {
+                    "status": "success",
+                    "message": "申请已更新",
+                    "data": serialize_request_data(request_obj, with_children=True),
+                }
+            ),
+            200,
+        )
+    except AccountError as exc:
+        return _error_response(exc)
+    except Exception as exc:
+        from models import db
+
+        db.session.rollback()
+        return jsonify({"status": "error", "message": str(exc)}), 500
+
+
+@account_bp.post("/claim/<int:request_id>/attachments")
+def add_claim_attachments_route(request_id):
+    try:
+        user = require_claim_list_permission()
+        request_obj = add_claim_attachments(request_id, request.files, user)
+        return (
+            jsonify(
+                {
+                    "status": "success",
+                    "message": "附件已上传",
+                    "data": serialize_request_data(request_obj, with_children=True),
+                }
+            ),
+            200,
+        )
+    except AccountError as exc:
+        return _error_response(exc)
+    except Exception as exc:
+        from models import db
+
+        db.session.rollback()
+        return jsonify({"status": "error", "message": str(exc)}), 500
+
+
+@account_bp.delete("/claim/attachments/<int:attachment_id>")
+def delete_claim_attachment_route(attachment_id):
+    try:
+        user = require_claim_list_permission()
+        request_obj = delete_claim_attachment(attachment_id, user)
+        return (
+            jsonify(
+                {
+                    "status": "success",
+                    "message": "附件已删除",
+                    "data": serialize_request_data(request_obj, with_children=True),
+                }
+            ),
+            200,
+        )
     except AccountError as exc:
         return _error_response(exc)
     except Exception as exc:

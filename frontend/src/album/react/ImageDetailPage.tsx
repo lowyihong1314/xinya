@@ -90,7 +90,7 @@ const INITIAL_STATE: ImageDetailState = {
   error: null,
 };
 
-const VIDEO_EXTENSIONS = new Set(["mp4", "mov", "m4v", "avi", "mkv", "webm", "flv", "mts", "m2ts", "3gp", "wmv"]);
+const VIDEO_EXTENSIONS = new Set(["mp4", "mov", "mod", "m4v", "avi", "mkv", "webm", "flv", "mts", "m2ts", "3gp", "wmv"]);
 const IMAGE_EXTENSIONS = new Set(["jpg", "jpeg", "png", "bmp", "tif", "tiff", "webp"]);
 const HEIC_EXTENSIONS = new Set(["heic", "heif"]);
 const ROTATABLE_EXTENSIONS = new Set(["png", "jpg", "jpeg", "heic"]);

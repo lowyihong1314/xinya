@@ -6,6 +6,7 @@ import { useEnsureDesignTokens } from "../../theme/designTokens";
 import { saveEvent, setEventPoster, uploadEventBrochure } from "../../event/shared/api";
 import type { AlbumFile, EventDetailRecord } from "../../event/shared/types";
 import { openBrochurePreviewModal } from "../../event/shared/brochurePreview";
+import { FIXED_EVENT_TYPES } from "../../event/shared/eventTypes";
 
 type Props = {
   detail: EventDetailRecord;
@@ -140,6 +141,11 @@ export function EditEventModal({ detail, onClose, onSaved }: Props) {
   return (
     <div style={overlayStyle} onClick={onClose}>
       <div style={modalStyle} onClick={(event) => event.stopPropagation()}>
+        <datalist id="album-event-type-options">
+          {FIXED_EVENT_TYPES.map((value) => (
+            <option key={value} value={value} />
+          ))}
+        </datalist>
         <div style={headerStyle}>
           <div>
             <div style={eyebrowStyle}>Event Editor</div>
@@ -197,7 +203,7 @@ export function EditEventModal({ detail, onClose, onSaved }: Props) {
         <div style={formGridStyle}>
           <Field label="活动名称" value={form.event_name} onChange={(value) => setForm((prev) => ({ ...prev, event_name: value }))} />
           <Field label="地点" value={form.location} onChange={(value) => setForm((prev) => ({ ...prev, location: value }))} />
-          <Field label="类型" value={form.type} onChange={(value) => setForm((prev) => ({ ...prev, type: value }))} />
+          <Field label="类型" value={form.type} list="album-event-type-options" onChange={(value) => setForm((prev) => ({ ...prev, type: value }))} />
           <Field label="对象" value={form.target} onChange={(value) => setForm((prev) => ({ ...prev, target: value }))} />
           <Field
             label="开始时间"
@@ -320,6 +326,7 @@ function Field({
   textarea,
   wide,
   type = "text",
+  list,
 }: {
   label: string;
   value: string;
@@ -327,6 +334,7 @@ function Field({
   textarea?: boolean;
   wide?: boolean;
   type?: string;
+  list?: string;
 }) {
   return (
     <label style={wide ? wideFieldStyle : fieldStyle}>
@@ -334,7 +342,7 @@ function Field({
       {textarea ? (
         <textarea rows={4} style={textareaStyle} value={value} onChange={(event) => onChange(event.target.value)} />
       ) : (
-        <input type={type} style={inputStyle} value={value} onChange={(event) => onChange(event.target.value)} />
+        <input type={type} list={list} style={inputStyle} value={value} onChange={(event) => onChange(event.target.value)} />
       )}
     </label>
   );

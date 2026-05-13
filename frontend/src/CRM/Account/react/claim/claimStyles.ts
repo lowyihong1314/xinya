@@ -27,7 +27,7 @@ export const scrollPanelStyle: CSSProperties = {
 
 export const toolbarStyle: CSSProperties = {
   display: "grid",
-  gridTemplateColumns: "minmax(0, 1fr) auto auto",
+  gridTemplateColumns: "minmax(0, 1fr) auto auto auto",
   gap: "10px",
   alignItems: "center",
 };

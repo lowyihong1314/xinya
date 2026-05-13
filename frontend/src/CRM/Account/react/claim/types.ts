@@ -35,6 +35,16 @@ export type ClaimApprover = {
   sign_json_data?: unknown;
 };
 
+export type ClaimChangeLog = {
+  id: number;
+  field_name?: string;
+  old_value?: string | null;
+  new_value?: string | null;
+  changed_by_user_id?: number | null;
+  changed_by_name?: string | null;
+  created_at?: string;
+};
+
 export type ClaimRecord = {
   id: number;
   applicant_user_id?: number | null;
@@ -56,6 +66,7 @@ export type ClaimRecord = {
   voucher_signed_at?: string;
   attachments?: ClaimAttachment[];
   approver_data?: ClaimApprover[];
+  change_logs?: ClaimChangeLog[];
 };
 
 export type ClaimListResponse = {

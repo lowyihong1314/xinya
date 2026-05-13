@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useState, type CSSProperties } from "react";
 
 import { apiFetch } from "../../../../js/apiFetch";
 import {
@@ -29,6 +29,8 @@ type ClaimListProps = {
   claims: ClaimRecord[];
   query: string;
   onQueryChange: (value: string) => void;
+  statusFilter: "all" | "approved" | "unapproved";
+  onStatusFilterChange: (value: "all" | "approved" | "unapproved") => void;
   page: number;
   pageCount: number;
   total: number;
@@ -46,6 +48,8 @@ export function ClaimList({
   claims,
   query,
   onQueryChange,
+  statusFilter,
+  onStatusFilterChange,
   page,
   pageCount,
   total,
@@ -122,6 +126,15 @@ export function ClaimList({
           placeholder="搜索姓名、用途、活动、状态、金额或单号"
           style={searchInputStyle}
         />
+        <select
+          value={statusFilter}
+          onChange={(event) => onStatusFilterChange(event.target.value as "all" | "approved" | "unapproved")}
+          style={statusFilterSelectStyle}
+        >
+          <option value="all">全部</option>
+          <option value="approved">已批准</option>
+          <option value="unapproved">未批准</option>
+        </select>
         <div className="claim-list__toolbar-spacer" />
         {query ? (
           <button type="button" style={buttonGhostStyle} onClick={() => onQueryChange("")}>
@@ -222,6 +235,11 @@ export function ClaimList({
     </div>
   );
 }
+
+const statusFilterSelectStyle = {
+  ...searchInputStyle,
+  width: "150px",
+} satisfies CSSProperties;
 
 function safeMoney(value?: number | string) {
   const amount = Number(value ?? 0);

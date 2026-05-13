@@ -3,6 +3,7 @@ import { startTransition, useEffect, useMemo, useState } from "react";
 import { smartImageURL } from "../../../js/get_img";
 import { showConfirmDialog } from "../../../js/dialogs";
 import { useEventData } from "../../../event/shared/EventDataContext";
+import { buildEventTypeChoices } from "../../../event/shared/eventTypes";
 import { useDebouncedAutosave } from "../../shared/useDebouncedAutosave";
 import { select_users_modal } from "../../select_users_modal";
 import { fetchForms } from "../../form/react/api";
@@ -107,13 +108,7 @@ export function useEventTableController() {
   });
 
   const eventTypeOptions = useMemo(() => {
-    const values = Array.from(
-      new Set(
-        mergedEvents
-          .map((event) => String(event.type || "").trim())
-          .filter(Boolean),
-      ),
-    ).sort((a, b) => a.localeCompare(b, "zh-Hans-CN"));
+    const values = buildEventTypeChoices(mergedEvents.map((event) => event.type));
 
     const hasBlank = mergedEvents.some((event) => !String(event.type || "").trim());
     return [
@@ -406,18 +401,39 @@ export function useEventTableController() {
     }
   }
 
-  async function uploadAttachment(file: File) {
+  async function uploadAttachment(files: File | File[]) {
     if (!selectedEventId) {
       return;
     }
+    const uploadFiles = (Array.isArray(files) ? files : [files]).filter(Boolean);
+    if (!uploadFiles.length) {
+      return;
+    }
+
     await flushPendingEventChanges();
     setUploadingEventFile(true);
+    let successCount = 0;
+    const failedNames: string[] = [];
     try {
-      await uploadEventFile(selectedEventId, file);
-      await refreshEvents();
-      setToast({ type: "success", text: "活动附件已上传" });
-    } catch (err) {
-      setToast({ type: "error", text: err instanceof Error ? err.message : "上传失败" });
+      for (const file of uploadFiles) {
+        try {
+          await uploadEventFile(selectedEventId, file);
+          successCount += 1;
+        } catch (err) {
+          failedNames.push(`${file.name || "未命名文件"}：${err instanceof Error ? err.message : "上传失败"}`);
+        }
+      }
+      if (successCount) {
+        await refreshEvents();
+      }
+      if (failedNames.length) {
+        setToast({
+          type: "error",
+          text: `已上传 ${successCount} 个，失败 ${failedNames.length} 个：${failedNames.slice(0, 2).join("；")}`,
+        });
+      } else {
+        setToast({ type: "success", text: uploadFiles.length > 1 ? `已上传 ${successCount} 个活动附件` : "活动附件已上传" });
+      }
     } finally {
       setUploadingEventFile(false);
     }

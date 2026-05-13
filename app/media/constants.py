@@ -12,6 +12,7 @@ ALLOWED_EXTENSIONS = {
     ".raw",
     ".mp4",
     ".mov",
+    ".mod",
     ".m4v",
     ".avi",
     ".mkv",
@@ -26,6 +27,7 @@ ALLOWED_EXTENSIONS = {
 VIDEO_EXTS = {
     ".mp4",
     ".mov",
+    ".mod",
     ".avi",
     ".mkv",
     ".flv",
