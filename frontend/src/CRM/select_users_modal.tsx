@@ -350,7 +350,7 @@ const overlayStyle = {
   display: "flex",
   alignItems: "center",
   justifyContent: "center",
-  padding: "24px",
+  padding: "12px",
   background: "rgba(31, 24, 15, 0.52)",
 };
 
@@ -359,11 +359,11 @@ const modalStyle = {
   maxHeight: "80vh",
   display: "flex",
   flexDirection: "column" as const,
-  gap: "12px",
-  padding: "20px",
-  borderRadius: "24px",
-  background: "linear-gradient(180deg, #fffdf8, #f8f2e7)",
-  boxShadow: "0 24px 60px rgba(0,0,0,0.24)",
+  gap: "8px",
+  padding: "12px",
+  borderRadius: "8px",
+  background: "#fffdf8",
+  boxShadow: "0 12px 28px rgba(0,0,0,0.18)",
 };
 
 const headerStyle = {
@@ -382,7 +382,7 @@ const eyebrowStyle = {
 };
 
 const titleStyle = {
-  fontSize: "20px",
+  fontSize: "18px",
   fontWeight: 900,
   color: "#3d2f19",
 };
@@ -397,8 +397,8 @@ const closeIconStyle = {
 
 const searchInputStyle = {
   width: "100%",
-  padding: "12px 14px",
-  borderRadius: "14px",
+  padding: "6px 8px",
+  borderRadius: "6px",
   border: "1px solid rgba(138, 106, 59, 0.2)",
   background: "rgba(255,255,255,0.9)",
   boxSizing: "border-box" as const,
@@ -412,14 +412,14 @@ const metaStyle = {
 const listStyle = {
   display: "grid",
   gridTemplateColumns: "repeat(auto-fill, minmax(132px, 1fr))",
-  gap: "12px",
+  gap: "8px",
   overflowY: "auto" as const,
   padding: "4px",
 };
 
 const stateStyle = {
   gridColumn: "1 / -1",
-  padding: "32px 16px",
+  padding: "18px 10px",
   textAlign: "center" as const,
   color: "#7a6241",
 };
@@ -428,21 +428,19 @@ const cardStyle = (selected: boolean) => ({
   display: "flex",
   flexDirection: "column" as const,
   alignItems: "center",
-  gap: "8px",
-  padding: "12px 10px",
-  borderRadius: "16px",
+  gap: "6px",
+  padding: "8px",
+  borderRadius: "6px",
   border: selected ? "1px solid rgba(114, 80, 34, 0.4)" : "1px solid rgba(0,0,0,0.08)",
-  background: selected
-    ? "linear-gradient(135deg, #7c5b2b, #b88b4d)"
-    : "linear-gradient(180deg, rgba(255,255,255,0.95), rgba(247,242,232,0.94))",
+  background: selected ? "#7c5b2b" : "rgba(255,255,255,0.95)",
   color: selected ? "#fffaf0" : "#362915",
   cursor: "pointer",
-  boxShadow: selected ? "0 14px 30px rgba(124, 91, 43, 0.26)" : "0 8px 18px rgba(0,0,0,0.06)",
+  boxShadow: "none",
 });
 
 const avatarStyle = {
-  width: "54px",
-  height: "54px",
+  width: "42px",
+  height: "42px",
   borderRadius: "50%",
   objectFit: "cover" as const,
   background: "#ece3d1",
@@ -463,12 +461,12 @@ const usernameStyle = {
 const footerStyle = {
   display: "flex",
   justifyContent: "flex-end",
-  gap: "10px",
+  gap: "6px",
 };
 
 const cancelButtonStyle = {
-  padding: "10px 16px",
-  borderRadius: "12px",
+  padding: "7px 10px",
+  borderRadius: "6px",
   border: "1px solid rgba(0,0,0,0.12)",
   background: "#fff",
   cursor: "pointer",
@@ -476,10 +474,10 @@ const cancelButtonStyle = {
 };
 
 const confirmButtonStyle = {
-  padding: "10px 16px",
-  borderRadius: "12px",
+  padding: "7px 10px",
+  borderRadius: "6px",
   border: "none",
-  background: "linear-gradient(135deg, #7c5b2b, #b88b4d)",
+  background: "#7c5b2b",
   color: "#fff",
   cursor: "pointer",
   fontWeight: 900,

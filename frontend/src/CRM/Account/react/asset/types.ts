@@ -164,3 +164,8 @@ export type AssetDashboardPayload = {
   inventory: AssetInventoryRecord[];
   documents: AssetStockDocumentRecord[];
 };
+
+export type AssetMasterDataPayload = Pick<AssetDashboardPayload, "warehouses" | "partners" | "items">;
+export type AssetInventoryPayload = Pick<AssetDashboardPayload, "warehouses" | "inventory">;
+export type AssetDocumentsPayload = Pick<AssetDashboardPayload, "warehouses" | "items" | "documents">;
+export type AssetMovementsPayload = Pick<AssetDashboardPayload, "documents">;

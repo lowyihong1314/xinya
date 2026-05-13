@@ -2,8 +2,12 @@ import { apiFetch } from "../../../../js/apiFetch";
 
 import type {
   AssetDashboardPayload,
+  AssetDocumentsPayload,
   AssetInventoryRecord,
+  AssetInventoryPayload,
   AssetItemRecord,
+  AssetMasterDataPayload,
+  AssetMovementsPayload,
   AssetPartnerRecord,
   AssetStockDocumentRecord,
   AssetSubItemRecord,
@@ -25,6 +29,50 @@ export async function fetchAssetDashboard() {
   const payload = await parseJson<{ data?: AssetDashboardPayload }>(response);
   if (!payload.data) {
     throw new Error("资产看板数据缺失");
+  }
+  return payload.data;
+}
+
+export async function fetchAssetMasterData() {
+  const response = await apiFetch("/api/asset/master-data", {
+    credentials: "include",
+  });
+  const payload = await parseJson<{ data?: AssetMasterDataPayload }>(response);
+  if (!payload.data) {
+    throw new Error("资产基础资料缺失");
+  }
+  return payload.data;
+}
+
+export async function fetchAssetInventoryData() {
+  const response = await apiFetch("/api/asset/inventory", {
+    credentials: "include",
+  });
+  const payload = await parseJson<{ data?: AssetInventoryPayload }>(response);
+  if (!payload.data) {
+    throw new Error("资产库存数据缺失");
+  }
+  return payload.data;
+}
+
+export async function fetchAssetDocumentsData() {
+  const response = await apiFetch("/api/asset/stock-documents", {
+    credentials: "include",
+  });
+  const payload = await parseJson<{ data?: AssetDocumentsPayload }>(response);
+  if (!payload.data) {
+    throw new Error("资产库存单据缺失");
+  }
+  return payload.data;
+}
+
+export async function fetchAssetMovementsData() {
+  const response = await apiFetch("/api/asset/movements", {
+    credentials: "include",
+  });
+  const payload = await parseJson<{ data?: AssetMovementsPayload }>(response);
+  if (!payload.data) {
+    throw new Error("资产库存流水缺失");
   }
   return payload.data;
 }

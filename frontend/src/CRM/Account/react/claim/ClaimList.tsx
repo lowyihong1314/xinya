@@ -1,4 +1,4 @@
-import { useEffect, useState, type CSSProperties } from "react";
+import { useEffect, useRef, useState, type CSSProperties } from "react";
 
 import { apiFetch } from "../../../../js/apiFetch";
 import {
@@ -63,6 +63,8 @@ export function ClaimList({
 }: ClaimListProps) {
   const [approverUsers, setApproverUsers] = useState<Record<number, ApproverUserProfile>>({});
   const [approverLoadError, setApproverLoadError] = useState("");
+  const [resultMaxHeight, setResultMaxHeight] = useState("calc(100dvh - 160px)");
+  const resultContainerRef = useRef<HTMLDivElement | null>(null);
 
   useEffect(() => {
     const approverIds = Array.from(
@@ -117,8 +119,41 @@ export function ClaimList({
     };
   }, [claims]);
 
+  useEffect(() => {
+    if (loading || !claims.length) {
+      return;
+    }
+
+    const element = resultContainerRef.current;
+    if (!element) {
+      return;
+    }
+
+    let animationFrame = 0;
+    const updateResultMaxHeight = () => {
+      window.cancelAnimationFrame(animationFrame);
+      animationFrame = window.requestAnimationFrame(() => {
+        const viewportHeight = window.visualViewport?.height ?? window.innerHeight;
+        const elementTop = element.getBoundingClientRect().top;
+        const bottomPadding = 8;
+        const nextHeight = Math.max(260, Math.floor(viewportHeight - elementTop - bottomPadding));
+        setResultMaxHeight(`${nextHeight}px`);
+      });
+    };
+
+    updateResultMaxHeight();
+    window.addEventListener("resize", updateResultMaxHeight);
+    window.visualViewport?.addEventListener("resize", updateResultMaxHeight);
+
+    return () => {
+      window.cancelAnimationFrame(animationFrame);
+      window.removeEventListener("resize", updateResultMaxHeight);
+      window.visualViewport?.removeEventListener("resize", updateResultMaxHeight);
+    };
+  }, [claims.length, loading, page, pageCount, query, statusFilter, approverLoadError]);
+
   return (
-    <div className="claim-list" style={{ display: "grid", gap: "14px", minHeight: 0 }}>
+    <>
       <div className="claim-list__toolbar" style={toolbarStyle}>
         <input
           value={query}
@@ -186,7 +221,11 @@ export function ClaimList({
             </div>
           </div>
 
-          <div className="claim-list__results" style={resultContainerStyle}>
+          <div
+            className="claim-list__results"
+            ref={resultContainerRef}
+            style={{ ...resultContainerStyle, maxHeight: resultMaxHeight }}
+          >
             <div className="claim-list__cards" style={listStyle}>
               {claims.map((claim) => (
                 <button key={claim.id} type="button" style={cardButtonStyle} onClick={() => onOpen(claim.id)}>
@@ -232,7 +271,7 @@ export function ClaimList({
           </div>
         </>
       ) : null}
-    </div>
+    </>
   );
 }
 

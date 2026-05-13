@@ -222,9 +222,9 @@ const radius = designTokens.radius;
 const detailPanelStyle: CSSProperties = {
   display: "grid",
   alignContent: "start",
-  gap: "14px",
-  padding: "16px",
-  borderRadius: radius.md,
+  gap: "8px",
+  padding: "10px",
+  borderRadius: radius.sm,
   background: colors.panelAlt,
   border: `1px solid ${colors.lineSoft}`,
 };
@@ -240,13 +240,13 @@ const panelEyebrowStyle: CSSProperties = {
 const detailHeaderStyle: CSSProperties = {
   display: "flex",
   justifyContent: "space-between",
-  gap: "12px",
+  gap: "8px",
   alignItems: "start",
 };
 
 const detailTitleStyle: CSSProperties = {
   margin: "4px 0 0",
-  fontSize: "22px",
+  fontSize: "18px",
   color: colors.ink,
 };
 
@@ -261,7 +261,7 @@ const statusTagStyle: CSSProperties = {
 };
 
 const errorStyle: CSSProperties = {
-  padding: "12px 14px",
+  padding: "8px 10px",
   borderRadius: radius.sm,
   background: colors.dangerSoft,
   color: colors.danger,
@@ -271,11 +271,11 @@ const errorStyle: CSSProperties = {
 const detailMetaGridStyle: CSSProperties = {
   display: "grid",
   gridTemplateColumns: "repeat(auto-fit, minmax(130px, 1fr))",
-  gap: "10px",
+  gap: "6px",
 };
 
 const metaItemStyle: CSSProperties = {
-  padding: "10px 12px",
+  padding: "7px 8px",
   borderRadius: radius.sm,
   background: colors.panel,
   border: `1px solid ${colors.lineSoft}`,
@@ -296,7 +296,7 @@ const metaValueStyle: CSSProperties = {
 
 const statusActionWrapStyle: CSSProperties = {
   display: "grid",
-  gap: "10px",
+  gap: "6px",
 };
 
 const detailSectionTitleStyle: CSSProperties = {
@@ -308,11 +308,11 @@ const detailSectionTitleStyle: CSSProperties = {
 const statusActionRowStyle: CSSProperties = {
   display: "flex",
   flexWrap: "wrap",
-  gap: "8px",
+  gap: "6px",
 };
 
 const statusActionButtonStyle = (active: boolean, background: string, color: string): CSSProperties => ({
-  padding: "8px 12px",
+  padding: "6px 8px",
   borderRadius: radius.sm,
   border: active ? `1px solid ${color}` : `1px solid ${colors.line}`,
   background: active ? background : colors.panel,
@@ -323,13 +323,13 @@ const statusActionButtonStyle = (active: boolean, background: string, color: str
 
 const proofWrapStyle: CSSProperties = {
   display: "grid",
-  gap: "8px",
+  gap: "6px",
 };
 
 const proofHeaderStyle: CSSProperties = {
   display: "flex",
   justifyContent: "space-between",
-  gap: "12px",
+  gap: "8px",
   alignItems: "center",
   flexWrap: "wrap",
 };
@@ -346,19 +346,19 @@ const proofImageStyle: CSSProperties = {
   width: "100%",
   maxHeight: "440px",
   objectFit: "contain",
-  borderRadius: radius.md,
+  borderRadius: radius.sm,
   border: `1px solid ${colors.line}`,
   background: colors.panel,
 };
 
 const detailActionAreaStyle: CSSProperties = {
   display: "flex",
-  gap: "10px",
+  gap: "6px",
   flexWrap: "wrap",
 };
 
 const secondaryActionButtonStyle: CSSProperties = {
-  padding: "10px 14px",
+  padding: "7px 10px",
   borderRadius: radius.sm,
   border: `1px solid ${colors.line}`,
   background: colors.panel,
@@ -368,7 +368,7 @@ const secondaryActionButtonStyle: CSSProperties = {
 };
 
 const dangerActionButtonStyle: CSSProperties = {
-  padding: "10px 14px",
+  padding: "7px 10px",
   borderRadius: radius.sm,
   border: `1px solid ${colors.danger}`,
   background: colors.dangerSoft,
@@ -378,7 +378,7 @@ const dangerActionButtonStyle: CSSProperties = {
 };
 
 const emptyStyle: CSSProperties = {
-  padding: "14px",
+  padding: "10px",
   borderRadius: radius.sm,
   background: colors.panel,
   border: `1px solid ${colors.lineSoft}`,

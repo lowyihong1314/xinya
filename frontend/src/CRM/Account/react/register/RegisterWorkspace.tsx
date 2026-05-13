@@ -360,16 +360,16 @@ const radius = designTokens.radius;
 
 const workspaceStyle: CSSProperties = {
   display: "grid",
-  gridTemplateColumns: "320px minmax(0, 1fr)",
-  gap: "16px",
+  gridTemplateColumns: "280px minmax(0, 1fr)",
+  gap: "10px",
   minHeight: 0,
   height: "100%",
   maxHeight: "100%",
 };
 
 const surfaceStyle: CSSProperties = {
-  padding: "24px",
-  borderRadius: radius.lg,
+  padding: "10px",
+  borderRadius: radius.sm,
   background: colors.panelStrong,
   border: `1px solid ${colors.lineSoft}`,
   color: colors.ink,
@@ -378,31 +378,31 @@ const surfaceStyle: CSSProperties = {
 const sidebarStyle: CSSProperties = {
   display: "grid",
   alignContent: "start",
-  gap: "12px",
-  padding: "18px",
-  borderRadius: radius.lg,
+  gap: "8px",
+  padding: "10px",
+  borderRadius: radius.sm,
   background: colors.panelStrong,
   border: `1px solid ${colors.lineSoft}`,
-  boxShadow: `0 16px 36px ${colors.shadowSoft}`,
+  boxShadow: "none",
   overflow: "auto",
 };
 
 const contentStyle: CSSProperties = {
   display: "grid",
   alignContent: "start",
-  gap: "14px",
+  gap: "10px",
   minWidth: 0,
-  padding: "18px",
-  borderRadius: radius.lg,
+  padding: "10px",
+  borderRadius: radius.sm,
   background: colors.panelStrong,
   border: `1px solid ${colors.lineSoft}`,
-  boxShadow: `0 16px 36px ${colors.shadowSoft}`,
+  boxShadow: "none",
   overflow: "auto",
 };
 
 const panelEyebrowStyle: CSSProperties = {
-  fontSize: "12px",
-  letterSpacing: "0.14em",
+  fontSize: "11px",
+  letterSpacing: "0.08em",
   textTransform: "uppercase",
   color: colors.accent,
   fontWeight: 700,
@@ -410,7 +410,7 @@ const panelEyebrowStyle: CSSProperties = {
 
 const panelTitleStyle: CSSProperties = {
   margin: "4px 0 0",
-  fontSize: "26px",
+  fontSize: "18px",
   color: colors.ink,
 };
 
@@ -427,10 +427,10 @@ const formCardListStyle: CSSProperties = {
 
 const formCardStyle = (active: boolean): CSSProperties => ({
   display: "grid",
-  gap: "10px",
+  gap: "6px",
   width: "100%",
-  padding: "14px",
-  borderRadius: radius.md,
+  padding: "8px 10px",
+  borderRadius: radius.sm,
   border: active ? `1px solid ${colors.accentBorder}` : `1px solid ${colors.lineSoft}`,
   background: active ? colors.accentTint : colors.panel,
   textAlign: "left",
@@ -440,13 +440,13 @@ const formCardStyle = (active: boolean): CSSProperties => ({
 const formCardHeaderStyle: CSSProperties = {
   display: "flex",
   justifyContent: "space-between",
-  gap: "12px",
+  gap: "8px",
   alignItems: "center",
 };
 
 const formCardTitleStyle: CSSProperties = {
   color: colors.ink,
-  fontSize: "15px",
+  fontSize: "13px",
   fontWeight: 800,
 };
 
@@ -459,7 +459,7 @@ const formCardCountStyle: CSSProperties = {
 const formCardStatsStyle: CSSProperties = {
   display: "flex",
   flexWrap: "wrap",
-  gap: "8px",
+  gap: "5px",
 };
 
 const formCardFootStyle: CSSProperties = {
@@ -479,7 +479,7 @@ const statusPillStyle: CSSProperties = {
 const toolbarStyle: CSSProperties = {
   display: "flex",
   justifyContent: "space-between",
-  gap: "16px",
+  gap: "8px",
   alignItems: "start",
   flexWrap: "wrap",
 };
@@ -487,15 +487,15 @@ const toolbarStyle: CSSProperties = {
 const filterTabsStyle: CSSProperties = {
   display: "flex",
   flexWrap: "wrap",
-  gap: "8px",
+  gap: "5px",
 };
 
 const filterButtonStyle = (active: boolean): CSSProperties => ({
   display: "inline-flex",
   alignItems: "center",
-  gap: "8px",
-  padding: "8px 12px",
-  borderRadius: "999px",
+  gap: "5px",
+  padding: "5px 8px",
+  borderRadius: "6px",
   border: active ? `1px solid ${colors.accentBorder}` : `1px solid ${colors.line}`,
   background: active ? colors.accentTint : colors.panel,
   color: active ? colors.accentStrong : colors.ink,
@@ -516,7 +516,7 @@ const filterCountStyle = (active: boolean): CSSProperties => ({
 });
 
 const errorStyle: CSSProperties = {
-  padding: "12px 14px",
+  padding: "8px 10px",
   borderRadius: radius.sm,
   background: colors.dangerSoft,
   color: colors.danger,
@@ -526,23 +526,23 @@ const errorStyle: CSSProperties = {
 const detailLayoutStyle: CSSProperties = {
   display: "grid",
   gridTemplateColumns: "minmax(0, 1.1fr) minmax(320px, 0.9fr)",
-  gap: "14px",
+  gap: "10px",
   minHeight: 0,
 };
 
 const paymentListStyle: CSSProperties = {
   display: "grid",
-  gap: "10px",
+  gap: "6px",
   alignContent: "start",
   minWidth: 0,
 };
 
 const paymentCardStyle = (active: boolean): CSSProperties => ({
   display: "grid",
-  gap: "10px",
+  gap: "6px",
   width: "100%",
-  padding: "14px",
-  borderRadius: radius.md,
+  padding: "8px 10px",
+  borderRadius: radius.sm,
   border: active ? `1px solid ${colors.info}` : `1px solid ${colors.lineSoft}`,
   background: active ? colors.infoTint : colors.panel,
   textAlign: "left",
@@ -552,13 +552,13 @@ const paymentCardStyle = (active: boolean): CSSProperties => ({
 const paymentCardHeadStyle: CSSProperties = {
   display: "flex",
   justifyContent: "space-between",
-  gap: "12px",
+  gap: "8px",
   alignItems: "start",
 };
 
 const paymentNameStyle: CSSProperties = {
   color: colors.ink,
-  fontSize: "15px",
+  fontSize: "13px",
   fontWeight: 800,
 };
 
@@ -575,7 +575,7 @@ const paymentGridStyle: CSSProperties = {
 };
 
 const metaItemStyle: CSSProperties = {
-  padding: "10px 12px",
+  padding: "7px 8px",
   borderRadius: radius.sm,
   background: colors.panel,
   border: `1px solid ${colors.lineSoft}`,
@@ -597,9 +597,9 @@ const metaValueStyle: CSSProperties = {
 const detailPanelStyle: CSSProperties = {
   display: "grid",
   alignContent: "start",
-  gap: "14px",
-  padding: "16px",
-  borderRadius: radius.md,
+  gap: "8px",
+  padding: "10px",
+  borderRadius: radius.sm,
   background: colors.panelAlt,
   border: `1px solid ${colors.lineSoft}`,
 };
@@ -615,7 +615,7 @@ const statusTagStyle: CSSProperties = {
 };
 
 const emptyStyle: CSSProperties = {
-  padding: "14px",
+  padding: "10px",
   borderRadius: radius.sm,
   background: colors.panel,
   border: `1px solid ${colors.lineSoft}`,

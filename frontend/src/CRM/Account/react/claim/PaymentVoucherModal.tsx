@@ -187,7 +187,7 @@ const overlayStyle: CSSProperties = {
   inset: 0,
   zIndex: 10030,
   background: "rgba(10, 18, 32, 0.58)",
-  padding: "18px",
+  padding: "12px",
   display: "grid",
   placeItems: "center",
 };
@@ -197,18 +197,18 @@ const modalStyle: CSSProperties = {
   maxHeight: "92vh",
   overflow: "auto",
   display: "grid",
-  gap: "18px",
-  padding: "20px",
-  borderRadius: radius.lg,
-  background: "linear-gradient(180deg, rgba(248,252,255,0.98), rgba(240,245,250,0.98))",
+  gap: "10px",
+  padding: "12px",
+  borderRadius: radius.sm,
+  background: colors.panelStrong,
   border: `1px solid ${colors.lineSoft}`,
-  boxShadow: "0 28px 70px rgba(15, 23, 42, 0.22)",
+  boxShadow: "0 12px 28px rgba(15, 23, 42, 0.18)",
 };
 
 const heroStyle: CSSProperties = {
   display: "flex",
   justifyContent: "space-between",
-  gap: "16px",
+  gap: "8px",
   alignItems: "start",
   flexWrap: "wrap",
 };
@@ -222,7 +222,7 @@ const eyebrowStyle: CSSProperties = {
 };
 
 const titleStyle: CSSProperties = {
-  fontSize: "28px",
+  fontSize: "20px",
   fontWeight: 800,
   color: colors.ink,
 };
@@ -236,8 +236,8 @@ const subtitleStyle: CSSProperties = {
 
 const ghostButtonStyle: CSSProperties = {
   border: `1px solid ${colors.lineSoft}`,
-  borderRadius: "999px",
-  padding: "10px 14px",
+  borderRadius: "6px",
+  padding: "7px 10px",
   background: "rgba(255,255,255,0.82)",
   color: colors.ink,
   cursor: "pointer",
@@ -247,21 +247,21 @@ const ghostButtonStyle: CSSProperties = {
 const gridStyle: CSSProperties = {
   display: "grid",
   gridTemplateColumns: "repeat(auto-fit, minmax(320px, 1fr))",
-  gap: "18px",
+  gap: "8px",
 };
 
 const panelStyle: CSSProperties = {
   display: "grid",
-  gap: "14px",
-  padding: "18px",
-  borderRadius: "20px",
-  background: "rgba(255,255,255,0.9)",
+  gap: "8px",
+  padding: "10px",
+  borderRadius: "8px",
+  background: colors.panel,
   border: `1px solid ${colors.lineSoft}`,
 };
 
 const infoCardStyle: CSSProperties = {
-  padding: "16px 18px",
-  borderRadius: radius.md,
+  padding: "10px",
+  borderRadius: radius.sm,
   background: "rgba(255,255,255,0.86)",
   border: `1px solid ${colors.lineSoft}`,
   color: colors.ink,
@@ -276,13 +276,13 @@ const sectionTitleStyle: CSSProperties = {
 const factGridStyle: CSSProperties = {
   display: "grid",
   gridTemplateColumns: "repeat(auto-fit, minmax(160px, 1fr))",
-  gap: "10px",
+  gap: "6px",
 };
 
 const factStyle: CSSProperties = {
-  padding: "12px 14px",
-  borderRadius: "14px",
-  background: "linear-gradient(180deg, rgba(234,244,247,0.9), rgba(255,255,255,0.88))",
+  padding: "8px 10px",
+  borderRadius: "6px",
+  background: colors.panel,
   border: `1px solid ${colors.lineSoft}`,
   display: "grid",
   gap: "6px",
@@ -303,8 +303,8 @@ const factValueStyle: CSSProperties = {
 };
 
 const purposeCardStyle: CSSProperties = {
-  padding: "14px 16px",
-  borderRadius: "16px",
+  padding: "8px 10px",
+  borderRadius: "6px",
   background: "rgba(247, 250, 252, 0.92)",
   border: `1px solid ${colors.lineSoft}`,
   display: "grid",
@@ -334,9 +334,9 @@ const attachmentRowStyle: CSSProperties = {
 };
 
 const shareCardStyle: CSSProperties = {
-  padding: "16px",
-  borderRadius: "18px",
-  background: "linear-gradient(145deg, rgba(15,118,110,0.12), rgba(255,255,255,0.92))",
+  padding: "10px",
+  borderRadius: "6px",
+  background: colors.accentTint,
   border: `1px solid ${colors.accentBorder}`,
   display: "grid",
   gap: "10px",
@@ -351,13 +351,13 @@ const urlStyle: CSSProperties = {
 
 const badgeRowStyle: CSSProperties = {
   display: "flex",
-  gap: "10px",
+  gap: "6px",
   flexWrap: "wrap",
 };
 
 function statusPillStyle(isSigned: boolean): CSSProperties {
   return {
-    padding: "8px 12px",
+    padding: "4px 7px",
     borderRadius: "999px",
     background: isSigned ? colors.successSoft : colors.warningSoft,
     color: isSigned ? colors.success : colors.warning,
@@ -367,7 +367,7 @@ function statusPillStyle(isSigned: boolean): CSSProperties {
 }
 
 const copiedPillStyle: CSSProperties = {
-  padding: "8px 12px",
+  padding: "4px 7px",
   borderRadius: "999px",
   background: colors.infoSoft,
   color: colors.info,
@@ -378,14 +378,14 @@ const copiedPillStyle: CSSProperties = {
 const actionGridStyle: CSSProperties = {
   display: "grid",
   gridTemplateColumns: "repeat(auto-fit, minmax(180px, 1fr))",
-  gap: "12px",
+  gap: "6px",
 };
 
 const primaryButtonStyle: CSSProperties = {
   border: "none",
-  borderRadius: "14px",
-  padding: "12px 14px",
-  background: "linear-gradient(135deg, #0f766e, #1d4ed8)",
+  borderRadius: "6px",
+  padding: "7px 10px",
+  background: "#0f766e",
   color: "white",
   cursor: "pointer",
   fontWeight: 800,
@@ -393,8 +393,8 @@ const primaryButtonStyle: CSSProperties = {
 
 const secondaryButtonStyle: CSSProperties = {
   border: `1px solid ${colors.lineSoft}`,
-  borderRadius: "14px",
-  padding: "12px 14px",
+  borderRadius: "6px",
+  padding: "7px 10px",
   background: "rgba(255,255,255,0.88)",
   color: colors.ink,
   cursor: "pointer",
@@ -408,8 +408,8 @@ const disabledButtonStyle: CSSProperties = {
 };
 
 const hintCardStyle: CSSProperties = {
-  padding: "14px 16px",
-  borderRadius: "16px",
+  padding: "8px 10px",
+  borderRadius: "6px",
   background: "rgba(219,234,254,0.56)",
   border: `1px solid ${colors.infoTintStrong}`,
   color: colors.ink,

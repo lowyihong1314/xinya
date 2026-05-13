@@ -5,6 +5,7 @@ import { FormWorkspacePage } from '../form/react/FormWorkspacePage';
 import { LongOpenRegistrationFormPage } from '../long_open_registration_form/react/LongOpenRegistrationFormPage';
 import { UserControlPage } from '../user_control/react/UserControlPage';
 import { FinancePage } from '../Account/react/FinancePage';
+import { AssetWorkspace } from '../Account/react/asset/AssetWorkspace';
 import { SongbookAdminPage } from '../changyou/react/SongbookAdminPage';
 import { FileSystemPage } from '../file_system/react/FileSystemPage';
 import { createElement } from 'react';
@@ -15,6 +16,7 @@ export type CRMModuleKey =
   | 'event_table'
   | 'dharma_event'
   | 'finance'
+  | 'asset'
   | 'register'
   | 'cctv'
   | 'files'
@@ -57,6 +59,13 @@ export const CRM_MODULES: CRMModuleSpec[] = [
     icon: 'fas fa-coins',
     description: '报销与财务审批工作台。',
     Component: FinancePage,
+  },
+  {
+    key: 'asset',
+    title: '资产库存',
+    icon: 'fa-solid fa-boxes-stacked',
+    description: '仓库、库存、单据与库存流水。',
+    Component: AssetWorkspace,
   },
   {
     key: 'register',

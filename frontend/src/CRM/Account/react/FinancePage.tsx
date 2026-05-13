@@ -5,7 +5,6 @@ import { useSearchParams } from "react-router-dom";
 import { useUserState } from "../../../app/UserState";
 import { CRMNavigationTile } from "../../shared/CRMNavigationTile";
 import { useEnsureDesignTokens } from "../../../theme/designTokens";
-import { AssetWorkspace } from "./asset/AssetWorkspace";
 import { ClaimWorkspace } from "./claim/ClaimWorkspace";
 import { IncomeWorkspace } from "./income/IncomeWorkspace";
 import { RegisterWorkspace } from "./register/RegisterWorkspace";
@@ -17,7 +16,6 @@ type FinanceTabKey =
   | "income_req"
   | "register"
   | "summarize_expense"
-  | "asset"
   | "sales_income";
 
 const FINANCE_TABS: Array<{
@@ -49,12 +47,6 @@ const FINANCE_TABS: Array<{
     title: "支出分析",
     icon: "fa-solid fa-chart-pie",
     description: "按活动归类支出，没有活动的申请统一归到未关联活动。",
-  },
-  {
-    key: "asset",
-    title: "资产库存",
-    icon: "fa-solid fa-boxes-stacked",
-    description: "仓库、size 库存、库存单据和流动确认。",
   },
   {
     key: "sales_income",
@@ -89,59 +81,45 @@ export function FinancePage() {
   }, [activeTab, searchParams, setSearchParams]);
 
   return (
-    <div className="finance-page" style={pageStyle}>
-      <section className="finance-page__tabs" style={tabsStyle(isMobile)}>
-        {FINANCE_TABS.map((tab) => {
-          const active = tab.key === activeTab;
-          return (
-            <CRMNavigationTile
-              key={tab.key}
-              onClick={() => {
-                const nextParams = new URLSearchParams(searchParams);
-                nextParams.set("account_router", tab.key);
-                setSearchParams(nextParams);
-              }}
-              icon={tab.icon}
-              title={tab.title}
-              description={tab.description}
-              active={active}
-              isMobile={isMobile}
-            />
-          );
-        })}
-      </section>
+    <>
+      {isMobile ? (
+        <section className="finance-page__tabs" style={tabsStyle(isMobile)}>
+          {FINANCE_TABS.map((tab) => {
+            const active = tab.key === activeTab;
+            return (
+              <CRMNavigationTile
+                key={tab.key}
+                onClick={() => {
+                  const nextParams = new URLSearchParams(searchParams);
+                  nextParams.set("account_router", tab.key);
+                  setSearchParams(nextParams);
+                }}
+                icon={tab.icon}
+                title={tab.title}
+                description={tab.description}
+                active={active}
+                isMobile={isMobile}
+              />
+            );
+          })}
+        </section>
+      ) : null}
 
-      <section className="finance-page__workspace" style={workspaceStyle(isMobile)}>
-        {activeTab === "claim_req" ? <ClaimWorkspace /> : null}
-        {activeTab === "register" ? <RegisterWorkspace /> : null}
-        {activeTab === "income_req" ? <IncomeWorkspace /> : null}
-        {activeTab === "summarize_expense" ? <SummarizeExpenseWorkspace /> : null}
-        {activeTab === "asset" ? <AssetWorkspace /> : null}
-        {activeTab === "sales_income" ? <SalesIncomeWorkspace /> : null}
-      </section>
-    </div>
+      {activeTab === "claim_req" ? <ClaimWorkspace /> : null}
+      {activeTab === "register" ? <RegisterWorkspace /> : null}
+      {activeTab === "income_req" ? <IncomeWorkspace /> : null}
+      {activeTab === "summarize_expense" ? <SummarizeExpenseWorkspace /> : null}
+      {activeTab === "sales_income" ? <SalesIncomeWorkspace /> : null}
+    </>
   );
 }
-
-const pageStyle: CSSProperties = {
-  display: "grid",
-  gap: "18px",
-};
 
 function tabsStyle(isMobile: boolean): CSSProperties {
   return {
     display: "grid",
-    gridTemplateColumns: isMobile ? "1fr" : "repeat(auto-fit, minmax(min(100%, 180px), 180px))",
-    gap: "14px",
+    gridTemplateColumns: isMobile ? "1fr" : "repeat(auto-fit, minmax(min(100%, 176px), 176px))",
+    gap: "6px",
     justifyContent: "start",
-  };
-}
-
-function workspaceStyle(isMobile: boolean): CSSProperties {
-  return {
-    minHeight: 0,
-    height: isMobile ? "auto" : "800px",
-    maxHeight: isMobile ? "none" : "800px",
-    overflow: "hidden",
+    marginBottom: "8px",
   };
 }

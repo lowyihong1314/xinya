@@ -28,6 +28,10 @@ function CRMEntryRedirect() {
   return <Navigate to={buildCRMModuleHref(DEFAULT_CRM_MODULE_KEY, searchParams)} replace />;
 }
 
+function buildLongOpenRegistrationPath(section: "membership" | "youth_class") {
+  return `${LONG_OPEN_REGISTRATION_FORM_PATH}?registration_section=${section}`;
+}
+
 export const crmRoute: RouteObject = {
   path: "crm",
   element: <CRMPage />,
@@ -40,15 +44,15 @@ export const crmRoute: RouteObject = {
     })),
     {
       path: "permanent_registration",
-      element: <Navigate to={LONG_OPEN_REGISTRATION_FORM_PATH} replace />,
+      element: <Navigate to={buildLongOpenRegistrationPath("membership")} replace />,
     },
     {
       path: "membership_registration",
-      element: <Navigate to={LONG_OPEN_REGISTRATION_FORM_PATH} replace />,
+      element: <Navigate to={buildLongOpenRegistrationPath("membership")} replace />,
     },
     {
       path: "youth_class_registration",
-      element: <Navigate to={LONG_OPEN_REGISTRATION_FORM_PATH} replace />,
+      element: <Navigate to={buildLongOpenRegistrationPath("youth_class")} replace />,
     },
     { path: "*", element: <CRMEntryRedirect /> },
   ],

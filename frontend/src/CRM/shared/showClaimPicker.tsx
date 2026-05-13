@@ -203,7 +203,7 @@ const overlayStyle = {
   display: "flex",
   alignItems: "center",
   justifyContent: "center",
-  padding: "20px",
+  padding: "12px",
   background: "rgba(15, 23, 42, 0.52)",
 };
 
@@ -211,19 +211,19 @@ const modalStyle = {
   width: "min(920px, 100%)",
   maxHeight: "88vh",
   overflowY: "auto" as const,
-  padding: "20px",
-  borderRadius: "24px",
-  background: "linear-gradient(180deg, #ffffff, #f6f8fb)",
+  padding: "12px",
+  borderRadius: "8px",
+  background: "#ffffff",
   border: "1px solid rgba(148, 163, 184, 0.22)",
-  boxShadow: "0 24px 56px rgba(15, 23, 42, 0.24)",
+  boxShadow: "0 12px 28px rgba(15, 23, 42, 0.18)",
 };
 
 const headerStyle = {
   display: "flex",
   justifyContent: "space-between",
   alignItems: "flex-start",
-  gap: "12px",
-  marginBottom: "14px",
+  gap: "8px",
+  marginBottom: "10px",
 };
 
 const eyebrowStyle = {
@@ -236,15 +236,15 @@ const eyebrowStyle = {
 
 const titleStyle = {
   margin: 0,
-  fontSize: "24px",
+  fontSize: "18px",
   fontWeight: 900,
   color: "#0f172a",
 };
 
 const searchInputStyle = {
   width: "100%",
-  padding: "12px 14px",
-  borderRadius: "14px",
+  padding: "6px 8px",
+  borderRadius: "6px",
   border: "1px solid rgba(148, 163, 184, 0.3)",
   background: "#fff",
   boxSizing: "border-box" as const,
@@ -270,22 +270,22 @@ const resultInfoStyle = {
 };
 
 const stateStyle = {
-  padding: "32px 14px",
+  padding: "18px 10px",
   textAlign: "center" as const,
   color: "#64748b",
 };
 
 const listStyle = {
   display: "grid",
-  gap: "10px",
-  marginTop: "16px",
+  gap: "6px",
+  marginTop: "10px",
 };
 
 const claimCardStyle = {
   display: "grid",
-  gap: "6px",
-  padding: "14px 16px",
-  borderRadius: "16px",
+  gap: "4px",
+  padding: "8px 10px",
+  borderRadius: "6px",
   border: "1px solid rgba(148, 163, 184, 0.22)",
   background: "#fff",
   textAlign: "left" as const,
@@ -294,8 +294,8 @@ const claimCardStyle = {
 
 const claimCardSelectedStyle = {
   border: "1px solid rgba(14, 116, 144, 0.42)",
-  background: "linear-gradient(180deg, rgba(240,249,255,0.96), rgba(236,253,245,0.96))",
-  boxShadow: "0 14px 30px rgba(14, 116, 144, 0.12)",
+  background: "rgba(240,249,255,0.96)",
+  boxShadow: "none",
 };
 
 const claimCardTopRowStyle = {
@@ -332,14 +332,14 @@ const claimPurposeStyle = {
 const footerStyle = {
   display: "flex",
   justifyContent: "flex-end",
-  gap: "10px",
-  marginTop: "18px",
+  gap: "6px",
+  marginTop: "10px",
   flexWrap: "wrap" as const,
 };
 
 const secondaryButtonStyle = {
-  padding: "10px 14px",
-  borderRadius: "999px",
+  padding: "7px 10px",
+  borderRadius: "6px",
   border: "1px solid rgba(148, 163, 184, 0.3)",
   background: "#fff",
   color: "#0f172a",
@@ -348,10 +348,10 @@ const secondaryButtonStyle = {
 };
 
 const primaryButtonStyle = {
-  padding: "10px 16px",
-  borderRadius: "999px",
+  padding: "7px 10px",
+  borderRadius: "6px",
   border: "none",
-  background: "linear-gradient(135deg, #0f766e, #0369a1)",
+  background: "#0f766e",
   color: "#fff",
   cursor: "pointer",
   fontWeight: 800,

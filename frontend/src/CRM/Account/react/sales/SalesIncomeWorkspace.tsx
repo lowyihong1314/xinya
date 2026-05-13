@@ -849,27 +849,27 @@ export function SalesIncomeWorkspace() {
 
 const workspaceStyle: CSSProperties = {
   display: "grid",
-  gap: "18px",
+  gap: "10px",
   height: "100%",
   overflowY: "auto",
-  paddingRight: "4px",
+  paddingRight: "2px",
 };
 
 const panelStyle: CSSProperties = {
   display: "grid",
-  gap: "16px",
-  padding: "18px",
-  borderRadius: radius.lg,
+  gap: "10px",
+  padding: "10px",
+  borderRadius: radius.sm,
   background: colors.panelStrong,
   border: `1px solid ${colors.lineSoft}`,
-  boxShadow: `0 14px 32px ${colors.shadowSoft}`,
+  boxShadow: "none",
 };
 
 function panelHeaderStyle(isMobile: boolean): CSSProperties {
   return {
     display: "grid",
     gridTemplateColumns: isMobile ? "1fr" : "minmax(0, 1fr) auto",
-    gap: "12px",
+    gap: "8px",
     alignItems: "center",
   };
 }
@@ -880,7 +880,7 @@ const panelCopyStyle: CSSProperties = {
 };
 
 const panelTitleStyle: CSSProperties = {
-  fontSize: "18px",
+  fontSize: "16px",
   fontWeight: 700,
   color: colors.ink,
 };
@@ -893,23 +893,23 @@ const panelHintStyle: CSSProperties = {
 
 const overviewStyle: CSSProperties = {
   display: "grid",
-  gap: "16px",
+  gap: "8px",
 };
 
 function actionGridStyle(isMobile: boolean): CSSProperties {
   return {
     display: "grid",
     gridTemplateColumns: isMobile ? "1fr" : "repeat(2, minmax(0, 1fr))",
-    gap: "12px",
+    gap: "8px",
   };
 }
 
 const actionCardStyle: CSSProperties = {
   display: "grid",
-  gap: "8px",
+  gap: "6px",
   textAlign: "left",
-  padding: "16px",
-  borderRadius: radius.md,
+  padding: "10px",
+  borderRadius: radius.sm,
   border: `1px solid ${colors.accentBorder}`,
   background: `linear-gradient(145deg, ${colors.panel}, ${colors.accentTint})`,
   color: colors.ink,
@@ -917,7 +917,7 @@ const actionCardStyle: CSSProperties = {
 };
 
 const actionTitleStyle: CSSProperties = {
-  fontSize: "16px",
+  fontSize: "14px",
   fontWeight: 700,
   color: colors.accentStrong,
 };
@@ -930,14 +930,14 @@ const actionHintStyle: CSSProperties = {
 
 const listBlockStyle: CSSProperties = {
   display: "grid",
-  gap: "12px",
+  gap: "6px",
 };
 
 function toolbarStyle(isMobile: boolean): CSSProperties {
   return {
     display: "grid",
     gridTemplateColumns: isMobile ? "1fr" : "minmax(0, 1fr) minmax(280px, 360px)",
-    gap: "12px",
+    gap: "8px",
     alignItems: "center",
   };
 }
@@ -950,14 +950,14 @@ const sectionTitleStyle: CSSProperties = {
 
 const documentListStyle: CSSProperties = {
   display: "grid",
-  gap: "12px",
+  gap: "6px",
 };
 
 const documentCardStyle: CSSProperties = {
   display: "grid",
-  gap: "8px",
-  padding: "14px",
-  borderRadius: radius.md,
+  gap: "6px",
+  padding: "8px 10px",
+  borderRadius: radius.sm,
   border: `1px solid ${colors.lineSoft}`,
   background: colors.panelAlt,
 };
@@ -992,7 +992,7 @@ function statusChipStyle(status: string): CSSProperties {
     display: "inline-flex",
     alignItems: "center",
     justifyContent: "center",
-    padding: "6px 10px",
+    padding: "4px 7px",
     borderRadius: "999px",
     border: `1px solid ${palette.border}`,
     background: palette.background,
@@ -1012,7 +1012,7 @@ const lineWrapStyle: CSSProperties = {
 const lineChipStyle: CSSProperties = {
   display: "inline-flex",
   alignItems: "center",
-  padding: "8px 10px",
+  padding: "4px 7px",
   borderRadius: "999px",
   background: colors.panel,
   border: `1px solid ${colors.lineSoft}`,
@@ -1022,14 +1022,14 @@ const lineChipStyle: CSSProperties = {
 
 const formStyle: CSSProperties = {
   display: "grid",
-  gap: "14px",
+  gap: "8px",
 };
 
 const editorHeaderCardStyle: CSSProperties = {
   display: "grid",
-  gap: "6px",
-  padding: "14px",
-  borderRadius: radius.md,
+  gap: "4px",
+  padding: "8px 10px",
+  borderRadius: radius.sm,
   background: colors.panelAlt,
   border: `1px solid ${colors.lineSoft}`,
 };
@@ -1038,7 +1038,7 @@ function fieldGridStyle(isMobile: boolean): CSSProperties {
   return {
     display: "grid",
     gridTemplateColumns: isMobile ? "1fr" : "repeat(2, minmax(0, 1fr))",
-    gap: "10px",
+    gap: "8px",
   };
 }
 
@@ -1048,8 +1048,9 @@ const inputStyle: CSSProperties = {
   border: `1px solid ${colors.line}`,
   background: colors.panel,
   color: colors.ink,
-  padding: "11px 12px",
-  fontSize: "14px",
+  minHeight: "32px",
+  padding: "6px 8px",
+  fontSize: "13px",
   outline: "none",
   boxSizing: "border-box",
 };
@@ -1062,9 +1063,9 @@ const textareaStyle: CSSProperties = {
 
 const pickerBlockStyle: CSSProperties = {
   display: "grid",
-  gap: "10px",
-  padding: "12px 14px",
-  borderRadius: radius.md,
+  gap: "6px",
+  padding: "8px 10px",
+  borderRadius: radius.sm,
   border: `1px solid ${colors.lineSoft}`,
   background: colors.panel,
 };
@@ -1088,9 +1089,9 @@ const pickerValueStyle: CSSProperties = {
 
 const lineEditorStyle: CSSProperties = {
   display: "grid",
-  gap: "12px",
-  padding: "14px",
-  borderRadius: radius.md,
+  gap: "8px",
+  padding: "10px",
+  borderRadius: radius.sm,
   background: colors.panelAlt,
   border: `1px solid ${colors.lineSoft}`,
 };
@@ -1099,20 +1100,20 @@ const sectionHeaderStyle: CSSProperties = {
   display: "flex",
   justifyContent: "space-between",
   alignItems: "center",
-  gap: "10px",
+  gap: "6px",
   flexWrap: "wrap",
 };
 
 const lineListStyle: CSSProperties = {
   display: "grid",
-  gap: "12px",
+  gap: "6px",
 };
 
 const lineCardStyle: CSSProperties = {
   display: "grid",
-  gap: "10px",
-  padding: "12px",
-  borderRadius: radius.md,
+  gap: "6px",
+  padding: "8px 10px",
+  borderRadius: radius.sm,
   background: colors.panel,
   border: `1px solid ${colors.lineSoft}`,
 };
@@ -1120,7 +1121,7 @@ const lineCardStyle: CSSProperties = {
 const formActionRowStyle: CSSProperties = {
   display: "flex",
   flexWrap: "wrap",
-  gap: "10px",
+  gap: "6px",
   alignItems: "center",
 };
 
@@ -1129,9 +1130,10 @@ const primaryButtonStyle: CSSProperties = {
   borderRadius: radius.sm,
   background: `linear-gradient(135deg, ${colors.accent}, ${colors.accentStrong})`,
   color: colors.panel,
-  padding: "11px 14px",
+  padding: "7px 10px",
   fontWeight: 700,
   cursor: "pointer",
+  fontSize: "13px",
 };
 
 const secondaryButtonStyle: CSSProperties = {
@@ -1139,9 +1141,10 @@ const secondaryButtonStyle: CSSProperties = {
   borderRadius: radius.sm,
   background: colors.panel,
   color: colors.accentStrong,
-  padding: "9px 12px",
+  padding: "7px 10px",
   fontWeight: 700,
   cursor: "pointer",
+  fontSize: "13px",
 };
 
 const ghostButtonStyle: CSSProperties = {
@@ -1149,14 +1152,15 @@ const ghostButtonStyle: CSSProperties = {
   borderRadius: radius.sm,
   background: colors.panelStrong,
   color: colors.inkMuted,
-  padding: "9px 12px",
+  padding: "6px 8px",
   fontWeight: 700,
   cursor: "pointer",
+  fontSize: "12px",
 };
 
 const successStyle: CSSProperties = {
-  padding: "12px 14px",
-  borderRadius: radius.md,
+  padding: "8px 10px",
+  borderRadius: radius.sm,
   border: `1px solid ${colors.successStrong}`,
   background: colors.successSoft,
   color: colors.success,
@@ -1164,8 +1168,8 @@ const successStyle: CSSProperties = {
 };
 
 const errorStyle: CSSProperties = {
-  padding: "12px 14px",
-  borderRadius: radius.md,
+  padding: "8px 10px",
+  borderRadius: radius.sm,
   border: `1px solid ${colors.warningBorder}`,
   background: colors.warningSoft,
   color: colors.warning,
@@ -1173,16 +1177,16 @@ const errorStyle: CSSProperties = {
 };
 
 const placeholderStyle: CSSProperties = {
-  padding: "24px",
-  borderRadius: radius.lg,
+  padding: "14px",
+  borderRadius: radius.sm,
   background: colors.panelStrong,
   border: `1px solid ${colors.lineSoft}`,
   color: colors.inkMuted,
 };
 
 const placeholderSubtleStyle: CSSProperties = {
-  padding: "14px",
-  borderRadius: radius.md,
+  padding: "10px",
+  borderRadius: radius.sm,
   background: colors.panelAlt,
   border: `1px dashed ${colors.lineSoft}`,
   color: colors.inkMuted,

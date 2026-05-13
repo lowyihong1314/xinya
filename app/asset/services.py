@@ -6,7 +6,7 @@ from datetime import datetime
 from pathlib import Path
 
 from sqlalchemy import or_
-from sqlalchemy.orm import joinedload, selectinload
+from sqlalchemy.orm import joinedload, lazyload, selectinload
 
 from app.asset.exceptions import NotFound, ValidationError
 from app.paths import DATA_ROOT
@@ -212,7 +212,10 @@ def _get_warehouse_or_raise(warehouse_id):
 
 
 def _get_item_or_raise(item_id):
-    item = AssetItem.query.options(selectinload(AssetItem.sub_items)).get(item_id)
+    item = AssetItem.query.options(
+        lazyload("*"),
+        selectinload(AssetItem.sub_items).lazyload("*"),
+    ).get(item_id)
     if not item:
         raise NotFound("找不到资产 item")
     return item
@@ -226,7 +229,10 @@ def _get_partner_or_raise(partner_id):
 
 
 def _get_sub_item_or_raise(sub_item_id):
-    sub_item = AssetSubItem.query.options(joinedload(AssetSubItem.item)).get(sub_item_id)
+    sub_item = AssetSubItem.query.options(
+        lazyload("*"),
+        joinedload(AssetSubItem.item).lazyload("*"),
+    ).get(sub_item_id)
     if not sub_item:
         raise NotFound("找不到子 item")
     return sub_item
@@ -235,17 +241,28 @@ def _get_sub_item_or_raise(sub_item_id):
 def _get_document_or_raise(document_id):
     document = (
         AssetStockDocument.query.options(
-            selectinload(AssetStockDocument.lines).joinedload(AssetStockDocumentLine.sub_item).joinedload(AssetSubItem.item),
-            selectinload(AssetStockDocument.movements).joinedload(AssetStockMovement.warehouse),
-            joinedload(AssetStockDocument.source_warehouse),
-            joinedload(AssetStockDocument.target_warehouse),
-            joinedload(AssetStockDocument.requester),
-            joinedload(AssetStockDocument.handler),
-            joinedload(AssetStockDocument.taken_by_user),
-            joinedload(AssetStockDocument.counterparty),
-            joinedload(AssetStockDocument.creator),
-            joinedload(AssetStockDocument.approver),
-            joinedload(AssetStockDocument.event),
+            lazyload("*"),
+            selectinload(AssetStockDocument.lines).lazyload("*"),
+            selectinload(AssetStockDocument.lines)
+            .joinedload(AssetStockDocumentLine.sub_item)
+            .lazyload("*"),
+            selectinload(AssetStockDocument.lines)
+            .joinedload(AssetStockDocumentLine.sub_item)
+            .joinedload(AssetSubItem.item)
+            .lazyload("*"),
+            selectinload(AssetStockDocument.movements).lazyload("*"),
+            selectinload(AssetStockDocument.movements)
+            .joinedload(AssetStockMovement.warehouse)
+            .lazyload("*"),
+            joinedload(AssetStockDocument.source_warehouse).lazyload("*"),
+            joinedload(AssetStockDocument.target_warehouse).lazyload("*"),
+            joinedload(AssetStockDocument.requester).lazyload("*"),
+            joinedload(AssetStockDocument.handler).lazyload("*"),
+            joinedload(AssetStockDocument.taken_by_user).lazyload("*"),
+            joinedload(AssetStockDocument.counterparty).lazyload("*"),
+            joinedload(AssetStockDocument.creator).lazyload("*"),
+            joinedload(AssetStockDocument.approver).lazyload("*"),
+            joinedload(AssetStockDocument.event).lazyload("*"),
         )
         .filter(AssetStockDocument.id == document_id)
         .first()
@@ -265,8 +282,10 @@ def _get_reimbursement_request_or_raise(request_id):
 def _get_inventory_or_raise(inventory_id):
     inventory = (
         AssetInventory.query.options(
-            joinedload(AssetInventory.warehouse),
-            joinedload(AssetInventory.sub_item).joinedload(AssetSubItem.item),
+            lazyload("*"),
+            joinedload(AssetInventory.warehouse).lazyload("*"),
+            joinedload(AssetInventory.sub_item).lazyload("*"),
+            joinedload(AssetInventory.sub_item).joinedload(AssetSubItem.item).lazyload("*"),
         )
         .filter(AssetInventory.id == inventory_id)
         .first()
@@ -344,20 +363,47 @@ def _create_movement(document, line, warehouse_id, movement_type, quantity_delta
     db.session.add(movement)
 
 
-def load_asset_dashboard():
-    warehouses = AssetWarehouse.query.order_by(AssetWarehouse.name.asc()).all()
-    partners = (
-        AssetPartner.query.order_by(AssetPartner.partner_type.asc(), AssetPartner.name.asc(), AssetPartner.id.asc()).all()
+def _query_asset_warehouses():
+    return (
+        AssetWarehouse.query.options(
+            lazyload("*"),
+            joinedload(AssetWarehouse.manager).lazyload("*"),
+        )
+        .order_by(AssetWarehouse.name.asc())
+        .all()
     )
-    items = (
-        AssetItem.query.options(selectinload(AssetItem.sub_items))
+
+
+def _query_asset_partners():
+    return (
+        AssetPartner.query.options(lazyload("*"))
+        .order_by(
+            AssetPartner.partner_type.asc(),
+            AssetPartner.name.asc(),
+            AssetPartner.id.asc(),
+        )
+        .all()
+    )
+
+
+def _query_asset_items():
+    return (
+        AssetItem.query.options(
+            lazyload("*"),
+            selectinload(AssetItem.sub_items).lazyload("*"),
+        )
         .order_by(AssetItem.name.asc(), AssetItem.id.asc())
         .all()
     )
-    inventories = (
+
+
+def _query_asset_inventory():
+    return (
         AssetInventory.query.options(
-            joinedload(AssetInventory.warehouse),
-            joinedload(AssetInventory.sub_item).joinedload(AssetSubItem.item),
+            lazyload("*"),
+            joinedload(AssetInventory.warehouse).lazyload("*"),
+            joinedload(AssetInventory.sub_item).lazyload("*"),
+            joinedload(AssetInventory.sub_item).joinedload(AssetSubItem.item).lazyload("*"),
         )
         .order_by(AssetWarehouse.name.asc(), AssetItem.name.asc(), AssetSubItem.size.asc(), AssetSubItem.id.asc())
         .join(AssetInventory.warehouse)
@@ -365,24 +411,114 @@ def load_asset_dashboard():
         .join(AssetSubItem.item)
         .all()
     )
-    documents = (
-        AssetStockDocument.query.options(
-            selectinload(AssetStockDocument.lines).joinedload(AssetStockDocumentLine.sub_item).joinedload(AssetSubItem.item),
-            selectinload(AssetStockDocument.movements).joinedload(AssetStockMovement.warehouse),
-            joinedload(AssetStockDocument.source_warehouse),
-            joinedload(AssetStockDocument.target_warehouse),
-            joinedload(AssetStockDocument.requester),
-            joinedload(AssetStockDocument.handler),
-            joinedload(AssetStockDocument.taken_by_user),
-            joinedload(AssetStockDocument.counterparty),
-            joinedload(AssetStockDocument.creator),
-            joinedload(AssetStockDocument.approver),
-            joinedload(AssetStockDocument.event),
+
+
+def _query_asset_documents(limit=30, include_lines=True, include_movements=True):
+    options = [
+        lazyload("*"),
+        joinedload(AssetStockDocument.source_warehouse).lazyload("*"),
+        joinedload(AssetStockDocument.target_warehouse).lazyload("*"),
+        joinedload(AssetStockDocument.requester).lazyload("*"),
+        joinedload(AssetStockDocument.handler).lazyload("*"),
+        joinedload(AssetStockDocument.taken_by_user).lazyload("*"),
+        joinedload(AssetStockDocument.counterparty).lazyload("*"),
+        joinedload(AssetStockDocument.creator).lazyload("*"),
+        joinedload(AssetStockDocument.approver).lazyload("*"),
+        joinedload(AssetStockDocument.event).lazyload("*"),
+    ]
+    if include_lines:
+        options.extend(
+            [
+                selectinload(AssetStockDocument.lines).lazyload("*"),
+                selectinload(AssetStockDocument.lines)
+                .joinedload(AssetStockDocumentLine.sub_item)
+                .lazyload("*"),
+                selectinload(AssetStockDocument.lines)
+                .joinedload(AssetStockDocumentLine.sub_item)
+                .joinedload(AssetSubItem.item)
+                .lazyload("*"),
+            ]
         )
+    if include_movements:
+        options.extend(
+            [
+                selectinload(AssetStockDocument.movements).lazyload("*"),
+                selectinload(AssetStockDocument.movements)
+                .joinedload(AssetStockMovement.sub_item)
+                .lazyload("*"),
+                selectinload(AssetStockDocument.movements)
+                .joinedload(AssetStockMovement.sub_item)
+                .joinedload(AssetSubItem.item)
+                .lazyload("*"),
+                selectinload(AssetStockDocument.movements)
+                .joinedload(AssetStockMovement.warehouse)
+                .lazyload("*"),
+                selectinload(AssetStockDocument.movements)
+                .joinedload(AssetStockMovement.taken_by_user)
+                .lazyload("*"),
+                selectinload(AssetStockDocument.movements)
+                .joinedload(AssetStockMovement.creator)
+                .lazyload("*"),
+            ]
+        )
+    return (
+        AssetStockDocument.query.options(*options)
         .order_by(AssetStockDocument.created_at.desc(), AssetStockDocument.id.desc())
-        .limit(30)
+        .limit(limit)
         .all()
     )
+
+
+def load_asset_master_data():
+    warehouses = _query_asset_warehouses()
+    partners = _query_asset_partners()
+    items = _query_asset_items()
+    return {
+        "warehouses": [serialize_warehouse(warehouse) for warehouse in warehouses],
+        "partners": [serialize_partner(partner) for partner in partners],
+        "items": [serialize_item(item) for item in items],
+    }
+
+
+def load_asset_inventory_data():
+    warehouses = _query_asset_warehouses()
+    inventories = _query_asset_inventory()
+    return {
+        "warehouses": [serialize_warehouse(warehouse) for warehouse in warehouses],
+        "inventory": [serialize_inventory_row(inventory) for inventory in inventories],
+    }
+
+
+def load_asset_documents_data(limit=30):
+    warehouses = _query_asset_warehouses()
+    items = _query_asset_items()
+    documents = _query_asset_documents(limit=limit, include_lines=True, include_movements=False)
+    return {
+        "warehouses": [serialize_warehouse(warehouse) for warehouse in warehouses],
+        "items": [serialize_item(item) for item in items],
+        "documents": [
+            serialize_stock_document(document, include_children=True, include_lines=True, include_movements=False)
+            for document in documents
+        ],
+    }
+
+
+def load_asset_movements_data(limit=30):
+    documents = _query_asset_documents(limit=limit, include_lines=False, include_movements=True)
+    return {
+        "documents": [
+            serialize_stock_document(document, include_children=True, include_lines=False, include_movements=True)
+            for document in documents
+        ],
+    }
+
+
+def load_asset_dashboard():
+    warehouses = _query_asset_warehouses()
+    partners = _query_asset_partners()
+    items = _query_asset_items()
+    inventories = _query_asset_inventory()
+    documents = _query_asset_documents(limit=30, include_lines=True, include_movements=True)
 
     metrics = {
         "warehouse_count": len(warehouses),
@@ -403,13 +539,7 @@ def load_asset_dashboard():
 
 
 def list_asset_partners():
-    partners = (
-        AssetPartner.query.order_by(
-            AssetPartner.partner_type.asc(),
-            AssetPartner.name.asc(),
-            AssetPartner.id.asc(),
-        ).all()
-    )
+    partners = _query_asset_partners()
     return [serialize_partner(partner) for partner in partners]
 
 

@@ -63,23 +63,22 @@ function tileStyle(active: boolean, isMobile: boolean): CSSProperties {
   return {
     position: "relative",
     display: "grid",
-    gridTemplateColumns: isMobile ? "44px minmax(0, 1fr)" : "56px minmax(0, 1fr)",
-    gap: "14px",
-    alignItems: "start",
-    padding: isMobile ? "14px" : "16px",
-    borderRadius: "var(--x-radius-md)",
+    gridTemplateColumns: isMobile ? "34px minmax(0, 1fr)" : "30px minmax(0, 1fr)",
+    gap: "8px",
+    alignItems: "center",
+    padding: isMobile ? "8px 10px" : "7px 8px",
+    borderRadius: "6px",
     border: active ? "1px solid var(--x-color-accent-border)" : "1px solid var(--x-color-line-soft)",
-    background: active
-      ? "linear-gradient(145deg, var(--x-color-accent-tint-strong), var(--x-color-info-tint))"
-      : "var(--x-color-panel-strong)",
-    boxShadow: active ? "0 18px 36px var(--x-color-shadow-strong)" : "0 10px 24px var(--x-color-shadow-soft)",
+    borderLeft: active ? "3px solid var(--x-color-accent)" : "3px solid transparent",
+    background: active ? "var(--x-color-accent-tint)" : "transparent",
+    boxShadow: "none",
     color: "var(--x-color-ink)",
     cursor: "pointer",
     textAlign: "left",
     textDecoration: "none",
     width: isMobile ? "100%" : "min(100%, 180px)",
     overflow: "visible",
-    transition: "transform 160ms ease, box-shadow 180ms ease, border-color 180ms ease",
+    transition: "background 140ms ease, border-color 140ms ease",
   };
 }
 
@@ -93,18 +92,16 @@ function tileButtonStyle(active: boolean, isMobile: boolean): CSSProperties {
 }
 
 function iconStyle(active: boolean, isMobile: boolean): CSSProperties {
-  const size = isMobile ? 44 : 56;
+  const size = isMobile ? 34 : 30;
   return {
     width: `${size}px`,
     height: `${size}px`,
     display: "grid",
     placeItems: "center",
-    borderRadius: isMobile ? "14px" : "16px",
-    background: active
-      ? "linear-gradient(135deg, var(--x-color-accent), var(--x-color-info))"
-      : "var(--x-color-panel-alt)",
-    color: active ? "white" : "var(--x-color-ink)",
-    fontSize: isMobile ? "18px" : "20px",
+    borderRadius: "6px",
+    background: active ? "var(--x-color-accent)" : "var(--x-color-panel-alt)",
+    color: active ? "white" : "var(--x-color-ink-muted)",
+    fontSize: isMobile ? "15px" : "13px",
   };
 }
 
@@ -116,9 +113,9 @@ const copyStyle: CSSProperties = {
 
 function titleStyle(active: boolean): CSSProperties {
   return {
-    fontSize: "16px",
+    fontSize: "13px",
     fontWeight: 700,
     color: active ? "var(--x-color-accent-strong)" : "var(--x-color-ink)",
-    lineHeight: 1.35,
+    lineHeight: 1.2,
   };
 }

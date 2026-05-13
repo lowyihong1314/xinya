@@ -1116,9 +1116,8 @@ export function FahuiIntakePage() {
 
 const pageStyle: CSSProperties = {
   minHeight: "100vh",
-  padding: "32px 20px 56px",
-  background:
-    "radial-gradient(circle at top left, rgba(196,148,88,0.18), transparent 32%), linear-gradient(180deg, #f8f3ea 0%, #efe4d2 100%)",
+  padding: "12px",
+  background: "#f8f3ea",
 };
 
 function shellStyle(isMobile: boolean): CSSProperties {
@@ -1127,18 +1126,18 @@ function shellStyle(isMobile: boolean): CSSProperties {
     maxWidth: "1120px",
     margin: "0 auto",
     display: "grid",
-    gap: isMobile ? "18px" : "24px",
+    gap: "10px",
   };
 }
 
 const heroStyle: CSSProperties = {
   display: "grid",
-  gap: "14px",
-  padding: "28px",
-  borderRadius: "24px",
+  gap: "8px",
+  padding: "10px",
+  borderRadius: "8px",
   border: "1px solid rgba(126, 80, 32, 0.16)",
-  background: "linear-gradient(135deg, rgba(255,250,242,0.98), rgba(247,236,220,0.94))",
-  boxShadow: "0 18px 48px rgba(86, 52, 22, 0.12)",
+  background: "#fffaf2",
+  boxShadow: "none",
 };
 
 const stepRowStyle: CSSProperties = {
@@ -1149,9 +1148,9 @@ const stepRowStyle: CSSProperties = {
 
 function stepPillStyle(active: boolean): CSSProperties {
   return {
-    padding: "8px 12px",
-    borderRadius: "999px",
-    background: active ? "linear-gradient(135deg, #ba7330, #8f5624)" : "rgba(122, 84, 46, 0.08)",
+    padding: "5px 8px",
+    borderRadius: "6px",
+    background: active ? "#ba7330" : "rgba(122, 84, 46, 0.08)",
     color: active ? "#fff8ef" : "#6b4c2f",
     fontSize: "12px",
     fontWeight: 700,
@@ -1161,7 +1160,7 @@ function stepPillStyle(active: boolean): CSSProperties {
 function titleStyle(isMobile: boolean): CSSProperties {
   return {
     margin: 0,
-    fontSize: isMobile ? "28px" : "42px",
+    fontSize: isMobile ? "22px" : "28px",
     lineHeight: 1.08,
     color: "#3a2410",
     fontWeight: 800,
@@ -1178,24 +1177,24 @@ const leadStyle: CSSProperties = {
 
 const panelStyle: CSSProperties = {
   display: "grid",
-  gap: "18px",
-  padding: "24px",
-  borderRadius: "24px",
+  gap: "10px",
+  padding: "10px",
+  borderRadius: "8px",
   background: "rgba(255,255,255,0.88)",
   border: "1px solid rgba(126, 80, 32, 0.12)",
-  boxShadow: "0 14px 36px rgba(77, 49, 22, 0.08)",
+  boxShadow: "none",
 };
 
 const formStyle: CSSProperties = {
   display: "grid",
-  gap: "22px",
+  gap: "10px",
 };
 
 const sectionCardStyle: CSSProperties = {
   display: "grid",
-  gap: "16px",
-  padding: "20px",
-  borderRadius: "22px",
+  gap: "8px",
+  padding: "10px",
+  borderRadius: "8px",
   border: "1px solid rgba(123, 90, 56, 0.1)",
   background: "rgba(255,252,247,0.92)",
 };
@@ -1209,7 +1208,7 @@ const sectionHeaderStyle: CSSProperties = {
 };
 
 const sectionTitleStyle: CSSProperties = {
-  fontSize: "20px",
+  fontSize: "16px",
   fontWeight: 800,
   color: "#3f2a16",
 };
@@ -1224,14 +1223,14 @@ const sectionCopyStyle: CSSProperties = {
 const itemFlowRowStyle: CSSProperties = {
   display: "flex",
   flexWrap: "wrap",
-  gap: "10px",
+  gap: "6px",
 };
 
 function itemFlowPillStyle(active: boolean): CSSProperties {
   return {
-    padding: "10px 14px",
-    borderRadius: "999px",
-    background: active ? "linear-gradient(135deg, #ba7330, #8f5624)" : "rgba(122, 84, 46, 0.08)",
+    padding: "6px 8px",
+    borderRadius: "6px",
+    background: active ? "#ba7330" : "rgba(122, 84, 46, 0.08)",
     color: active ? "#fff8ef" : "#6b4c2f",
     fontSize: "13px",
     fontWeight: 800,
@@ -1242,14 +1241,14 @@ function fieldGridStyle(isMobile: boolean): CSSProperties {
   return {
     display: "grid",
     gridTemplateColumns: isMobile ? "1fr" : "repeat(2, minmax(0, 1fr))",
-    gap: "14px",
+    gap: "8px",
   };
 }
 
 const singleFieldRowStyle: CSSProperties = {
   display: "grid",
   gridTemplateColumns: "minmax(0, 1fr)",
-  gap: "14px",
+  gap: "8px",
 };
 
 const fieldStyle: CSSProperties = {
@@ -1266,11 +1265,11 @@ const labelStyle: CSSProperties = {
 const inputStyle: CSSProperties = {
   width: "100%",
   boxSizing: "border-box",
-  borderRadius: "14px",
+  borderRadius: "6px",
   border: "1px solid rgba(123, 90, 56, 0.18)",
   background: "#fffdfa",
-  padding: "12px 14px",
-  fontSize: "14px",
+  padding: "6px 8px",
+  fontSize: "13px",
   color: "#342112",
 };
 
@@ -1278,15 +1277,15 @@ function detailGridStyle(isMobile: boolean): CSSProperties {
   return {
     display: "grid",
     gridTemplateColumns: isMobile ? "1fr" : "repeat(2, minmax(0, 1fr))",
-    gap: "12px",
+    gap: "8px",
   };
 }
 
 const detailCardStyle: CSSProperties = {
   display: "grid",
   gap: "6px",
-  padding: "14px 16px",
-  borderRadius: "16px",
+  padding: "8px 10px",
+  borderRadius: "6px",
   border: "1px solid rgba(123, 90, 56, 0.12)",
   background: "#fffdfa",
 };
@@ -1306,15 +1305,15 @@ const detailValueStyle: CSSProperties = {
 
 const historyListStyle: CSSProperties = {
   display: "grid",
-  gap: "14px",
+  gap: "6px",
 };
 
 function historyCardStyle(locked: boolean): CSSProperties {
   return {
     display: "grid",
-    gap: "12px",
-    padding: "18px",
-    borderRadius: "18px",
+    gap: "8px",
+    padding: "10px",
+    borderRadius: "6px",
     border: locked ? "1px solid rgba(45, 126, 76, 0.22)" : "1px solid rgba(123, 90, 56, 0.12)",
     background: locked ? "rgba(240, 251, 244, 0.96)" : "#fffdfa",
   };
@@ -1344,7 +1343,7 @@ const historyMetaStyle: CSSProperties = {
 };
 
 const statusChipStyle: CSSProperties = {
-  padding: "8px 12px",
+  padding: "4px 7px",
   borderRadius: "999px",
   fontSize: "12px",
   fontWeight: 800,
@@ -1356,8 +1355,8 @@ const previewListStyle: CSSProperties = {
 };
 
 const previewItemStyle: CSSProperties = {
-  padding: "10px 12px",
-  borderRadius: "12px",
+  padding: "8px 10px",
+  borderRadius: "6px",
   background: "rgba(247,240,230,0.68)",
   color: "#5f452d",
   fontSize: "13px",
@@ -1370,14 +1369,14 @@ function historyActionRowStyle(isMobile: boolean): CSSProperties {
     justifyContent: "space-between",
     alignItems: isMobile ? "stretch" : "center",
     flexDirection: isMobile ? "column" : "row",
-    gap: "12px",
+    gap: "8px",
   };
 }
 
 const summaryPillStyle: CSSProperties = {
   alignSelf: "start",
-  padding: "10px 14px",
-  borderRadius: "999px",
+  padding: "6px 8px",
+  borderRadius: "6px",
   background: "rgba(166,106,46,0.08)",
   color: "#6f4d2e",
   fontSize: "13px",
@@ -1386,15 +1385,15 @@ const summaryPillStyle: CSSProperties = {
 
 const reviewListStyle: CSSProperties = {
   display: "grid",
-  gap: "12px",
+  gap: "6px",
 };
 
 const reviewCardStyle: CSSProperties = {
   display: "grid",
-  gap: "6px",
+  gap: "4px",
   width: "100%",
-  padding: "16px",
-  borderRadius: "16px",
+  padding: "8px 10px",
+  borderRadius: "6px",
   border: "1px solid rgba(123, 90, 56, 0.12)",
   background: "#fffdfa",
   textAlign: "left",
@@ -1423,7 +1422,7 @@ function actionRowStyle(isMobile: boolean): CSSProperties {
     justifyContent: "space-between",
     alignItems: isMobile ? "stretch" : "center",
     flexDirection: isMobile ? "column" : "row",
-    gap: "12px",
+    gap: "8px",
   };
 }
 
@@ -1431,7 +1430,7 @@ function confirmActionGroupStyle(isMobile: boolean): CSSProperties {
   return {
     display: "grid",
     justifyItems: isMobile ? "stretch" : "end",
-    gap: "10px",
+    gap: "6px",
     width: isMobile ? "100%" : "auto",
   };
 }
@@ -1450,33 +1449,33 @@ const inlineNoteStyle: CSSProperties = {
 
 const primaryButtonStyle: CSSProperties = {
   border: "none",
-  borderRadius: "14px",
-  background: "linear-gradient(135deg, #ba7330, #8f5624)",
+  borderRadius: "6px",
+  background: "#ba7330",
   color: "#fff8ef",
-  padding: "12px 18px",
-  fontSize: "14px",
+  padding: "7px 10px",
+  fontSize: "13px",
   fontWeight: 800,
   cursor: "pointer",
 };
 
 const secondaryButtonStyle: CSSProperties = {
   border: "1px solid rgba(123, 90, 56, 0.18)",
-  borderRadius: "14px",
+  borderRadius: "6px",
   background: "#fffdfa",
   color: "#5c442c",
-  padding: "12px 18px",
-  fontSize: "14px",
+  padding: "7px 10px",
+  fontSize: "13px",
   fontWeight: 700,
   cursor: "pointer",
 };
 
 const ghostButtonStyle: CSSProperties = {
   border: "1px solid rgba(166,106,46,0.18)",
-  borderRadius: "12px",
+  borderRadius: "6px",
   background: "rgba(255,248,237,0.92)",
   color: "#8f5624",
-  padding: "10px 12px",
-  fontSize: "13px",
+  padding: "6px 8px",
+  fontSize: "12px",
   fontWeight: 700,
   cursor: "pointer",
 };
@@ -1489,18 +1488,18 @@ const disabledButtonStyle: CSSProperties = {
 
 const disabledSuccessButtonStyle: CSSProperties = {
   border: "1px solid rgba(45, 126, 76, 0.2)",
-  borderRadius: "12px",
+  borderRadius: "6px",
   background: "rgba(232, 248, 237, 0.96)",
   color: "#2d6f45",
-  padding: "10px 12px",
-  fontSize: "13px",
+  padding: "6px 8px",
+  fontSize: "12px",
   fontWeight: 700,
   cursor: "not-allowed",
 };
 
 const emptyStyle: CSSProperties = {
-  padding: "18px",
-  borderRadius: "14px",
+  padding: "10px",
+  borderRadius: "6px",
   border: "1px dashed rgba(123, 90, 56, 0.22)",
   color: "#7a5e42",
   fontSize: "13px",
@@ -1509,8 +1508,8 @@ const emptyStyle: CSSProperties = {
 };
 
 const emptyMiniStyle: CSSProperties = {
-  padding: "12px 14px",
-  borderRadius: "12px",
+  padding: "8px 10px",
+  borderRadius: "6px",
   background: "rgba(247,240,230,0.45)",
   color: "#7a5e42",
   fontSize: "13px",
@@ -1518,8 +1517,8 @@ const emptyMiniStyle: CSSProperties = {
 };
 
 const lockedHintStyle: CSSProperties = {
-  padding: "14px 16px",
-  borderRadius: "16px",
+  padding: "8px 10px",
+  borderRadius: "6px",
   border: "1px solid rgba(45, 126, 76, 0.16)",
   background: "rgba(240, 251, 244, 0.96)",
   color: "#2c6a40",
@@ -1528,28 +1527,28 @@ const lockedHintStyle: CSSProperties = {
 };
 
 const errorBannerStyle: CSSProperties = {
-  padding: "12px 14px",
-  borderRadius: "14px",
+  padding: "8px 10px",
+  borderRadius: "6px",
   border: "1px solid rgba(176, 63, 42, 0.18)",
   background: "rgba(255,243,240,0.96)",
   color: "#ad3e2a",
-  fontSize: "14px",
+  fontSize: "13px",
   fontWeight: 700,
 };
 
 const successBannerStyle: CSSProperties = {
-  padding: "12px 14px",
-  borderRadius: "14px",
+  padding: "8px 10px",
+  borderRadius: "6px",
   border: "1px solid rgba(71, 120, 82, 0.18)",
   background: "rgba(241, 250, 244, 0.96)",
   color: "#336b42",
-  fontSize: "14px",
+  fontSize: "13px",
   fontWeight: 700,
 };
 
 const infoBannerStyle: CSSProperties = {
-  padding: "12px 14px",
-  borderRadius: "14px",
+  padding: "8px 10px",
+  borderRadius: "6px",
   border: "1px solid rgba(166,106,46,0.16)",
   background: "rgba(255,248,237,0.92)",
   color: "#8f5624",

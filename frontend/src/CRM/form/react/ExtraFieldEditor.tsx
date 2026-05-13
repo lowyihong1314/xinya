@@ -181,16 +181,16 @@ function normalizeOptions(options: string[]) {
 
 const editorCardStyle: CSSProperties = {
   display: "grid",
-  gap: "12px",
-  padding: "14px",
-  borderRadius: "16px",
+  gap: "8px",
+  padding: "10px",
+  borderRadius: "6px",
   border: "1px solid var(--x-color-line-soft)",
   background: "var(--x-color-panel-strong)",
 };
 
 const editorGridStyle: CSSProperties = {
   display: "grid",
-  gap: "12px",
+  gap: "8px",
   gridTemplateColumns: "repeat(auto-fit, minmax(180px, 1fr))",
 };
 
@@ -208,8 +208,8 @@ const labelStyle: CSSProperties = {
 const inputStyle: CSSProperties = {
   width: "100%",
   minWidth: 0,
-  padding: "10px 12px",
-  borderRadius: "12px",
+  padding: "6px 8px",
+  borderRadius: "6px",
   border: "1px solid var(--x-color-line-soft)",
   background: "var(--x-color-panel)",
   color: "var(--x-color-ink)",
@@ -219,13 +219,13 @@ const inputStyle: CSSProperties = {
 const actionsStyle: CSSProperties = {
   display: "flex",
   justifyContent: "flex-end",
-  gap: "10px",
+  gap: "6px",
   flexWrap: "wrap",
 };
 
 const saveButtonStyle: CSSProperties = {
-  padding: "10px 16px",
-  borderRadius: "999px",
+  padding: "7px 10px",
+  borderRadius: "6px",
   border: "1px solid var(--x-color-line-soft)",
   background: "var(--x-color-panel)",
   color: "var(--x-color-ink)",
@@ -234,8 +234,8 @@ const saveButtonStyle: CSSProperties = {
 };
 
 const deleteButtonStyle: CSSProperties = {
-  padding: "10px 16px",
-  borderRadius: "999px",
+  padding: "7px 10px",
+  borderRadius: "6px",
   border: "1px solid var(--x-color-danger-border)",
   background: "var(--x-color-danger-soft)",
   color: "var(--x-color-danger)",
@@ -244,8 +244,8 @@ const deleteButtonStyle: CSSProperties = {
 };
 
 const ghostButtonStyle: CSSProperties = {
-  padding: "8px 12px",
-  borderRadius: "999px",
+  padding: "6px 8px",
+  borderRadius: "6px",
   border: "1px solid var(--x-color-line-soft)",
   background: "var(--x-color-panel)",
   color: "var(--x-color-ink)",
@@ -263,19 +263,19 @@ const optionsHeaderStyle: CSSProperties = {
 
 const optionsListStyle: CSSProperties = {
   display: "grid",
-  gap: "10px",
+  gap: "6px",
 };
 
 const optionRowStyle: CSSProperties = {
   display: "grid",
   gridTemplateColumns: "minmax(0, 1fr) auto",
-  gap: "10px",
+  gap: "6px",
   alignItems: "center",
 };
 
 const hintStyle: CSSProperties = {
-  padding: "10px 12px",
-  borderRadius: "12px",
+  padding: "8px 10px",
+  borderRadius: "6px",
   border: "1px dashed var(--x-color-line-soft)",
   color: "var(--x-color-ink-muted)",
   background: "var(--x-color-panel)",

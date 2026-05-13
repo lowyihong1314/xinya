@@ -114,14 +114,14 @@ const overlayStyle: CSSProperties = {
   display: "flex",
   alignItems: "center",
   justifyContent: "center",
-  padding: "20px",
+  padding: "12px",
 };
 
 const modalStyle: CSSProperties = {
   width: "min(900px, 100%)",
   background: "#000",
-  borderRadius: "10px",
-  padding: "12px",
+  borderRadius: "8px",
+  padding: "8px",
   position: "relative",
 };
 
@@ -145,7 +145,7 @@ const ptzGridStyle: CSSProperties = {
   display: "grid",
   gridTemplateColumns: "50px 50px 50px",
   gridTemplateRows: "50px 50px 50px",
-  gap: "6px",
+  gap: "4px",
   justifyContent: "center",
   marginTop: "12px",
 };
@@ -154,7 +154,7 @@ const ptzButtonStyle: CSSProperties = {
   background: "#222",
   color: "#fff",
   border: "1px solid #444",
-  borderRadius: "6px",
+  borderRadius: "4px",
   cursor: "pointer",
   fontSize: "16px",
 };

@@ -347,7 +347,7 @@ const overlayStyle = {
   display: "flex",
   alignItems: "center",
   justifyContent: "center",
-  padding: "20px",
+  padding: "12px",
   background: "rgba(15, 23, 42, 0.52)",
 };
 
@@ -355,19 +355,19 @@ const modalStyle = {
   width: "min(980px, 100%)",
   maxHeight: "88vh",
   overflowY: "auto" as const,
-  padding: "20px",
-  borderRadius: "24px",
-  background: "linear-gradient(180deg, #ffffff, #f6f8fb)",
+  padding: "12px",
+  borderRadius: "8px",
+  background: "#ffffff",
   border: "1px solid rgba(148, 163, 184, 0.22)",
-  boxShadow: "0 24px 56px rgba(15, 23, 42, 0.24)",
+  boxShadow: "0 12px 28px rgba(15, 23, 42, 0.18)",
 };
 
 const headerStyle = {
   display: "flex",
   justifyContent: "space-between",
   alignItems: "flex-start",
-  gap: "12px",
-  marginBottom: "14px",
+  gap: "8px",
+  marginBottom: "10px",
 };
 
 const eyebrowStyle = {
@@ -380,15 +380,15 @@ const eyebrowStyle = {
 
 const titleStyle = {
   margin: 0,
-  fontSize: "24px",
+  fontSize: "18px",
   fontWeight: 900,
   color: "#0f172a",
 };
 
 const searchInputStyle = {
   width: "100%",
-  padding: "12px 14px",
-  borderRadius: "14px",
+  padding: "6px 8px",
+  borderRadius: "6px",
   border: "1px solid rgba(148, 163, 184, 0.3)",
   background: "#fff",
   boxSizing: "border-box" as const,
@@ -419,8 +419,8 @@ const monthNavigatorStyle = {
 };
 
 const monthFilterButtonStyle = {
-  padding: "9px 14px",
-  borderRadius: "999px",
+  padding: "5px 8px",
+  borderRadius: "6px",
   border: "1px solid rgba(148, 163, 184, 0.32)",
   background: "#fff",
   color: "#334155",
@@ -435,7 +435,7 @@ const monthFilterButtonActiveStyle = {
 };
 
 const monthCurrentLabelStyle = {
-  padding: "9px 4px",
+  padding: "5px 4px",
   fontSize: "13px",
   fontWeight: 800,
   color: "#0f172a",
@@ -458,26 +458,26 @@ const resultInfoStyle = {
 };
 
 const stateStyle = {
-  padding: "30px 16px",
+  padding: "18px 10px",
   textAlign: "center" as const,
   color: "#64748b",
 };
 
 const gridStyle = {
   display: "grid",
-  gridTemplateColumns: "repeat(auto-fill, minmax(220px, 1fr))",
-  gap: "14px",
+  gridTemplateColumns: "repeat(auto-fill, minmax(180px, 1fr))",
+  gap: "8px",
 };
 
 const eventCardStyle = {
   position: "relative" as const,
-  minHeight: "200px",
+  minHeight: "150px",
   border: "none",
-  borderRadius: "18px",
+  borderRadius: "8px",
   overflow: "hidden",
   cursor: "pointer",
   background: "linear-gradient(135deg, rgba(59,130,246,0.12), rgba(99,102,241,0.14))",
-  boxShadow: "0 12px 24px rgba(15, 23, 42, 0.12)",
+  boxShadow: "none",
   textAlign: "left" as const,
 };
 
@@ -489,8 +489,8 @@ const eventCardOverlayStyle = {
   display: "flex",
   flexDirection: "column" as const,
   justifyContent: "flex-end",
-  minHeight: "200px",
-  padding: "14px",
+  minHeight: "150px",
+  padding: "10px",
   color: "#fff",
   background: "linear-gradient(to top, rgba(15,23,42,0.84), rgba(15,23,42,0.06))",
 };

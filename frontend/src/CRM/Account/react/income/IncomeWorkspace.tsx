@@ -381,15 +381,15 @@ const radius = designTokens.radius;
 
 const workspaceStyle: CSSProperties = {
   display: "grid",
-  gap: "16px",
+  gap: "10px",
   height: "100%",
   maxHeight: "100%",
   minHeight: 0,
-  padding: "18px",
-  borderRadius: radius.lg,
+  padding: "10px",
+  borderRadius: radius.sm,
   border: `1px solid ${colors.lineSoft}`,
-  background: `linear-gradient(145deg, ${colors.accentTint} 0%, ${colors.panelStrong} 100%)`,
-  boxShadow: `0 16px 36px ${colors.shadowSoft}`,
+  background: colors.panelStrong,
+  boxShadow: "none",
   overflow: "auto",
   boxSizing: "border-box",
 };
@@ -397,14 +397,14 @@ const workspaceStyle: CSSProperties = {
 const headerStyle: CSSProperties = {
   display: "flex",
   justifyContent: "space-between",
-  gap: "16px",
+  gap: "8px",
   alignItems: "start",
   flexWrap: "wrap",
 };
 
 const eyebrowStyle: CSSProperties = {
-  fontSize: "12px",
-  letterSpacing: "0.14em",
+  fontSize: "11px",
+  letterSpacing: "0.08em",
   textTransform: "uppercase",
   color: colors.accent,
   fontWeight: 700,
@@ -412,13 +412,13 @@ const eyebrowStyle: CSSProperties = {
 
 const titleStyle: CSSProperties = {
   margin: "4px 0 0",
-  fontSize: "28px",
+  fontSize: "20px",
   lineHeight: 1.05,
   color: colors.ink,
 };
 
 const subtitleStyle: CSSProperties = {
-  marginTop: "8px",
+  marginTop: "4px",
   color: colors.inkMuted,
   lineHeight: 1.6,
   fontSize: "13px",
@@ -431,8 +431,8 @@ const filterWrapStyle: CSSProperties = {
 };
 
 const filterButtonStyle = (active: boolean): CSSProperties => ({
-  padding: "8px 12px",
-  borderRadius: "999px",
+  padding: "5px 8px",
+  borderRadius: "6px",
   border: active ? `1px solid ${colors.accentBorder}` : `1px solid ${colors.line}`,
   background: active ? colors.accentTint : colors.panel,
   color: active ? colors.accentStrong : colors.ink,
@@ -444,12 +444,12 @@ const filterButtonStyle = (active: boolean): CSSProperties => ({
 const metricGridStyle: CSSProperties = {
   display: "grid",
   gridTemplateColumns: "repeat(auto-fit, minmax(180px, 1fr))",
-  gap: "12px",
+  gap: "8px",
 };
 
 const metricCardStyle: CSSProperties = {
-  padding: "16px",
-  borderRadius: radius.md,
+  padding: "10px",
+  borderRadius: radius.sm,
   background: colors.panel,
   border: `1px solid ${colors.lineSoft}`,
 };
@@ -461,8 +461,8 @@ const metricLabelStyle: CSSProperties = {
 };
 
 const metricValueStyle: CSSProperties = {
-  marginTop: "8px",
-  fontSize: "24px",
+  marginTop: "4px",
+  fontSize: "18px",
   color: colors.ink,
   fontWeight: 900,
 };
@@ -476,16 +476,16 @@ const metricHintStyle: CSSProperties = {
 const chartGridStyle: CSSProperties = {
   display: "grid",
   gridTemplateColumns: "repeat(auto-fit, minmax(320px, 1fr))",
-  gap: "14px",
+  gap: "8px",
 };
 
 const panelStyle: CSSProperties = {
   display: "grid",
-  gap: "14px",
+  gap: "8px",
   alignContent: "start",
   minHeight: "320px",
-  padding: "16px",
-  borderRadius: radius.md,
+  padding: "10px",
+  borderRadius: radius.sm,
   background: colors.panelStrong,
   border: `1px solid ${colors.lineSoft}`,
 };
@@ -547,7 +547,7 @@ const monthCountStyle: CSSProperties = {
 
 const listStyle: CSSProperties = {
   display: "grid",
-  gap: "12px",
+  gap: "6px",
 };
 
 const listItemStyle: CSSProperties = {
@@ -558,7 +558,7 @@ const listItemStyle: CSSProperties = {
 const listHeaderStyle: CSSProperties = {
   display: "flex",
   justifyContent: "space-between",
-  gap: "12px",
+  gap: "8px",
   alignItems: "center",
 };
 
@@ -594,7 +594,7 @@ const listMetaStyle: CSSProperties = {
 };
 
 const errorStyle: CSSProperties = {
-  padding: "12px 14px",
+  padding: "8px 10px",
   borderRadius: radius.sm,
   border: `1px solid ${colors.dangerBorder}`,
   background: colors.dangerSoft,
@@ -605,16 +605,16 @@ const errorStyle: CSSProperties = {
 const placeholderStyle: CSSProperties = {
   display: "grid",
   placeItems: "center",
-  minHeight: "240px",
-  padding: "24px",
-  borderRadius: radius.lg,
+  minHeight: "180px",
+  padding: "14px",
+  borderRadius: radius.sm,
   border: `1px dashed ${colors.lineSoft}`,
   background: colors.panelStrong,
   color: colors.inkMuted,
 };
 
 const emptyStyle: CSSProperties = {
-  padding: "14px",
+  padding: "10px",
   borderRadius: radius.sm,
   background: colors.panelAlt,
   color: colors.inkMuted,

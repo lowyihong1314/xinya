@@ -25,17 +25,18 @@ export function CCTVPage() {
 
 const pageStyle: CSSProperties = {
   display: "grid",
-  gap: "18px",
+  gap: "10px",
 };
 
 const heroStyle: CSSProperties = {
   display: "grid",
-  gap: "18px",
-  padding: "20px",
-  borderRadius: "18px",
-  background: "linear-gradient(160deg, #12343b, #0f766e)",
-  color: "#fff",
-  boxShadow: "0 20px 50px rgba(15,23,42,0.18)",
+  gap: "8px",
+  padding: "10px 12px",
+  borderRadius: "8px",
+  background: "var(--x-color-panel)",
+  color: "var(--x-color-ink)",
+  border: "1px solid var(--x-color-line-soft)",
+  boxShadow: "none",
 };
 
 const eyebrowStyle: CSSProperties = {
@@ -47,7 +48,7 @@ const eyebrowStyle: CSSProperties = {
 
 const titleStyle: CSSProperties = {
   margin: 0,
-  fontSize: "34px",
+  fontSize: "20px",
   lineHeight: 1.1,
 };
 
@@ -60,17 +61,17 @@ const copyStyle: CSSProperties = {
 
 const actionsStyle: CSSProperties = {
   display: "flex",
-  gap: "12px",
+  gap: "6px",
   flexWrap: "wrap",
   alignItems: "center",
 };
 
 const openButtonStyle: CSSProperties = {
-  padding: "12px 18px",
-  borderRadius: "999px",
+  padding: "7px 10px",
+  borderRadius: "6px",
   border: "none",
-  background: "#fff",
-  color: "#0f766e",
+  background: "var(--x-color-accent)",
+  color: "#fff",
   fontWeight: 700,
   cursor: "pointer",
 };

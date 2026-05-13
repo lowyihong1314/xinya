@@ -283,7 +283,7 @@ export function ClaimDetail({
   }
 
   return (
-    <div className="claim-detail" style={{ display: "grid", gap: "16px" }}>
+    <>
       <div className="claim-detail__header" style={panelHeaderStyle}>
         <button type="button" style={buttonGhostStyle} onClick={onBack}>
           返回列表
@@ -291,7 +291,7 @@ export function ClaimDetail({
         <div className="claim-detail__title" style={panelTitleStyle}>申请详情 #{claim.id}</div>
       </div>
 
-      <div className="claim-detail__status-row" style={{ display: "flex", gap: "10px", flexWrap: "wrap", alignItems: "center" }}>
+      <div className="claim-detail__status-row" style={{ display: "flex", gap: "6px", flexWrap: "wrap", alignItems: "center" }}>
         <div className="claim-detail__status-badge" style={statusBadgeStyle(claimStatus)}>{statusText(claimStatus)}</div>
         <span style={chipStyle}>
           批准 {claim.approver_data?.filter((item) => !item.reject).length || 0} 人
@@ -306,106 +306,63 @@ export function ClaimDetail({
         {attachmentError ? <span style={{ ...chipStyle, color: "var(--x-color-danger)" }}>{attachmentError}</span> : null}
       </div>
 
-      {editingClaim ? (
-        <section className="claim-detail__edit-panel" style={editPanelStyle}>
-          <div style={sectionTitleStyle}>编辑申请内容</div>
-          <div style={editGridStyle(isMobile)}>
-            <label style={editFieldStyle}>
-              <span style={detailLabelStyle}>申请人</span>
-              <input
-                style={inputStyle}
-                value={editDraft.applicant_name}
-                onChange={(event) => setEditDraft((prev) => ({ ...prev, applicant_name: event.target.value }))}
-              />
-            </label>
-            <label style={editFieldStyle}>
-              <span style={detailLabelStyle}>金额</span>
-              <input
-                type="number"
-                inputMode="decimal"
-                style={inputStyle}
-                value={editDraft.amount}
-                onChange={(event) => setEditDraft((prev) => ({ ...prev, amount: event.target.value }))}
-              />
-            </label>
-            <label style={editFieldStyle}>
-              <span style={detailLabelStyle}>日期</span>
-              <input
-                type="date"
-                style={inputStyle}
-                value={editDraft.request_date}
-                onChange={(event) => setEditDraft((prev) => ({ ...prev, request_date: event.target.value }))}
-              />
-            </label>
-            <label style={editFieldStyle}>
-              <span style={detailLabelStyle}>部门</span>
-              <input
-                style={inputStyle}
-                value={editDraft.department_name}
-                onChange={(event) => setEditDraft((prev) => ({ ...prev, department_name: event.target.value }))}
-              />
-            </label>
-            <label style={{ ...editFieldStyle, gridColumn: "1 / -1" }}>
-              <span style={detailLabelStyle}>用途说明</span>
-              <textarea
-                rows={5}
-                style={textareaStyle}
-                value={editDraft.purpose}
-                onChange={(event) => setEditDraft((prev) => ({ ...prev, purpose: event.target.value }))}
-              />
-            </label>
-            <div style={{ ...editFieldStyle, gridColumn: "1 / -1" }}>
-              <span style={detailLabelStyle}>关联活动</span>
-              <div style={eventActionRowStyle}>
-                <span style={chipStyle}>
-                  {claim.event_id ? `${claim.event_name || "未命名活动"} (#${claim.event_id})` : "未关联活动"}
-                </span>
-                <button
-                  type="button"
-                  style={disabledStyle(buttonSecondaryStyle, savingEvent)}
-                  disabled={savingEvent}
-                  onClick={() => void handlePickEvent()}
-                >
-                  {savingEvent ? "保存中…" : claim.event_id ? "更换活动" : "选择活动"}
-                </button>
-                {claim.event_id ? (
-                  <button
-                    type="button"
-                    style={disabledStyle(buttonGhostStyle, savingEvent)}
-                    disabled={savingEvent}
-                    onClick={() => void handleClearEvent()}
-                  >
-                    清除
-                  </button>
-                ) : null}
-              </div>
-            </div>
-          </div>
-          <div style={footerActionsStyle}>
-            <button type="button" style={buttonGhostStyle} disabled={savingClaim} onClick={() => setEditingClaim(false)}>
-              取消
-            </button>
-            <button type="button" style={buttonPrimaryStyle} disabled={savingClaim} onClick={() => void handleSaveClaimEdit()}>
-              {savingClaim ? "保存中…" : "保存修改"}
-            </button>
-          </div>
-        </section>
-      ) : null}
-
       <div className="claim-detail__grid" style={detailGridStyle(isMobile)}>
-        <DetailRow label="申请人" value={claim.applicant_name} />
-        <DetailRow label="金额" value={`RM ${safeMoney(claim.amount)}`} />
-        <DetailRow label="日期" value={claim.request_date} />
-        <DetailRow label="部门" value={claim.department_name || "-"} />
+        {editingClaim ? (
+          <EditableDetailRow label="申请人">
+            <input
+              style={inputStyle}
+              value={editDraft.applicant_name}
+              onChange={(event) => setEditDraft((prev) => ({ ...prev, applicant_name: event.target.value }))}
+            />
+          </EditableDetailRow>
+        ) : (
+          <DetailRow label="申请人" value={claim.applicant_name} />
+        )}
+        {editingClaim ? (
+          <EditableDetailRow label="金额">
+            <input
+              type="number"
+              inputMode="decimal"
+              style={inputStyle}
+              value={editDraft.amount}
+              onChange={(event) => setEditDraft((prev) => ({ ...prev, amount: event.target.value }))}
+            />
+          </EditableDetailRow>
+        ) : (
+          <DetailRow label="金额" value={`RM ${safeMoney(claim.amount)}`} />
+        )}
+        {editingClaim ? (
+          <EditableDetailRow label="日期">
+            <input
+              type="date"
+              style={inputStyle}
+              value={editDraft.request_date}
+              onChange={(event) => setEditDraft((prev) => ({ ...prev, request_date: event.target.value }))}
+            />
+          </EditableDetailRow>
+        ) : (
+          <DetailRow label="日期" value={claim.request_date} />
+        )}
+        {editingClaim ? (
+          <EditableDetailRow label="部门">
+            <input
+              style={inputStyle}
+              value={editDraft.department_name}
+              onChange={(event) => setEditDraft((prev) => ({ ...prev, department_name: event.target.value }))}
+            />
+          </EditableDetailRow>
+        ) : (
+          <DetailRow label="部门" value={claim.department_name || "-"} />
+        )}
         <DetailRow label="收款人 / 签收人" value={claim.voucher_recipient_name || "-"} />
         <DetailRow label="签收时间" value={formatDateTime(claim.voucher_signed_at)} />
         <div className="claim-detail__row" style={detailRowStyle}>
           <div className="claim-detail__row-label" style={detailLabelStyle}>活动</div>
-          <div className="claim-detail__row-value" style={detailValueStyle}>
-            {claim.event_id ? `${claim.event_name || "未命名活动"} (#${claim.event_id})` : "-"}
-          </div>
-          {canEditEvent ? (
+          {editingClaim && canEditEvent ? (
             <div style={eventActionRowStyle}>
+              <span style={chipStyle}>
+                {claim.event_id ? `${claim.event_name || "未命名活动"} (#${claim.event_id})` : "未关联活动"}
+              </span>
               <button
                 type="button"
                 style={disabledStyle(buttonSecondaryStyle, savingEvent)}
@@ -425,7 +382,11 @@ export function ClaimDetail({
                 </button>
               ) : null}
             </div>
-          ) : null}
+          ) : (
+            <div className="claim-detail__row-value" style={detailValueStyle}>
+              {claim.event_id ? `${claim.event_name || "未命名活动"} (#${claim.event_id})` : "-"}
+            </div>
+          )}
           {eventFeedback ? <div style={{ ...chipStyle, color: "var(--x-color-success)" }}>{eventFeedback}</div> : null}
           {eventError ? <div style={{ ...chipStyle, color: "var(--x-color-danger)" }}>{eventError}</div> : null}
           {claim.is_locked ? <div style={{ ...chipStyle, color: "var(--x-color-ink-muted)" }}>该申请已锁定，不能修改活动</div> : null}
@@ -433,12 +394,24 @@ export function ClaimDetail({
         <DetailRow label="创建时间" value={formatDateTime(claim.created_at)} />
       </div>
 
-      {claim.purpose ? <div className="claim-detail__purpose" style={purposeBoxStyle}>{claim.purpose}</div> : null}
+      {editingClaim ? (
+        <label className="claim-detail__purpose claim-detail__purpose--editing" style={purposeBoxStyle}>
+          <span style={detailLabelStyle}>用途说明</span>
+          <textarea
+            rows={4}
+            style={textareaStyle}
+            value={editDraft.purpose}
+            onChange={(event) => setEditDraft((prev) => ({ ...prev, purpose: event.target.value }))}
+          />
+        </label>
+      ) : claim.purpose ? (
+        <div className="claim-detail__purpose" style={purposeBoxStyle}>{claim.purpose}</div>
+      ) : null}
 
       {claim.approver_data?.length || (claim.attachments || []).length || canEditAttachments || (claim.change_logs || []).length ? (
         <div
           className="claim-detail__section-row"
-          style={{ display: "flex", gap: "16px", flexWrap: "wrap", alignItems: "stretch" }}
+          style={{ display: "flex", gap: "8px", flexWrap: "wrap", alignItems: "stretch" }}
         >
           {claim.approver_data?.length ? (
             <div className="claim-detail__section-slot" style={{ flex: "1 1 320px", minWidth: 0 }}>
@@ -565,8 +538,36 @@ export function ClaimDetail({
           {canEditClaims ? (
             <>
               {canEditClaim ? (
-                <button type="button" style={buttonSecondaryStyle} disabled={savingClaim} onClick={() => setEditingClaim(true)}>
-                  编辑申请
+                <button
+                  type="button"
+                  style={editingClaim ? buttonPrimaryStyle : buttonSecondaryStyle}
+                  disabled={savingClaim}
+                  onClick={() => {
+                    if (editingClaim) {
+                      void handleSaveClaimEdit();
+                      return;
+                    }
+                    setEditDraft(buildEditDraft(claim));
+                    setEditFeedback("");
+                    setEditError("");
+                    setEditingClaim(true);
+                  }}
+                >
+                  {editingClaim ? (savingClaim ? "保存中…" : "保存编辑") : "编辑申请"}
+                </button>
+              ) : null}
+              {editingClaim ? (
+                <button
+                  type="button"
+                  style={buttonGhostStyle}
+                  disabled={savingClaim}
+                  onClick={() => {
+                    setEditDraft(buildEditDraft(claim));
+                    setEditError("");
+                    setEditingClaim(false);
+                  }}
+                >
+                  取消编辑
                 </button>
               ) : null}
               <button type="button" style={buttonApproveStyle} onClick={onApprove}>
@@ -598,7 +599,7 @@ export function ClaimDetail({
       ) : null}
 
       {voucherOpen ? <PaymentVoucherModal claimId={claim.id} onClose={() => setVoucherOpen(false)} /> : null}
-    </div>
+    </>
   );
 }
 
@@ -664,6 +665,15 @@ function DetailRow({ label, value }: { label: string; value?: string }) {
   );
 }
 
+function EditableDetailRow({ label, children }: { label: string; children: ReactNode }) {
+  return (
+    <label className="claim-detail__row claim-detail__row--editing" style={detailRowStyle}>
+      <span className="claim-detail__row-label" style={detailLabelStyle}>{label}</span>
+      {children}
+    </label>
+  );
+}
+
 function disabledStyle(style: CSSProperties, disabled: boolean): CSSProperties {
   if (!disabled) {
     return style;
@@ -692,35 +702,12 @@ function buildEditDraft(claim: ClaimRecord): ClaimEditDraft {
   };
 }
 
-const editPanelStyle: CSSProperties = {
-  display: "grid",
-  gap: "14px",
-  padding: "16px",
-  borderRadius: "16px",
-  border: "1px solid var(--x-color-line-soft)",
-  background: "var(--x-color-panel-alt)",
-};
-
-function editGridStyle(isMobile: boolean): CSSProperties {
-  return {
-    display: "grid",
-    gridTemplateColumns: isMobile ? "1fr" : "repeat(2, minmax(0, 1fr))",
-    gap: "12px",
-  };
-}
-
-const editFieldStyle: CSSProperties = {
-  display: "grid",
-  minWidth: 0,
-  gap: "8px",
-};
-
 const attachmentActionStyle: CSSProperties = {
   display: "flex",
-  gap: "8px",
+  gap: "6px",
   flexWrap: "wrap",
   alignItems: "center",
-  marginBottom: "10px",
+  marginBottom: "8px",
 };
 
 const hiddenInputStyle: CSSProperties = {
@@ -729,15 +716,15 @@ const hiddenInputStyle: CSSProperties = {
 
 const attachmentButtonRowStyle: CSSProperties = {
   display: "flex",
-  gap: "8px",
+  gap: "6px",
   flexWrap: "wrap",
   alignItems: "center",
 };
 
 const smallAttachmentButtonStyle: CSSProperties = {
   border: "1px solid var(--x-color-line-soft)",
-  borderRadius: "10px",
-  padding: "7px 10px",
+  borderRadius: "6px",
+  padding: "6px 8px",
   background: "var(--x-color-panel)",
   color: "var(--x-color-ink)",
   cursor: "pointer",
@@ -754,14 +741,14 @@ const smallAttachmentDangerButtonStyle: CSSProperties = {
 
 const changeLogListStyle: CSSProperties = {
   display: "grid",
-  gap: "8px",
+  gap: "6px",
 };
 
 const changeLogCardStyle: CSSProperties = {
   display: "grid",
-  gap: "6px",
-  padding: "10px",
-  borderRadius: "12px",
+  gap: "4px",
+  padding: "8px 10px",
+  borderRadius: "6px",
   border: "1px solid var(--x-color-line-soft)",
   background: "var(--x-color-panel-alt)",
 };
@@ -826,7 +813,7 @@ function SignViewerModal({
         background: "rgba(10, 14, 20, 0.6)",
         display: "grid",
         placeItems: "center",
-        padding: "20px",
+        padding: "12px",
       }}
       onClick={onClose}
     >
@@ -835,12 +822,12 @@ function SignViewerModal({
         style={{
           width: "min(720px, 100%)",
           display: "grid",
-          gap: "16px",
-          padding: "18px",
-          borderRadius: "20px",
+          gap: "10px",
+          padding: "12px",
+          borderRadius: "8px",
           background: "var(--x-color-panel-strong)",
           border: "1px solid var(--x-color-line-soft)",
-          boxShadow: "0 20px 50px var(--x-color-shadow-soft)",
+          boxShadow: "0 12px 28px var(--x-color-shadow-soft)",
         }}
         onClick={(event) => event.stopPropagation()}
       >
@@ -860,8 +847,8 @@ function SignViewerModal({
         <div
           className="claim-detail__sign-modal-preview"
           style={{
-            minHeight: "260px",
-            borderRadius: "18px",
+            minHeight: "220px",
+            borderRadius: "6px",
             border: "1px solid var(--x-color-line-soft)",
             background: "linear-gradient(180deg, #fffdf8, #f5efe0)",
             overflow: "hidden",

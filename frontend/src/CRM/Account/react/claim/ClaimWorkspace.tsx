@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import type { ChangeEvent } from "react";
 
 import { useUserState } from "../../../../app/UserState";
@@ -15,8 +15,6 @@ import {
   noticeSuccessStyle,
   noticeTextStyle,
   noticeTitleStyle,
-  scrollPanelStyle,
-  shellStyle,
 } from "./claimStyles";
 import type { AccountUser, ClaimRecord, ReadBillData } from "./types";
 
@@ -157,7 +155,6 @@ export function ClaimWorkspace() {
   const [query, setQuery] = useState("");
   const [statusFilter, setStatusFilter] = useState<ClaimStatusFilter>("all");
   const [page, setPage] = useState(1);
-  const scrollPanelRef = useRef<HTMLDivElement | null>(null);
 
   useEffect(() => {
     const nextInitial = buildInitialCreateState(accountUser);
@@ -192,7 +189,7 @@ export function ClaimWorkspace() {
     if (!error) {
       return;
     }
-    scrollPanelRef.current?.scrollTo({ top: 0, behavior: "smooth" });
+    window.scrollTo({ top: 0, behavior: "smooth" });
   }, [error]);
 
   const selectedClaim = useMemo(() => {
@@ -516,7 +513,7 @@ export function ClaimWorkspace() {
   }
 
   return (
-    <div className="claim-workspace" style={shellStyle}>
+    <>
       {message ? (
         <div className="claim-workspace__message claim-workspace__message--success" style={noticeSuccessStyle}>
           <div style={noticeTitleStyle}>操作成功</div>
@@ -535,68 +532,66 @@ export function ClaimWorkspace() {
         </div>
       ) : null}
 
-      <div className="claim-workspace__scroll-panel" style={scrollPanelStyle} ref={scrollPanelRef}>
-        {view.kind === "list" ? (
-          <ClaimList
-            loading={loading}
-            claims={pagedClaims}
-            query={query}
-            onQueryChange={setQuery}
-            statusFilter={statusFilter}
-            onStatusFilterChange={setStatusFilter}
-            page={safePage}
-            pageCount={pageCount}
-            total={filteredClaims.length}
-            pageSize={pageSize}
-            onPageChange={setPage}
-            onOpen={(claimId) => setView({ kind: "detail", claimId })}
-            scopeLabel={canViewAll || canReadAllClaims ? "范围：全部申请" : "范围：我的申请"}
-            onRefresh={() => void loadClaims()}
-            canCreate={canSubmitClaims}
-            onCreate={() => {
-              if (!canSubmitClaims) {
-                setError("你没有提交申请的权限");
-                return;
-              }
-              setCreateState(buildInitialCreateState(accountUser));
-              setView({ kind: "create" });
-            }}
-          />
-        ) : null}
+      {view.kind === "list" ? (
+        <ClaimList
+          loading={loading}
+          claims={pagedClaims}
+          query={query}
+          onQueryChange={setQuery}
+          statusFilter={statusFilter}
+          onStatusFilterChange={setStatusFilter}
+          page={safePage}
+          pageCount={pageCount}
+          total={filteredClaims.length}
+          pageSize={pageSize}
+          onPageChange={setPage}
+          onOpen={(claimId) => setView({ kind: "detail", claimId })}
+          scopeLabel={canViewAll || canReadAllClaims ? "范围：全部申请" : "范围：我的申请"}
+          onRefresh={() => void loadClaims()}
+          canCreate={canSubmitClaims}
+          onCreate={() => {
+            if (!canSubmitClaims) {
+              setError("你没有提交申请的权限");
+              return;
+            }
+            setCreateState(buildInitialCreateState(accountUser));
+            setView({ kind: "create" });
+          }}
+        />
+      ) : null}
 
-        {view.kind === "create" ? (
-          <ClaimCreateForm
-            isMobile={isMobile}
-            state={createState}
-            user={accountUser}
-            submitting={submitting}
-            aiFilling={aiFilling}
-            onBack={() => setView({ kind: "list" })}
-            onChange={setCreateState}
-            onAiFill={() => void handleAiFillClaim()}
-            onPickEvent={() => void handlePickEvent()}
-            onSign={() => void handleSignClaim()}
-            onSubmit={() => void handleCreateSubmit()}
-            onFilesChange={handleFilesChange}
-          />
-        ) : null}
+      {view.kind === "create" ? (
+        <ClaimCreateForm
+          isMobile={isMobile}
+          state={createState}
+          user={accountUser}
+          submitting={submitting}
+          aiFilling={aiFilling}
+          onBack={() => setView({ kind: "list" })}
+          onChange={setCreateState}
+          onAiFill={() => void handleAiFillClaim()}
+          onPickEvent={() => void handlePickEvent()}
+          onSign={() => void handleSignClaim()}
+          onSubmit={() => void handleCreateSubmit()}
+          onFilesChange={handleFilesChange}
+        />
+      ) : null}
 
-        {view.kind === "detail" && selectedClaim ? (
-          <ClaimDetail
-            isMobile={isMobile}
-            claim={selectedClaim}
-            canEditClaims={canEditClaims}
-            isApprovedByMe={isApprovedByMe}
-            currentUserId={accountUser?.id}
-            onBack={() => setView({ kind: "list" })}
-            onApprove={() => void handleDecision("approve")}
-            onReject={() => void handleDecision("reject")}
-            onDelete={() => void handleDeleteClaim()}
-            onClaimUpdated={handleClaimUpdated}
-          />
-        ) : null}
-      </div>
-    </div>
+      {view.kind === "detail" && selectedClaim ? (
+        <ClaimDetail
+          isMobile={isMobile}
+          claim={selectedClaim}
+          canEditClaims={canEditClaims}
+          isApprovedByMe={isApprovedByMe}
+          currentUserId={accountUser?.id}
+          onBack={() => setView({ kind: "list" })}
+          onApprove={() => void handleDecision("approve")}
+          onReject={() => void handleDecision("reject")}
+          onDelete={() => void handleDeleteClaim()}
+          onClaimUpdated={handleClaimUpdated}
+        />
+      ) : null}
+    </>
   );
 }
 

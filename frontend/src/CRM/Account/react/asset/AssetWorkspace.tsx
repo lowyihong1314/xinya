@@ -1,5 +1,6 @@
 import { useDeferredValue, useEffect, useMemo, useState } from "react";
 import type { CSSProperties, FormEvent } from "react";
+import { useSearchParams } from "react-router-dom";
 
 import { useUserState } from "../../../../app/UserState";
 import { openPreviewModal } from "../../../../js/attachment_preview";
@@ -21,7 +22,10 @@ import {
   deleteAssetStockDocument,
   deleteAssetSubItem,
   deleteAssetWarehouse,
-  fetchAssetDashboard,
+  fetchAssetDocumentsData,
+  fetchAssetInventoryData,
+  fetchAssetMasterData,
+  fetchAssetMovementsData,
   updateAssetItem,
   updateAssetInventoryThreshold,
   updateAssetPartner,
@@ -34,6 +38,7 @@ import type {
   AssetDashboardPayload,
   AssetItemRecord,
   AssetPartnerRecord,
+  AssetStockDocumentRecord,
   AssetSubItemRecord,
   AssetWarehouseRecord,
 } from "./types";
@@ -131,6 +136,7 @@ type MovementSummaryRow = {
 type MasterEditorMode = "overview" | "warehouse" | "item" | "partner" | "sub_item";
 type DocumentEditorMode = "overview" | "form";
 type AssetPanelKey = "master" | "documents" | "inventory" | "low_stock" | "item_summary" | "movements";
+type AssetDataKey = "master" | "documents" | "inventory" | "movements";
 
 type AssetPermissionUser = {
   departments?: Array<{
@@ -169,12 +175,49 @@ const INITIAL_SUB_ITEM_FORM: SubItemFormState = {
 };
 
 const INITIAL_COLLAPSED_SECTIONS: Record<AssetPanelKey, boolean> = {
-  master: true,
+  master: false,
   documents: true,
   inventory: true,
   low_stock: true,
   item_summary: true,
   movements: true,
+};
+
+const ASSET_PANEL_KEYS: AssetPanelKey[] = ["master", "documents", "inventory", "low_stock", "item_summary", "movements"];
+
+function resolveAssetPanelKey(value: string | null): AssetPanelKey {
+  return ASSET_PANEL_KEYS.includes(value as AssetPanelKey) ? (value as AssetPanelKey) : "master";
+}
+
+const ASSET_PANEL_DATA_KEY: Record<AssetPanelKey, AssetDataKey> = {
+  master: "master",
+  documents: "documents",
+  inventory: "inventory",
+  low_stock: "inventory",
+  item_summary: "inventory",
+  movements: "movements",
+};
+
+const INITIAL_ASSET_DATA_LOADED: Record<AssetDataKey, boolean> = {
+  master: false,
+  documents: false,
+  inventory: false,
+  movements: false,
+};
+
+const EMPTY_ASSET_DASHBOARD: AssetDashboardPayload = {
+  metrics: {
+    warehouse_count: 0,
+    item_count: 0,
+    sub_item_count: 0,
+    inventory_unit_count: 0,
+    draft_document_count: 0,
+  },
+  warehouses: [],
+  partners: [],
+  items: [],
+  inventory: [],
+  documents: [],
 };
 
 const PRIMARY_BUTTON_CLASS_NAME = "asset-workspace__button asset-workspace__button--primary";
@@ -214,8 +257,12 @@ const INITIAL_DOCUMENT_FORM: DocumentFormState = {
 
 export function AssetWorkspace() {
   const { user, isMobile } = useUserState();
+  const [searchParams] = useSearchParams();
   const permissionUser = user as AssetPermissionUser;
-  const [dashboard, setDashboard] = useState<AssetDashboardPayload | null>(null);
+  const requestedPanelKey = resolveAssetPanelKey(searchParams.get("asset_panel"));
+  const [dashboard, setDashboard] = useState<AssetDashboardPayload>(EMPTY_ASSET_DASHBOARD);
+  const [movementDocuments, setMovementDocuments] = useState<AssetStockDocumentRecord[]>([]);
+  const [loadedData, setLoadedData] = useState<Record<AssetDataKey, boolean>>(INITIAL_ASSET_DATA_LOADED);
   const [loading, setLoading] = useState(true);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -233,8 +280,11 @@ export function AssetWorkspace() {
   const [editingDocumentId, setEditingDocumentId] = useState<number | null>(null);
   const [masterEditorMode, setMasterEditorMode] = useState<MasterEditorMode>("overview");
   const [documentEditorMode, setDocumentEditorMode] = useState<DocumentEditorMode>("overview");
-  const [collapsedSections, setCollapsedSections] =
-    useState<Record<AssetPanelKey, boolean>>(INITIAL_COLLAPSED_SECTIONS);
+  const [activePanelKey, setActivePanelKey] = useState<AssetPanelKey>(requestedPanelKey);
+  const [collapsedSections, setCollapsedSections] = useState<Record<AssetPanelKey, boolean>>({
+    ...INITIAL_COLLAPSED_SECTIONS,
+    [requestedPanelKey]: false,
+  });
   const [masterQuery, setMasterQuery] = useState("");
   const [inventoryQuery, setInventoryQuery] = useState("");
   const [inventoryWarehouseFilter, setInventoryWarehouseFilter] = useState<string>("all");
@@ -242,10 +292,13 @@ export function AssetWorkspace() {
   const [documentStatusFilter, setDocumentStatusFilter] = useState<string>("all");
   const [documentTypeFilter, setDocumentTypeFilter] = useState<string>("all");
   const [movementQuery, setMovementQuery] = useState("");
+  const activeDataKey = ASSET_PANEL_DATA_KEY[activePanelKey];
+  const activePanelLoaded = loadedData[activeDataKey];
 
   useEffect(() => {
-    void loadDashboard();
-  }, []);
+    openPanel(requestedPanelKey);
+    void loadDashboard(requestedPanelKey);
+  }, [requestedPanelKey]);
 
   useEffect(() => {
     if (!message && !error) {
@@ -347,7 +400,7 @@ export function AssetWorkspace() {
   }, [inventoryRows]);
   const movementRows = useMemo<MovementSummaryRow[]>(
     () =>
-      (dashboard?.documents || [])
+      movementDocuments
         .flatMap((document) =>
           (document.movements || []).map((movement) => ({
             id: movement.id,
@@ -375,7 +428,7 @@ export function AssetWorkspace() {
           }
           return rightTime - leftTime;
         }),
-    [dashboard],
+    [movementDocuments],
   );
   const filteredWarehouses = useMemo(
     () =>
@@ -519,33 +572,83 @@ export function AssetWorkspace() {
     });
   }, [inventoryRows]);
 
-  async function loadDashboard() {
+  async function loadDashboard(panelKey: AssetPanelKey = activePanelKey) {
+    const dataKey = ASSET_PANEL_DATA_KEY[panelKey];
     setLoading(true);
     setError(null);
     try {
-      const data = await fetchAssetDashboard();
-      setDashboard(data);
-      setSubItemForm((current) => ({
+      if (dataKey === "master") {
+        const data = await fetchAssetMasterData();
+        setDashboard((current) => ({
+          ...current,
+          warehouses: data.warehouses,
+          partners: data.partners,
+          items: data.items,
+        }));
+        hydrateMasterDefaults(data.items);
+      } else if (dataKey === "documents") {
+        const data = await fetchAssetDocumentsData();
+        setDashboard((current) => ({
+          ...current,
+          warehouses: data.warehouses,
+          items: data.items,
+          documents: data.documents,
+        }));
+        hydrateDocumentDefaults(data.warehouses, data.items);
+      } else if (dataKey === "inventory") {
+        const data = await fetchAssetInventoryData();
+        setDashboard((current) => ({
+          ...current,
+          warehouses: data.warehouses,
+          inventory: data.inventory,
+        }));
+      } else {
+        const data = await fetchAssetMovementsData();
+        setMovementDocuments(data.documents);
+      }
+      setLoadedData((current) => ({
         ...current,
-        itemId: current.itemId || String(data.items[0]?.id || ""),
-      }));
-      setDocumentForm((current) => ({
-        ...current,
-        sourceWarehouseId: current.sourceWarehouseId || String(data.warehouses[0]?.id || ""),
-        targetWarehouseId: current.targetWarehouseId || String(data.warehouses[0]?.id || ""),
-        lines: current.lines.length
-          ? current.lines.map((line, index) =>
-              index === 0 && !line.subItemId
-                ? { ...line, subItemId: String(data.items[0]?.sub_items?.[0]?.id || "") }
-                : line,
-            )
-          : [createDocumentLineState(String(data.items[0]?.sub_items?.[0]?.id || ""))],
+        [dataKey]: true,
       }));
     } catch (nextError) {
       setError(nextError instanceof Error ? nextError.message : "资产模块载入失败");
     } finally {
       setLoading(false);
     }
+  }
+
+  function hydrateMasterDefaults(items: AssetItemRecord[]) {
+    setSubItemForm((current) => ({
+      ...current,
+      itemId: current.itemId || String(items[0]?.id || ""),
+    }));
+  }
+
+  function hydrateDocumentDefaults(warehouses: AssetWarehouseRecord[], items: AssetItemRecord[]) {
+    const firstWarehouseId = String(warehouses[0]?.id || "");
+    const firstSubItemId = String(items[0]?.sub_items?.[0]?.id || "");
+    setDocumentForm((current) => ({
+      ...current,
+      sourceWarehouseId: current.sourceWarehouseId || firstWarehouseId,
+      targetWarehouseId: current.targetWarehouseId || firstWarehouseId,
+      lines: current.lines.length
+        ? current.lines.map((line, index) =>
+            index === 0 && !line.subItemId ? { ...line, subItemId: firstSubItemId } : line,
+          )
+        : [createDocumentLineState(firstSubItemId)],
+    }));
+  }
+
+  function markAssetDataStale(keys: AssetDataKey[]) {
+    setLoadedData((current) =>
+      keys.reduce(
+        (next, key) => ({
+          ...next,
+          [key]: false,
+        }),
+        current,
+      ),
+    );
   }
 
   async function handleWarehouseSubmit(event: FormEvent<HTMLFormElement>) {
@@ -565,7 +668,8 @@ export function AssetWorkspace() {
       setEditingWarehouseId(null);
       setMasterEditorMode("overview");
       setMessage(editingWarehouseId ? "仓库已更新" : "仓库已创建");
-      await loadDashboard();
+      markAssetDataStale(["documents", "inventory", "movements"]);
+      await loadDashboard("master");
     } catch (nextError) {
       setError(nextError instanceof Error ? nextError.message : `${editingWarehouseId ? "更新" : "创建"}仓库失败`);
     } finally {
@@ -590,7 +694,8 @@ export function AssetWorkspace() {
       setEditingItemId(null);
       setMasterEditorMode("overview");
       setMessage(editingItemId ? "资产 item 已更新" : "资产 item 已创建");
-      await loadDashboard();
+      markAssetDataStale(["documents", "inventory", "movements"]);
+      await loadDashboard("master");
     } catch (nextError) {
       setError(nextError instanceof Error ? nextError.message : `${editingItemId ? "更新" : "创建"} item 失败`);
     } finally {
@@ -623,7 +728,8 @@ export function AssetWorkspace() {
       setEditingPartnerId(null);
       setMasterEditorMode("overview");
       setMessage(editingPartnerId ? "往来对象已更新" : "往来对象已创建");
-      await loadDashboard();
+      markAssetDataStale(["documents"]);
+      await loadDashboard("master");
     } catch (nextError) {
       setError(nextError instanceof Error ? nextError.message : `${editingPartnerId ? "更新" : "创建"}往来对象失败`);
     } finally {
@@ -662,7 +768,8 @@ export function AssetWorkspace() {
       setEditingSubItemId(null);
       setMasterEditorMode("overview");
       setMessage(editingSubItemId ? "子 item 已更新" : "子 item 已创建");
-      await loadDashboard();
+      markAssetDataStale(["documents", "inventory", "movements"]);
+      await loadDashboard("master");
     } catch (nextError) {
       setError(nextError instanceof Error ? nextError.message : `${editingSubItemId ? "更新" : "创建"}子 item 失败`);
     } finally {
@@ -716,7 +823,8 @@ export function AssetWorkspace() {
         await createAssetStockDocument(payload);
       }
       setMessage(editingDocumentId ? "库存单据已更新" : "库存单据已创建");
-      await loadDashboard();
+      markAssetDataStale(["inventory", "movements"]);
+      await loadDashboard("documents");
       resetDocumentForm();
       setDocumentEditorMode("overview");
     } catch (nextError) {
@@ -738,7 +846,8 @@ export function AssetWorkspace() {
         closeDocumentEditor();
       }
       setMessage(`单据 #${documentId} 已确认`);
-      await loadDashboard();
+      markAssetDataStale(["inventory", "movements"]);
+      await loadDashboard("documents");
     } catch (nextError) {
       setError(nextError instanceof Error ? nextError.message : "确认库存单据失败");
     } finally {
@@ -758,7 +867,7 @@ export function AssetWorkspace() {
     try {
       await uploadAssetDocumentInvoice(documentId, file);
       setMessage("invoice 文件已上传");
-      await loadDashboard();
+      await loadDashboard("documents");
     } catch (nextError) {
       setError(nextError instanceof Error ? nextError.message : "invoice 上传失败");
     } finally {
@@ -791,7 +900,7 @@ export function AssetWorkspace() {
     try {
       await updateAssetInventoryThreshold(inventoryId, Number(rawValue));
       setMessage("最低库存已更新");
-      await loadDashboard();
+      await loadDashboard("inventory");
     } catch (nextError) {
       setError(nextError instanceof Error ? nextError.message : "更新最低库存失败");
     } finally {
@@ -993,21 +1102,19 @@ export function AssetWorkspace() {
   }
 
   function togglePanel(panelKey: AssetPanelKey) {
+    setActivePanelKey(panelKey);
     setCollapsedSections((current) => ({
-      ...current,
+      ...INITIAL_COLLAPSED_SECTIONS,
       [panelKey]: !current[panelKey],
     }));
   }
 
   function openPanel(panelKey: AssetPanelKey) {
-    setCollapsedSections((current) => (
-      current[panelKey]
-        ? {
-            ...current,
-            [panelKey]: false,
-          }
-        : current
-    ));
+    setActivePanelKey(panelKey);
+    setCollapsedSections({
+      ...INITIAL_COLLAPSED_SECTIONS,
+      [panelKey]: false,
+    });
   }
 
   function resetWarehouseForm() {
@@ -1078,7 +1185,8 @@ export function AssetWorkspace() {
         closeDocumentEditor();
       }
       setMessage("库存单据已作废");
-      await loadDashboard();
+      markAssetDataStale(["inventory", "movements"]);
+      await loadDashboard("documents");
     } catch (nextError) {
       setError(nextError instanceof Error ? nextError.message : "作废库存单据失败");
     } finally {
@@ -1103,7 +1211,8 @@ export function AssetWorkspace() {
         resetPartnerForm();
       }
       setMessage(`往来对象 ${partner.name} 已删除`);
-      await loadDashboard();
+      markAssetDataStale(["documents"]);
+      await loadDashboard("master");
     } catch (nextError) {
       setError(nextError instanceof Error ? nextError.message : "删除往来对象失败");
     } finally {
@@ -1128,7 +1237,7 @@ export function AssetWorkspace() {
         closeDocumentEditor();
       }
       setMessage("库存单据已删除");
-      await loadDashboard();
+      await loadDashboard("documents");
     } catch (nextError) {
       setError(nextError instanceof Error ? nextError.message : "删除库存单据失败");
     } finally {
@@ -1153,7 +1262,8 @@ export function AssetWorkspace() {
         resetWarehouseForm();
       }
       setMessage(`仓库 ${warehouse.name} 已删除`);
-      await loadDashboard();
+      markAssetDataStale(["documents", "inventory", "movements"]);
+      await loadDashboard("master");
     } catch (nextError) {
       setError(nextError instanceof Error ? nextError.message : "删除仓库失败");
     } finally {
@@ -1178,7 +1288,8 @@ export function AssetWorkspace() {
         resetItemForm();
       }
       setMessage(`Item ${item.name} 已删除`);
-      await loadDashboard();
+      markAssetDataStale(["documents", "inventory", "movements"]);
+      await loadDashboard("master");
     } catch (nextError) {
       setError(nextError instanceof Error ? nextError.message : "删除 Item 失败");
     } finally {
@@ -1203,7 +1314,8 @@ export function AssetWorkspace() {
         resetSubItemForm();
       }
       setMessage(`子 Item ${subItem.name} 已删除`);
-      await loadDashboard();
+      markAssetDataStale(["documents", "inventory", "movements"]);
+      await loadDashboard("master");
     } catch (nextError) {
       setError(nextError instanceof Error ? nextError.message : "删除子 Item 失败");
     } finally {
@@ -1272,11 +1384,11 @@ export function AssetWorkspace() {
     );
   }
 
-  if (loading && !dashboard) {
+  if (loading && !activePanelLoaded) {
     return <div className="asset-workspace asset-workspace--loading" style={placeholderStyle}>资产模块载入中…</div>;
   }
 
-  if (!dashboard) {
+  if (error && !activePanelLoaded) {
     return <div className="asset-workspace asset-workspace--error" style={errorStyle}>{error || "资产模块暂时不可用"}</div>;
   }
 
@@ -1286,7 +1398,7 @@ export function AssetWorkspace() {
       {error ? <div className="asset-workspace__alert asset-workspace__alert--error" style={errorStyle}>{error}</div> : null}
 
       <div className="asset-workspace__stack asset-workspace__stack--master" style={stackSectionStyle}>
-        <section className="asset-workspace__panel asset-workspace__panel--master" style={panelStyle}>
+        <section className="asset-workspace__panel asset-workspace__panel--master" style={panelDisplayStyle(activePanelKey, "master")}>
           <div className="asset-workspace__panel-header" style={panelTitleRowStyle}>
             <div className="asset-workspace__panel-copy" style={panelHeaderCopyStyle}>
               <div className="asset-workspace__panel-title" style={panelTitleStyle}>基础档案</div>
@@ -1565,7 +1677,7 @@ export function AssetWorkspace() {
           )}
         </section>
 
-        <section className="asset-workspace__panel asset-workspace__panel--documents" style={panelStyle}>
+        <section className="asset-workspace__panel asset-workspace__panel--documents" style={panelDisplayStyle(activePanelKey, "documents")}>
           <div className="asset-workspace__panel-header" style={panelTitleRowStyle}>
             <div className="asset-workspace__panel-copy" style={panelHeaderCopyStyle}>
               <div className="asset-workspace__panel-title" style={panelTitleStyle}>库存单据</div>
@@ -2032,7 +2144,7 @@ export function AssetWorkspace() {
       </div>
 
       <div className="asset-workspace__stack asset-workspace__stack--inventory" style={stackSectionStyle}>
-        <section className="asset-workspace__panel asset-workspace__panel--inventory" style={panelStyle}>
+        <section className="asset-workspace__panel asset-workspace__panel--inventory" style={panelDisplayStyle(activePanelKey, "inventory")}>
           <div className="asset-workspace__panel-header" style={panelTitleRowStyle}>
             <div className="asset-workspace__panel-copy" style={panelHeaderCopyStyle}>
               <div className="asset-workspace__panel-title" style={panelTitleStyle}>库存总览</div>
@@ -2146,7 +2258,7 @@ export function AssetWorkspace() {
           )}
         </section>
 
-        <section className="asset-workspace__panel asset-workspace__panel--low-stock" style={panelStyle}>
+        <section className="asset-workspace__panel asset-workspace__panel--low-stock" style={panelDisplayStyle(activePanelKey, "low_stock")}>
           <div className="asset-workspace__panel-header" style={panelTitleRowStyle}>
             <div className="asset-workspace__panel-copy" style={panelHeaderCopyStyle}>
               <div className="asset-workspace__panel-title" style={panelTitleStyle}>低库存提醒</div>
@@ -2185,7 +2297,7 @@ export function AssetWorkspace() {
       </div>
 
       <div className="asset-workspace__stack asset-workspace__stack--summary" style={stackSectionStyle}>
-        <section className="asset-workspace__panel asset-workspace__panel--item-summary" style={panelStyle}>
+        <section className="asset-workspace__panel asset-workspace__panel--item-summary" style={panelDisplayStyle(activePanelKey, "item_summary")}>
           <div className="asset-workspace__panel-header" style={panelTitleRowStyle}>
             <div className="asset-workspace__panel-copy" style={panelHeaderCopyStyle}>
               <div className="asset-workspace__panel-title" style={panelTitleStyle}>Item 汇总</div>
@@ -2229,7 +2341,7 @@ export function AssetWorkspace() {
           )}
         </section>
 
-        <section className="asset-workspace__panel asset-workspace__panel--movements" style={panelStyle}>
+        <section className="asset-workspace__panel asset-workspace__panel--movements" style={panelDisplayStyle(activePanelKey, "movements")}>
           <div className="asset-workspace__panel-header" style={panelTitleRowStyle}>
             <div className="asset-workspace__panel-copy" style={panelHeaderCopyStyle}>
               <div className="asset-workspace__panel-title" style={panelTitleStyle}>库存流水</div>
@@ -2540,10 +2652,10 @@ const radius = designTokens.radius;
 
 const workspaceStyle: CSSProperties = {
   display: "grid",
-  gap: "18px",
+  gap: "10px",
   height: "100%",
   overflowY: "auto",
-  paddingRight: "4px",
+  paddingRight: "2px",
 };
 
 function chipStyle(kind: "edit" | "read" | "neutral" | "confirmed" | "warning"): CSSProperties {
@@ -2561,9 +2673,9 @@ function chipStyle(kind: "edit" | "read" | "neutral" | "confirmed" | "warning"):
     display: "inline-flex",
     alignItems: "center",
     gap: "6px",
-    padding: "8px 12px",
+    padding: "4px 7px",
     borderRadius: "999px",
-    fontSize: "12px",
+    fontSize: "11px",
     fontWeight: 700,
     border: `1px solid ${palette.border}`,
     background: palette.background,
@@ -2574,18 +2686,25 @@ function chipStyle(kind: "edit" | "read" | "neutral" | "confirmed" | "warning"):
 const stackSectionStyle: CSSProperties = {
   display: "flex",
   flexDirection: "column",
-  gap: "18px",
+  gap: "10px",
 };
 
 const panelStyle: CSSProperties = {
   display: "grid",
-  gap: "16px",
-  padding: "18px",
-  borderRadius: radius.lg,
+  gap: "10px",
+  padding: "10px",
+  borderRadius: radius.sm,
   background: colors.panelStrong,
   border: `1px solid ${colors.lineSoft}`,
-  boxShadow: `0 14px 32px ${colors.shadowSoft}`,
+  boxShadow: "none",
 };
+
+function panelDisplayStyle(activePanelKey: AssetPanelKey, panelKey: AssetPanelKey): CSSProperties {
+  return {
+    ...panelStyle,
+    display: activePanelKey === panelKey ? "grid" : "none",
+  };
+}
 
 const panelTitleRowStyle: CSSProperties = {
   display: "flex",
@@ -2608,7 +2727,7 @@ const panelHeaderActionsStyle: CSSProperties = {
 };
 
 const panelTitleStyle: CSSProperties = {
-  fontSize: "18px",
+  fontSize: "16px",
   fontWeight: 700,
   color: colors.ink,
 };
@@ -2623,17 +2742,17 @@ function masterActionGridStyle(isMobile: boolean): CSSProperties {
   return {
     display: "grid",
     gridTemplateColumns: isMobile ? "1fr" : "repeat(2, minmax(0, 1fr))",
-    gap: "12px",
+    gap: "8px",
   };
 }
 
 function masterActionCardStyle(disabled: boolean): CSSProperties {
   return {
     display: "grid",
-    gap: "8px",
+    gap: "6px",
     textAlign: "left",
-    padding: "14px",
-    borderRadius: radius.md,
+    padding: "10px",
+    borderRadius: radius.sm,
     border: `1px solid ${disabled ? colors.lineSoft : colors.accentBorder}`,
     background: disabled ? colors.panelAlt : `linear-gradient(145deg, ${colors.panel}, ${colors.accentTint})`,
     color: colors.ink,
@@ -2656,9 +2775,9 @@ const masterActionHintStyle: CSSProperties = {
 
 const formBlockStyle: CSSProperties = {
   display: "grid",
-  gap: "12px",
-  padding: "14px",
-  borderRadius: radius.md,
+  gap: "8px",
+  padding: "10px",
+  borderRadius: radius.sm,
   background: colors.panelAlt,
   border: `1px solid ${colors.lineSoft}`,
 };
@@ -2672,10 +2791,10 @@ function masterEditorHeaderStyle(isMobile: boolean): CSSProperties {
   return {
     display: "grid",
     gridTemplateColumns: isMobile ? "1fr" : "auto minmax(0, 1fr)",
-    gap: "12px",
+    gap: "8px",
     alignItems: "center",
-    padding: "14px",
-    borderRadius: radius.md,
+    padding: "10px",
+    borderRadius: radius.sm,
     background: colors.panelAlt,
     border: `1px solid ${colors.lineSoft}`,
   };
@@ -2691,7 +2810,7 @@ function fieldGridStyle(isMobile: boolean): CSSProperties {
   return {
     display: "grid",
     gridTemplateColumns: isMobile ? "1fr" : "repeat(2, minmax(0, 1fr))",
-    gap: "10px",
+    gap: "8px",
   };
 }
 
@@ -2701,30 +2820,31 @@ const inputStyle: CSSProperties = {
   border: `1px solid ${colors.line}`,
   background: colors.panel,
   color: colors.ink,
-  padding: "11px 12px",
-  fontSize: "14px",
+  minHeight: "32px",
+  padding: "6px 8px",
+  fontSize: "13px",
   outline: "none",
   boxSizing: "border-box",
 };
 
 const textareaStyle: CSSProperties = {
   ...inputStyle,
-  minHeight: "82px",
+  minHeight: "72px",
   resize: "vertical",
 };
 
 const formActionRowStyle: CSSProperties = {
   display: "flex",
   flexWrap: "wrap",
-  gap: "10px",
+  gap: "6px",
   alignItems: "center",
 };
 
 const claimLinkerStyle: CSSProperties = {
   display: "grid",
-  gap: "12px",
-  padding: "14px",
-  borderRadius: radius.md,
+  gap: "8px",
+  padding: "10px",
+  borderRadius: radius.sm,
   border: `1px dashed ${colors.accentBorder}`,
   background: colors.accentTint,
 };
@@ -2742,9 +2862,9 @@ const claimValueStyle: CSSProperties = {
 
 const pickerBlockStyle: CSSProperties = {
   display: "grid",
-  gap: "12px",
-  padding: "12px 14px",
-  borderRadius: radius.md,
+  gap: "8px",
+  padding: "8px 10px",
+  borderRadius: radius.sm,
   border: `1px solid ${colors.lineSoft}`,
   background: colors.panel,
 };
@@ -2771,9 +2891,10 @@ const primaryButtonStyle: CSSProperties = {
   borderRadius: radius.sm,
   background: `linear-gradient(135deg, ${colors.accent}, ${colors.accentStrong})`,
   color: colors.panel,
-  padding: "11px 14px",
+  padding: "7px 10px",
   fontWeight: 700,
   cursor: "pointer",
+  fontSize: "13px",
 };
 
 const secondaryButtonStyle: CSSProperties = {
@@ -2781,9 +2902,10 @@ const secondaryButtonStyle: CSSProperties = {
   borderRadius: radius.sm,
   background: colors.panel,
   color: colors.accentStrong,
-  padding: "9px 12px",
+  padding: "7px 10px",
   fontWeight: 700,
   cursor: "pointer",
+  fontSize: "13px",
 };
 
 const panelToggleButtonStyle: CSSProperties = {
@@ -2797,9 +2919,10 @@ const ghostButtonStyle: CSSProperties = {
   borderRadius: radius.sm,
   background: colors.panelAlt,
   color: colors.inkMuted,
-  padding: "8px 10px",
+  padding: "6px 8px",
   fontWeight: 600,
   cursor: "pointer",
+  fontSize: "12px",
 };
 
 const ghostDangerButtonStyle: CSSProperties = {
@@ -2807,25 +2930,26 @@ const ghostDangerButtonStyle: CSSProperties = {
   borderRadius: radius.sm,
   background: colors.dangerSoft,
   color: colors.danger,
-  padding: "8px 10px",
+  padding: "6px 8px",
   fontWeight: 600,
   cursor: "pointer",
+  fontSize: "12px",
 };
 
 const listBlockStyle: CSSProperties = {
   display: "grid",
-  gap: "10px",
+  gap: "6px",
 };
 
 const sectionToolbarStyle: CSSProperties = {
   display: "grid",
-  gap: "10px",
+  gap: "6px",
 };
 
 const toolbarRowStyle: CSSProperties = {
   display: "flex",
   flexWrap: "wrap",
-  gap: "10px",
+  gap: "6px",
   alignItems: "center",
 };
 
@@ -2852,12 +2976,12 @@ const actionGroupStyle: CSSProperties = {
 
 const compactListStyle: CSSProperties = {
   display: "grid",
-  gap: "10px",
+  gap: "6px",
 };
 
 const compactListItemStyle: CSSProperties = {
-  padding: "12px 14px",
-  borderRadius: radius.md,
+  padding: "8px 10px",
+  borderRadius: radius.sm,
   background: colors.panel,
   border: `1px solid ${colors.lineSoft}`,
 };
@@ -2884,8 +3008,8 @@ const itemCardHeaderStyle: CSSProperties = {
 
 const subItemListStyle: CSSProperties = {
   display: "grid",
-  gap: "8px",
-  marginTop: "10px",
+  gap: "6px",
+  marginTop: "8px",
 };
 
 const subItemCardStyle: CSSProperties = {
@@ -2898,12 +3022,12 @@ const subItemCardStyle: CSSProperties = {
 
 const documentListStyle: CSSProperties = {
   display: "grid",
-  gap: "12px",
+  gap: "6px",
 };
 
 const documentCardStyle: CSSProperties = {
-  padding: "14px",
-  borderRadius: radius.md,
+  padding: "10px",
+  borderRadius: radius.sm,
   background: colors.panel,
   border: `1px solid ${colors.lineSoft}`,
 };
@@ -2932,8 +3056,8 @@ const documentActionRowStyle: CSSProperties = {
   display: "flex",
   flexWrap: "wrap",
   alignItems: "center",
-  gap: "10px",
-  marginTop: "10px",
+  gap: "6px",
+  marginTop: "8px",
 };
 
 const fileActionLabelStyle: CSSProperties = {
@@ -2957,18 +3081,18 @@ const lineWrapStyle: CSSProperties = {
 
 const lineEditorSectionStyle: CSSProperties = {
   display: "grid",
-  gap: "10px",
+  gap: "6px",
 };
 
 const lineEditorListStyle: CSSProperties = {
   display: "grid",
-  gap: "10px",
+  gap: "6px",
 };
 
 const lineEditorCardStyle: CSSProperties = {
   display: "grid",
-  gap: "10px",
-  padding: "12px",
+  gap: "6px",
+  padding: "8px 10px",
   borderRadius: radius.sm,
   background: colors.panel,
   border: `1px dashed ${colors.accentBorder}`,
@@ -2985,12 +3109,12 @@ function lineEditorGridStyle(isMobile: boolean): CSSProperties {
   return {
     display: "grid",
     gridTemplateColumns: isMobile ? "1fr" : "1.4fr 0.8fr 0.8fr 0.8fr",
-    gap: "10px",
+    gap: "8px",
   };
 }
 
 const lineChipStyle: CSSProperties = {
-  padding: "6px 10px",
+  padding: "4px 7px",
   borderRadius: "999px",
   background: colors.accentTint,
   color: colors.accentStrong,
@@ -3000,22 +3124,22 @@ const lineChipStyle: CSSProperties = {
 
 const movementListStyle: CSSProperties = {
   display: "grid",
-  gap: "10px",
+  gap: "6px",
 };
 
 const movementCardStyle: CSSProperties = {
-  padding: "12px 14px",
-  borderRadius: radius.md,
+  padding: "8px 10px",
+  borderRadius: radius.sm,
   background: colors.panel,
   border: `1px solid ${colors.lineSoft}`,
   display: "grid",
-  gap: "8px",
+  gap: "6px",
 };
 
 function movementDeltaStyle(quantityDelta: number): CSSProperties {
   const positive = quantityDelta >= 0;
   return {
-    padding: "6px 10px",
+    padding: "4px 7px",
     borderRadius: "999px",
     background: positive ? colors.successSoft : colors.dangerSoft,
     color: positive ? colors.success : colors.danger,
@@ -3048,7 +3172,7 @@ const tableStyle: CSSProperties = {
 
 const thStyle: CSSProperties = {
   textAlign: "left",
-  padding: "10px 12px",
+  padding: "7px 8px",
   borderBottom: `1px solid ${colors.line}`,
   color: colors.inkMuted,
   fontSize: "12px",
@@ -3057,7 +3181,7 @@ const thStyle: CSSProperties = {
 };
 
 const tdStyle: CSSProperties = {
-  padding: "12px",
+  padding: "8px",
   borderBottom: `1px solid ${colors.lineSoft}`,
   fontSize: "14px",
   color: colors.ink,
@@ -3078,18 +3202,18 @@ const thresholdInputStyle: CSSProperties = {
   ...inputStyle,
   minWidth: "72px",
   width: "72px",
-  padding: "8px 10px",
+  padding: "6px 8px",
 };
 
 const thresholdButtonStyle: CSSProperties = {
   ...secondaryButtonStyle,
-  padding: "8px 10px",
+  padding: "6px 8px",
   whiteSpace: "nowrap",
 };
 
 const warningItemStyle: CSSProperties = {
-  padding: "12px 14px",
-  borderRadius: radius.md,
+  padding: "8px 10px",
+  borderRadius: radius.sm,
   background: colors.warningSoft,
   border: `1px solid ${colors.warningBorder}`,
 };
@@ -3109,8 +3233,8 @@ const placeholderSubtleStyle: CSSProperties = {
 };
 
 const errorStyle: CSSProperties = {
-  padding: "12px 14px",
-  borderRadius: radius.md,
+  padding: "8px 10px",
+  borderRadius: radius.sm,
   background: colors.dangerSoft,
   border: `1px solid ${colors.dangerBorder}`,
   color: colors.danger,
@@ -3118,8 +3242,8 @@ const errorStyle: CSSProperties = {
 };
 
 const successStyle: CSSProperties = {
-  padding: "12px 14px",
-  borderRadius: radius.md,
+  padding: "8px 10px",
+  borderRadius: radius.sm,
   background: colors.successSoft,
   border: `1px solid ${colors.accentBorder}`,
   color: colors.success,

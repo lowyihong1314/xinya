@@ -805,15 +805,17 @@ function Field({
 
 const pageStyle: CSSProperties = {
   display: "grid",
-  gap: "18px",
+  gap: "10px",
 };
 
 const headerStyle: CSSProperties = {
   display: "flex",
   justifyContent: "space-between",
-  gap: "16px",
+  gap: "10px",
   alignItems: "center",
   flexWrap: "wrap",
+  paddingBottom: "8px",
+  borderBottom: "1px solid var(--x-color-line-soft)",
 };
 
 const eyebrowStyle: CSSProperties = {
@@ -824,15 +826,15 @@ const eyebrowStyle: CSSProperties = {
 };
 
 const titleStyle: CSSProperties = {
-  margin: "8px 0 0",
-  fontSize: "30px",
+  margin: "4px 0 0",
+  fontSize: "20px",
   lineHeight: 1.1,
   color: "var(--x-color-ink)",
 };
 
 const headerActionsStyle: CSSProperties = {
   display: "flex",
-  gap: "10px",
+  gap: "6px",
   alignItems: "center",
   flexWrap: "wrap",
 };
@@ -846,45 +848,48 @@ const toggleStyle: CSSProperties = {
 };
 
 const primaryButtonStyle: CSSProperties = {
-  padding: "12px 18px",
-  borderRadius: "999px",
+  padding: "7px 10px",
+  borderRadius: "6px",
   border: "none",
-  background: "linear-gradient(135deg, var(--x-color-accent), var(--x-color-info))",
+  background: "var(--x-color-accent)",
   color: "white",
   fontWeight: 700,
   cursor: "pointer",
+  fontSize: "13px",
 };
 
 const secondaryButtonStyle: CSSProperties = {
-  padding: "12px 18px",
-  borderRadius: "999px",
+  padding: "7px 10px",
+  borderRadius: "6px",
   border: "1px solid var(--x-color-line-soft)",
   background: "var(--x-color-panel)",
   color: "var(--x-color-ink)",
   fontWeight: 700,
   cursor: "pointer",
+  fontSize: "13px",
 };
 
 const ghostDangerStyle: CSSProperties = {
-  padding: "10px 14px",
-  borderRadius: "999px",
+  padding: "7px 10px",
+  borderRadius: "6px",
   border: "1px solid var(--x-color-danger-border)",
   background: "var(--x-color-danger-soft)",
   color: "var(--x-color-danger)",
   fontWeight: 700,
   cursor: "pointer",
+  fontSize: "13px",
 };
 
 const successBannerStyle: CSSProperties = {
-  padding: "14px 16px",
-  borderRadius: "var(--x-radius-md)",
+  padding: "8px 10px",
+  borderRadius: "6px",
   background: "var(--x-color-success-soft)",
   color: "var(--x-color-success)",
 };
 
 const errorBannerStyle: CSSProperties = {
-  padding: "14px 16px",
-  borderRadius: "var(--x-radius-md)",
+  padding: "8px 10px",
+  borderRadius: "6px",
   background: "var(--x-color-danger-soft)",
   color: "var(--x-color-danger)",
 };
@@ -894,7 +899,7 @@ const modalOverlayStyle: CSSProperties = {
   inset: 0,
   display: "grid",
   placeItems: "center",
-  padding: "24px",
+  padding: "12px",
   background: "rgba(15, 23, 42, 0.48)",
   zIndex: 1200,
 };
@@ -905,19 +910,19 @@ function modalCardStyle(isMobile: boolean): CSSProperties {
     maxWidth: isMobile ? "100%" : "780px",
     maxHeight: "min(88vh, 920px)",
     overflow: "auto",
-    padding: "22px",
-    borderRadius: "var(--x-radius-lg)",
+    padding: "12px",
+    borderRadius: "8px",
     background: "var(--x-color-panel-strong)",
     border: "1px solid var(--x-color-line-soft)",
-    boxShadow: "0 28px 70px rgba(15, 23, 42, 0.26)",
+    boxShadow: "0 12px 28px rgba(15, 23, 42, 0.18)",
   };
 }
 
 function layoutStyle(isMobile: boolean): CSSProperties {
   return {
     display: "grid",
-    gridTemplateColumns: isMobile ? "1fr" : "minmax(280px, 340px) minmax(0, 1fr)",
-    gap: "20px",
+    gridTemplateColumns: isMobile ? "1fr" : "minmax(240px, 300px) minmax(0, 1fr)",
+    gap: "10px",
     alignItems: "start",
   };
 }
@@ -925,37 +930,37 @@ function layoutStyle(isMobile: boolean): CSSProperties {
 function sidebarStyle(isMobile: boolean): CSSProperties {
   return {
     display: "grid",
-    gap: "12px",
+    gap: "6px",
     position: isMobile ? "static" : "sticky",
-    top: isMobile ? undefined : "84px",
+    top: isMobile ? undefined : "68px",
   };
 }
 
 const searchStyle: CSSProperties = {
-  minHeight: "46px",
-  padding: "12px 14px",
-  borderRadius: "var(--x-radius-sm)",
+  minHeight: "32px",
+  padding: "6px 8px",
+  borderRadius: "6px",
   border: "1px solid var(--x-color-line)",
   background: "var(--x-color-panel)",
   boxSizing: "border-box",
-  fontSize: "14px",
+  fontSize: "13px",
 };
 
 const searchControlsStyle = (isMobile: boolean): CSSProperties => ({
   display: "grid",
   gridTemplateColumns: isMobile ? "1fr" : "minmax(0, 1fr) 140px",
-  gap: "10px",
+  gap: "6px",
   alignItems: "stretch",
 });
 
 const searchSelectStyle: CSSProperties = {
-  minHeight: "46px",
-  padding: "12px 14px",
-  borderRadius: "var(--x-radius-sm)",
+  minHeight: "32px",
+  padding: "6px 8px",
+  borderRadius: "6px",
   border: "1px solid var(--x-color-line)",
   background: "var(--x-color-panel)",
   boxSizing: "border-box",
-  fontSize: "14px",
+  fontSize: "13px",
 };
 
 const resultsMetaStyle: CSSProperties = {
@@ -969,61 +974,61 @@ const resultsMetaStyle: CSSProperties = {
 
 function eventNavCardStyle(active: boolean): CSSProperties {
   return {
-    padding: "16px",
-    borderRadius: "var(--x-radius-md)",
+    padding: "8px 10px",
+    borderRadius: "6px",
     border: active ? "1px solid var(--x-color-accent-border)" : "1px solid var(--x-color-line-soft)",
-    background: active
-      ? "linear-gradient(145deg, var(--x-color-accent-tint-strong), var(--x-color-info-tint))"
-      : "var(--x-color-panel-strong)",
-    boxShadow: active ? "0 18px 34px var(--x-color-shadow-medium)" : "0 10px 24px var(--x-color-shadow-soft)",
+    borderLeft: active ? "3px solid var(--x-color-accent)" : "3px solid transparent",
+    background: active ? "var(--x-color-accent-tint)" : "var(--x-color-panel)",
+    boxShadow: "none",
     textAlign: "left",
     cursor: "pointer",
   };
 }
 
 const eventNavTitleStyle = (active: boolean): CSSProperties => ({
-  fontSize: "16px",
+  fontSize: "13px",
   fontWeight: 700,
   color: active ? "var(--x-color-accent-strong)" : "var(--x-color-ink)",
 });
 
 const eventNavMetaStyle: CSSProperties = {
-  marginTop: "6px",
-  fontSize: "13px",
+  marginTop: "3px",
+  fontSize: "11px",
   color: "var(--x-color-ink-muted)",
 };
 
 const paginationStyle: CSSProperties = {
   display: "flex",
-  gap: "10px",
-  marginTop: "4px",
+  gap: "6px",
+  marginTop: "2px",
 };
 
 const paginationButtonStyle: CSSProperties = {
   flex: 1,
-  padding: "10px 12px",
-  borderRadius: "var(--x-radius-sm)",
+  padding: "7px 8px",
+  borderRadius: "6px",
   border: "1px solid var(--x-color-line-soft)",
   background: "var(--x-color-panel)",
   color: "var(--x-color-ink)",
   cursor: "pointer",
+  fontSize: "12px",
 };
 
 const contentStyle: CSSProperties = {
   display: "grid",
-  gap: "16px",
+  gap: "10px",
 };
 
 function heroStyle(isMobile: boolean): CSSProperties {
   return {
     display: "grid",
-    gridTemplateColumns: isMobile ? "1fr" : "180px minmax(0, 1fr)",
-    gap: "18px",
-    padding: isMobile ? "16px" : "20px",
-    borderRadius: "var(--x-radius-lg)",
+    gridTemplateColumns: isMobile ? "1fr" : "112px minmax(0, 1fr)",
+    gap: "10px",
+    padding: isMobile ? "10px" : "10px",
+    borderRadius: "8px",
     background: "var(--x-color-panel-strong)",
     border: "1px solid var(--x-color-line-soft)",
-    boxShadow: "0 16px 34px var(--x-color-shadow-soft)",
+    boxShadow: "none",
   };
 }
 
@@ -1033,16 +1038,16 @@ const heroImageWrapStyle: CSSProperties = {
 };
 
 const heroImageStyle: CSSProperties = {
-  width: "180px",
-  height: "180px",
-  borderRadius: "18px",
+  width: "112px",
+  height: "112px",
+  borderRadius: "6px",
   objectFit: "cover",
   background: "var(--x-color-panel-alt)",
 };
 
 const heroCopyStyle: CSSProperties = {
   display: "grid",
-  gap: "10px",
+  gap: "6px",
 };
 
 const heroTopRowStyle: CSSProperties = {
@@ -1054,54 +1059,54 @@ const heroTopRowStyle: CSSProperties = {
 };
 
 const sectionEyebrowStyle: CSSProperties = {
-  fontSize: "12px",
-  letterSpacing: "0.14em",
+  fontSize: "11px",
+  letterSpacing: "0.08em",
   textTransform: "uppercase",
   color: "var(--x-color-ink-muted)",
 };
 
 const sectionTitleStyle: CSSProperties = {
-  margin: "8px 0 0",
-  fontSize: "24px",
+  margin: "4px 0 0",
+  fontSize: "18px",
   color: "var(--x-color-ink)",
 };
 
 const inlineNoteStyle: CSSProperties = {
-  fontSize: "14px",
+  fontSize: "12px",
   color: "var(--x-color-ink-muted)",
 };
 
 const chipRowStyle: CSSProperties = {
   display: "flex",
-  gap: "8px",
+  gap: "6px",
   flexWrap: "wrap",
-  marginTop: "8px",
+  marginTop: "4px",
 };
 
 const chipStyle: CSSProperties = {
-  padding: "8px 10px",
+  padding: "4px 7px",
   borderRadius: "999px",
   background: "var(--x-color-panel-alt)",
-  fontSize: "12px",
+  fontSize: "11px",
   color: "var(--x-color-ink-muted)",
 };
 
 const panelStyle: CSSProperties = {
-  padding: "22px",
-  borderRadius: "var(--x-radius-lg)",
+  padding: "10px",
+  borderRadius: "8px",
   background: "var(--x-color-panel-strong)",
   border: "1px solid var(--x-color-line-soft)",
-  boxShadow: "0 14px 34px var(--x-color-shadow-soft)",
+  boxShadow: "none",
 };
 
 const panelHeaderStyle: CSSProperties = {
   display: "flex",
   justifyContent: "space-between",
-  gap: "14px",
+  gap: "8px",
   alignItems: "center",
   flexWrap: "wrap",
-  paddingBottom: "14px",
-  marginBottom: "16px",
+  paddingBottom: "8px",
+  marginBottom: "10px",
   borderBottom: "1px solid var(--x-color-line-soft)",
 };
 
@@ -1109,13 +1114,13 @@ function formGridStyle(isMobile: boolean): CSSProperties {
   return {
     display: "grid",
     gridTemplateColumns: isMobile ? "1fr" : "repeat(2, minmax(0, 1fr))",
-    gap: "16px",
+    gap: "8px",
   };
 }
 
 const fieldStyle: CSSProperties = {
   display: "grid",
-  gap: "8px",
+  gap: "4px",
 };
 
 const wideFieldStyle: CSSProperties = {
@@ -1124,25 +1129,25 @@ const wideFieldStyle: CSSProperties = {
 };
 
 const fieldLabelStyle: CSSProperties = {
-  fontSize: "14px",
+  fontSize: "12px",
   fontWeight: 700,
   color: "var(--x-color-ink-muted)",
 };
 
 const inputStyle: CSSProperties = {
   width: "100%",
-  minHeight: "46px",
-  padding: "12px 14px",
-  borderRadius: "var(--x-radius-sm)",
+  minHeight: "32px",
+  padding: "6px 8px",
+  borderRadius: "6px",
   border: "1px solid var(--x-color-line)",
   background: "var(--x-color-panel-alt)",
   boxSizing: "border-box",
-  fontSize: "14px",
+  fontSize: "13px",
 };
 
 const textareaStyle: CSSProperties = {
   ...inputStyle,
-  minHeight: "120px",
+  minHeight: "84px",
   resize: "vertical",
 };
 
@@ -1152,20 +1157,20 @@ const hiddenInputStyle: CSSProperties = {
 
 const attachmentListStyle: CSSProperties = {
   display: "grid",
-  gap: "12px",
+  gap: "6px",
 };
 
 const attachmentCardStyle: CSSProperties = {
   display: "flex",
   justifyContent: "space-between",
-  gap: "14px",
+  gap: "8px",
   alignItems: "center",
   flexWrap: "wrap",
-  minHeight: "64px",
-  padding: "14px 16px",
-  borderRadius: "var(--x-radius-md)",
+  minHeight: "44px",
+  padding: "8px 10px",
+  borderRadius: "6px",
   border: "1px solid var(--x-color-line-soft)",
-  background: "linear-gradient(180deg, var(--x-color-panel-alt), var(--x-color-panel))",
+  background: "var(--x-color-panel-alt)",
 };
 
 const attachmentMetaWrapStyle: CSSProperties = {
@@ -1174,21 +1179,21 @@ const attachmentMetaWrapStyle: CSSProperties = {
 };
 
 const attachmentTitleStyle: CSSProperties = {
-  fontSize: "14px",
+  fontSize: "13px",
   fontWeight: 700,
   color: "var(--x-color-ink)",
   wordBreak: "break-word",
 };
 
 const attachmentSubtitleStyle: CSSProperties = {
-  fontSize: "13px",
+  fontSize: "11px",
   color: "var(--x-color-ink-muted)",
-  lineHeight: 1.5,
+  lineHeight: 1.35,
 };
 
 const attachmentActionRowStyle: CSSProperties = {
   display: "flex",
-  gap: "10px",
+  gap: "6px",
   flexWrap: "wrap",
   alignItems: "center",
 };
@@ -1197,31 +1202,31 @@ const modalActionsStyle: CSSProperties = {
   gridColumn: "1 / -1",
   display: "flex",
   justifyContent: "space-between",
-  gap: "12px",
+  gap: "8px",
   alignItems: "center",
   flexWrap: "wrap",
-  paddingTop: "8px",
+  paddingTop: "4px",
 };
 
 const organizerRowStyle: CSSProperties = {
   display: "flex",
-  gap: "12px",
+  gap: "8px",
   flexWrap: "wrap",
 };
 
 const organizerCardStyle: CSSProperties = {
   display: "grid",
   justifyItems: "center",
-  gap: "8px",
+  gap: "4px",
 };
 
 const organizerAvatarStyle: CSSProperties = {
-  width: "52px",
-  height: "52px",
+  width: "38px",
+  height: "38px",
   borderRadius: "50%",
   objectFit: "cover",
-  border: "2px solid var(--x-color-panel)",
-  boxShadow: "0 8px 18px var(--x-color-shadow-soft)",
+  border: "1px solid var(--x-color-panel)",
+  boxShadow: "none",
 };
 
 const organizerNameStyle: CSSProperties = {
@@ -1231,8 +1236,8 @@ const organizerNameStyle: CSSProperties = {
 };
 
 const placeholderStyle: CSSProperties = {
-  padding: "24px",
-  borderRadius: "var(--x-radius-md)",
+  padding: "12px",
+  borderRadius: "6px",
   background: "var(--x-color-panel)",
   border: "1px solid var(--x-color-line-soft)",
   color: "var(--x-color-ink-muted)",

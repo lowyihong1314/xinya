@@ -632,8 +632,8 @@ const savedItemSummaryStyle: CSSProperties = {
 };
 
 const emptyStateStyle: CSSProperties = {
-  padding: "18px",
-  borderRadius: "14px",
+  padding: "10px",
+  borderRadius: "6px",
   border: "1px dashed rgba(123, 90, 56, 0.22)",
   color: "#7a5e42",
   fontSize: "13px",
@@ -643,12 +643,12 @@ const emptyStateStyle: CSSProperties = {
 
 const editorCardStyle: CSSProperties = {
   display: "grid",
-  gap: "16px",
-  padding: "22px",
-  borderRadius: "22px",
+  gap: "8px",
+  padding: "10px",
+  borderRadius: "8px",
   border: "1px solid rgba(123, 90, 56, 0.12)",
   background: "#fffdfa",
-  boxShadow: "0 14px 36px rgba(77, 49, 22, 0.06)",
+  boxShadow: "none",
 };
 
 function editorHeaderStyle(isMobile: boolean): CSSProperties {
@@ -657,7 +657,7 @@ function editorHeaderStyle(isMobile: boolean): CSSProperties {
     flexDirection: isMobile ? "column" : "row",
     justifyContent: "space-between",
     alignItems: isMobile ? "stretch" : "start",
-    gap: "14px",
+    gap: "8px",
   };
 }
 
@@ -669,14 +669,14 @@ const editorHeaderCopyStyle: CSSProperties = {
 const editorEyebrowStyle: CSSProperties = {
   fontSize: "12px",
   fontWeight: 800,
-  letterSpacing: "0.14em",
+  letterSpacing: "0.08em",
   textTransform: "uppercase",
   color: "#a66a2e",
 };
 
 const editorTitleStyle: CSSProperties = {
   margin: 0,
-  fontSize: "24px",
+  fontSize: "18px",
   lineHeight: 1.15,
   color: "#3a2410",
 };
@@ -691,7 +691,7 @@ function editorActionsStyle(isMobile: boolean): CSSProperties {
   return {
     display: "flex",
     flexDirection: isMobile ? "column" : "row",
-    gap: "10px",
+    gap: "6px",
     alignItems: isMobile ? "stretch" : "center",
   };
 }
@@ -700,15 +700,15 @@ function priceSummaryStyle(isMobile: boolean): CSSProperties {
   return {
     display: "grid",
     gridTemplateColumns: isMobile ? "1fr" : "repeat(3, minmax(0, 1fr))",
-    gap: "12px",
+    gap: "8px",
   };
 }
 
 const priceSummaryCardStyle: CSSProperties = {
   display: "grid",
   gap: "6px",
-  padding: "14px 16px",
-  borderRadius: "16px",
+  padding: "8px 10px",
+  borderRadius: "6px",
   background: "rgba(248, 241, 231, 0.9)",
   border: "1px solid rgba(123, 90, 56, 0.1)",
 };
@@ -720,7 +720,7 @@ const priceLabelStyle: CSSProperties = {
 };
 
 const priceValueStyle: CSSProperties = {
-  fontSize: "20px",
+  fontSize: "16px",
   fontWeight: 800,
   color: "#3a2410",
 };
@@ -729,7 +729,7 @@ function fieldGridStyle(isMobile: boolean): CSSProperties {
   return {
     display: "grid",
     gridTemplateColumns: isMobile ? "1fr" : "repeat(2, minmax(0, 1fr))",
-    gap: "14px",
+    gap: "8px",
   };
 }
 
@@ -747,11 +747,11 @@ const labelStyle: CSSProperties = {
 const inputStyle: CSSProperties = {
   width: "100%",
   boxSizing: "border-box",
-  borderRadius: "14px",
+  borderRadius: "6px",
   border: "1px solid rgba(123, 90, 56, 0.18)",
   background: "#fffdfa",
-  padding: "12px 14px",
-  fontSize: "14px",
+  padding: "6px 8px",
+  fontSize: "13px",
   color: "#342112",
 };
 
@@ -763,14 +763,14 @@ const textareaStyle: CSSProperties = {
 
 const multiInputGroupStyle: CSSProperties = {
   display: "grid",
-  gap: "10px",
+  gap: "6px",
 };
 
 function multiInputRowStyle(isMobile: boolean): CSSProperties {
   return {
     display: "grid",
     gridTemplateColumns: isMobile ? "1fr" : "minmax(0, 1fr) auto",
-    gap: "10px",
+    gap: "6px",
     alignItems: "center",
   };
 }
@@ -780,7 +780,7 @@ function multiInputFooterStyle(isMobile: boolean): CSSProperties {
     display: "flex",
     flexDirection: isMobile ? "column" : "row",
     alignItems: isMobile ? "stretch" : "center",
-    gap: "10px",
+    gap: "6px",
   };
 }
 
@@ -792,7 +792,7 @@ const multiInputHintStyle: CSSProperties = {
 
 const inputTableWrapStyle: CSSProperties = {
   overflowX: "auto",
-  borderRadius: "16px",
+  borderRadius: "6px",
   border: "1px solid rgba(123, 90, 56, 0.12)",
   background: "#fffdfa",
 };
@@ -805,7 +805,7 @@ const inputTableStyle: CSSProperties = {
 
 const inputTableHeadCellStyle: CSSProperties = {
   textAlign: "left",
-  padding: "12px 14px",
+  padding: "7px 8px",
   background: "rgba(247,240,230,0.68)",
   color: "#7a5e42",
   fontSize: "12px",
@@ -815,7 +815,7 @@ const inputTableHeadCellStyle: CSSProperties = {
 
 function inputTableCellStyle(isLastRow: boolean): CSSProperties {
   return {
-    padding: "12px 14px",
+    padding: "7px 8px",
     verticalAlign: "middle",
     borderBottom: isLastRow ? "none" : "1px solid rgba(123, 90, 56, 0.1)",
   };
@@ -823,39 +823,39 @@ function inputTableCellStyle(isLastRow: boolean): CSSProperties {
 
 const primaryButtonStyle: CSSProperties = {
   border: "none",
-  borderRadius: "14px",
-  background: "linear-gradient(135deg, #ba7330, #8f5624)",
+  borderRadius: "6px",
+  background: "#ba7330",
   color: "#fff8ef",
-  padding: "12px 18px",
-  fontSize: "14px",
+  padding: "7px 10px",
+  fontSize: "13px",
   fontWeight: 800,
   cursor: "pointer",
 };
 
 const secondaryButtonStyle: CSSProperties = {
   border: "1px solid rgba(123, 90, 56, 0.18)",
-  borderRadius: "14px",
+  borderRadius: "6px",
   background: "#fffdfa",
   color: "#5c442c",
-  padding: "12px 18px",
-  fontSize: "14px",
+  padding: "7px 10px",
+  fontSize: "13px",
   fontWeight: 700,
   cursor: "pointer",
 };
 
 const compactSecondaryButtonStyle: CSSProperties = {
   ...secondaryButtonStyle,
-  padding: "10px 14px",
-  fontSize: "13px",
+  padding: "6px 8px",
+  fontSize: "12px",
 };
 
 const dangerButtonStyle: CSSProperties = {
   border: "1px solid rgba(176, 63, 42, 0.18)",
-  borderRadius: "14px",
+  borderRadius: "6px",
   background: "rgba(255,244,241,0.96)",
   color: "#ad3e2a",
-  padding: "12px 18px",
-  fontSize: "14px",
+  padding: "7px 10px",
+  fontSize: "13px",
   fontWeight: 700,
   cursor: "pointer",
 };

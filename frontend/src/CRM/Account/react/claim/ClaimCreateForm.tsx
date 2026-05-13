@@ -67,7 +67,7 @@ export function ClaimCreateForm({
   const aiFillDisabled = !hasReadableImage || aiFilling || submitting;
 
   return (
-    <div className="claim-create-form" style={{ display: "grid", gap: "16px" }}>
+    <>
       <div className="claim-create-form__header" style={panelHeaderStyle}>
         <button type="button" style={buttonGhostStyle} onClick={onBack}>
           返回列表
@@ -195,7 +195,7 @@ export function ClaimCreateForm({
           {submitting ? "提交中…" : "提交申请"}
         </button>
       </div>
-    </div>
+    </>
   );
 }
 

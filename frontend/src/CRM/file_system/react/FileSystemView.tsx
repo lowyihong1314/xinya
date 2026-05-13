@@ -726,30 +726,30 @@ const dialogOverlayStyle: CSSProperties = {
   display: "grid",
   placeItems: "center",
   zIndex: 1200,
-  padding: "20px",
+  padding: "12px",
 };
 
 const dialogPanelStyle: CSSProperties = {
   width: "min(460px, 100%)",
   display: "grid",
-  gap: "14px",
-  padding: "20px",
-  borderRadius: "20px",
+  gap: "8px",
+  padding: "12px",
+  borderRadius: "8px",
   background: "var(--x-color-panel)",
   border: "1px solid var(--x-color-line-soft)",
-  boxShadow: "0 24px 60px var(--x-color-shadow-medium)",
+  boxShadow: "0 12px 28px var(--x-color-shadow-medium)",
 };
 
 const dialogFieldStyle: CSSProperties = {
   display: "grid",
-  gap: "8px",
+  gap: "4px",
 };
 
 const dialogInputStyle: CSSProperties = {
   width: "100%",
-  minHeight: "42px",
-  padding: "0 12px",
-  borderRadius: "12px",
+  minHeight: "32px",
+  padding: "0 8px",
+  borderRadius: "6px",
   border: "1px solid var(--x-color-line-soft)",
   background: "var(--x-color-panel-strong)",
   color: "var(--x-color-ink)",
@@ -762,6 +762,6 @@ const dialogSelectStyle: CSSProperties = {
 const dialogActionsStyle: CSSProperties = {
   display: "flex",
   justifyContent: "flex-end",
-  gap: "10px",
+  gap: "6px",
   flexWrap: "wrap",
 };

@@ -232,14 +232,13 @@ const pageShellStyle: CSSProperties = {
   minHeight: "100vh",
   position: "relative",
   overflow: "hidden",
-  background: "linear-gradient(180deg, #edf4f7, #f9f4ea 42%, #eef3f9)",
+  background: "#edf4f7",
 };
 
 const pageBackdropStyle: CSSProperties = {
   position: "absolute",
   inset: "-10%",
-  background:
-    "radial-gradient(circle at 12% 16%, rgba(15,118,110,0.18), transparent 26%), radial-gradient(circle at 86% 18%, rgba(217,119,6,0.16), transparent 24%), radial-gradient(circle at 50% 78%, rgba(29,78,216,0.12), transparent 30%)",
+  background: "transparent",
   pointerEvents: "none",
 };
 
@@ -247,17 +246,17 @@ const pageContentStyle: CSSProperties = {
   position: "relative",
   maxWidth: "1160px",
   margin: "0 auto",
-  padding: "32px 18px 48px",
+  padding: "12px",
   display: "grid",
-  gap: "18px",
+  gap: "10px",
 };
 
 const heroPanelStyle: CSSProperties = {
-  padding: "22px 24px",
-  borderRadius: radius.lg,
-  background: "linear-gradient(135deg, rgba(255,255,255,0.95), rgba(244,249,251,0.92))",
+  padding: "10px 12px",
+  borderRadius: radius.sm,
+  background: colors.panel,
   border: `1px solid ${colors.lineSoft}`,
-  boxShadow: "0 18px 45px rgba(15, 23, 42, 0.08)",
+  boxShadow: "none",
 };
 
 const heroEyebrowStyle: CSSProperties = {
@@ -269,8 +268,8 @@ const heroEyebrowStyle: CSSProperties = {
 };
 
 const heroTitleStyle: CSSProperties = {
-  margin: "8px 0 6px",
-  fontSize: "34px",
+  margin: "4px 0 3px",
+  fontSize: "22px",
   lineHeight: 1.05,
   color: colors.ink,
 };
@@ -286,21 +285,21 @@ const heroCopyStyle: CSSProperties = {
 const layoutStyle: CSSProperties = {
   display: "grid",
   gridTemplateColumns: "repeat(auto-fit, minmax(320px, 1fr))",
-  gap: "18px",
+  gap: "8px",
 };
 
 const panelStyle: CSSProperties = {
-  padding: "20px",
-  borderRadius: "22px",
-  background: "rgba(255,255,255,0.9)",
+  padding: "10px",
+  borderRadius: "8px",
+  background: colors.panel,
   border: `1px solid ${colors.lineSoft}`,
-  boxShadow: "0 14px 34px rgba(15, 23, 42, 0.05)",
+  boxShadow: "none",
   display: "grid",
-  gap: "14px",
+  gap: "8px",
 };
 
 const sectionTitleStyle: CSSProperties = {
-  fontSize: "20px",
+  fontSize: "16px",
   fontWeight: 800,
   color: colors.ink,
 };
@@ -308,13 +307,13 @@ const sectionTitleStyle: CSSProperties = {
 const factGridStyle: CSSProperties = {
   display: "grid",
   gridTemplateColumns: "repeat(auto-fit, minmax(160px, 1fr))",
-  gap: "10px",
+  gap: "6px",
 };
 
 const factCardStyle: CSSProperties = {
-  padding: "12px 14px",
-  borderRadius: "16px",
-  background: "linear-gradient(180deg, rgba(232,245,242,0.88), rgba(255,255,255,0.94))",
+  padding: "8px 10px",
+  borderRadius: "6px",
+  background: colors.panel,
   border: `1px solid ${colors.lineSoft}`,
   display: "grid",
   gap: "4px",
@@ -335,8 +334,8 @@ const factValueStyle: CSSProperties = {
 };
 
 const copyCardStyle: CSSProperties = {
-  padding: "14px 16px",
-  borderRadius: "16px",
+  padding: "8px 10px",
+  borderRadius: "6px",
   background: "rgba(247,250,252,0.95)",
   border: `1px solid ${colors.lineSoft}`,
   display: "grid",
@@ -361,7 +360,7 @@ const mutedTextStyle: CSSProperties = {
 
 const fieldStyle: CSSProperties = {
   display: "grid",
-  gap: "10px",
+  gap: "4px",
 };
 
 const fieldLabelStyle: CSSProperties = {
@@ -371,17 +370,17 @@ const fieldLabelStyle: CSSProperties = {
 };
 
 const inputStyle: CSSProperties = {
-  borderRadius: "14px",
+  borderRadius: "6px",
   border: `1px solid ${colors.line}`,
-  padding: "13px 14px",
-  fontSize: "15px",
+  padding: "6px 8px",
+  fontSize: "13px",
   color: colors.ink,
   background: "rgba(255,255,255,0.94)",
 };
 
 const noteStyle: CSSProperties = {
-  padding: "14px 16px",
-  borderRadius: "16px",
+  padding: "8px 10px",
+  borderRadius: "6px",
   background: "rgba(254,243,199,0.72)",
   border: `1px solid ${colors.warningBorder}`,
   lineHeight: 1.6,
@@ -391,14 +390,14 @@ const noteStyle: CSSProperties = {
 const actionRowStyle: CSSProperties = {
   display: "grid",
   gridTemplateColumns: "repeat(auto-fit, minmax(180px, 1fr))",
-  gap: "12px",
+  gap: "6px",
 };
 
 const primaryButtonStyle: CSSProperties = {
   border: "none",
-  borderRadius: "14px",
-  padding: "13px 15px",
-  background: "linear-gradient(135deg, #0f766e, #1d4ed8)",
+  borderRadius: "6px",
+  padding: "7px 10px",
+  background: "#0f766e",
   color: "white",
   fontWeight: 800,
   cursor: "pointer",
@@ -406,8 +405,8 @@ const primaryButtonStyle: CSSProperties = {
 
 const secondaryButtonStyle: CSSProperties = {
   border: `1px solid ${colors.line}`,
-  borderRadius: "14px",
-  padding: "13px 15px",
+  borderRadius: "6px",
+  padding: "7px 10px",
   background: "rgba(255,255,255,0.92)",
   color: colors.ink,
   fontWeight: 800,

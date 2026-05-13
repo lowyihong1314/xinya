@@ -24,6 +24,10 @@ from app.asset.services import (
     delete_sub_item,
     delete_warehouse,
     load_asset_dashboard,
+    load_asset_documents_data,
+    load_asset_inventory_data,
+    load_asset_master_data,
+    load_asset_movements_data,
     list_asset_partners,
     update_item,
     update_inventory_threshold,
@@ -46,6 +50,33 @@ def get_asset_dashboard():
     try:
         require_asset_read_permission()
         return jsonify({"status": "success", "data": load_asset_dashboard()})
+    except AssetError as exc:
+        return _error_response(exc)
+
+
+@asset_bp.get("/master-data")
+def get_asset_master_data():
+    try:
+        require_asset_read_permission()
+        return jsonify({"status": "success", "data": load_asset_master_data()})
+    except AssetError as exc:
+        return _error_response(exc)
+
+
+@asset_bp.get("/inventory")
+def get_asset_inventory():
+    try:
+        require_asset_read_permission()
+        return jsonify({"status": "success", "data": load_asset_inventory_data()})
+    except AssetError as exc:
+        return _error_response(exc)
+
+
+@asset_bp.get("/movements")
+def get_asset_movements():
+    try:
+        require_asset_read_permission()
+        return jsonify({"status": "success", "data": load_asset_movements_data()})
     except AssetError as exc:
         return _error_response(exc)
 
@@ -305,6 +336,15 @@ def delete_sub_item_route(sub_item_id):
 
         db.session.rollback()
         return jsonify({"status": "error", "message": str(exc)}), 500
+
+
+@asset_bp.get("/stock-documents")
+def get_stock_documents():
+    try:
+        require_asset_read_permission()
+        return jsonify({"status": "success", "data": load_asset_documents_data()})
+    except AssetError as exc:
+        return _error_response(exc)
 
 
 @asset_bp.post("/stock-documents")

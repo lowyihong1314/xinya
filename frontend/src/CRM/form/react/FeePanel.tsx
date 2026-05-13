@@ -383,30 +383,30 @@ function FeeInlineEditor({
 }
 
 function sectionBodyStyle(isMobile: boolean): CSSProperties {
-  return { display: "grid", gap: isMobile ? "10px" : "12px" };
+  return { display: "grid", gap: "8px" };
 }
 
 function sectionInlineActionsStyle(isMobile: boolean): CSSProperties {
-  return { display: "flex", justifyContent: isMobile ? "flex-start" : "flex-end", gap: "10px", flexWrap: "wrap" };
+  return { display: "flex", justifyContent: isMobile ? "flex-start" : "flex-end", gap: "6px", flexWrap: "wrap" };
 }
 
-const stackStyle: CSSProperties = { display: "grid", gap: "10px" };
-const placeholderStyle: CSSProperties = { padding: "18px", borderRadius: "var(--x-radius-md)", background: "var(--x-color-panel-strong)", color: "var(--x-color-ink-muted)" };
-const linkButtonStyle: CSSProperties = { padding: "12px 18px", borderRadius: "999px", border: "1px solid var(--x-color-line-soft)", background: "var(--x-color-panel)", color: "var(--x-color-ink)", fontWeight: 700, cursor: "pointer", textDecoration: "none" };
-const smallLinkButtonStyle: CSSProperties = { ...linkButtonStyle, padding: "8px 12px", fontSize: "13px" };
-const smallSecondaryButtonStyle: CSSProperties = { padding: "8px 12px", borderRadius: "999px", border: "1px solid var(--x-color-line-soft)", background: "var(--x-color-panel)", color: "var(--x-color-ink)", fontWeight: 700, cursor: "pointer", fontSize: "13px" };
-const smallDangerButtonStyle: CSSProperties = { padding: "8px 12px", borderRadius: "999px", border: "1px solid var(--x-color-danger-border)", background: "var(--x-color-danger-soft)", color: "var(--x-color-danger)", fontWeight: 700, cursor: "pointer", fontSize: "13px" };
-const errorBannerStyle: CSSProperties = { padding: "14px 16px", borderRadius: "var(--x-radius-md)", background: "var(--x-color-danger-soft)", color: "var(--x-color-danger)" };
-const inlineNoteStyle: CSSProperties = { color: "var(--x-color-ink-muted)", fontSize: "14px" };
-const fieldStyle: CSSProperties = { display: "grid", gap: "8px" };
-const fieldLabelStyle: CSSProperties = { fontSize: "13px", fontWeight: 700, color: "var(--x-color-ink-muted)" };
-const inputStyle: CSSProperties = { width: "100%", padding: "12px 14px", borderRadius: "12px", border: "1px solid var(--x-color-line-soft)", background: "var(--x-color-panel-strong)", color: "var(--x-color-ink)", boxSizing: "border-box" };
+const stackStyle: CSSProperties = { display: "grid", gap: "6px" };
+const placeholderStyle: CSSProperties = { padding: "10px", borderRadius: "6px", background: "var(--x-color-panel-strong)", color: "var(--x-color-ink-muted)" };
+const linkButtonStyle: CSSProperties = { padding: "7px 10px", borderRadius: "6px", border: "1px solid var(--x-color-line-soft)", background: "var(--x-color-panel)", color: "var(--x-color-ink)", fontWeight: 700, cursor: "pointer", textDecoration: "none", fontSize: "13px" };
+const smallLinkButtonStyle: CSSProperties = { ...linkButtonStyle, padding: "6px 8px", fontSize: "12px" };
+const smallSecondaryButtonStyle: CSSProperties = { padding: "6px 8px", borderRadius: "6px", border: "1px solid var(--x-color-line-soft)", background: "var(--x-color-panel)", color: "var(--x-color-ink)", fontWeight: 700, cursor: "pointer", fontSize: "12px" };
+const smallDangerButtonStyle: CSSProperties = { padding: "6px 8px", borderRadius: "6px", border: "1px solid var(--x-color-danger-border)", background: "var(--x-color-danger-soft)", color: "var(--x-color-danger)", fontWeight: 700, cursor: "pointer", fontSize: "12px" };
+const errorBannerStyle: CSSProperties = { padding: "8px 10px", borderRadius: "6px", background: "var(--x-color-danger-soft)", color: "var(--x-color-danger)" };
+const inlineNoteStyle: CSSProperties = { color: "var(--x-color-ink-muted)", fontSize: "12px" };
+const fieldStyle: CSSProperties = { display: "grid", gap: "4px" };
+const fieldLabelStyle: CSSProperties = { fontSize: "12px", fontWeight: 700, color: "var(--x-color-ink-muted)" };
+const inputStyle: CSSProperties = { width: "100%", minHeight: "32px", padding: "6px 8px", borderRadius: "6px", border: "1px solid var(--x-color-line-soft)", background: "var(--x-color-panel-strong)", color: "var(--x-color-ink)", boxSizing: "border-box", fontSize: "13px" };
 function compactInputStyle(isMobile: boolean): CSSProperties {
   return {
     minWidth: isMobile ? "0" : "120px",
     width: "100%",
-    padding: "10px 12px",
-    borderRadius: "12px",
+    padding: "6px 8px",
+    borderRadius: "6px",
     border: "1px solid var(--x-color-line-soft)",
     background: "var(--x-color-panel-strong)",
     color: "var(--x-color-ink)",
@@ -417,9 +417,9 @@ function compactInputStyle(isMobile: boolean): CSSProperties {
 function feeEditorCardStyle(isMobile: boolean): CSSProperties {
   return {
     display: "grid",
-    gap: isMobile ? "12px" : "14px",
-    padding: isMobile ? "12px" : "14px",
-    borderRadius: isMobile ? "14px" : "16px",
+    gap: "8px",
+    padding: "10px",
+    borderRadius: "6px",
     border: "1px solid var(--x-color-line-soft)",
     background: "var(--x-color-panel-strong)",
   };
@@ -428,7 +428,7 @@ function feeEditorCardStyle(isMobile: boolean): CSSProperties {
 function feeEditorGridStyle(isMobile: boolean): CSSProperties {
   return {
     display: "grid",
-    gap: "12px",
+    gap: "8px",
     gridTemplateColumns: isMobile ? "1fr" : "repeat(auto-fit, minmax(150px, 1fr))",
   };
 }
@@ -439,15 +439,15 @@ function feeImageControlStyle(isMobile: boolean): CSSProperties {
   return {
     display: "flex",
     alignItems: isMobile ? "stretch" : "center",
-    gap: "10px",
+    gap: "6px",
     flexWrap: "wrap",
     flexDirection: isMobile ? "column" : "row",
   };
 }
 
 const feeImagePreviewStyle: CSSProperties = { display: "inline-flex", width: "fit-content", textDecoration: "none" };
-const feeImageStyle: CSSProperties = { display: "block", width: "100%", maxWidth: "220px", maxHeight: "160px", objectFit: "cover", borderRadius: "14px", border: "1px solid var(--x-color-line-soft)", background: "var(--x-color-panel)" };
-const feeImageEmptyStyle: CSSProperties = { padding: "18px", borderRadius: "14px", border: "1px dashed var(--x-color-line-soft)", color: "var(--x-color-ink-muted)", fontSize: "13px", background: "var(--x-color-panel)" };
+const feeImageStyle: CSSProperties = { display: "block", width: "100%", maxWidth: "220px", maxHeight: "160px", objectFit: "cover", borderRadius: "6px", border: "1px solid var(--x-color-line-soft)", background: "var(--x-color-panel)" };
+const feeImageEmptyStyle: CSSProperties = { padding: "10px", borderRadius: "6px", border: "1px dashed var(--x-color-line-soft)", color: "var(--x-color-ink-muted)", fontSize: "13px", background: "var(--x-color-panel)" };
 function feeActionRowStyle(isMobile: boolean): CSSProperties {
   return {
     display: "flex",

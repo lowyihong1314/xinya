@@ -153,7 +153,7 @@ def serialize_stock_movement(movement: AssetStockMovement):
     }
 
 
-def serialize_stock_document(document: AssetStockDocument, include_children=True):
+def serialize_stock_document(document: AssetStockDocument, include_children=True, include_lines=True, include_movements=True):
     invoice_file_path = str(document.invoice_file_path or "").strip() or None
     data = {
         "id": document.id,
@@ -194,6 +194,6 @@ def serialize_stock_document(document: AssetStockDocument, include_children=True
         "updated_at": document.updated_at.isoformat() if document.updated_at else None,
     }
     if include_children:
-        data["lines"] = [serialize_stock_document_line(line) for line in document.lines]
-        data["movements"] = [serialize_stock_movement(movement) for movement in document.movements]
+        data["lines"] = [serialize_stock_document_line(line) for line in document.lines] if include_lines else []
+        data["movements"] = [serialize_stock_movement(movement) for movement in document.movements] if include_movements else []
     return data

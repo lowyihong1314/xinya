@@ -970,97 +970,98 @@ function getMemberPaymentStatusMeta(member: FormMember) {
   };
 }
 
-const pageStyle: CSSProperties = { display: "grid", gap: "18px" };
-const headerStyle: CSSProperties = { display: "flex", justifyContent: "space-between", gap: "16px", alignItems: "center", flexWrap: "wrap" };
-const eyebrowStyle: CSSProperties = { fontSize: "12px", letterSpacing: "0.14em", textTransform: "uppercase", color: "var(--x-color-ink-muted)" };
-const titleStyle: CSSProperties = { margin: "8px 0 0", fontSize: "30px", lineHeight: 1.1, color: "var(--x-color-ink)" };
-const headerActionsStyle: CSSProperties = { display: "flex", gap: "10px", alignItems: "center", flexWrap: "wrap" };
-const toggleStyle: CSSProperties = { display: "flex", alignItems: "center", gap: "8px", color: "var(--x-color-ink-muted)", fontSize: "14px" };
-const primaryButtonStyle: CSSProperties = { padding: "12px 18px", borderRadius: "999px", border: "none", background: "linear-gradient(135deg, var(--x-color-accent), var(--x-color-info))", color: "white", fontWeight: 700, cursor: "pointer" };
-const secondaryButtonStyle: CSSProperties = { padding: "12px 18px", borderRadius: "999px", border: "1px solid var(--x-color-line-soft)", background: "var(--x-color-panel)", color: "var(--x-color-ink)", fontWeight: 700, cursor: "pointer" };
-const dangerButtonStyle: CSSProperties = { padding: "12px 18px", borderRadius: "999px", border: "1px solid var(--x-color-danger-border)", background: "var(--x-color-danger-soft)", color: "var(--x-color-danger)", fontWeight: 700, cursor: "pointer" };
-const ghostDangerStyle: CSSProperties = { ...dangerButtonStyle, padding: "10px 14px" };
+const pageStyle: CSSProperties = { display: "grid", gap: "10px" };
+const headerStyle: CSSProperties = { display: "flex", justifyContent: "space-between", gap: "10px", alignItems: "center", flexWrap: "wrap", paddingBottom: "8px", borderBottom: "1px solid var(--x-color-line-soft)" };
+const eyebrowStyle: CSSProperties = { fontSize: "11px", letterSpacing: "0.08em", textTransform: "uppercase", color: "var(--x-color-ink-muted)" };
+const titleStyle: CSSProperties = { margin: "4px 0 0", fontSize: "20px", lineHeight: 1.1, color: "var(--x-color-ink)" };
+const headerActionsStyle: CSSProperties = { display: "flex", gap: "6px", alignItems: "center", flexWrap: "wrap" };
+const toggleStyle: CSSProperties = { display: "flex", alignItems: "center", gap: "6px", color: "var(--x-color-ink-muted)", fontSize: "12px" };
+const primaryButtonStyle: CSSProperties = { padding: "7px 10px", borderRadius: "6px", border: "none", background: "var(--x-color-accent)", color: "white", fontWeight: 700, cursor: "pointer", fontSize: "13px" };
+const secondaryButtonStyle: CSSProperties = { padding: "7px 10px", borderRadius: "6px", border: "1px solid var(--x-color-line-soft)", background: "var(--x-color-panel)", color: "var(--x-color-ink)", fontWeight: 700, cursor: "pointer", fontSize: "13px" };
+const dangerButtonStyle: CSSProperties = { padding: "7px 10px", borderRadius: "6px", border: "1px solid var(--x-color-danger-border)", background: "var(--x-color-danger-soft)", color: "var(--x-color-danger)", fontWeight: 700, cursor: "pointer", fontSize: "13px" };
+const ghostDangerStyle: CSSProperties = { ...dangerButtonStyle };
 const linkButtonStyle: CSSProperties = { ...secondaryButtonStyle, textDecoration: "none" };
-const smallSecondaryButtonStyle: CSSProperties = { ...secondaryButtonStyle, padding: "8px 12px", fontSize: "13px" };
-const smallDangerButtonStyle: CSSProperties = { ...dangerButtonStyle, padding: "8px 12px", fontSize: "13px" };
-const smallLinkButtonStyle: CSSProperties = { ...linkButtonStyle, padding: "8px 12px", fontSize: "13px" };
-const successBannerStyle: CSSProperties = { padding: "14px 16px", borderRadius: "var(--x-radius-md)", background: "var(--x-color-success-soft)", color: "var(--x-color-success)" };
-const errorBannerStyle: CSSProperties = { padding: "14px 16px", borderRadius: "var(--x-radius-md)", background: "var(--x-color-danger-soft)", color: "var(--x-color-danger)" };
+const smallSecondaryButtonStyle: CSSProperties = { ...secondaryButtonStyle, padding: "6px 8px", fontSize: "12px" };
+const smallDangerButtonStyle: CSSProperties = { ...dangerButtonStyle, padding: "6px 8px", fontSize: "12px" };
+const smallLinkButtonStyle: CSSProperties = { ...linkButtonStyle, padding: "6px 8px", fontSize: "12px" };
+const successBannerStyle: CSSProperties = { padding: "8px 10px", borderRadius: "6px", background: "var(--x-color-success-soft)", color: "var(--x-color-success)" };
+const errorBannerStyle: CSSProperties = { padding: "8px 10px", borderRadius: "6px", background: "var(--x-color-danger-soft)", color: "var(--x-color-danger)" };
 function layoutStyle(isMobile: boolean): CSSProperties {
-  return { display: "grid", gridTemplateColumns: isMobile ? "1fr" : "minmax(260px, 320px) minmax(0, 1fr)", gap: "20px", alignItems: "start" };
+  return { display: "grid", gridTemplateColumns: isMobile ? "1fr" : "minmax(240px, 300px) minmax(0, 1fr)", gap: "10px", alignItems: "start" };
 }
 function sidebarStyle(isMobile: boolean): CSSProperties {
-  return { display: "grid", gap: "12px", position: isMobile ? "static" : "sticky", top: isMobile ? undefined : "84px" };
+  return { display: "grid", gap: "6px", position: isMobile ? "static" : "sticky", top: isMobile ? undefined : "68px" };
 }
 function formNavCardStyle(active: boolean): CSSProperties {
   return {
-    padding: "16px",
-    borderRadius: "var(--x-radius-md)",
+    padding: "8px 10px",
+    borderRadius: "6px",
     border: active ? "1px solid var(--x-color-accent-border)" : "1px solid var(--x-color-line-soft)",
-    background: active ? "linear-gradient(145deg, var(--x-color-accent-tint-strong), var(--x-color-info-tint))" : "var(--x-color-panel-strong)",
-    boxShadow: active ? "0 18px 34px var(--x-color-shadow-medium)" : "0 10px 24px var(--x-color-shadow-soft)",
+    borderLeft: active ? "3px solid var(--x-color-accent)" : "3px solid transparent",
+    background: active ? "var(--x-color-accent-tint)" : "var(--x-color-panel)",
+    boxShadow: "none",
     textAlign: "left",
     cursor: "pointer",
   };
 }
-const formNavTitleStyle = (active: boolean): CSSProperties => ({ fontSize: "16px", fontWeight: 700, color: active ? "var(--x-color-accent)" : "var(--x-color-ink)" });
-const formNavMetaStyle: CSSProperties = { marginTop: "6px", fontSize: "13px", color: "var(--x-color-ink-muted)" };
-const contentStyle: CSSProperties = { display: "grid", gap: "18px" };
-const panelStyle: CSSProperties = { padding: "18px", borderRadius: "var(--x-radius-lg)", border: "1px solid var(--x-color-line-soft)", background: "var(--x-color-panel)", boxShadow: "0 18px 34px var(--x-color-shadow-soft)" };
-const panelHeaderStyle: CSSProperties = { display: "flex", justifyContent: "space-between", gap: "14px", alignItems: "flex-start", flexWrap: "wrap", marginBottom: "14px" };
-const sectionToggleButtonStyle: CSSProperties = { display: "flex", justifyContent: "space-between", alignItems: "center", gap: "14px", flex: 1, minWidth: "260px", padding: 0, border: "none", background: "transparent", textAlign: "left", cursor: "pointer" };
-const sectionToggleIconStyle: CSSProperties = { fontSize: "13px", fontWeight: 700, color: "var(--x-color-ink-muted)", whiteSpace: "nowrap" };
-const sectionBodyStyle: CSSProperties = { display: "grid", gap: "12px" };
-const sectionInlineActionsStyle: CSSProperties = { display: "flex", justifyContent: "flex-end", gap: "10px", flexWrap: "wrap" };
-const sectionEyebrowStyle: CSSProperties = { fontSize: "11px", letterSpacing: "0.16em", textTransform: "uppercase", color: "var(--x-color-ink-muted)" };
-const sectionTitleStyle: CSSProperties = { margin: "6px 0 0", fontSize: "22px", color: "var(--x-color-ink)" };
-const placeholderStyle: CSSProperties = { padding: "18px", borderRadius: "var(--x-radius-md)", background: "var(--x-color-panel-strong)", color: "var(--x-color-ink-muted)" };
+const formNavTitleStyle = (active: boolean): CSSProperties => ({ fontSize: "13px", fontWeight: 700, color: active ? "var(--x-color-accent)" : "var(--x-color-ink)" });
+const formNavMetaStyle: CSSProperties = { marginTop: "3px", fontSize: "11px", color: "var(--x-color-ink-muted)" };
+const contentStyle: CSSProperties = { display: "grid", gap: "10px" };
+const panelStyle: CSSProperties = { padding: "10px", borderRadius: "8px", border: "1px solid var(--x-color-line-soft)", background: "var(--x-color-panel)", boxShadow: "none" };
+const panelHeaderStyle: CSSProperties = { display: "flex", justifyContent: "space-between", gap: "8px", alignItems: "flex-start", flexWrap: "wrap", marginBottom: "8px" };
+const sectionToggleButtonStyle: CSSProperties = { display: "flex", justifyContent: "space-between", alignItems: "center", gap: "8px", flex: 1, minWidth: "220px", padding: 0, border: "none", background: "transparent", textAlign: "left", cursor: "pointer" };
+const sectionToggleIconStyle: CSSProperties = { fontSize: "12px", fontWeight: 700, color: "var(--x-color-ink-muted)", whiteSpace: "nowrap" };
+const sectionBodyStyle: CSSProperties = { display: "grid", gap: "8px" };
+const sectionInlineActionsStyle: CSSProperties = { display: "flex", justifyContent: "flex-end", gap: "6px", flexWrap: "wrap" };
+const sectionEyebrowStyle: CSSProperties = { fontSize: "11px", letterSpacing: "0.08em", textTransform: "uppercase", color: "var(--x-color-ink-muted)" };
+const sectionTitleStyle: CSSProperties = { margin: "4px 0 0", fontSize: "18px", color: "var(--x-color-ink)" };
+const placeholderStyle: CSSProperties = { padding: "10px", borderRadius: "6px", background: "var(--x-color-panel-strong)", color: "var(--x-color-ink-muted)" };
 function summaryGridStyle(isMobile: boolean): CSSProperties {
-  return { display: "grid", gap: "14px", gridTemplateColumns: isMobile ? "1fr" : "repeat(2, minmax(0, 1fr))" };
+  return { display: "grid", gap: "8px", gridTemplateColumns: isMobile ? "1fr" : "repeat(2, minmax(0, 1fr))" };
 }
-const fieldStyle: CSSProperties = { display: "grid", gap: "8px" };
+const fieldStyle: CSSProperties = { display: "grid", gap: "4px" };
 const wideFieldStyle: CSSProperties = { ...fieldStyle, gridColumn: "1 / -1" };
-const fieldLabelStyle: CSSProperties = { fontSize: "13px", fontWeight: 700, color: "var(--x-color-ink-muted)" };
-const inputStyle: CSSProperties = { width: "100%", padding: "12px 14px", borderRadius: "12px", border: "1px solid var(--x-color-line-soft)", background: "var(--x-color-panel-strong)", color: "var(--x-color-ink)", boxSizing: "border-box" };
-const textareaStyle: CSSProperties = { ...inputStyle, resize: "vertical", minHeight: "110px" };
-const sectionDividerStyle: CSSProperties = { height: "1px", margin: "18px 0 14px", background: "var(--x-color-line-soft)" };
-const toggleGridStyle: CSSProperties = { display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(180px, 1fr))", gap: "10px" };
-const configToggleStyle = (checked: boolean): CSSProperties => ({ display: "flex", gap: "10px", alignItems: "center", padding: "12px 14px", borderRadius: "14px", border: checked ? "1px solid var(--x-color-accent-border)" : "1px solid var(--x-color-line-soft)", background: checked ? "var(--x-color-accent-tint-strong)" : "var(--x-color-panel-strong)", color: "var(--x-color-ink)" });
-const inlineNoteStyle: CSSProperties = { color: "var(--x-color-ink-muted)", fontSize: "14px" };
-const eventListStyle: CSSProperties = { display: "grid", gap: "10px" };
-const eventCardStyle: CSSProperties = { display: "flex", justifyContent: "space-between", alignItems: "center", gap: "12px", padding: "14px", borderRadius: "14px", background: "var(--x-color-panel-strong)", border: "1px solid var(--x-color-line-soft)" };
+const fieldLabelStyle: CSSProperties = { fontSize: "12px", fontWeight: 700, color: "var(--x-color-ink-muted)" };
+const inputStyle: CSSProperties = { width: "100%", minHeight: "32px", padding: "6px 8px", borderRadius: "6px", border: "1px solid var(--x-color-line-soft)", background: "var(--x-color-panel-strong)", color: "var(--x-color-ink)", boxSizing: "border-box", fontSize: "13px" };
+const textareaStyle: CSSProperties = { ...inputStyle, resize: "vertical", minHeight: "84px" };
+const sectionDividerStyle: CSSProperties = { height: "1px", margin: "10px 0 8px", background: "var(--x-color-line-soft)" };
+const toggleGridStyle: CSSProperties = { display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(160px, 1fr))", gap: "6px" };
+const configToggleStyle = (checked: boolean): CSSProperties => ({ display: "flex", gap: "6px", alignItems: "center", padding: "7px 9px", borderRadius: "6px", border: checked ? "1px solid var(--x-color-accent-border)" : "1px solid var(--x-color-line-soft)", background: checked ? "var(--x-color-accent-tint)" : "var(--x-color-panel-strong)", color: "var(--x-color-ink)" });
+const inlineNoteStyle: CSSProperties = { color: "var(--x-color-ink-muted)", fontSize: "12px" };
+const eventListStyle: CSSProperties = { display: "grid", gap: "6px" };
+const eventCardStyle: CSSProperties = { display: "flex", justifyContent: "space-between", alignItems: "center", gap: "8px", padding: "8px 10px", borderRadius: "6px", background: "var(--x-color-panel-strong)", border: "1px solid var(--x-color-line-soft)" };
 const eventTitleStyle: CSSProperties = { fontWeight: 700, color: "var(--x-color-ink)" };
 const eventMetaStyle: CSSProperties = { marginTop: "4px", fontSize: "13px", color: "var(--x-color-ink-muted)" };
-const sectionStyle: CSSProperties = { marginTop: "14px", display: "grid", gap: "12px" };
-const stackStyle: CSSProperties = { display: "grid", gap: "10px" };
-const footerActionsStyle: CSSProperties = { display: "flex", justifyContent: "flex-end", gap: "10px", marginTop: "18px", flexWrap: "wrap" };
-const modalOverlayStyle: CSSProperties = { position: "fixed", inset: 0, zIndex: 1000, display: "flex", alignItems: "center", justifyContent: "center", padding: "22px", background: "rgba(15, 23, 42, 0.5)" };
-const iframeStyle: CSSProperties = { width: "100%", height: "70vh", border: "none", borderRadius: "var(--x-radius-md)", background: "var(--x-color-panel)" };
-const modalStyle: CSSProperties = { width: "min(980px, 100%)", maxHeight: "90vh", overflowY: "auto", padding: "20px", borderRadius: "var(--x-radius-lg)", background: "var(--x-color-panel)", border: "1px solid var(--x-color-line-soft)", boxShadow: "0 28px 56px var(--x-color-shadow-medium)" };const inlineEditorRowStyle: CSSProperties = { display: "flex", gap: "10px", alignItems: "center", flexWrap: "wrap" };
+const sectionStyle: CSSProperties = { marginTop: "10px", display: "grid", gap: "8px" };
+const stackStyle: CSSProperties = { display: "grid", gap: "6px" };
+const footerActionsStyle: CSSProperties = { display: "flex", justifyContent: "flex-end", gap: "6px", marginTop: "10px", flexWrap: "wrap" };
+const modalOverlayStyle: CSSProperties = { position: "fixed", inset: 0, zIndex: 1000, display: "flex", alignItems: "center", justifyContent: "center", padding: "12px", background: "rgba(15, 23, 42, 0.5)" };
+const iframeStyle: CSSProperties = { width: "100%", height: "70vh", border: "none", borderRadius: "6px", background: "var(--x-color-panel)" };
+const modalStyle: CSSProperties = { width: "min(980px, 100%)", maxHeight: "90vh", overflowY: "auto", padding: "12px", borderRadius: "8px", background: "var(--x-color-panel)", border: "1px solid var(--x-color-line-soft)", boxShadow: "0 12px 28px var(--x-color-shadow-medium)" };const inlineEditorRowStyle: CSSProperties = { display: "flex", gap: "6px", alignItems: "center", flexWrap: "wrap" };
 const feeEditorStyle: CSSProperties = { ...inlineEditorRowStyle, alignItems: "stretch" };
 const feeImageControlStyle: CSSProperties = { display: "flex", alignItems: "center", gap: "10px", flexWrap: "wrap" };
-const compactInputStyle: CSSProperties = { minWidth: "120px", padding: "10px 12px", borderRadius: "12px", border: "1px solid var(--x-color-line-soft)", background: "var(--x-color-panel-strong)", color: "var(--x-color-ink)" };
-const feeEditorCardStyle: CSSProperties = { display: "grid", gap: "14px", padding: "14px", borderRadius: "16px", border: "1px solid var(--x-color-line-soft)", background: "var(--x-color-panel-strong)" };
-const feeEditorGridStyle: CSSProperties = { display: "grid", gap: "12px", gridTemplateColumns: "repeat(auto-fit, minmax(150px, 1fr))" };
+const compactInputStyle: CSSProperties = { minWidth: "120px", padding: "6px 8px", borderRadius: "6px", border: "1px solid var(--x-color-line-soft)", background: "var(--x-color-panel-strong)", color: "var(--x-color-ink)" };
+const feeEditorCardStyle: CSSProperties = { display: "grid", gap: "8px", padding: "10px", borderRadius: "6px", border: "1px solid var(--x-color-line-soft)", background: "var(--x-color-panel-strong)" };
+const feeEditorGridStyle: CSSProperties = { display: "grid", gap: "8px", gridTemplateColumns: "repeat(auto-fit, minmax(150px, 1fr))" };
 const feeTextareaStyle: CSSProperties = { ...inputStyle, minHeight: "88px", resize: "vertical" };
 const feeImageSectionStyle: CSSProperties = { display: "grid", gap: "10px" };
 const feeImagePreviewStyle: CSSProperties = { display: "inline-flex", width: "fit-content", textDecoration: "none" };
-const feeImageStyle: CSSProperties = { display: "block", width: "100%", maxWidth: "220px", maxHeight: "160px", objectFit: "cover", borderRadius: "14px", border: "1px solid var(--x-color-line-soft)", background: "var(--x-color-panel)" };
-const feeImageEmptyStyle: CSSProperties = { padding: "18px", borderRadius: "14px", border: "1px dashed var(--x-color-line-soft)", color: "var(--x-color-ink-muted)", fontSize: "13px", background: "var(--x-color-panel)" };
+const feeImageStyle: CSSProperties = { display: "block", width: "100%", maxWidth: "220px", maxHeight: "160px", objectFit: "cover", borderRadius: "6px", border: "1px solid var(--x-color-line-soft)", background: "var(--x-color-panel)" };
+const feeImageEmptyStyle: CSSProperties = { padding: "10px", borderRadius: "6px", border: "1px dashed var(--x-color-line-soft)", color: "var(--x-color-ink-muted)", fontSize: "13px", background: "var(--x-color-panel)" };
 const feeActionRowStyle: CSSProperties = { display: "flex", justifyContent: "flex-end", gap: "8px", flexWrap: "wrap" };
-const memberListStyle: CSSProperties = { display: "grid", gap: "12px" };
-const memberCardStyle: CSSProperties = { padding: "16px", borderRadius: "16px", border: "1px solid var(--x-color-line-soft)", background: "var(--x-color-panel-strong)" };
-const memberPaymentTopRowStyle: CSSProperties = { display: "flex", justifyContent: "space-between", gap: "10px", alignItems: "center", flexWrap: "wrap", marginBottom: "12px" };
-const memberPaymentBadgeStyle: CSSProperties = { display: "inline-flex", alignItems: "center", justifyContent: "center", width: "fit-content", padding: "6px 12px", borderRadius: "999px", fontSize: "12px", fontWeight: 800 };
+const memberListStyle: CSSProperties = { display: "grid", gap: "6px" };
+const memberCardStyle: CSSProperties = { padding: "10px", borderRadius: "6px", border: "1px solid var(--x-color-line-soft)", background: "var(--x-color-panel-strong)" };
+const memberPaymentTopRowStyle: CSSProperties = { display: "flex", justifyContent: "space-between", gap: "8px", alignItems: "center", flexWrap: "wrap", marginBottom: "8px" };
+const memberPaymentBadgeStyle: CSSProperties = { display: "inline-flex", alignItems: "center", justifyContent: "center", width: "fit-content", padding: "4px 8px", borderRadius: "999px", fontSize: "11px", fontWeight: 800 };
 const memberPaymentHintStyle: CSSProperties = { fontSize: "12px", color: "var(--x-color-ink-muted)", fontWeight: 700 };
 const memberHeaderStyle: CSSProperties = { display: "flex", justifyContent: "space-between", gap: "10px", alignItems: "flex-start", flexWrap: "wrap" };
 const memberNameStyle: CSSProperties = { fontWeight: 800, color: "var(--x-color-ink)" };
-const memberMetaStyle: CSSProperties = { marginTop: "6px", color: "var(--x-color-ink-muted)", fontSize: "13px" };
-const chipRowStyle: CSSProperties = { display: "flex", gap: "8px", flexWrap: "wrap", marginTop: "12px" };
-const chipStyle: CSSProperties = { padding: "8px 10px", borderRadius: "999px", background: "var(--x-color-accent-tint-strong)", color: "var(--x-color-ink)", fontSize: "12px" };
-const shareGridStyle: CSSProperties = { display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(260px, 1fr))", gap: "16px", alignItems: "start" };
-const shareInfoCardStyle: CSSProperties = { padding: "14px 16px", borderRadius: "14px", border: "1px solid var(--x-color-line-soft)", background: "var(--x-color-panel-strong)", display: "grid", gap: "6px" };
+const memberMetaStyle: CSSProperties = { marginTop: "3px", color: "var(--x-color-ink-muted)", fontSize: "12px" };
+const chipRowStyle: CSSProperties = { display: "flex", gap: "6px", flexWrap: "wrap", marginTop: "8px" };
+const chipStyle: CSSProperties = { padding: "4px 7px", borderRadius: "999px", background: "var(--x-color-accent-tint-strong)", color: "var(--x-color-ink)", fontSize: "11px" };
+const shareGridStyle: CSSProperties = { display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(240px, 1fr))", gap: "8px", alignItems: "start" };
+const shareInfoCardStyle: CSSProperties = { padding: "10px", borderRadius: "6px", border: "1px solid var(--x-color-line-soft)", background: "var(--x-color-panel-strong)", display: "grid", gap: "4px" };
 const shareTitleStyle: CSSProperties = { fontSize: "16px", fontWeight: 700, color: "var(--x-color-ink)" };
-const urlBoxStyle: CSSProperties = { padding: "12px 14px", borderRadius: "14px", border: "1px solid var(--x-color-line-soft)", background: "var(--x-color-panel-strong)", color: "var(--x-color-ink)", wordBreak: "break-all" };
-const qrPreviewStyle: CSSProperties = { minHeight: "268px", padding: "16px", borderRadius: "16px", border: "1px solid var(--x-color-line-soft)", background: "var(--x-color-panel-strong)", display: "grid", placeItems: "center" };
+const urlBoxStyle: CSSProperties = { padding: "8px 10px", borderRadius: "6px", border: "1px solid var(--x-color-line-soft)", background: "var(--x-color-panel-strong)", color: "var(--x-color-ink)", wordBreak: "break-all" };
+const qrPreviewStyle: CSSProperties = { minHeight: "220px", padding: "10px", borderRadius: "6px", border: "1px solid var(--x-color-line-soft)", background: "var(--x-color-panel-strong)", display: "grid", placeItems: "center" };
 const qrImageStyle: CSSProperties = { width: "100%", maxWidth: "240px", height: "auto", display: "block" };

@@ -256,54 +256,54 @@ export function SongbookAdminPage() {
   );
 }
 
-const pageStyle = { display: "grid", gap: "16px" } as const;
-const pageInnerStyle = { width: "100%", maxWidth: "1480px", margin: "0 auto", display: "grid", gap: "16px" } as const;
-const heroStyle = (isMobile: boolean): CSSProperties => ({ display: "flex", justifyContent: "space-between", gap: "16px", alignItems: "flex-start", flexDirection: isMobile ? "column" : "row", padding: "20px", borderRadius: "24px", background: "linear-gradient(135deg, var(--x-color-nav-start), var(--x-color-accent))", color: "white" });
-const eyebrowStyle = { fontSize: "12px", letterSpacing: "0.18em", textTransform: "uppercase", opacity: 0.82 } as const;
-const titleStyle = { margin: "8px 0 0", fontSize: "28px", fontWeight: 900 } as const;
-const subtitleStyle = { margin: "8px 0 0", fontSize: "14px", opacity: 0.88 } as const;
-const heroActionsStyle = { display: "flex", gap: "10px", flexWrap: "wrap" } as const;
-const toolbarStyle = (isMobile: boolean): CSSProperties => ({ display: "flex", gap: "12px", flexWrap: "wrap", flexDirection: isMobile ? "column" : "row" });
-const summaryStyle = { padding: "12px 14px", borderRadius: "14px", background: "var(--x-color-panel-glass)", border: "1px solid var(--x-color-line-soft)", color: "var(--x-color-ink-muted)", fontSize: "13px", whiteSpace: "nowrap" as const } as const;
-const layoutStyle = (isMobile: boolean) => ({ display: "grid", gridTemplateColumns: isMobile ? "1fr" : "minmax(420px, 42vw) minmax(0,1fr)", gap: "16px", alignItems: "start" as const });
-const listPanelStyle = { padding: "18px", borderRadius: "20px", background: "var(--x-color-panel-strongest)", border: "1px solid var(--x-color-line-soft)", display: "grid", gap: "14px", alignContent: "start" } as const;
-const panelHeaderStyle = { display: "grid", gap: "6px" } as const;
-const panelTitleStyle = { fontSize: "20px", fontWeight: 900, color: "var(--x-color-ink)" } as const;
-const panelCaptionStyle = { fontSize: "13px", color: "var(--x-color-ink-muted)" } as const;
-const paginationStyle = { display: "flex", gap: "8px", flexWrap: "wrap" as const } as const;
-const pageButtonStyle = (disabled: boolean) => ({ padding: "10px 14px", borderRadius: "10px", border: "1px solid var(--x-color-line)", background: disabled ? "var(--x-color-panel-alt)" : "var(--x-color-panel)", color: disabled ? "var(--x-color-ink-muted)" : "var(--x-color-ink)", cursor: disabled ? "not-allowed" : "pointer", fontWeight: 700 });
-const numberButtonStyle = (active: boolean) => ({ minWidth: "40px", padding: "10px 12px", borderRadius: "10px", border: active ? "1px solid var(--x-color-accent)" : "1px solid var(--x-color-line)", background: active ? "var(--x-color-accent)" : "var(--x-color-panel)", color: active ? "white" : "var(--x-color-ink)", cursor: "pointer", fontWeight: 700 });
-const listStyle = { display: "grid", gap: "10px" } as const;
+const pageStyle = { display: "grid", gap: "10px" } as const;
+const pageInnerStyle = { width: "100%", maxWidth: "1480px", margin: "0 auto", display: "grid", gap: "10px" } as const;
+const heroStyle = (isMobile: boolean): CSSProperties => ({ display: "flex", justifyContent: "space-between", gap: "10px", alignItems: "flex-start", flexDirection: isMobile ? "column" : "row", padding: "10px 12px", borderRadius: "8px", background: "var(--x-color-panel)", color: "var(--x-color-ink)", border: "1px solid var(--x-color-line-soft)" });
+const eyebrowStyle = { fontSize: "11px", letterSpacing: "0.08em", textTransform: "uppercase", color: "var(--x-color-ink-muted)" } as const;
+const titleStyle = { margin: "4px 0 0", fontSize: "20px", fontWeight: 900 } as const;
+const subtitleStyle = { margin: "4px 0 0", fontSize: "12px", color: "var(--x-color-ink-muted)" } as const;
+const heroActionsStyle = { display: "flex", gap: "6px", flexWrap: "wrap" } as const;
+const toolbarStyle = (isMobile: boolean): CSSProperties => ({ display: "flex", gap: "6px", flexWrap: "wrap", flexDirection: isMobile ? "column" : "row" });
+const summaryStyle = { padding: "7px 9px", borderRadius: "6px", background: "var(--x-color-panel)", border: "1px solid var(--x-color-line-soft)", color: "var(--x-color-ink-muted)", fontSize: "12px", whiteSpace: "nowrap" as const } as const;
+const layoutStyle = (isMobile: boolean) => ({ display: "grid", gridTemplateColumns: isMobile ? "1fr" : "minmax(340px, 38vw) minmax(0,1fr)", gap: "10px", alignItems: "stretch" as const });
+const listPanelStyle = { height: "100%", boxSizing: "border-box", padding: "10px", borderRadius: "8px", background: "var(--x-color-panel-strongest)", border: "1px solid var(--x-color-line-soft)", display: "grid", gap: "8px", alignContent: "start" } as const;
+const panelHeaderStyle = { display: "grid", gap: "4px" } as const;
+const panelTitleStyle = { fontSize: "16px", fontWeight: 900, color: "var(--x-color-ink)" } as const;
+const panelCaptionStyle = { fontSize: "12px", color: "var(--x-color-ink-muted)" } as const;
+const paginationStyle = { display: "flex", gap: "6px", flexWrap: "wrap" as const } as const;
+const pageButtonStyle = (disabled: boolean) => ({ padding: "6px 9px", borderRadius: "6px", border: "1px solid var(--x-color-line)", background: disabled ? "var(--x-color-panel-alt)" : "var(--x-color-panel)", color: disabled ? "var(--x-color-ink-muted)" : "var(--x-color-ink)", cursor: disabled ? "not-allowed" : "pointer", fontWeight: 700, fontSize: "12px" });
+const numberButtonStyle = (active: boolean) => ({ minWidth: "30px", padding: "6px 8px", borderRadius: "6px", border: active ? "1px solid var(--x-color-accent)" : "1px solid var(--x-color-line)", background: active ? "var(--x-color-accent)" : "var(--x-color-panel)", color: active ? "white" : "var(--x-color-ink)", cursor: "pointer", fontWeight: 700, fontSize: "12px" });
+const listStyle = { display: "grid", gap: "6px" } as const;
 const listItemStyle = (active: boolean, isMobile: boolean) => ({
   width: "100%",
-  padding: isMobile ? "14px" : "15px 16px",
-  borderRadius: "16px",
+  padding: isMobile ? "10px" : "9px 10px",
+  borderRadius: "6px",
   border: active ? "1px solid var(--x-color-accent)" : "1px solid var(--x-color-line-soft)",
-  background: active ? "linear-gradient(180deg, var(--x-color-accent-tint-strong), var(--x-color-panel))" : "linear-gradient(180deg, var(--x-color-panel-strong), var(--x-color-panel))",
+  background: active ? "var(--x-color-accent-tint)" : "var(--x-color-panel)",
   textAlign: "left" as const,
   cursor: "pointer",
   display: "block",
-  boxShadow: "0 10px 24px var(--x-color-shadow-soft)",
+  boxShadow: "none",
 });
-const listRowStyle = (isMobile: boolean) => ({ display: "grid", gridTemplateColumns: isMobile ? "1fr" : "minmax(0,1fr) auto", gap: "12px", alignItems: "center" as const });
-const listIdentityStyle = { display: "grid", gap: "8px" } as const;
-const listBadgeRowStyle = { display: "flex", flexWrap: "wrap" as const, gap: "8px", alignItems: "center" } as const;
-const variantBadgeStyle = { padding: "6px 10px", borderRadius: "999px", background: "rgba(15,118,110,0.1)", color: "var(--x-color-accent-strong)", fontSize: "12px", fontWeight: 800, letterSpacing: "0.04em" } as const;
-const publishBadgeStyle = (published: boolean) => ({ padding: "6px 10px", borderRadius: "999px", background: published ? "rgba(22,163,74,0.12)" : "rgba(217,119,6,0.12)", color: published ? "var(--x-color-success)" : "var(--x-color-warning)", fontSize: "12px", fontWeight: 800 });
-const listTitleStyle = { fontWeight: 800, color: "var(--x-color-ink)", lineHeight: 1.45 } as const;
-const listMetaWrapStyle = (isMobile: boolean) => ({ display: "flex", flexWrap: "wrap" as const, gap: "8px", justifyContent: isMobile ? "flex-start" : "flex-end" as const });
-const listMetaPillStyle = { padding: "7px 10px", borderRadius: "999px", background: "var(--x-color-panel-glass)", border: "1px solid var(--x-color-line-soft)", fontSize: "12px", color: "var(--x-color-ink-muted)", fontWeight: 700 } as const;
-const editorStyle = { padding: "18px", borderRadius: "20px", background: "var(--x-color-panel-strongest)", border: "1px solid var(--x-color-line-soft)", display: "grid", gap: "14px" } as const;
-const editorHeaderStyle = { fontSize: "22px", fontWeight: 900, color: "var(--x-color-ink)" } as const;
-const gridStyle = (isMobile: boolean) => ({ display: "grid", gridTemplateColumns: isMobile ? "1fr" : "repeat(2, minmax(0,1fr))", gap: "12px" });
-const inputStyle = { width: "100%", padding: "12px 14px", borderRadius: "12px", border: "1px solid var(--x-color-line)", background: "var(--x-color-panel)" } as const;
-const textareaStyle = { width: "100%", minHeight: "480px", padding: "14px", borderRadius: "14px", border: "1px solid var(--x-color-line)", background: "var(--x-color-panel)", fontFamily: '"SFMono-Regular",Consolas,monospace', lineHeight: 1.7 } as const;
+const listRowStyle = (isMobile: boolean) => ({ display: "grid", gridTemplateColumns: isMobile ? "1fr" : "minmax(0,1fr) auto", gap: "8px", alignItems: "center" as const });
+const listIdentityStyle = { display: "grid", gap: "5px" } as const;
+const listBadgeRowStyle = { display: "flex", flexWrap: "wrap" as const, gap: "5px", alignItems: "center" } as const;
+const variantBadgeStyle = { padding: "4px 7px", borderRadius: "999px", background: "rgba(15,118,110,0.1)", color: "var(--x-color-accent-strong)", fontSize: "11px", fontWeight: 800, letterSpacing: "0.02em" } as const;
+const publishBadgeStyle = (published: boolean) => ({ padding: "4px 7px", borderRadius: "999px", background: published ? "rgba(22,163,74,0.12)" : "rgba(217,119,6,0.12)", color: published ? "var(--x-color-success)" : "var(--x-color-warning)", fontSize: "11px", fontWeight: 800 });
+const listTitleStyle = { fontWeight: 800, color: "var(--x-color-ink)", lineHeight: 1.25, fontSize: "13px" } as const;
+const listMetaWrapStyle = (isMobile: boolean) => ({ display: "flex", flexWrap: "wrap" as const, gap: "5px", justifyContent: isMobile ? "flex-start" : "flex-end" as const });
+const listMetaPillStyle = { padding: "4px 7px", borderRadius: "999px", background: "var(--x-color-panel-glass)", border: "1px solid var(--x-color-line-soft)", fontSize: "11px", color: "var(--x-color-ink-muted)", fontWeight: 700 } as const;
+const editorStyle = { padding: "10px", borderRadius: "8px", background: "var(--x-color-panel-strongest)", border: "1px solid var(--x-color-line-soft)", display: "grid", gap: "8px" } as const;
+const editorHeaderStyle = { fontSize: "16px", fontWeight: 900, color: "var(--x-color-ink)" } as const;
+const gridStyle = (isMobile: boolean) => ({ display: "grid", gridTemplateColumns: isMobile ? "1fr" : "repeat(2, minmax(0,1fr))", gap: "8px" });
+const inputStyle = { width: "100%", padding: "6px 8px", borderRadius: "6px", border: "1px solid var(--x-color-line)", background: "var(--x-color-panel)", fontSize: "13px" } as const;
+const textareaStyle = { width: "100%", minHeight: "360px", padding: "8px", borderRadius: "6px", border: "1px solid var(--x-color-line)", background: "var(--x-color-panel)", fontFamily: '"SFMono-Regular",Consolas,monospace', lineHeight: 1.55, fontSize: "13px" } as const;
 const checkboxRowStyle = { display: "flex", alignItems: "center", gap: "8px", color: "var(--x-color-ink-muted)" } as const;
-const actionsStyle = (isMobile: boolean) => ({ display: "flex", justifyContent: "flex-end", gap: "10px", flexWrap: "wrap" as const });
-const primaryButtonStyle = { padding: "12px 18px", borderRadius: "999px", border: "none", background: "linear-gradient(135deg, var(--x-color-accent), var(--x-color-info))", color: "white", fontWeight: 800, cursor: "pointer" } as const;
-const secondaryButtonStyle = { padding: "12px 18px", borderRadius: "999px", border: "1px solid rgba(255,255,255,0.3)", background: "rgba(255,255,255,0.12)", color: "white", fontWeight: 800, cursor: "pointer" } as const;
-const dangerButtonStyle = { padding: "12px 18px", borderRadius: "999px", border: "none", background: "var(--x-color-danger)", color: "white", fontWeight: 800, cursor: "pointer" } as const;
-const toastStyle = { padding: "12px 14px", borderRadius: "14px", background: "var(--x-color-success-soft)", color: "var(--x-color-success)" } as const;
-const errorStyle = { padding: "12px 14px", borderRadius: "14px", background: "rgba(220,38,38,0.08)", color: "var(--x-color-danger)" } as const;
+const actionsStyle = (isMobile: boolean) => ({ display: "flex", justifyContent: "flex-end", gap: "6px", flexWrap: "wrap" as const });
+const primaryButtonStyle = { padding: "7px 10px", borderRadius: "6px", border: "none", background: "var(--x-color-accent)", color: "white", fontWeight: 800, cursor: "pointer", fontSize: "13px" } as const;
+const secondaryButtonStyle = { padding: "7px 10px", borderRadius: "6px", border: "1px solid var(--x-color-line-soft)", background: "var(--x-color-panel)", color: "var(--x-color-ink)", fontWeight: 800, cursor: "pointer", fontSize: "13px" } as const;
+const dangerButtonStyle = { padding: "7px 10px", borderRadius: "6px", border: "none", background: "var(--x-color-danger)", color: "white", fontWeight: 800, cursor: "pointer", fontSize: "13px" } as const;
+const toastStyle = { padding: "8px 10px", borderRadius: "6px", background: "var(--x-color-success-soft)", color: "var(--x-color-success)" } as const;
+const errorStyle = { padding: "8px 10px", borderRadius: "6px", background: "rgba(220,38,38,0.08)", color: "var(--x-color-danger)" } as const;
 const stateStyle = { minHeight: "120px", display: "grid", placeItems: "center", color: "var(--x-color-ink-muted)" } as const;
 const fullWidthStateStyle = { ...stateStyle, width: "100%" } as const;

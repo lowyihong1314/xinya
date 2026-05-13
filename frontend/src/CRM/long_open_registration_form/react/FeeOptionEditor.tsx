@@ -157,18 +157,18 @@ export function FeeOptionEditor({
   );
 }
 
-const wrapStyle: CSSProperties = { display: "grid", gap: "14px" };
+const wrapStyle: CSSProperties = { display: "grid", gap: "8px" };
 const headerStyle: CSSProperties = { display: "grid", gap: "6px" };
 const titleStyle: CSSProperties = { fontSize: "15px", fontWeight: 800, color: "var(--x-color-ink)" };
 const descStyle: CSSProperties = { fontSize: "12px", color: "var(--x-color-ink-muted)", lineHeight: 1.6 };
-const listStyle: CSSProperties = { display: "grid", gap: "12px" };
+const listStyle: CSSProperties = { display: "grid", gap: "6px" };
 const cardStyle: CSSProperties = {
-  padding: "14px",
-  borderRadius: "18px",
+  padding: "10px",
+  borderRadius: "6px",
   background: "rgba(255,255,255,0.82)",
   border: "1px solid var(--x-color-line-soft)",
   display: "grid",
-  gap: "12px",
+  gap: "8px",
 };
 const badgeStyle: CSSProperties = {
   display: "inline-flex",
@@ -184,36 +184,36 @@ const badgeStyle: CSSProperties = {
 };
 const summaryStyle: CSSProperties = { fontSize: "13px", fontWeight: 700, color: "var(--x-color-ink)" };
 const removeButtonStyle: CSSProperties = {
-  padding: "8px 12px",
-  borderRadius: "999px",
+  padding: "6px 8px",
+  borderRadius: "6px",
   border: "1px solid rgba(180,35,24,0.18)",
   background: "#fff1f2",
   color: "#b42318",
   fontWeight: 700,
   cursor: "pointer",
 };
-const fieldStyle: CSSProperties = { display: "grid", gap: "8px" };
+const fieldStyle: CSSProperties = { display: "grid", gap: "4px" };
 const labelStyle: CSSProperties = { fontSize: "12px", fontWeight: 700, color: "var(--x-color-ink-muted)" };
 const inputStyle: CSSProperties = {
   width: "100%",
-  minHeight: "44px",
-  padding: "11px 13px",
-  borderRadius: "14px",
+  minHeight: "32px",
+  padding: "6px 8px",
+  borderRadius: "6px",
   border: "1px solid var(--x-color-line-soft)",
   background: "var(--x-color-panel-strong)",
   boxSizing: "border-box",
 };
 const emptyStyle: CSSProperties = {
-  padding: "16px",
-  borderRadius: "16px",
+  padding: "10px",
+  borderRadius: "6px",
   border: "1px dashed var(--x-color-line-soft)",
   color: "var(--x-color-ink-muted)",
   lineHeight: 1.6,
 };
 const footerStyle: CSSProperties = { display: "flex", justifyContent: "flex-start" };
 const addButtonStyle: CSSProperties = {
-  padding: "10px 16px",
-  borderRadius: "999px",
+  padding: "7px 10px",
+  borderRadius: "6px",
   border: "1px solid var(--x-color-line-soft)",
   background: "var(--x-color-panel-strong)",
   color: "var(--x-color-ink)",
@@ -226,7 +226,7 @@ function cardHeadStyle(isMobile: boolean): CSSProperties {
     display: "flex",
     alignItems: isMobile ? "flex-start" : "center",
     justifyContent: "space-between",
-    gap: "10px",
+    gap: "6px",
     flexWrap: "wrap",
     flexDirection: isMobile ? "column" : "row",
   };
@@ -236,6 +236,6 @@ function gridStyle(isMobile: boolean): CSSProperties {
   return {
     display: "grid",
     gridTemplateColumns: isMobile ? "1fr" : "repeat(4, minmax(0, 1fr))",
-    gap: "12px",
+    gap: "8px",
   };
 }
