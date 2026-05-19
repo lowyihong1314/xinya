@@ -171,10 +171,28 @@ export async function exportModalToPdf(modalEl) {
   <meta charset="utf-8" />
   <title>Parental Consent</title>
   <style>
+    @font-face {
+      font-family: "XinyaPdfCJK";
+      src: url("/static/font/NotoSerifTC-Medium.otf") format("opentype");
+      font-weight: 400;
+      font-style: normal;
+    }
+    @font-face {
+      font-family: "XinyaPdfCJK";
+      src: url("/static/font/NotoSerifTC-Medium.otf") format("opentype");
+      font-weight: 700;
+      font-style: normal;
+    }
+    @font-face {
+      font-family: "XinyaPdfCJK";
+      src: url("/static/font/NotoSerifTC-Medium.otf") format("opentype");
+      font-weight: 900;
+      font-style: normal;
+    }
     body {
       margin: 0;
       padding: 0;
-      font-family: Arial, "Microsoft YaHei", "PingFang SC", sans-serif;
+      font-family: "XinyaPdfCJK", Arial, "Microsoft YaHei", "PingFang SC", sans-serif;
       background: #fff;
     }
     @page {

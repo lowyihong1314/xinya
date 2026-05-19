@@ -43,10 +43,20 @@ def handle_join_room(data):
 @socketio.on("parental_sign_sync")
 def handle_parental_sign_sync(data):
     room = (data or {}).get("room")
+    parent = (data or {}).get("parent")
     sign_json_data = (data or {}).get("sign_json_data")
     if not room:
         return
-    emit("parental_sign_data", {"room": room, "sign_json_data": sign_json_data}, to=room, skip_sid=request.sid)
+    if not isinstance(parent, dict):
+        parent = None
+    if parent is not None and sign_json_data is not None:
+        parent["sign_json_data"] = sign_json_data
+    emit(
+        "parental_sign_data",
+        {"room": room, "parent": parent, "sign_json_data": sign_json_data},
+        to=room,
+        skip_sid=request.sid,
+    )
 
 
 @socketio.on("changyou_join_room")

@@ -4,6 +4,18 @@ function getSocketOrigin() {
   return SOCKET_ORIGIN;
 }
 
+function cloneSyncPayload(value) {
+  if (!value || typeof value !== "object") {
+    return null;
+  }
+
+  try {
+    return JSON.parse(JSON.stringify(value));
+  } catch {
+    return null;
+  }
+}
+
 function loadSocketIoScript() {
   return new Promise((resolve, reject) => {
     if (typeof window !== "undefined" && typeof window.io === "function") {
@@ -67,6 +79,14 @@ export async function connectParentalSignRoom(room, onMessage) {
       socket.emit("parental_sign_sync", {
         room,
         sign_json_data,
+      });
+    },
+    emitParentData(parent) {
+      const parentPayload = cloneSyncPayload(parent);
+      socket.emit("parental_sign_sync", {
+        room,
+        parent: parentPayload,
+        sign_json_data: parentPayload?.sign_json_data || null,
       });
     },
     disconnect() {

@@ -154,6 +154,49 @@ function applyReadOnly(fields) {
   });
 }
 
+function applyParentData(parent, nextParent) {
+  if (!nextParent || typeof nextParent !== "object") {
+    return false;
+  }
+
+  [
+    "parent_cn",
+    "parent_en",
+    "parent_nric",
+    "parent_phone",
+    "child_cn",
+    "child_en",
+    "child_nric",
+    "child_phone",
+    "sign",
+    "sign_date",
+    "sign_json_data",
+  ].forEach((key) => {
+    if (Object.prototype.hasOwnProperty.call(nextParent, key)) {
+      parent[key] = nextParent[key];
+    }
+  });
+
+  return true;
+}
+
+function updateAgreementFields(fields, parent) {
+  fields.p_cn.value = parent.parent_cn || "";
+  fields.p_en.value = parent.parent_en || "";
+  fields.p_nric.value = parent.parent_nric || "";
+  fields.p_phone.value = parent.parent_phone || "";
+  fields.child_cn.value = parent.child_cn || "";
+  fields.child_en.value = parent.child_en || "";
+  fields.child_nric.value = parent.child_nric || "";
+  fields.c_phone.value = parent.child_phone || "";
+  if (fields.sign) {
+    fields.sign.value = parent.sign || "";
+  }
+  if (fields.date) {
+    fields.date.value = parent.sign_date || "";
+  }
+}
+
 function copyText(text) {
   if (navigator.clipboard?.writeText) {
     return navigator.clipboard.writeText(text);
@@ -356,6 +399,7 @@ function createActionButtons({
   shareOnly,
   syncRoom,
   onShareReady,
+  onParentSync,
 }) {
   const actions = document.createElement("div");
   Object.assign(actions.style, {
@@ -450,6 +494,11 @@ function createActionButtons({
       return;
     }
 
+    if (shareOnly) {
+      onParentSync?.();
+      await new Promise((done) => window.setTimeout(done, 80));
+    }
+
     if (!shareOnly) {
       freezeModalToPrintable(modal);
       await exportModalToPdf(modal);
@@ -499,7 +548,9 @@ export function openParentalFormModal(
     const signArea = createSignPreview(safeParent, readOnly, {
       syncRoom,
       onSignChange(nextSign) {
-        roomConnection?.emitSign(nextSign);
+        sync();
+        safeParent.sign_json_data = nextSign;
+        roomConnection?.emitParentData(safeParent);
       },
     });
 
@@ -519,6 +570,10 @@ export function openParentalFormModal(
         onShareReady(dialog) {
           shareDialog = dialog;
         },
+        onParentSync() {
+          sync();
+          roomConnection?.emitParentData(safeParent);
+        },
       }),
     );
 
@@ -536,11 +591,23 @@ export function openParentalFormModal(
 
     if (syncRoom) {
       connectParentalSignRoom(syncRoom, (message) => {
-        if (!message?.sign_json_data) {
+        const remoteParent = message?.parent;
+        const remoteSign = message?.sign_json_data || remoteParent?.sign_json_data;
+        const hasParentData = applyParentData(safeParent, remoteParent);
+
+        if (!hasParentData && !remoteSign) {
           return;
         }
-        signArea.updateRemoteSign(message.sign_json_data);
-        shareDialog?.setWaitingText("已收到家长签名，孩子这边可以继续提交了。");
+
+        if (hasParentData) {
+          updateAgreementFields(fields, safeParent);
+        }
+        if (remoteSign) {
+          signArea.updateRemoteSign(remoteSign);
+        } else {
+          signArea.setStatus("已收到远程资料更新");
+        }
+        shareDialog?.setWaitingText("已收到家长资料和签名，孩子这边可以继续提交了。");
       })
         .then((connection) => {
           roomConnection = connection;
