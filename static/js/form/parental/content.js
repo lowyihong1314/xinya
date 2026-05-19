@@ -9,7 +9,7 @@ export function buildHeader(lastEvent) {
   });
 
   const logo = document.createElement("img");
-  logo.src = "https://utbabuddha.com/favicon.ico";
+  logo.src = "/static/images/logo/logo.png";
   logo.alt = "UTBA Logo";
   Object.assign(logo.style, {
     width: "56px",
@@ -229,7 +229,9 @@ export function buildAgreementSection({ lastEvent, payload, parent }) {
     document.createTextNode("（NRIC："),
     fields.child_nric,
     document.createTextNode("）参加贵会所办之 "),
-    document.createTextNode(lastEvent?.event_name || "本活动"),
+    document.createTextNode(
+      lastEvent?.event_name || lastEvent?.title || lastEvent?.name || "本活动",
+    ),
     document.createTextNode(
       "。本人深悉贵会将会妥善地安排及监督小儿/小女，如在上述期间有任何意外发生，本人将不会归咎贵会。",
     ),

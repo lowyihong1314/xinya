@@ -40,8 +40,21 @@ export function freezeModalToPrintable(modalEl) {
   modalEl.style.background = "#fff";
 }
 
+function normalizePdfFilename(filename) {
+  const rawName = String(filename || "parental_consent").trim();
+  const withoutPdf = rawName.replace(/\.pdf$/i, "");
+  const safeName = withoutPdf
+    .replace(/[\\/:*?"<>|\u0000-\u001f]/g, " ")
+    .replace(/\s+/g, " ")
+    .replace(/^[.\s]+|[.\s]+$/g, "")
+    .slice(0, 140);
+
+  return `${safeName || "parental_consent"}.pdf`;
+}
+
 export function showPdfPreview(blobUrl, filename = "parental_consent.pdf") {
   return new Promise((resolve) => {
+    const downloadFilename = normalizePdfFilename(filename);
     const overlay = document.createElement("div");
     Object.assign(overlay.style, {
       position: "fixed",
@@ -108,7 +121,7 @@ export function showPdfPreview(blobUrl, filename = "parental_consent.pdf") {
     downloadBtn.onclick = () => {
       const a = document.createElement("a");
       a.href = blobUrl;
-      a.download = filename;
+      a.download = downloadFilename;
       a.click();
     };
 
@@ -135,7 +148,9 @@ export function showPdfPreview(blobUrl, filename = "parental_consent.pdf") {
   });
 }
 
-export async function exportModalToPdf(modalEl) {
+export async function exportModalToPdf(modalEl, options = {}) {
+  const downloadFilename = normalizePdfFilename(options.filename);
+
   Swal.fire({
     title: "正在生成 PDF",
     text: "请稍候…",
@@ -154,6 +169,8 @@ export async function exportModalToPdf(modalEl) {
 
   try {
     const clone = modalEl.cloneNode(true);
+    freezeModalToPrintable(clone);
+    clone.querySelectorAll("[data-pdf-remove='true']").forEach((el) => el.remove());
     clone.querySelectorAll("button").forEach((b) => b.remove());
 
     clone.querySelectorAll("canvas").forEach((c) => {
@@ -173,26 +190,26 @@ export async function exportModalToPdf(modalEl) {
   <style>
     @font-face {
       font-family: "XinyaPdfCJK";
-      src: url("/static/font/NotoSerifTC-Medium.otf") format("opentype");
+      src: url("/static/font/NotoSansCJKsc-Regular.otf") format("opentype");
       font-weight: 400;
       font-style: normal;
     }
     @font-face {
       font-family: "XinyaPdfCJK";
-      src: url("/static/font/NotoSerifTC-Medium.otf") format("opentype");
+      src: url("/static/font/NotoSansCJKsc-Regular.otf") format("opentype");
       font-weight: 700;
       font-style: normal;
     }
     @font-face {
       font-family: "XinyaPdfCJK";
-      src: url("/static/font/NotoSerifTC-Medium.otf") format("opentype");
+      src: url("/static/font/NotoSansCJKsc-Regular.otf") format("opentype");
       font-weight: 900;
       font-style: normal;
     }
     body {
       margin: 0;
       padding: 0;
-      font-family: "XinyaPdfCJK", Arial, "Microsoft YaHei", "PingFang SC", sans-serif;
+      font-family: "XinyaPdfCJK", "Microsoft YaHei", "PingFang SC", "Noto Sans CJK SC", "Noto Sans CJK TC", Arial, sans-serif;
       background: #fff;
     }
     @page {
@@ -216,6 +233,7 @@ export async function exportModalToPdf(modalEl) {
     `.trim();
 
     const formData = new FormData();
+    formData.append("filename", downloadFilename);
     formData.append(
       "files",
       new Blob([html], { type: "text/html" }),
@@ -235,7 +253,7 @@ export async function exportModalToPdf(modalEl) {
     const url = URL.createObjectURL(pdfBlob);
 
     Swal.close();
-    await showPdfPreview(url);
+    await showPdfPreview(url, downloadFilename);
   } catch (err) {
     Swal.close();
     console.error(err);

@@ -1,7 +1,7 @@
 import { getMaxZIndex } from "../../get_Max_zindex.js";
 import { renderSignPreviewSvg, render_sign_modal } from "../../sign_tools.js";
 import { buildAgreementSection, buildBrief, buildHeader } from "./content.js";
-import { exportModalToPdf, freezeModalToPrintable } from "./print.js";
+import { exportModalToPdf } from "./print.js";
 import {
   buildParentalRoomId,
   connectParentalSignRoom,
@@ -75,6 +75,7 @@ function createSignPreview(parent, readOnly, options = {}) {
 
   const signLab = document.createElement("div");
   signLab.textContent = "签名（点击签名）";
+  signLab.dataset.pdfRemove = "true";
   Object.assign(signLab.style, {
     fontWeight: "900",
     fontSize: "12px",
@@ -95,6 +96,7 @@ function createSignPreview(parent, readOnly, options = {}) {
 
   const status = document.createElement("div");
   status.textContent = options.syncRoom ? "已启用远程签名同步" : "";
+  status.dataset.pdfRemove = "true";
   Object.assign(status.style, {
     minHeight: "16px",
     fontSize: "11px",
@@ -197,6 +199,10 @@ function updateAgreementFields(fields, parent) {
   }
 }
 
+function todayISODate() {
+  return new Date().toISOString().slice(0, 10);
+}
+
 function copyText(text) {
   if (navigator.clipboard?.writeText) {
     return navigator.clipboard.writeText(text);
@@ -226,6 +232,42 @@ function createQrImage(url) {
     boxShadow: "0 16px 36px rgba(15,23,42,0.08)",
   });
   return img;
+}
+
+function getFormPdfFilename(lastEvent, payload) {
+  return (
+    lastEvent?.title ||
+    lastEvent?.event_name ||
+    lastEvent?.name ||
+    payload?.form_title ||
+    payload?.form_name ||
+    "parental_consent"
+  );
+}
+
+function buildShareFormContext(form) {
+  if (!form || typeof form !== "object") {
+    return form;
+  }
+
+  return {
+    id: form.id,
+    title: form.title,
+    event_name: form.event_name,
+    name: form.name,
+    events: Array.isArray(form.events)
+      ? form.events.map((event) => ({
+          id: event.id,
+          event_name: event.event_name,
+          datetime: event.datetime,
+          end_datetime: event.end_datetime,
+          location: event.location,
+          type: event.type,
+          target: event.target,
+          purpose: event.purpose,
+        }))
+      : undefined,
+  };
 }
 
 function openShareDialog(url) {
@@ -400,6 +442,7 @@ function createActionButtons({
   syncRoom,
   onShareReady,
   onParentSync,
+  readOnly,
 }) {
   const actions = document.createElement("div");
   Object.assign(actions.style, {
@@ -427,7 +470,7 @@ function createActionButtons({
       sync();
       try {
         const shareUrl = await createShortParentalShareUrl({
-          form: lastEvent,
+          form: buildShareFormContext(lastEvent),
           payload,
           parent,
           room: syncRoom,
@@ -462,7 +505,7 @@ function createActionButtons({
 
   const okBtn = document.createElement("button");
   okBtn.type = "button";
-  okBtn.textContent = "我同意，继续";
+  okBtn.textContent = readOnly ? "下载 PDF" : "我同意，继续";
   Object.assign(okBtn.style, {
     border: "none",
     borderRadius: "12px",
@@ -477,21 +520,24 @@ function createActionButtons({
   okBtn.onclick = async () => {
     sync();
 
-    if (!parent.parent_cn && !parent.parent_en) {
+    if (!readOnly && !parent.parent_cn && !parent.parent_en) {
       alert("请填写家长姓名（中/英至少一个）");
       return;
     }
-    if (!parent.parent_nric) {
+    if (!readOnly && !parent.parent_nric) {
       alert("请填写家长 NRIC");
       return;
     }
-    if (!parent.parent_phone) {
+    if (!readOnly && !parent.parent_phone) {
       alert("请填写家长联络电话");
       return;
     }
-    if (!parent.sign_json_data || !parent.sign_json_data.strokes?.length) {
+    if (!readOnly && (!parent.sign_json_data || !parent.sign_json_data.strokes?.length)) {
       alert("请完成签名");
       return;
+    }
+    if (!readOnly && parent.sign_json_data?.strokes?.length && !parent.sign_date) {
+      parent.sign_date = todayISODate();
     }
 
     if (shareOnly) {
@@ -500,8 +546,12 @@ function createActionButtons({
     }
 
     if (!shareOnly) {
-      freezeModalToPrintable(modal);
-      await exportModalToPdf(modal);
+      await exportModalToPdf(modal, {
+        filename: getFormPdfFilename(lastEvent, payload),
+      });
+      if (readOnly) {
+        return;
+      }
     }
 
     overlay.remove();
@@ -524,6 +574,10 @@ export function openParentalFormModal(
   const safeParent = parent && typeof parent === "object" ? parent : {};
   const syncRoom = options.syncRoom || buildParentalRoomId(lastEvent, payload);
   const shareOnly = Boolean(options.shareOnly);
+  const onParentDataSync =
+    typeof options.onParentDataSync === "function"
+      ? options.onParentDataSync
+      : null;
 
   return new Promise((resolve) => {
     const overlay = createOverlay();
@@ -550,6 +604,9 @@ export function openParentalFormModal(
       onSignChange(nextSign) {
         sync();
         safeParent.sign_json_data = nextSign;
+        if (!safeParent.sign_date) {
+          safeParent.sign_date = todayISODate();
+        }
         roomConnection?.emitParentData(safeParent);
       },
     });
@@ -574,6 +631,7 @@ export function openParentalFormModal(
           sync();
           roomConnection?.emitParentData(safeParent);
         },
+        readOnly,
       }),
     );
 
@@ -603,11 +661,28 @@ export function openParentalFormModal(
           updateAgreementFields(fields, safeParent);
         }
         if (remoteSign) {
+          safeParent.sign_json_data = remoteSign;
+          if (!safeParent.sign_date) {
+            safeParent.sign_date = todayISODate();
+          }
           signArea.updateRemoteSign(remoteSign);
         } else {
           signArea.setStatus("已收到远程资料更新");
         }
         shareDialog?.setWaitingText("已收到家长资料和签名，孩子这边可以继续提交了。");
+        if (onParentDataSync) {
+          signArea.setStatus("已收到远程资料，正在保存到 CRM...");
+          Promise.resolve(onParentDataSync({ ...safeParent }))
+            .then(() => {
+              signArea.setStatus("已保存家长签名资料");
+              shareDialog?.setWaitingText("已收到家长资料和签名，并已保存到 CRM。");
+            })
+            .catch((error) => {
+              console.error("[parental-sign-sync] save failed", error);
+              signArea.setStatus("已收到远程资料，但保存到 CRM 失败");
+              shareDialog?.setWaitingText("已收到家长资料和签名，但保存到 CRM 失败，请稍后重试。");
+            });
+        }
       })
         .then((connection) => {
           roomConnection = connection;

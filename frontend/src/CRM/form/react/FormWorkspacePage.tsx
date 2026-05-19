@@ -1,4 +1,4 @@
-import { useSearchParams } from "react-router-dom";
+import { useNavigate, useSearchParams } from "react-router-dom";
 
 import { useEnsureDesignTokens } from "../../../theme/designTokens";
 import { useUserState } from "../../../app/UserState";
@@ -10,6 +10,7 @@ export function FormWorkspacePage() {
   useEnsureDesignTokens();
 
   const { user, isMobile } = useUserState();
+  const navigate = useNavigate();
   const [searchParams] = useSearchParams();
   const permissionNames = getUserPermissionNames(user);
   const canReadForms =
@@ -58,6 +59,7 @@ export function FormWorkspacePage() {
       onEditExtraField={(fieldId, payload) => void actions.handleEditExtraField(fieldId, payload)}
       onDeleteExtraField={(fieldId) => void actions.handleDeleteExtraField(fieldId)}
       onPickEvent={() => void actions.handlePickEvent()}
+      onOpenEventDetail={(eventId) => navigate(`/crm/event_table?event_id=${eventId}`)}
       onRemoveEvent={(eventId) => void actions.handleRemoveEvent(eventId)}
       onRemoveMember={(memberId) => void actions.handleRemoveMember(memberId)}
       onShowMemberDetail={(member) => actions.handleShowMemberDetail(member)}

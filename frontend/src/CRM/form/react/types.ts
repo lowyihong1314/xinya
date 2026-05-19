@@ -20,6 +20,10 @@ export type FormEvent = {
   id: number;
   event_name?: string;
   datetime?: string;
+  end_datetime?: string;
+  location?: string;
+  type?: string;
+  target?: string;
   purpose?: string;
   event_image?: { id: number } | null;
 };

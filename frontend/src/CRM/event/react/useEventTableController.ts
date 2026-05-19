@@ -26,7 +26,8 @@ const ALL_EVENT_TYPE_FILTER = "__all__";
 const BLANK_EVENT_TYPE_FILTER = "__blank__";
 const EVENT_EDITOR_DEBOUNCE_MS = 600;
 
-export function useEventTableController() {
+export function useEventTableController(options?: { preferredEventId?: number | null }) {
+  const preferredEventId = options?.preferredEventId ?? null;
   const { events, loading, error, refreshEvents } = useEventData();
   const [query, setQuery] = useState("");
   const [selectedType, setSelectedType] = useState(ALL_EVENT_TYPE_FILTER);
@@ -72,10 +73,13 @@ export function useEventTableController() {
   });
 
   useEffect(() => {
-    setSelectedEventId((prev) =>
-      prev && mergedEvents.some((event) => event.id === prev) ? prev : mergedEvents[0]?.id ?? null,
-    );
-  }, [mergedEvents]);
+    setSelectedEventId((prev) => {
+      if (preferredEventId && mergedEvents.some((event) => event.id === preferredEventId)) {
+        return preferredEventId;
+      }
+      return prev && mergedEvents.some((event) => event.id === prev) ? prev : mergedEvents[0]?.id ?? null;
+    });
+  }, [mergedEvents, preferredEventId]);
 
   useEffect(() => {
     if (!toast) {
@@ -174,6 +178,17 @@ export function useEventTableController() {
   useEffect(() => {
     setPage((prev) => Math.min(prev, totalPages));
   }, [totalPages]);
+
+  useEffect(() => {
+    if (!selectedEventId) {
+      return;
+    }
+    const selectedIndex = filteredEvents.findIndex((event) => event.id === selectedEventId);
+    if (selectedIndex < 0) {
+      return;
+    }
+    setPage(Math.floor(selectedIndex / PAGE_SIZE) + 1);
+  }, [filteredEvents, selectedEventId]);
 
   const selectedEvent = useMemo(
     () => mergedEvents.find((event) => event.id === selectedEventId) ?? null,

@@ -56,6 +56,56 @@ MEMBERSHIP_FEE_SCOPE = "membership"
 YOUTH_CLASS_FEE_SCOPE = "youth_class"
 
 
+def _parse_iso_date(value):
+    if not value:
+        return None
+    try:
+        return datetime.strptime(str(value)[:10], "%Y-%m-%d").date()
+    except (TypeError, ValueError):
+        return None
+
+
+def _upsert_parental_data(member_data, payload):
+    if not isinstance(payload, dict):
+        raise ValueError("家长同意书资料格式不正确")
+
+    parental = member_data.parental_data
+    if not parental:
+        parental = RegisParentalData(regis_member_data_id=member_data.id)
+        db.session.add(parental)
+
+    for key in [
+        "parent_cn",
+        "parent_en",
+        "parent_nric",
+        "parent_phone",
+        "child_cn",
+        "child_en",
+        "child_nric",
+        "child_phone",
+        "sign",
+    ]:
+        if key in payload:
+            setattr(parental, key, payload.get(key) or None)
+
+    if "sign_json_data" in payload:
+        parental.sign_json_data = payload.get("sign_json_data")
+
+    sign_date = _parse_iso_date(payload.get("sign_date"))
+    if sign_date:
+        parental.sign_date = sign_date
+    elif parental.sign_json_data and not parental.sign_date:
+        parental.sign_date = malaysia_now().date()
+
+    if not member_data.parent_1 and parental.parent_cn:
+        member_data.parent_1 = parental.parent_cn
+    if not member_data.parent_1_phone and parental.parent_phone:
+        member_data.parent_1_phone = parental.parent_phone
+    member_data.parental_form = True
+
+    return parental
+
+
 def _is_form_registration_closed(form):
     return bool(form.expired and malaysia_now().date() > form.expired)
 
@@ -1645,6 +1695,12 @@ def edit_member(data):
             event_form_ids = nric_change["event_form_ids"]
             response_payload.update(nric_change["response_payload"])
             db.session.commit()
+        elif field == "parental_data":
+            parental = _upsert_parental_data(latest, value)
+            db.session.commit()
+            updated_target = "RegisParentalData"
+            value = parental.to_dict()
+            response_payload["parental_data"] = value
         elif isinstance(field, str) and hasattr(latest, field):
             setattr(latest, field, value)
             db.session.commit()
@@ -1792,7 +1848,10 @@ def edit_form(form_id, data):
 
 
 def html_to_pdf():
-    return merge_html_files_to_pdf(request.files.getlist("files"))
+    return merge_html_files_to_pdf(
+        request.files.getlist("files"),
+        request.form.get("filename"),
+    )
 
 
 def _sync_youth_registration_status(entry):

@@ -1,15 +1,17 @@
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import type { CSSProperties, ReactNode } from "react";
 import QRCode from "qrcode";
 
 import { CachedImage } from "../../../components/CachedMedia";
 import { downloadUrl } from "../../../js/browserActions";
+import { smartImageURL } from "../../../js/get_img";
 import { ExtraFieldEditor } from "./ExtraFieldEditor";
 import { FeePanel } from "./FeePanel";
 import type { ExtraFieldDraft } from "./ExtraFieldEditor";
-import type { ExtraFieldConfig, FormCreatePayload, FormFee, FormMember, FormRecord } from "./types";
+import type { ExtraFieldConfig, FormCreatePayload, FormEvent, FormFee, FormMember, FormRecord } from "./types";
 
 type Toast = { type: "success" | "error"; text: string } | null;
+const MEMBER_PAGE_SIZE = 8;
 
 type FeePayload = {
   category: string;
@@ -19,6 +21,53 @@ type FeePayload = {
   description?: string;
   image_path?: string | null;
 };
+
+type WorkspaceKey = "settings" | "events" | "fees" | "fields" | "members";
+
+const WORKSPACE_ITEMS: Array<{
+  key: WorkspaceKey;
+  title: string;
+  eyebrow: string;
+  description: string;
+  icon: string;
+}> = [
+  {
+    key: "settings",
+    title: "基本设置",
+    eyebrow: "Summary",
+    description: "标题、截止日期、详情与字段开关",
+    icon: "fa-solid fa-sliders",
+  },
+  {
+    key: "events",
+    title: "关联活动",
+    eyebrow: "Event",
+    description: "绑定或移除活动来源",
+    icon: "fa-solid fa-calendar-check",
+  },
+  {
+    key: "fees",
+    title: "报名费",
+    eyebrow: "Fees",
+    description: "配置收费类别、金额与付款资料",
+    icon: "fa-solid fa-receipt",
+  },
+  {
+    key: "fields",
+    title: "表格内容",
+    eyebrow: "Extra Fields",
+    description: "管理报名表额外填写项目",
+    icon: "fa-solid fa-list-check",
+  },
+  {
+    key: "members",
+    title: "报名成员",
+    eyebrow: "Members",
+    description: "查看成员、付款状态与导出 Excel",
+    icon: "fa-solid fa-users",
+  },
+];
+type WorkspaceItem = (typeof WORKSPACE_ITEMS)[number];
 
 function normalizeExtraFieldDraft(draft: ExtraFieldDraft, index: number): ExtraFieldDraft {
   const label = draft.label.trim();
@@ -77,6 +126,29 @@ async function exportMembersToExcel(formTitle: string, members: FormMember[], ex
   XLSX.writeFile(workbook, `${sanitizeFilenamePart(formTitle)}_members.xlsx`);
 }
 
+function hasCheckedPayment(member: FormMember) {
+  const payments = Array.isArray(member.payments) ? member.payments : [];
+  return payments.some((payment) => payment.status === "checked");
+}
+
+function hasPendingPayment(member: FormMember) {
+  const payments = Array.isArray(member.payments) ? member.payments : [];
+  return payments.some((payment) => payment.status !== "checked" && payment.status !== "fail");
+}
+
+function getEnabledFieldSwitchCount(form: FormRecord) {
+  return [
+    form.field_switches?.email ?? form.email,
+    form.field_switches?.parental_form ?? form.parental_form,
+    form.field_switches?.parent_1 ?? form.parent_1,
+    form.field_switches?.parent_2 ?? form.parent_2,
+    form.field_switches?.address ?? form.address,
+    form.field_switches?.medical ?? form.medical,
+    form.field_switches?.allergy ?? form.allergy,
+    form.field_switches?.other_remark ?? form.other_remark,
+  ].filter(Boolean).length;
+}
+
 export function FormWorkspaceView(props: {
   isMobile?: boolean;
   canReadForms: boolean;
@@ -105,6 +177,7 @@ export function FormWorkspaceView(props: {
   onEditExtraField: (fieldId: number, payload: ExtraFieldDraft) => void;
   onDeleteExtraField: (fieldId: number) => void;
   onPickEvent: () => void;
+  onOpenEventDetail: (eventId: number) => void;
   onRemoveEvent: (eventId: number) => void;
   onRemoveMember: (memberId: number) => void;
   onShowMemberDetail: (member: FormMember) => void;
@@ -117,26 +190,35 @@ export function FormWorkspaceView(props: {
   const linkedEvents = selectedForm?.events || [];
   const [shareView, setShareView] = useState<null | "share" | "share_payment">(null);
   const [iframeUrl, setIframeUrl] = useState<string | null>(null);
-  const [collapsedSections, setCollapsedSections] = useState({
-    event: true,
-    fees: true,
-    extraFields: true,
-    members: true,
-  });
+  const [activeWorkspace, setActiveWorkspace] = useState<WorkspaceKey | null>(null);
+  const [mobileDetailOpen, setMobileDetailOpen] = useState(false);
+  const activeWorkspaceItem = activeWorkspace ? WORKSPACE_ITEMS.find((item) => item.key === activeWorkspace) ?? null : null;
+  const selectedMembers = selectedForm?.members || [];
+  const parentalFormEnabled = Boolean(selectedForm?.field_switches?.parental_form ?? selectedForm?.parental_form);
+  const memberCount = selectedForm?.member_count ?? selectedMembers.length;
+  const paidMemberCount = selectedMembers.filter(hasCheckedPayment).length;
+  const pendingPaymentCount = selectedMembers.filter(hasPendingPayment).length;
+  const enabledFieldSwitchCount = selectedForm ? getEnabledFieldSwitchCount(selectedForm) : 0;
 
   useEffect(() => {
-    setCollapsedSections({
-      event: true,
-      fees: true,
-      extraFields: true,
-      members: true,
-    });
+    setActiveWorkspace(null);
     setShareView(null);
     setIframeUrl(null);
+    if (!selectedForm?.id) {
+      setMobileDetailOpen(false);
+    }
   }, [selectedForm?.id]);
 
-  function toggleSection(section: keyof typeof collapsedSections) {
-    setCollapsedSections((prev) => ({ ...prev, [section]: !prev[section] }));
+  function handleOpenForm(formId: number) {
+    setMobileDetailOpen(true);
+    props.onOpenForm(formId);
+  }
+
+  function handleBackToFormList() {
+    setMobileDetailOpen(false);
+    setActiveWorkspace(null);
+    setShareView(null);
+    setIframeUrl(null);
   }
 
   return (
@@ -168,13 +250,13 @@ export function FormWorkspaceView(props: {
       ) : null}
 
       {props.canReadForms ? <div style={layoutStyle(isMobile)}>
-        <aside style={sidebarStyle(isMobile)}>
+        {!isMobile || !mobileDetailOpen ? <aside style={sidebarStyle(isMobile)}>
           {props.loading ? <div style={placeholderStyle}>加载报名表中…</div> : null}
           {!props.loading && !props.forms.length ? <div style={placeholderStyle}>暂无报名表</div> : null}
           {props.forms.map((form) => {
             const active = selectedForm?.id === form.id;
             return (
-              <button key={form.id} type="button" style={formNavCardStyle(active)} onClick={() => props.onOpenForm(form.id)}>
+              <button key={form.id} type="button" style={formNavCardStyle(active)} onClick={() => handleOpenForm(form.id)}>
                 <div style={formNavTitleStyle(active)}>{form.title}</div>
                 <div style={formNavMetaStyle}>
                   截止 {form.expired || "-"} · 成员 {form.member_count ?? (form.members || []).length}
@@ -182,9 +264,14 @@ export function FormWorkspaceView(props: {
               </button>
             );
           })}
-        </aside>
+        </aside> : null}
 
-        <section className="form_detail_section" style={contentStyle}>
+        {!isMobile || mobileDetailOpen ? <section className="form_detail_section" style={contentStyle}>
+          {isMobile ? (
+            <button type="button" style={mobileBackButtonStyle} onClick={handleBackToFormList}>
+              ← 返回表格界面
+            </button>
+          ) : null}
           {!selectedForm ? <div style={placeholderStyle}>选择一个报名表开始编辑</div> : null}
           {selectedForm && props.detailLoading ? <div style={placeholderStyle}>正在加载详细资料…</div> : null}
 
@@ -209,196 +296,232 @@ export function FormWorkspaceView(props: {
             />
           ) : null}
 
-          {selectedForm && !props.detailLoading && shareView === null && iframeUrl === null ? (
-            <>
-              <section style={panelStyle}>
-                <div style={panelHeaderStyle}>
-                  <div>
-                    <div style={sectionEyebrowStyle}>Summary</div>
-                    <h4 style={sectionTitleStyle}>{selectedForm.title}</h4>
-                  </div>
-                  <div style={headerActionsStyle}>
-                    <button type="button" style={secondaryButtonStyle} onClick={() => setShareView("share_payment")}>
-                      分享支付页面
-                    </button>
-                    <button type="button" style={secondaryButtonStyle} onClick={() => setShareView("share")}>
-                      分享报名表格
-                    </button>
-                    {props.canEditForms ? (
-                      <button type="button" style={dangerButtonStyle} onClick={() => props.onDeleteForm(selectedForm.id)}>
-                        删除表单
-                      </button>
-                    ) : null}
+          {selectedForm && !props.detailLoading && shareView === null && iframeUrl === null && activeWorkspaceItem === null ? (
+            <section style={panelStyle}>
+              <div style={panelHeaderStyle}>
+                <div>
+                  <div style={sectionEyebrowStyle}>Summary Dashboard</div>
+                  <h4 style={sectionTitleStyle}>{selectedForm.title}</h4>
+                  <div style={dashboardSubtitleStyle}>
+                    Form ID #{selectedForm.id} · 截止 {selectedForm.expired || "-"}
                   </div>
                 </div>
-
-                <div style={summaryGridStyle(isMobile)}>
-                  <Field
-                    label="标题"
-                    value={selectedForm.title}
-                    disabled={!props.canEditForms}
-                    onChange={(value) => props.onPatchForm({ title: value })}
-                  />
-                  <Field
-                    label="截止日期"
-                    type="date"
-                    value={selectedForm.expired || ""}
-                    disabled={!props.canEditForms}
-                    onChange={(value) => props.onPatchForm({ expired: value })}
-                  />
-                  <Field
-                    label="详情"
-                    value={selectedForm.detail || ""}
-                    disabled={!props.canEditForms}
-                    onChange={(value) => props.onPatchForm({ detail: value })}
-                    textarea
-                    wide
-                  />
+                <div style={headerActionsStyle}>
+                  <label style={toggleStyle}>
+                    <input
+                      type="checkbox"
+                      checked={props.realtimeEnabled}
+                      onChange={(event) => props.onToggleRealtime(event.target.checked)}
+                    />
+                    <span>实时同步</span>
+                  </label>
+                  <button type="button" style={secondaryButtonStyle} onClick={props.onRefresh}>
+                    刷新
+                  </button>
+                  <button type="button" style={secondaryButtonStyle} onClick={() => setShareView("share_payment")}>
+                    分享支付页面
+                  </button>
+                  <button type="button" style={secondaryButtonStyle} onClick={() => setShareView("share")}>
+                    分享报名表格
+                  </button>
                 </div>
+              </div>
 
-                <div style={sectionDividerStyle} />
-                <div style={sectionEyebrowStyle}>Field Switches</div>
-                <div style={toggleGridStyle}>
-                  <ConfigToggle
-                    label="启用 Email"
-                    checked={Boolean(selectedForm.field_switches?.email ?? selectedForm.email)}
-                    disabled={!props.canEditForms}
-                    onChange={(next) => props.onPatchForm({ field_switches: { ...(selectedForm.field_switches || {}), email: next } })}
-                  />
-                  <ConfigToggle
-                    label="家长同意书"
-                    checked={Boolean(selectedForm.field_switches?.parental_form ?? selectedForm.parental_form)}
-                    disabled={!props.canEditForms}
-                    onChange={(next) =>
-                      props.onPatchForm({ field_switches: { ...(selectedForm.field_switches || {}), parental_form: next } })
-                    }
-                  />
-                  <ConfigToggle
-                    label="家长 1"
-                    checked={Boolean(selectedForm.field_switches?.parent_1 ?? selectedForm.parent_1)}
-                    disabled={!props.canEditForms}
-                    onChange={(next) =>
-                      props.onPatchForm({
-                        field_switches: { ...(selectedForm.field_switches || {}), parent_1: next, parent_1_phone: next },
-                      })
-                    }
-                  />
-                  <ConfigToggle
-                    label="家长 2"
-                    checked={Boolean(selectedForm.field_switches?.parent_2 ?? selectedForm.parent_2)}
-                    disabled={!props.canEditForms}
-                    onChange={(next) =>
-                      props.onPatchForm({
-                        field_switches: { ...(selectedForm.field_switches || {}), parent_2: next, parent_2_phone: next },
-                      })
-                    }
-                  />
-                  <ConfigToggle
-                    label="居住地址"
-                    checked={Boolean(selectedForm.field_switches?.address ?? selectedForm.address)}
-                    disabled={!props.canEditForms}
-                    onChange={(next) => props.onPatchForm({ field_switches: { ...(selectedForm.field_switches || {}), address: next } })}
-                  />
-                  <ConfigToggle
-                    label="医疗备注"
-                    checked={Boolean(selectedForm.field_switches?.medical ?? selectedForm.medical)}
-                    disabled={!props.canEditForms}
-                    onChange={(next) => props.onPatchForm({ field_switches: { ...(selectedForm.field_switches || {}), medical: next } })}
-                  />
-                  <ConfigToggle
-                    label="过敏"
-                    checked={Boolean(selectedForm.field_switches?.allergy ?? selectedForm.allergy)}
-                    disabled={!props.canEditForms}
-                    onChange={(next) => props.onPatchForm({ field_switches: { ...(selectedForm.field_switches || {}), allergy: next } })}
-                  />
-                  <ConfigToggle
-                    label="其他备注"
-                    checked={Boolean(selectedForm.field_switches?.other_remark ?? selectedForm.other_remark)}
-                    disabled={!props.canEditForms}
-                    onChange={(next) =>
-                      props.onPatchForm({ field_switches: { ...(selectedForm.field_switches || {}), other_remark: next } })
-                    }
-                  />
+              <div style={dashboardMetricGridStyle(isMobile)}>
+                <DashboardMetric label="报名成员" value={String(memberCount)} detail={`已付款 ${paidMemberCount} · 处理中 ${pendingPaymentCount}`} />
+                <DashboardMetric label="关联活动" value={String(linkedEvents.length)} detail={linkedEvents[0]?.event_name || "当前表格绑定的活动"} />
+                <DashboardMetric label="报名费" value={String(props.fees.length)} detail="收费类别与付款资料" />
+                <DashboardMetric label="表格内容" value={String(props.extraFields.length)} detail="额外填写项目" />
+                <DashboardMetric label="字段开关" value={String(enabledFieldSwitchCount)} detail="已启用的默认字段" />
+              </div>
+
+              <div style={sectionDividerStyle} />
+              <div style={workspaceIntroStyle}>
+                <div>
+                  <div style={sectionEyebrowStyle}>Workspaces</div>
+                  <h4 style={workspaceIntroTitleStyle}>选择操作空间</h4>
                 </div>
-              </section>
+              </div>
+              <div style={workspaceIconGridStyle(isMobile)}>
+                {WORKSPACE_ITEMS.map((item) => (
+                  <button key={item.key} type="button" style={workspaceIconButtonStyle} onClick={() => setActiveWorkspace(item.key)}>
+                    <i className={item.icon} aria-hidden="true" style={workspaceIconStyle} />
+                    <span style={workspaceIconTitleStyle}>{item.title}</span>
+                    <span style={workspaceIconDescriptionStyle}>{item.description}</span>
+                  </button>
+                ))}
+              </div>
+            </section>
+          ) : null}
 
-              <CollapsibleSection
-                eyebrow="Event"
-                title="关联活动"
-                collapsed={collapsedSections.event}
-                onToggle={() => toggleSection("event")}
-                actions={props.canEditForms ? (
+          {selectedForm && !props.detailLoading && shareView === null && iframeUrl === null && activeWorkspaceItem?.key === "settings" ? (
+            <WorkspacePanel
+              item={activeWorkspaceItem}
+              onBack={() => setActiveWorkspace(null)}
+              actions={
+                props.canEditForms ? (
+                  <button type="button" style={dangerButtonStyle} onClick={() => props.onDeleteForm(selectedForm.id)}>
+                    删除表单
+                  </button>
+                ) : null
+              }
+            >
+              <div style={summaryGridStyle(isMobile)}>
+                <Field
+                  label="标题"
+                  value={selectedForm.title}
+                  disabled={!props.canEditForms}
+                  onChange={(value) => props.onPatchForm({ title: value })}
+                />
+                <Field
+                  label="截止日期"
+                  type="date"
+                  value={selectedForm.expired || ""}
+                  disabled={!props.canEditForms}
+                  onChange={(value) => props.onPatchForm({ expired: value })}
+                />
+                <Field
+                  label="详情"
+                  value={selectedForm.detail || ""}
+                  disabled={!props.canEditForms}
+                  onChange={(value) => props.onPatchForm({ detail: value })}
+                  textarea
+                  textareaMinHeight="450px"
+                  wide
+                />
+              </div>
+
+              <div style={sectionDividerStyle} />
+              <div style={sectionEyebrowStyle}>Field Switches</div>
+              <div style={toggleGridStyle}>
+                <ConfigToggle
+                  label="启用 Email"
+                  checked={Boolean(selectedForm.field_switches?.email ?? selectedForm.email)}
+                  disabled={!props.canEditForms}
+                  onChange={(next) => props.onPatchForm({ field_switches: { ...(selectedForm.field_switches || {}), email: next } })}
+                />
+                <ConfigToggle
+                  label="家长同意书"
+                  checked={Boolean(selectedForm.field_switches?.parental_form ?? selectedForm.parental_form)}
+                  disabled={!props.canEditForms}
+                  onChange={(next) =>
+                    props.onPatchForm({ field_switches: { ...(selectedForm.field_switches || {}), parental_form: next } })
+                  }
+                />
+                <ConfigToggle
+                  label="家长 1"
+                  checked={Boolean(selectedForm.field_switches?.parent_1 ?? selectedForm.parent_1)}
+                  disabled={!props.canEditForms}
+                  onChange={(next) =>
+                    props.onPatchForm({
+                      field_switches: { ...(selectedForm.field_switches || {}), parent_1: next, parent_1_phone: next },
+                    })
+                  }
+                />
+                <ConfigToggle
+                  label="家长 2"
+                  checked={Boolean(selectedForm.field_switches?.parent_2 ?? selectedForm.parent_2)}
+                  disabled={!props.canEditForms}
+                  onChange={(next) =>
+                    props.onPatchForm({
+                      field_switches: { ...(selectedForm.field_switches || {}), parent_2: next, parent_2_phone: next },
+                    })
+                  }
+                />
+                <ConfigToggle
+                  label="居住地址"
+                  checked={Boolean(selectedForm.field_switches?.address ?? selectedForm.address)}
+                  disabled={!props.canEditForms}
+                  onChange={(next) => props.onPatchForm({ field_switches: { ...(selectedForm.field_switches || {}), address: next } })}
+                />
+                <ConfigToggle
+                  label="医疗备注"
+                  checked={Boolean(selectedForm.field_switches?.medical ?? selectedForm.medical)}
+                  disabled={!props.canEditForms}
+                  onChange={(next) => props.onPatchForm({ field_switches: { ...(selectedForm.field_switches || {}), medical: next } })}
+                />
+                <ConfigToggle
+                  label="过敏"
+                  checked={Boolean(selectedForm.field_switches?.allergy ?? selectedForm.allergy)}
+                  disabled={!props.canEditForms}
+                  onChange={(next) => props.onPatchForm({ field_switches: { ...(selectedForm.field_switches || {}), allergy: next } })}
+                />
+                <ConfigToggle
+                  label="其他备注"
+                  checked={Boolean(selectedForm.field_switches?.other_remark ?? selectedForm.other_remark)}
+                  disabled={!props.canEditForms}
+                  onChange={(next) =>
+                    props.onPatchForm({ field_switches: { ...(selectedForm.field_switches || {}), other_remark: next } })
+                  }
+                />
+              </div>
+            </WorkspacePanel>
+          ) : null}
+
+          {selectedForm && !props.detailLoading && shareView === null && iframeUrl === null && activeWorkspaceItem?.key === "events" ? (
+            <WorkspacePanel
+              item={activeWorkspaceItem}
+              onBack={() => setActiveWorkspace(null)}
+              actions={
+                props.canEditForms ? (
                   <button type="button" style={secondaryButtonStyle} onClick={props.onPickEvent}>
                     选择活动
                   </button>
-                ) : null}
-              >
-                {!linkedEvents.length ? <div style={inlineNoteStyle}>当前未关联活动</div> : null}
-                {linkedEvents.length ? (
-                  <div style={eventListStyle}>
-                    {linkedEvents.map((event) => (
-                      <div key={event.id} style={eventCardStyle}>
-                        <div>
-                          <div style={eventTitleStyle}>{event.event_name || `活动 #${event.id}`}</div>
-                          <div style={eventMetaStyle}>Event ID #{event.id}</div>
-                          <div style={eventMetaStyle}>{event.datetime || event.purpose || `活动 #${event.id}`}</div>
-                        </div>
-                        {props.canEditForms ? (
-                          <button type="button" style={ghostDangerStyle} onClick={() => props.onRemoveEvent(event.id)}>
-                            移除
-                          </button>
-                        ) : null}
-                      </div>
-                    ))}
-                  </div>
-                ) : null}
-              </CollapsibleSection>
+                ) : null
+              }
+            >
+              {!linkedEvents.length ? <div style={inlineNoteStyle}>当前未关联活动</div> : null}
+              {linkedEvents.length ? (
+                <div style={eventListStyle}>
+                  {linkedEvents.map((event) => (
+                    <LinkedEventCard
+                      key={event.id}
+                      event={event}
+                      canEditForms={props.canEditForms}
+                      onOpen={() => props.onOpenEventDetail(event.id)}
+                      onRemove={() => props.onRemoveEvent(event.id)}
+                    />
+                  ))}
+                </div>
+              ) : null}
+            </WorkspacePanel>
+          ) : null}
 
-              <CollapsibleSection
-                eyebrow="Fees"
-                title="报名费"
-                collapsed={collapsedSections.fees}
-                onToggle={() => toggleSection("fees")}
-              >
-                <FeePanel
-                  formId={selectedForm.id}
-                  fees={props.fees}
-                  readOnly={!props.canEditForms}
-                  onAdd={props.onAddFee}
-                  onEdit={props.onEditFee}
-                  onDelete={props.onDeleteFee}
-                />
-              </CollapsibleSection>
+          {selectedForm && !props.detailLoading && shareView === null && iframeUrl === null && activeWorkspaceItem?.key === "fees" ? (
+            <WorkspacePanel item={activeWorkspaceItem} onBack={() => setActiveWorkspace(null)}>
+              <FeePanel
+                formId={selectedForm.id}
+                fees={props.fees}
+                readOnly={!props.canEditForms}
+                onAdd={props.onAddFee}
+                onEdit={props.onEditFee}
+                onDelete={props.onDeleteFee}
+              />
+            </WorkspacePanel>
+          ) : null}
 
-                <CollapsibleSection
-                  eyebrow="Extra Fields"
-                  title={
-                    <span style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
-                      <span>表格内容</span>
-                      <small style={{ color: "#6b7280", fontSize: 12, fontWeight: 400 }}>
-                        (中文姓名，英文姓名，NRIC，年龄，性别，邮箱，居住地址，医疗备注，过敏备注 ) 这9项已经默认存在表格里
-                        (紧急联络人，交通.... 等等 ， 其他各别事项请在下方增添）
-                      </small>
-                    </span>
-                  }
-                  collapsed={collapsedSections.extraFields}
-                  onToggle={() => toggleSection("extraFields")}
-                >
-                <ExtraFieldPanel
-                  fields={props.extraFields}
-                  readOnly={!props.canEditForms}
-                  onAdd={props.onAddExtraField}
-                  onEdit={props.onEditExtraField}
-                  onDelete={props.onDeleteExtraField}
-                />
-              </CollapsibleSection>
+          {selectedForm && !props.detailLoading && shareView === null && iframeUrl === null && activeWorkspaceItem?.key === "fields" ? (
+            <WorkspacePanel item={activeWorkspaceItem} onBack={() => setActiveWorkspace(null)}>
+              <div style={inlineNoteStyle}>
+                中文姓名、英文姓名、NRIC、年龄、性别、邮箱、居住地址、医疗备注、过敏备注已经默认存在表格里。
+                紧急联络人、交通等个别事项请在这里增添。
+              </div>
+              <ExtraFieldPanel
+                fields={props.extraFields}
+                readOnly={!props.canEditForms}
+                onAdd={props.onAddExtraField}
+                onEdit={props.onEditExtraField}
+                onDelete={props.onDeleteExtraField}
+              />
+            </WorkspacePanel>
+          ) : null}
 
-              <CollapsibleSection
-                eyebrow="Members"
-                title="报名成员"
-                collapsed={collapsedSections.members}
-                onToggle={() => toggleSection("members")}
-                actions={props.canViewMemberDetail ? (
+          {selectedForm && !props.detailLoading && shareView === null && iframeUrl === null && activeWorkspaceItem?.key === "members" ? (
+            <WorkspacePanel
+              item={activeWorkspaceItem}
+              onBack={() => setActiveWorkspace(null)}
+              actions={
+                props.canViewMemberDetail ? (
                   <button
                     type="button"
                     style={secondaryButtonStyle}
@@ -406,27 +529,28 @@ export function FormWorkspaceView(props: {
                   >
                     下载 Excel
                   </button>
-                ) : null}
-              >
-                {props.canViewMemberDetail ? (
-                  <MemberPanel
-                    members={selectedForm.members || []}
-                    extraFields={props.extraFields}
-                    canEditMembers={props.canEditMembers}
-                    onRemove={props.onRemoveMember}
-                    onShowDetail={props.onShowMemberDetail}
-                    onOpenParental={props.onOpenParental}
-                  />
-                ) : (
-                  <div style={inlineNoteStyle}>
-                    这个表单目前共有 {selectedForm.member_count ?? (selectedForm.members || []).length} 位报名成员。
-                    需要 `member_detail` 或 `form_edit` 权限才能查看详细资料。
-                  </div>
-                )}
-              </CollapsibleSection>
-            </>
+                ) : null
+              }
+            >
+              {props.canViewMemberDetail ? (
+                <MemberPanel
+                  members={selectedForm.members || []}
+                  extraFields={props.extraFields}
+                  canEditMembers={props.canEditMembers}
+                  parentalFormEnabled={parentalFormEnabled}
+                  onRemove={props.onRemoveMember}
+                  onShowDetail={props.onShowMemberDetail}
+                  onOpenParental={props.onOpenParental}
+                />
+              ) : (
+                <div style={inlineNoteStyle}>
+                  这个表单目前共有 {selectedForm.member_count ?? (selectedForm.members || []).length} 位报名成员。
+                  需要 `member_detail` 或 `form_edit` 权限才能查看详细资料。
+                </div>
+              )}
+            </WorkspacePanel>
           ) : null}
-        </section>
+        </section> : null}
       </div> : null}
 
       {props.createOpen && props.canEditForms ? <CreateFormModal onClose={props.onCloseCreate} onSubmit={props.onCreateForm} /> : null}
@@ -434,35 +558,124 @@ export function FormWorkspaceView(props: {
   );
 }
 
-function CollapsibleSection({
-  eyebrow,
-  title,
-  collapsed,
-  onToggle,
+function DashboardMetric({ label, value, detail }: { label: string; value: string; detail: string }) {
+  return (
+    <div style={dashboardMetricStyle}>
+      <div style={dashboardMetricLabelStyle}>{label}</div>
+      <div style={dashboardMetricValueStyle}>{value}</div>
+      <div style={dashboardMetricDetailStyle}>{detail}</div>
+    </div>
+  );
+}
+
+function WorkspacePanel({
+  item,
+  onBack,
   actions,
   children,
 }: {
-  eyebrow: string;
-  title: React.ReactNode;
-  collapsed: boolean;
-  onToggle: () => void;
+  item: WorkspaceItem;
+  onBack: () => void;
   actions?: ReactNode;
   children: ReactNode;
 }) {
   return (
     <section style={panelStyle}>
       <div style={panelHeaderStyle}>
-        <button type="button" style={sectionToggleButtonStyle} onClick={onToggle}>
+        <div style={workspacePanelTitleGroupStyle}>
+          <button type="button" style={workspaceBackButtonStyle} onClick={onBack}>
+            ← 返回 Dashboard
+          </button>
           <div>
-            <div style={sectionEyebrowStyle}>{eyebrow}</div>
-            <h4 style={sectionTitleStyle}>{title}</h4>
+            <div style={sectionEyebrowStyle}>{item.eyebrow}</div>
+            <h4 style={sectionTitleStyle}>{item.title}</h4>
           </div>
-          <span style={sectionToggleIconStyle}>{collapsed ? "展开" : "收起"}</span>
-        </button>
-        {actions}
+        </div>
+        {actions ? <div style={headerActionsStyle}>{actions}</div> : null}
       </div>
-      {!collapsed ? children : null}
+      <div style={sectionBodyStyle}>{children}</div>
     </section>
+  );
+}
+
+function LinkedEventCard({
+  event,
+  canEditForms,
+  onOpen,
+  onRemove,
+}: {
+  event: FormEvent;
+  canEditForms: boolean;
+  onOpen: () => void;
+  onRemove: () => void;
+}) {
+  const [imageUrl, setImageUrl] = useState("");
+
+  useEffect(() => {
+    let active = true;
+    const imageId = event.event_image?.id;
+
+    if (!imageId) {
+      setImageUrl("");
+      return () => {
+        active = false;
+      };
+    }
+
+    void smartImageURL(imageId, "cache")
+      .then((url) => {
+        if (active) {
+          setImageUrl(url && !url.includes("broken-image.png") ? url : "");
+        }
+      })
+      .catch(() => {
+        if (active) {
+          setImageUrl("");
+        }
+      });
+
+    return () => {
+      active = false;
+    };
+  }, [event.event_image?.id]);
+
+  return (
+    <article style={eventCardStyle}>
+      <button type="button" style={eventCardMainButtonStyle} onClick={onOpen}>
+        <div style={eventPosterWrapStyle}>
+          {imageUrl ? (
+            <CachedImage
+              src={imageUrl}
+              cacheKey={`form-linked-event:${event.id}:${event.event_image?.id || "poster"}`}
+              alt={event.event_name || `活动 #${event.id}`}
+              style={eventPosterStyle}
+            />
+          ) : (
+            <div style={eventPosterPlaceholderStyle}>
+              <i className="fa-solid fa-image" aria-hidden="true" />
+            </div>
+          )}
+        </div>
+        <div style={eventCardBodyStyle}>
+          <div>
+            <div style={eventTitleStyle}>{event.event_name || `活动 #${event.id}`}</div>
+            <div style={eventMetaStyle}>Event ID #{event.id}</div>
+          </div>
+          <div style={eventMetaStyle}>{event.datetime || event.purpose || `活动 #${event.id}`}</div>
+          <div style={chipRowStyle}>
+            <span style={chipStyle}>地点 {event.location || "-"}</span>
+            <span style={chipStyle}>类型 {event.type || "-"}</span>
+            <span style={chipStyle}>对象 {event.target || "-"}</span>
+          </div>
+          <div style={eventOpenHintStyle}>点击进入创建活动详情</div>
+        </div>
+      </button>
+      {canEditForms ? (
+        <button type="button" style={ghostDangerStyle} onClick={onRemove}>
+          移除
+        </button>
+      ) : null}
+    </article>
   );
 }
 
@@ -776,6 +989,7 @@ function MemberPanel({
   members,
   extraFields,
   canEditMembers,
+  parentalFormEnabled,
   onRemove,
   onShowDetail,
   onOpenParental,
@@ -783,16 +997,53 @@ function MemberPanel({
   members: FormMember[];
   extraFields: ExtraFieldConfig[];
   canEditMembers: boolean;
+  parentalFormEnabled: boolean;
   onRemove: (memberId: number) => void;
   onShowDetail: (member: FormMember) => void;
   onOpenParental: (member: FormMember) => void;
 }) {
+  const [memberQuery, setMemberQuery] = useState("");
+  const [memberPage, setMemberPage] = useState(1);
+  const filteredMembers = useMemo(() => {
+    const keyword = memberQuery.trim().toLowerCase();
+    if (!keyword) {
+      return members;
+    }
+
+    return members.filter((member) => buildMemberSearchText(member, extraFields).includes(keyword));
+  }, [extraFields, memberQuery, members]);
+  const totalPages = Math.max(1, Math.ceil(filteredMembers.length / MEMBER_PAGE_SIZE));
+  const safePage = Math.min(memberPage, totalPages);
+  const pagedMembers = filteredMembers.slice((safePage - 1) * MEMBER_PAGE_SIZE, safePage * MEMBER_PAGE_SIZE);
+
+  useEffect(() => {
+    setMemberPage(1);
+  }, [memberQuery, members.length]);
+
+  useEffect(() => {
+    setMemberPage((current) => Math.min(current, totalPages));
+  }, [totalPages]);
+
   return (
     <div style={sectionBodyStyle}>
       {!members.length ? <div style={placeholderStyle}>暂无报名成员</div> : null}
       {members.length ? (
-        <div style={memberListStyle}>
-          {members.map((member) => {
+        <>
+          <div style={memberToolbarStyle}>
+            <input
+              type="search"
+              placeholder="搜索姓名、NRIC、电话、Email、家长或表格内容"
+              value={memberQuery}
+              onChange={(event) => setMemberQuery(event.target.value)}
+              style={memberSearchInputStyle}
+            />
+            <div style={memberResultMetaStyle}>
+              {filteredMembers.length} / {members.length} 位 · 第 {safePage} / {totalPages} 页
+            </div>
+          </div>
+          {!filteredMembers.length ? <div style={placeholderStyle}>没有匹配的报名成员</div> : null}
+          {filteredMembers.length ? <div style={memberListStyle}>
+          {pagedMembers.map((member) => {
             const paymentMeta = getMemberPaymentStatusMeta(member);
             return (
               <article key={member.id} style={memberCardStyle}>
@@ -819,9 +1070,9 @@ function MemberPanel({
                     <button type="button" style={secondaryButtonStyle} onClick={() => onShowDetail(member)}>
                       {canEditMembers ? "详情 / 编辑" : "查看详情"}
                     </button>
-                    {member.parental_data ? (
+                    {parentalFormEnabled || member.parental_data ? (
                       <button type="button" style={secondaryButtonStyle} onClick={() => onOpenParental(member)}>
-                        家长同意书
+                        {member.parental_data ? "家长同意书" : "发给家长签名"}
                       </button>
                     ) : null}
                     {canEditMembers ? (
@@ -852,7 +1103,28 @@ function MemberPanel({
               </article>
             );
           })}
-        </div>
+          </div> : null}
+          {filteredMembers.length > MEMBER_PAGE_SIZE ? (
+            <div style={memberPaginationStyle}>
+              <button
+                type="button"
+                style={secondaryButtonStyle}
+                disabled={safePage <= 1}
+                onClick={() => setMemberPage((current) => Math.max(1, current - 1))}
+              >
+                上一页
+              </button>
+              <button
+                type="button"
+                style={secondaryButtonStyle}
+                disabled={safePage >= totalPages}
+                onClick={() => setMemberPage((current) => Math.min(totalPages, current + 1))}
+              >
+                下一页
+              </button>
+            </div>
+          ) : null}
+        </>
       ) : null}
     </div>
   );
@@ -864,6 +1136,7 @@ function Field({
   onChange,
   disabled,
   textarea,
+  textareaMinHeight,
   wide,
   type = "text",
 }: {
@@ -872,6 +1145,7 @@ function Field({
   onChange: (value: string) => void;
   disabled?: boolean;
   textarea?: boolean;
+  textareaMinHeight?: string;
   wide?: boolean;
   type?: string;
 }) {
@@ -881,7 +1155,7 @@ function Field({
       {textarea ? (
         <textarea
           rows={4}
-          style={textareaStyle}
+          style={textareaMinHeight ? { ...textareaStyle, minHeight: textareaMinHeight } : textareaStyle}
           value={value}
           disabled={disabled}
           onChange={(event) => onChange(event.target.value)}
@@ -916,6 +1190,37 @@ function ConfigToggle({
       <span>{label}</span>
     </label>
   );
+}
+
+function buildMemberSearchText(member: FormMember, extraFields: ExtraFieldConfig[]) {
+  const values = member.extra_fields || member.field_values || [];
+  const extraFieldText = extraFields
+    .map((field) => {
+      const match = values.find((item) => item.field_config_id === field.id);
+      return [field.label, formatExtraFieldValue(match?.field_value)].join(" ");
+    })
+    .join(" ");
+
+  return [
+    member.id,
+    member.name_cn,
+    member.name,
+    member.nric,
+    member.phone,
+    member.email,
+    member.gender,
+    member.address,
+    member.parent_1,
+    member.parent_1_phone,
+    member.parent_2,
+    member.parent_2_phone,
+    member.medical,
+    member.allergy,
+    member.other_remark,
+    extraFieldText,
+  ]
+    .map((value) => String(value || "").toLowerCase())
+    .join(" ");
 }
 
 function formatExtraFieldValue(value: unknown) {
@@ -1006,16 +1311,33 @@ function formNavCardStyle(active: boolean): CSSProperties {
 }
 const formNavTitleStyle = (active: boolean): CSSProperties => ({ fontSize: "13px", fontWeight: 700, color: active ? "var(--x-color-accent)" : "var(--x-color-ink)" });
 const formNavMetaStyle: CSSProperties = { marginTop: "3px", fontSize: "11px", color: "var(--x-color-ink-muted)" };
-const contentStyle: CSSProperties = { display: "grid", gap: "10px" };
+const contentStyle: CSSProperties = { display: "grid", gap: "10px", width: "100%", maxWidth: "700px" };
 const panelStyle: CSSProperties = { padding: "10px", borderRadius: "8px", border: "1px solid var(--x-color-line-soft)", background: "var(--x-color-panel)", boxShadow: "none" };
 const panelHeaderStyle: CSSProperties = { display: "flex", justifyContent: "space-between", gap: "8px", alignItems: "flex-start", flexWrap: "wrap", marginBottom: "8px" };
-const sectionToggleButtonStyle: CSSProperties = { display: "flex", justifyContent: "space-between", alignItems: "center", gap: "8px", flex: 1, minWidth: "220px", padding: 0, border: "none", background: "transparent", textAlign: "left", cursor: "pointer" };
-const sectionToggleIconStyle: CSSProperties = { fontSize: "12px", fontWeight: 700, color: "var(--x-color-ink-muted)", whiteSpace: "nowrap" };
+const mobileBackButtonStyle: CSSProperties = { ...secondaryButtonStyle, width: "fit-content" };
 const sectionBodyStyle: CSSProperties = { display: "grid", gap: "8px" };
-const sectionInlineActionsStyle: CSSProperties = { display: "flex", justifyContent: "flex-end", gap: "6px", flexWrap: "wrap" };
 const sectionEyebrowStyle: CSSProperties = { fontSize: "11px", letterSpacing: "0.08em", textTransform: "uppercase", color: "var(--x-color-ink-muted)" };
 const sectionTitleStyle: CSSProperties = { margin: "4px 0 0", fontSize: "18px", color: "var(--x-color-ink)" };
 const placeholderStyle: CSSProperties = { padding: "10px", borderRadius: "6px", background: "var(--x-color-panel-strong)", color: "var(--x-color-ink-muted)" };
+const dashboardSubtitleStyle: CSSProperties = { marginTop: "4px", color: "var(--x-color-ink-muted)", fontSize: "12px" };
+function dashboardMetricGridStyle(isMobile: boolean): CSSProperties {
+  return { display: "grid", gridTemplateColumns: isMobile ? "1fr" : "repeat(5, minmax(0, 1fr))", gap: "8px" };
+}
+const dashboardMetricStyle: CSSProperties = { minHeight: "78px", padding: "10px", borderRadius: "8px", border: "1px solid var(--x-color-line-soft)", background: "var(--x-color-panel-strong)", display: "grid", alignContent: "space-between", gap: "4px" };
+const dashboardMetricLabelStyle: CSSProperties = { color: "var(--x-color-ink-muted)", fontSize: "11px", fontWeight: 700 };
+const dashboardMetricValueStyle: CSSProperties = { color: "var(--x-color-ink)", fontSize: "24px", lineHeight: 1, fontWeight: 800 };
+const dashboardMetricDetailStyle: CSSProperties = { color: "var(--x-color-ink-muted)", fontSize: "11px", lineHeight: 1.35, overflowWrap: "anywhere" };
+const workspaceIntroStyle: CSSProperties = { display: "flex", justifyContent: "space-between", gap: "8px", alignItems: "flex-end", flexWrap: "wrap", marginBottom: "8px" };
+const workspaceIntroTitleStyle: CSSProperties = { ...sectionTitleStyle, fontSize: "16px" };
+function workspaceIconGridStyle(isMobile: boolean): CSSProperties {
+  return { display: "grid", gridTemplateColumns: isMobile ? "1fr" : "repeat(5, minmax(128px, 1fr))", gap: "8px" };
+}
+const workspaceIconButtonStyle: CSSProperties = { minHeight: "148px", padding: "14px 10px", borderRadius: "8px", border: "1px solid var(--x-color-line-soft)", background: "var(--x-color-panel-strong)", color: "var(--x-color-ink)", display: "grid", justifyItems: "center", alignContent: "center", gap: "8px", textAlign: "center", cursor: "pointer" };
+const workspaceIconStyle: CSSProperties = { fontSize: "34px", color: "var(--x-color-accent)" };
+const workspaceIconTitleStyle: CSSProperties = { fontSize: "15px", fontWeight: 800, lineHeight: 1.2 };
+const workspaceIconDescriptionStyle: CSSProperties = { maxWidth: "180px", fontSize: "12px", lineHeight: 1.35, color: "var(--x-color-ink-muted)" };
+const workspacePanelTitleGroupStyle: CSSProperties = { display: "flex", gap: "10px", alignItems: "flex-start", flexWrap: "wrap" };
+const workspaceBackButtonStyle: CSSProperties = { ...secondaryButtonStyle, whiteSpace: "nowrap" };
 function summaryGridStyle(isMobile: boolean): CSSProperties {
   return { display: "grid", gap: "8px", gridTemplateColumns: isMobile ? "1fr" : "repeat(2, minmax(0, 1fr))" };
 }
@@ -1029,9 +1351,15 @@ const toggleGridStyle: CSSProperties = { display: "grid", gridTemplateColumns: "
 const configToggleStyle = (checked: boolean): CSSProperties => ({ display: "flex", gap: "6px", alignItems: "center", padding: "7px 9px", borderRadius: "6px", border: checked ? "1px solid var(--x-color-accent-border)" : "1px solid var(--x-color-line-soft)", background: checked ? "var(--x-color-accent-tint)" : "var(--x-color-panel-strong)", color: "var(--x-color-ink)" });
 const inlineNoteStyle: CSSProperties = { color: "var(--x-color-ink-muted)", fontSize: "12px" };
 const eventListStyle: CSSProperties = { display: "grid", gap: "6px" };
-const eventCardStyle: CSSProperties = { display: "flex", justifyContent: "space-between", alignItems: "center", gap: "8px", padding: "8px 10px", borderRadius: "6px", background: "var(--x-color-panel-strong)", border: "1px solid var(--x-color-line-soft)" };
+const eventCardStyle: CSSProperties = { display: "grid", gridTemplateColumns: "minmax(0, 1fr) auto", gap: "8px", alignItems: "start", padding: "8px", borderRadius: "8px", background: "var(--x-color-panel-strong)", border: "1px solid var(--x-color-line-soft)" };
+const eventCardMainButtonStyle: CSSProperties = { display: "grid", gridTemplateColumns: "minmax(96px, 140px) minmax(0, 1fr)", gap: "10px", width: "100%", padding: 0, border: "none", background: "transparent", color: "var(--x-color-ink)", textAlign: "left", cursor: "pointer" };
+const eventPosterWrapStyle: CSSProperties = { width: "100%", aspectRatio: "4 / 3", minHeight: "96px", overflow: "hidden", borderRadius: "6px", border: "1px solid var(--x-color-line-soft)", background: "var(--x-color-panel)" };
+const eventPosterStyle: CSSProperties = { width: "100%", height: "100%", display: "block", objectFit: "cover" };
+const eventPosterPlaceholderStyle: CSSProperties = { width: "100%", height: "100%", display: "grid", placeItems: "center", color: "var(--x-color-ink-muted)", fontSize: "28px", background: "var(--x-color-panel)" };
+const eventCardBodyStyle: CSSProperties = { minWidth: 0, display: "grid", gap: "5px", alignContent: "start" };
 const eventTitleStyle: CSSProperties = { fontWeight: 700, color: "var(--x-color-ink)" };
 const eventMetaStyle: CSSProperties = { marginTop: "4px", fontSize: "13px", color: "var(--x-color-ink-muted)" };
+const eventOpenHintStyle: CSSProperties = { marginTop: "2px", fontSize: "12px", fontWeight: 700, color: "var(--x-color-accent)" };
 const sectionStyle: CSSProperties = { marginTop: "10px", display: "grid", gap: "8px" };
 const stackStyle: CSSProperties = { display: "grid", gap: "6px" };
 const footerActionsStyle: CSSProperties = { display: "flex", justifyContent: "flex-end", gap: "6px", marginTop: "10px", flexWrap: "wrap" };
@@ -1049,8 +1377,12 @@ const feeImagePreviewStyle: CSSProperties = { display: "inline-flex", width: "fi
 const feeImageStyle: CSSProperties = { display: "block", width: "100%", maxWidth: "220px", maxHeight: "160px", objectFit: "cover", borderRadius: "6px", border: "1px solid var(--x-color-line-soft)", background: "var(--x-color-panel)" };
 const feeImageEmptyStyle: CSSProperties = { padding: "10px", borderRadius: "6px", border: "1px dashed var(--x-color-line-soft)", color: "var(--x-color-ink-muted)", fontSize: "13px", background: "var(--x-color-panel)" };
 const feeActionRowStyle: CSSProperties = { display: "flex", justifyContent: "flex-end", gap: "8px", flexWrap: "wrap" };
+const memberToolbarStyle: CSSProperties = { display: "grid", gridTemplateColumns: "minmax(0, 1fr) auto", gap: "8px", alignItems: "center" };
+const memberSearchInputStyle: CSSProperties = { ...inputStyle, minHeight: "34px" };
+const memberResultMetaStyle: CSSProperties = { color: "var(--x-color-ink-muted)", fontSize: "12px", fontWeight: 700, whiteSpace: "nowrap" };
 const memberListStyle: CSSProperties = { display: "grid", gap: "6px" };
 const memberCardStyle: CSSProperties = { padding: "10px", borderRadius: "6px", border: "1px solid var(--x-color-line-soft)", background: "var(--x-color-panel-strong)" };
+const memberPaginationStyle: CSSProperties = { display: "flex", justifyContent: "flex-end", gap: "6px", flexWrap: "wrap" };
 const memberPaymentTopRowStyle: CSSProperties = { display: "flex", justifyContent: "space-between", gap: "8px", alignItems: "center", flexWrap: "wrap", marginBottom: "8px" };
 const memberPaymentBadgeStyle: CSSProperties = { display: "inline-flex", alignItems: "center", justifyContent: "center", width: "fit-content", padding: "4px 8px", borderRadius: "999px", fontSize: "11px", fontWeight: 800 };
 const memberPaymentHintStyle: CSSProperties = { fontSize: "12px", color: "var(--x-color-ink-muted)", fontWeight: 700 };

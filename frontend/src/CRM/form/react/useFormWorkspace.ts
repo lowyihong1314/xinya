@@ -419,6 +419,7 @@ export function useFormWorkspace(options?: { enabled?: boolean; canEditMembers?:
   function handleShowMemberDetail(member: FormRecord["members"][number]) {
     showRegisterDetail({
       member,
+      form: selectedForm ?? (selectedFormId ? ({ id: selectedFormId, title: "" } as FormRecord) : undefined),
       formId: selectedFormId ?? undefined,
       extraFields,
       onSaveField: canEditMembers ? handleEditMemberField : undefined,
@@ -427,7 +428,12 @@ export function useFormWorkspace(options?: { enabled?: boolean; canEditMembers?:
   }
 
   async function handleOpenParental(member: FormRecord["members"][number]) {
-    await open_parental_form(null, member, member.parental_data, true, true);
+    const formContext = selectedForm ?? (selectedFormId ? ({ id: selectedFormId, title: "" } as FormRecord) : null);
+    await open_parental_form(formContext, member, member.parental_data || {}, true, true, {
+      onParentDataSync: canEditMembers
+        ? (parentData: unknown) => handleEditMemberField(member, "parental_data", parentData)
+        : undefined,
+    });
   }
 
   function setRealtime(nextValue: boolean) {

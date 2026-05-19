@@ -13,6 +13,7 @@ import type {
   FormMemberExtraField,
   FormMemberTimeSlot,
   FormPayment,
+  FormRecord,
 } from "./types";
 
 type ParentalData = {
@@ -26,6 +27,7 @@ type ParentalData = {
 
 type ShowRegisterDetailOptions = {
   member: FormMember;
+  form?: FormRecord;
   formId?: number;
   extraFields?: ExtraFieldConfig[];
   onSaveField?: (member: FormMember, field: string | number, value: unknown) => Promise<void>;
@@ -198,6 +200,7 @@ function PaymentCard({ payment }: { payment: FormPayment }) {
 
 function MemberDetailModal({
   member,
+  form,
   formId,
   extraFields,
   onSaveField,
@@ -207,6 +210,8 @@ function MemberDetailModal({
   onClose: () => void;
 }) {
   const parental = (member.parental_data || null) as ParentalData | null;
+  const parentalFormEnabled = Boolean(parental || (form?.field_switches?.parental_form ?? form?.parental_form));
+  const parentalFormContext = form ?? (formId ? ({ id: formId, title: "" } as FormRecord) : null);
   const availableSlots = Array.isArray(member.available_time_slot_json)
     ? (member.available_time_slot_json as FormMemberTimeSlot[])
     : [];
@@ -359,15 +364,19 @@ function MemberDetailModal({
           <Section
             title="附加资料"
             action={
-              parental ? (
+              parentalFormEnabled ? (
                 <button
                   type="button"
                   style={secondaryButtonStyle}
                   onClick={() => {
-                    void open_parental_form(null, member, member.parental_data, true, true);
+                    void open_parental_form(parentalFormContext, member, member.parental_data || {}, true, true, {
+                      onParentDataSync: onSaveField
+                        ? (parentData: unknown) => onSaveField(member, "parental_data", parentData)
+                        : undefined,
+                    });
                   }}
                 >
-                  查看家长同意书
+                  {parental ? "查看家长同意书" : "发给家长签名"}
                 </button>
               ) : null
             }
@@ -631,10 +640,10 @@ const overlayStyle: CSSProperties = {
 };
 
 const modalStyle: CSSProperties = {
-  width: "min(1080px, 100%)",
-  maxHeight: "88vh",
+  width: "min(980px, 100%)",
+  maxHeight: "90vh",
   overflowY: "auto",
-  padding: "12px",
+  padding: "10px",
   borderRadius: radius.sm,
   background: colors.panelStrongest,
   border: `1px solid ${colors.line}`,
@@ -647,7 +656,7 @@ const headerStyle: CSSProperties = {
   justifyContent: "space-between",
   gap: "8px",
   alignItems: "flex-start",
-  marginBottom: "10px",
+  marginBottom: "8px",
 };
 
 const headerActionsStyle: CSSProperties = {
@@ -657,7 +666,7 @@ const headerActionsStyle: CSSProperties = {
 };
 
 const eyebrowStyle: CSSProperties = {
-  marginBottom: "6px",
+  marginBottom: "4px",
   fontSize: "11px",
   letterSpacing: "0.16em",
   textTransform: "uppercase",
@@ -668,19 +677,19 @@ const eyebrowStyle: CSSProperties = {
 const titleStyle: CSSProperties = {
   margin: 0,
   color: colors.ink,
-  fontSize: "20px",
+  fontSize: "18px",
   fontWeight: 900,
   lineHeight: 1.1,
 };
 
 const subTitleStyle: CSSProperties = {
-  marginTop: "4px",
+  marginTop: "3px",
   color: colors.inkMuted,
-  fontSize: "13px",
+  fontSize: "12px",
 };
 
 const closeButtonStyle: CSSProperties = {
-  padding: "8px 12px",
+  padding: "6px 9px",
   borderRadius: radius.sm,
   border: `1px solid ${colors.line}`,
   background: colors.panel,
@@ -704,9 +713,9 @@ const dirtyBadgeStyle: CSSProperties = {
 
 const summaryGridStyle: CSSProperties = {
   display: "grid",
-  gridTemplateColumns: "repeat(auto-fit, minmax(150px, 1fr))",
-  gap: "8px",
-  marginBottom: "10px",
+  gridTemplateColumns: "repeat(auto-fit, minmax(130px, 1fr))",
+  gap: "6px",
+  marginBottom: "8px",
 };
 
 const errorBannerStyle: CSSProperties = {
@@ -721,7 +730,7 @@ const errorBannerStyle: CSSProperties = {
 };
 
 const summaryCardStyle: CSSProperties = {
-  padding: "8px 10px",
+  padding: "6px 8px",
   borderRadius: radius.sm,
   background: colors.panel,
   border: `1px solid ${colors.lineSoft}`,
@@ -734,27 +743,27 @@ const summaryCardAccentStyle: CSSProperties = {
 
 const summaryLabelStyle: CSSProperties = {
   color: colors.inkMuted,
-  fontSize: "12px",
-  marginBottom: "3px",
+  fontSize: "11px",
+  marginBottom: "2px",
   fontWeight: 700,
 };
 
 const summaryValueStyle: CSSProperties = {
   color: colors.ink,
-  fontSize: "15px",
+  fontSize: "14px",
   fontWeight: 900,
 };
 
 const twoColumnGridStyle: CSSProperties = {
   display: "grid",
-  gridTemplateColumns: "repeat(auto-fit, minmax(320px, 1fr))",
-  gap: "8px",
-  marginBottom: "8px",
+  gridTemplateColumns: "repeat(auto-fit, minmax(300px, 1fr))",
+  gap: "6px",
+  marginBottom: "6px",
 };
 
 const sectionStyle: CSSProperties = {
-  marginBottom: "8px",
-  padding: "10px",
+  marginBottom: "6px",
+  padding: "8px",
   borderRadius: radius.sm,
   background: colors.panelStrong,
   border: `1px solid ${colors.lineSoft}`,
@@ -765,59 +774,59 @@ const sectionHeaderStyle: CSSProperties = {
   justifyContent: "space-between",
   gap: "8px",
   alignItems: "center",
-  marginBottom: "8px",
+  marginBottom: "6px",
 };
 
 const sectionTitleStyle: CSSProperties = {
   color: colors.ink,
-  fontSize: "15px",
+  fontSize: "14px",
   fontWeight: 900,
 };
 
 const sectionBodyStyle: CSSProperties = {
   display: "grid",
-  gap: "6px",
+  gap: "5px",
 };
 
 const compactGridStyle: CSSProperties = {
   display: "grid",
-  gridTemplateColumns: "repeat(auto-fit, minmax(180px, 1fr))",
-  gap: "6px",
+  gridTemplateColumns: "repeat(auto-fit, minmax(150px, 1fr))",
+  gap: "5px",
 };
 
 const readItemStyle: CSSProperties = {
-  padding: "8px 10px",
+  padding: "6px 8px",
   borderRadius: radius.sm,
   background: colors.panelAlt,
   border: `1px solid ${colors.lineSoft}`,
 };
 
 const readLabelStyle: CSSProperties = {
-  marginBottom: "4px",
+  marginBottom: "3px",
   color: colors.inkMuted,
-  fontSize: "12px",
+  fontSize: "11px",
   fontWeight: 700,
 };
 
 const readValueStyle: CSSProperties = {
   color: colors.ink,
-  lineHeight: 1.5,
+  lineHeight: 1.35,
   wordBreak: "break-word",
-  fontSize: "13px",
+  fontSize: "12px",
 };
 
 const editRowStyle: CSSProperties = {
   display: "grid",
-  gridTemplateColumns: "112px minmax(0, 1fr) 64px",
-  gap: "6px",
+  gridTemplateColumns: "96px minmax(0, 1fr) 48px",
+  gap: "5px",
   alignItems: "start",
 };
 
 const editLabelStyle: CSSProperties = {
   color: colors.inkMuted,
   fontWeight: 700,
-  fontSize: "12px",
-  paddingTop: "10px",
+  fontSize: "11px",
+  paddingTop: "8px",
 };
 
 const editControlWrapStyle: CSSProperties = {
@@ -826,22 +835,24 @@ const editControlWrapStyle: CSSProperties = {
 
 const inputStyle: CSSProperties = {
   width: "100%",
-  padding: "6px 8px",
+  minHeight: "30px",
+  padding: "5px 7px",
   borderRadius: radius.sm,
   border: `1px solid ${colors.line}`,
   background: colors.panel,
   color: colors.ink,
   boxSizing: "border-box",
+  fontSize: "12px",
 };
 
 const textareaStyle: CSSProperties = {
   ...inputStyle,
   resize: "vertical",
-  minHeight: "92px",
+  minHeight: "72px",
 };
 
 const saveButtonStyle: CSSProperties = {
-  padding: "8px 10px",
+  padding: "6px 9px",
   borderRadius: radius.sm,
   border: "none",
   background: colors.accent,
@@ -853,7 +864,7 @@ const saveButtonStyle: CSSProperties = {
 };
 
 const secondaryButtonStyle: CSSProperties = {
-  padding: "8px 10px",
+  padding: "6px 9px",
   borderRadius: radius.sm,
   border: `1px solid ${colors.line}`,
   background: colors.panel,
@@ -871,9 +882,9 @@ const checkboxWrapStyle: CSSProperties = {
 };
 
 const editHintStyle: CSSProperties = {
-  paddingTop: "10px",
+  paddingTop: "8px",
   color: colors.inkMuted,
-  fontSize: "11px",
+  fontSize: "10px",
   textAlign: "right",
 };
 

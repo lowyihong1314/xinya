@@ -1,4 +1,4 @@
-import { useNavigate } from "react-router-dom";
+import { useNavigate, useSearchParams } from "react-router-dom";
 
 import { useEnsureDesignTokens } from "../../../theme/designTokens";
 import { useUserState } from "../../../app/UserState";
@@ -11,7 +11,13 @@ export function EventTablePage() {
 
   const { isMobile, user } = useUserState();
   const navigate = useNavigate();
-  const { state, actions } = useEventTableController();
+  const [searchParams] = useSearchParams();
+  const rawPreferredEventId = searchParams.get("event_id");
+  const preferredEventId =
+    rawPreferredEventId && Number.isFinite(Number(rawPreferredEventId))
+      ? Number(rawPreferredEventId)
+      : null;
+  const { state, actions } = useEventTableController({ preferredEventId });
   const canEditEvent = hasUserPermission(user, "event_edit");
 
   return (
