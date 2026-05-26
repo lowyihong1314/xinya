@@ -6,6 +6,7 @@ import { showConfirmDialog, showPromptDialog } from "../../../../js/dialogs";
 import { showEventPicker } from "../../../shared/showEventPicker";
 import { render_sign_modal } from "../../../../../../static/js/sign_tools.js";
 import { decideClaim, deleteClaim, fetchClaims, readClaimBill, submitClaim } from "./api";
+import { ClaimBatchAiPage } from "./ClaimBatchAiPage";
 import { ClaimCreateForm, type CreateState } from "./ClaimCreateForm";
 import { ClaimDetail } from "./ClaimDetail";
 import { ClaimList } from "./ClaimList";
@@ -21,6 +22,7 @@ import type { AccountUser, ClaimRecord, ReadBillData } from "./types";
 type ViewState =
   | { kind: "list" }
   | { kind: "create" }
+  | { kind: "batchAi" }
   | { kind: "detail"; claimId: number };
 
 type ClaimStatusFilter = "all" | "approved" | "unapproved";
@@ -44,6 +46,12 @@ function buildInitialCreateState(user: AccountUser | null): CreateState {
     department_name: user?.departments?.[0]?.name || "",
     acctDept: "",
     purpose: "",
+    ref1: "",
+    ref2: "",
+    vendor_name: "",
+    vendor_address: "",
+    vendor_contact_number: "",
+    purchase_datetime: "",
     selectedEvent: null,
     files: [],
     signJsonData: null,
@@ -109,7 +117,7 @@ function buildPurposeFromReadBill(data: ReadBillData) {
   const receiptNumber = stringValue(data.receiptNumber);
   const expenseCategory = stringValue(data.expenseCategory);
   const description = stringValue(data.description);
-  const itemSummary = (data.receiptItems || [])
+  const itemSummary = (data.receiptItems || data.receipt_items || [])
     .map((item) => {
       const itemDescription = stringValue(item.description);
       const lineTotal = normalizeMoneyValue(item.lineTotal);
@@ -128,6 +136,82 @@ function buildPurposeFromReadBill(data: ReadBillData) {
   ]
     .filter(Boolean)
     .join("\n");
+}
+
+function normalizeReceiptDateTime(value: unknown) {
+  const rawValue = stringValue(value);
+  if (!rawValue) {
+    return "";
+  }
+
+  const normalized = rawValue.replace(" ", "T");
+  const match = normalized.match(/^(\d{4})[-/.](\d{1,2})[-/.](\d{1,2})(?:T(\d{1,2}):(\d{2})(?::\d{2})?)?/);
+  if (match) {
+    const [, yyyy, mm, dd, hh = "00", min = "00"] = match;
+    return `${yyyy}-${mm.padStart(2, "0")}-${dd.padStart(2, "0")}T${hh.padStart(2, "0")}:${min}`;
+  }
+
+  const parsed = new Date(rawValue);
+  if (Number.isNaN(parsed.getTime())) {
+    return "";
+  }
+  const yyyy = parsed.getFullYear();
+  const mm = String(parsed.getMonth() + 1).padStart(2, "0");
+  const dd = String(parsed.getDate()).padStart(2, "0");
+  const hh = String(parsed.getHours()).padStart(2, "0");
+  const min = String(parsed.getMinutes()).padStart(2, "0");
+  return `${yyyy}-${mm}-${dd}T${hh}:${min}`;
+}
+
+function buildReceiptItemsText(data: ReadBillData) {
+  return (data.receiptItems || data.receipt_items || [])
+    .map((item, index) => {
+      const itemNumber = stringValue(item.itemNumber) || String(index + 1);
+      const description = stringValue(item.description);
+      const quantity = stringValue(item.quantity);
+      const category = stringValue(item.expenseCategory);
+      const lineTotal = normalizeMoneyValue(item.lineTotal);
+      return [
+        `${itemNumber}.`,
+        description,
+        quantity ? `x${quantity}` : "",
+        category && category !== "OTHER" ? category : "",
+        lineTotal ? `RM ${lineTotal}` : "",
+      ]
+        .filter(Boolean)
+        .join(" ");
+    })
+    .filter(Boolean)
+    .join("\n");
+}
+
+function buildVendorFieldsFromReadBill(data: ReadBillData) {
+  const vendorPayload =
+    data.vendorData && typeof data.vendorData === "object"
+      ? (data.vendorData as Record<string, unknown>)
+      : data.vendor_data && typeof data.vendor_data === "object"
+        ? (data.vendor_data as Record<string, unknown>)
+        : {};
+
+  return {
+    vendor_name: stringValue(
+      data.vendorName || data.vendor_name || data.merchantName || data.merchant_name || vendorPayload.name,
+    ),
+    vendor_address: stringValue(
+      data.vendorAddress || data.vendor_address || data.merchantAddress || data.merchant_address || vendorPayload.address,
+    ),
+    vendor_contact_number: stringValue(
+      data.vendorPhone ||
+        data.vendor_phone ||
+        data.merchantPhone ||
+        data.merchant_phone ||
+        data.contactNumber ||
+        data.contact_number ||
+        vendorPayload.phone ||
+        vendorPayload.contact_number ||
+        vendorPayload.tel,
+    ),
+  };
 }
 
 function formatConfidence(value: unknown) {
@@ -217,6 +301,12 @@ export function ClaimWorkspace() {
         claim.id,
         claim.applicant_name,
         claim.purpose,
+        claim.ref1,
+        claim.ref2,
+        claim.vendor_name,
+        claim.vendor_address,
+        claim.vendor_contact_number,
+        claim.purchase_datetime,
         claim.event_name,
         claim.event_id,
         claim.department_name,
@@ -309,11 +399,36 @@ export function ClaimWorkspace() {
         throw new Error("AI fillin 没有返回识别结果");
       }
 
-      const updates: Partial<Pick<CreateState, "amount" | "request_date" | "purpose">> = {};
+      const updates: Partial<
+        Pick<
+          CreateState,
+          | "amount"
+          | "request_date"
+          | "purpose"
+          | "ref1"
+          | "ref2"
+          | "vendor_name"
+          | "vendor_address"
+          | "vendor_contact_number"
+          | "purchase_datetime"
+        >
+      > = {};
       const updatedFields: string[] = [];
-      const amount = normalizeMoneyValue(data.totalAmount);
-      const requestDate = normalizeReceiptDate(data.receiptDate);
+      const amount = normalizeMoneyValue(data.totalAmount || data.total_amount);
+      const requestDate = normalizeReceiptDate(data.receiptDate || data.receipt_date || data.purchaseDate || data.purchase_date);
+      const purchaseDateTime = normalizeReceiptDateTime(
+        data.purchaseDateTime ||
+          data.purchaseDatetime ||
+          data.purchase_datetime ||
+          data.receiptDateTime ||
+          data.receipt_date_time ||
+          data.receiptDate ||
+          data.receipt_date,
+      );
       const purpose = buildPurposeFromReadBill(data);
+      const ref1 = stringValue(data.description);
+      const ref2 = buildReceiptItemsText(data);
+      const vendorFields = buildVendorFieldsFromReadBill(data);
 
       if (amount) {
         updates.amount = amount;
@@ -326,6 +441,30 @@ export function ClaimWorkspace() {
       if (purpose) {
         updates.purpose = purpose;
         updatedFields.push("用途说明");
+      }
+      if (ref1) {
+        updates.ref1 = ref1;
+        updatedFields.push("AI说明");
+      }
+      if (ref2) {
+        updates.ref2 = ref2;
+        updatedFields.push("AI项目内容");
+      }
+      if (vendorFields.vendor_name) {
+        updates.vendor_name = vendorFields.vendor_name;
+        updatedFields.push("商家名称");
+      }
+      if (vendorFields.vendor_address) {
+        updates.vendor_address = vendorFields.vendor_address;
+        updatedFields.push("商家地址");
+      }
+      if (vendorFields.vendor_contact_number) {
+        updates.vendor_contact_number = vendorFields.vendor_contact_number;
+        updatedFields.push("商家联络号码");
+      }
+      if (purchaseDateTime) {
+        updates.purchase_datetime = purchaseDateTime;
+        updatedFields.push("采购日期");
       }
 
       if (!updatedFields.length) {
@@ -398,6 +537,24 @@ export function ClaimWorkspace() {
         ? `【做账分配：${createState.acctDept}】\n${createState.purpose.trim()}`
         : createState.purpose.trim(),
     );
+    if (createState.ref1.trim()) {
+      formData.append("ref1", createState.ref1.trim());
+    }
+    if (createState.ref2.trim()) {
+      formData.append("ref2", createState.ref2.trim());
+    }
+    if (createState.vendor_name.trim()) {
+      formData.append("vendor_name", createState.vendor_name.trim());
+    }
+    if (createState.vendor_address.trim()) {
+      formData.append("vendor_address", createState.vendor_address.trim());
+    }
+    if (createState.vendor_contact_number.trim()) {
+      formData.append("vendor_contact_number", createState.vendor_contact_number.trim());
+    }
+    if (createState.purchase_datetime) {
+      formData.append("purchase_datetime", createState.purchase_datetime);
+    }
     if (createState.selectedEvent?.id) {
       formData.append("event_id", String(createState.selectedEvent.id));
     }
@@ -534,6 +691,7 @@ export function ClaimWorkspace() {
 
       {view.kind === "list" ? (
         <ClaimList
+          isMobile={isMobile}
           loading={loading}
           claims={pagedClaims}
           query={query}
@@ -557,8 +715,17 @@ export function ClaimWorkspace() {
             setCreateState(buildInitialCreateState(accountUser));
             setView({ kind: "create" });
           }}
+          onBatchAiCreate={() => {
+            if (!canSubmitClaims) {
+              setError("你没有提交申请的权限");
+              return;
+            }
+            setView({ kind: "batchAi" });
+          }}
         />
       ) : null}
+
+      {view.kind === "batchAi" ? <ClaimBatchAiPage onBack={() => setView({ kind: "list" })} /> : null}
 
       {view.kind === "create" ? (
         <ClaimCreateForm

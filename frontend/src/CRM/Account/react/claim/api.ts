@@ -92,7 +92,23 @@ export async function updateClaimEvent(requestId: number, eventId: number | null
 
 export async function updateClaim(
   requestId: number,
-  payload: Partial<Pick<ClaimRecord, "applicant_name" | "amount" | "request_date" | "department_name" | "purpose" | "event_id">>,
+  payload: Partial<
+    Pick<
+      ClaimRecord,
+      | "applicant_name"
+      | "amount"
+      | "request_date"
+      | "department_name"
+      | "purpose"
+      | "ref1"
+      | "ref2"
+      | "vendor_name"
+      | "vendor_address"
+      | "vendor_contact_number"
+      | "purchase_datetime"
+      | "event_id"
+    >
+  >,
 ) {
   const response = await apiFetch(`/api/account/claim/${requestId}`, {
     method: "PUT",

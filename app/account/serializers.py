@@ -13,6 +13,14 @@ def serialize_request_data(request_obj, with_children=True):
         "department_id": None,
         "department_name": request_obj.department_name,
         "purpose": request_obj.purpose,
+        "ref1": request_obj.ref1,
+        "ref2": request_obj.ref2,
+        "vendor_name": request_obj.vendor_name,
+        "vendor_address": request_obj.vendor_address,
+        "vendor_contact_number": request_obj.vendor_contact_number,
+        "purchase_datetime": request_obj.purchase_datetime.isoformat()
+        if request_obj.purchase_datetime
+        else None,
         "public_token": request_obj.public_token,
         "sign_json_data": request_obj.sign_json_data,
         "voucher_recipient_name": request_obj.voucher_recipient_name,

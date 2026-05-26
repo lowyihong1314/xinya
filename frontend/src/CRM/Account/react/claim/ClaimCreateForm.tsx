@@ -27,6 +27,12 @@ export type CreateState = {
   department_name: string;
   acctDept: string;
   purpose: string;
+  ref1: string;
+  ref2: string;
+  vendor_name: string;
+  vendor_address: string;
+  vendor_contact_number: string;
+  purchase_datetime: string;
   selectedEvent: { id: number; event_name?: string } | null;
   files: File[];
   signJsonData: { strokes?: unknown[] } | null;
@@ -152,6 +158,51 @@ export function ClaimCreateForm({
             value={state.purpose}
             onChange={(event) => onChange((prev) => ({ ...prev, purpose: event.target.value }))}
             style={textareaStyle}
+          />
+        </Field>
+        <Field label="AI说明 ref1" wide>
+          <textarea
+            rows={3}
+            value={state.ref1}
+            onChange={(event) => onChange((prev) => ({ ...prev, ref1: event.target.value }))}
+            style={textareaStyle}
+          />
+        </Field>
+        <Field label="AI项目内容 ref2" wide>
+          <textarea
+            rows={4}
+            value={state.ref2}
+            onChange={(event) => onChange((prev) => ({ ...prev, ref2: event.target.value }))}
+            style={textareaStyle}
+          />
+        </Field>
+        <Field label="商家名称">
+          <input
+            value={state.vendor_name}
+            onChange={(event) => onChange((prev) => ({ ...prev, vendor_name: event.target.value }))}
+            style={inputStyle}
+          />
+        </Field>
+        <Field label="商家联络号码">
+          <input
+            value={state.vendor_contact_number}
+            onChange={(event) => onChange((prev) => ({ ...prev, vendor_contact_number: event.target.value }))}
+            style={inputStyle}
+          />
+        </Field>
+        <Field label="商家地址" wide>
+          <input
+            value={state.vendor_address}
+            onChange={(event) => onChange((prev) => ({ ...prev, vendor_address: event.target.value }))}
+            style={inputStyle}
+          />
+        </Field>
+        <Field label="采购日期 purchase_datetime">
+          <input
+            type="datetime-local"
+            value={state.purchase_datetime}
+            onChange={(event) => onChange((prev) => ({ ...prev, purchase_datetime: event.target.value }))}
+            style={inputStyle}
           />
         </Field>
         <Field label="附件" wide>

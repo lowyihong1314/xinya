@@ -36,6 +36,12 @@ CLAIM_EDIT_FIELD_LABELS = {
     "amount": "金额",
     "department_name": "部门",
     "purpose": "用途说明",
+    "ref1": "AI说明",
+    "ref2": "AI项目内容",
+    "vendor_name": "商家名称",
+    "vendor_address": "商家地址",
+    "vendor_contact_number": "商家联络号码",
+    "purchase_datetime": "采购日期",
     "event_id": "活动",
     "attachment": "附件",
 }
@@ -241,6 +247,34 @@ def _record_claim_change(request_obj, field_name, old_value, new_value, user):
     )
 
 
+def _optional_text(value, max_length=None, field_name="字段"):
+    text = str(value or "").strip()
+    if max_length and len(text) > max_length:
+        raise ValidationError(f"{field_name}过长")
+    return text or None
+
+
+def _parse_optional_datetime(value, field_name):
+    text = str(value or "").strip()
+    if not text:
+        return None
+
+    normalized = text.replace("Z", "+00:00")
+    try:
+        parsed = datetime.fromisoformat(normalized)
+        return parsed.replace(tzinfo=None)
+    except Exception:
+        pass
+
+    for fmt in ("%Y-%m-%d %H:%M:%S", "%Y-%m-%d %H:%M", "%Y-%m-%d"):
+        try:
+            return datetime.strptime(text, fmt)
+        except Exception:
+            continue
+
+    raise ValidationError(f"{field_name}格式错误")
+
+
 def _require_payment_voucher_access(request_obj, user):
     permissions = resolve_user_permissions(user)
     can_account = "account_read" in permissions or "account_edit" in permissions
@@ -334,6 +368,12 @@ def create_claim_from_form(form, files, current_user=None):
     event_id_raw = form.get("event_id")
     sign_json_data_raw = form.get("sign_json_data")
     department_name = _resolve_claim_department_name(form)
+    ref1 = _optional_text(form.get("ref1"))
+    ref2 = _optional_text(form.get("ref2"))
+    vendor_name = _optional_text(form.get("vendor_name"), 255, "商家名称")
+    vendor_address = _optional_text(form.get("vendor_address"))
+    vendor_contact_number = _optional_text(form.get("vendor_contact_number"), 80, "商家联络号码")
+    purchase_datetime = _parse_optional_datetime(form.get("purchase_datetime"), "采购日期")
 
     if not all(
         [
@@ -364,6 +404,12 @@ def create_claim_from_form(form, files, current_user=None):
         amount=amount,
         department_name=department_name,
         purpose=purpose,
+        ref1=ref1,
+        ref2=ref2,
+        vendor_name=vendor_name,
+        vendor_address=vendor_address,
+        vendor_contact_number=vendor_contact_number,
+        purchase_datetime=purchase_datetime,
         public_token=uuid.uuid4().hex,
         event_id=event_id,
         sign_json_data=sign_json_data,
@@ -480,6 +526,22 @@ def update_claim(request_id, payload, user):
             raise ValidationError("用途说明不能为空")
         _record_claim_change(request_obj, "purpose", request_obj.purpose, purpose, user)
         request_obj.purpose = purpose
+
+    optional_field_limits = {
+        "vendor_name": (255, "商家名称"),
+        "vendor_contact_number": (80, "商家联络号码"),
+    }
+    for optional_field in ("ref1", "ref2", "vendor_name", "vendor_address", "vendor_contact_number"):
+        if optional_field in payload:
+            max_length, field_label = optional_field_limits.get(optional_field, (None, "字段"))
+            next_value = _optional_text(payload.get(optional_field), max_length, field_label)
+            _record_claim_change(request_obj, optional_field, getattr(request_obj, optional_field), next_value, user)
+            setattr(request_obj, optional_field, next_value)
+
+    if "purchase_datetime" in payload:
+        purchase_datetime = _parse_optional_datetime(payload.get("purchase_datetime"), "采购日期")
+        _record_claim_change(request_obj, "purchase_datetime", request_obj.purchase_datetime, purchase_datetime, user)
+        request_obj.purchase_datetime = purchase_datetime
 
     if "event_id" in payload:
         raw_event_id = payload.get("event_id")

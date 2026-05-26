@@ -53,6 +53,12 @@ export type ClaimRecord = {
   request_date?: string;
   department_name?: string;
   purpose?: string;
+  ref1?: string | null;
+  ref2?: string | null;
+  vendor_name?: string | null;
+  vendor_address?: string | null;
+  vendor_contact_number?: string | null;
+  purchase_datetime?: string | null;
   event_id?: number;
   event_name?: string;
   created_at?: string;
@@ -97,16 +103,36 @@ export type ReadBillReceiptItem = {
 };
 
 export type ReadBillData = {
+  [key: string]: unknown;
   merchantName?: string | null;
+  merchant_name?: string | null;
   receiptNumber?: string | null;
   receiptDate?: string | null;
+  receipt_date?: string | null;
+  receiptDateTime?: string | null;
+  receipt_date_time?: string | null;
+  purchaseDateTime?: string | null;
+  purchaseDatetime?: string | null;
+  purchase_datetime?: string | null;
+  purchaseDate?: string | null;
+  purchase_date?: string | null;
   currency?: string | null;
   expenseCategory?: string | null;
   description?: string | null;
+  merchantAddress?: string | null;
+  merchant_address?: string | null;
+  vendorName?: string | null;
+  vendor_name?: string | null;
+  vendorAddress?: string | null;
+  vendor_address?: string | null;
+  vendorData?: unknown;
+  vendor_data?: unknown;
   amountBeforeTax?: string | number | null;
   taxAmount?: string | number | null;
   totalAmount?: string | number | null;
+  total_amount?: string | number | null;
   receiptItems?: ReadBillReceiptItem[];
+  receipt_items?: ReadBillReceiptItem[];
 };
 
 export type ReadBillMeta = {

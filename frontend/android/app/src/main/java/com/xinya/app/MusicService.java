@@ -369,6 +369,10 @@ public class MusicService extends Service {
         return callOnPlayerThread(() -> player != null && player.isPlaying(), false);
     }
 
+    public boolean isPlayWhenReady() {
+        return callOnPlayerThread(() -> player != null && player.getPlayWhenReady(), false);
+    }
+
     public int getCurrentTrackId() { return currentTrackId; }
 
     public int getCurrentMediaIndex() {

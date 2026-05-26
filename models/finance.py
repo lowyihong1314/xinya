@@ -27,6 +27,12 @@ class ReimbursementRequest(db.Model):
     department_name = db.Column(db.String(100), nullable=False, index=True)
 
     purpose = db.Column(db.Text, nullable=False)
+    ref1 = db.Column(db.Text, nullable=True)
+    ref2 = db.Column(db.Text, nullable=True)
+    vendor_name = db.Column(db.String(255), nullable=True)
+    vendor_address = db.Column(db.Text, nullable=True)
+    vendor_contact_number = db.Column(db.String(80), nullable=True)
+    purchase_datetime = db.Column(db.DateTime, nullable=True)
 
     # link token（申请链接）
     public_token = db.Column(db.String(128), unique=True, nullable=False, index=True)

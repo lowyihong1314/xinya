@@ -59,6 +59,12 @@ type ClaimEditDraft = {
   request_date: string;
   department_name: string;
   purpose: string;
+  ref1: string;
+  ref2: string;
+  vendor_name: string;
+  vendor_address: string;
+  vendor_contact_number: string;
+  purchase_datetime: string;
 };
 
 export function ClaimDetail({
@@ -220,6 +226,12 @@ export function ClaimDetail({
         request_date: editDraft.request_date,
         department_name: editDraft.department_name.trim(),
         purpose: editDraft.purpose.trim(),
+        ref1: editDraft.ref1.trim(),
+        ref2: editDraft.ref2.trim(),
+        vendor_name: editDraft.vendor_name.trim(),
+        vendor_address: editDraft.vendor_address.trim(),
+        vendor_contact_number: editDraft.vendor_contact_number.trim(),
+        purchase_datetime: editDraft.purchase_datetime,
       });
       onClaimUpdated(updated);
       setEditDraft(buildEditDraft(updated));
@@ -354,6 +366,18 @@ export function ClaimDetail({
         ) : (
           <DetailRow label="部门" value={claim.department_name || "-"} />
         )}
+        {editingClaim ? (
+          <EditableDetailRow label="采购日期">
+            <input
+              type="datetime-local"
+              style={inputStyle}
+              value={editDraft.purchase_datetime}
+              onChange={(event) => setEditDraft((prev) => ({ ...prev, purchase_datetime: event.target.value }))}
+            />
+          </EditableDetailRow>
+        ) : (
+          <DetailRow label="采购日期" value={formatDateTime(claim.purchase_datetime)} />
+        )}
         <DetailRow label="收款人 / 签收人" value={claim.voucher_recipient_name || "-"} />
         <DetailRow label="签收时间" value={formatDateTime(claim.voucher_signed_at)} />
         <div className="claim-detail__row" style={detailRowStyle}>
@@ -406,6 +430,87 @@ export function ClaimDetail({
         </label>
       ) : claim.purpose ? (
         <div className="claim-detail__purpose" style={purposeBoxStyle}>{claim.purpose}</div>
+      ) : null}
+
+      {editingClaim ? (
+        <div className="claim-detail__ai-fields" style={{ display: "grid", gap: "8px" }}>
+          <label className="claim-detail__purpose claim-detail__purpose--editing" style={purposeBoxStyle}>
+            <span style={detailLabelStyle}>AI说明 ref1</span>
+            <textarea
+              rows={3}
+              style={textareaStyle}
+              value={editDraft.ref1}
+              onChange={(event) => setEditDraft((prev) => ({ ...prev, ref1: event.target.value }))}
+            />
+          </label>
+          <label className="claim-detail__purpose claim-detail__purpose--editing" style={purposeBoxStyle}>
+            <span style={detailLabelStyle}>AI项目内容 ref2</span>
+            <textarea
+              rows={4}
+              style={textareaStyle}
+              value={editDraft.ref2}
+              onChange={(event) => setEditDraft((prev) => ({ ...prev, ref2: event.target.value }))}
+            />
+          </label>
+          <div className="claim-detail__purpose claim-detail__purpose--editing" style={purposeBoxStyle}>
+            <span style={detailLabelStyle}>商家资料</span>
+            <div style={detailGridStyle(isMobile)}>
+              <label style={{ display: "grid", gap: "4px" }}>
+                <span style={detailLabelStyle}>商家名称</span>
+                <input
+                  style={inputStyle}
+                  value={editDraft.vendor_name}
+                  onChange={(event) => setEditDraft((prev) => ({ ...prev, vendor_name: event.target.value }))}
+                />
+              </label>
+              <label style={{ display: "grid", gap: "4px" }}>
+                <span style={detailLabelStyle}>商家联络号码</span>
+                <input
+                  style={inputStyle}
+                  value={editDraft.vendor_contact_number}
+                  onChange={(event) => setEditDraft((prev) => ({ ...prev, vendor_contact_number: event.target.value }))}
+                />
+              </label>
+              <label style={{ display: "grid", gap: "4px", gridColumn: "1 / -1" }}>
+                <span style={detailLabelStyle}>商家地址</span>
+                <input
+                  style={inputStyle}
+                  value={editDraft.vendor_address}
+                  onChange={(event) => setEditDraft((prev) => ({ ...prev, vendor_address: event.target.value }))}
+                />
+              </label>
+            </div>
+          </div>
+        </div>
+      ) : claim.ref1 || claim.ref2 || claim.vendor_name || claim.vendor_address || claim.vendor_contact_number ? (
+        <div className="claim-detail__ai-fields" style={{ display: "grid", gap: "8px" }}>
+          {claim.ref1 ? (
+            <div className="claim-detail__purpose" style={purposeBoxStyle}>
+              <span style={detailLabelStyle}>AI说明 ref1</span>
+              <span>{claim.ref1}</span>
+            </div>
+          ) : null}
+          {claim.ref2 ? (
+            <div className="claim-detail__purpose" style={purposeBoxStyle}>
+              <span style={detailLabelStyle}>AI项目内容 ref2</span>
+              <span>{claim.ref2}</span>
+            </div>
+          ) : null}
+          {claim.vendor_name || claim.vendor_address || claim.vendor_contact_number ? (
+            <div className="claim-detail__purpose" style={purposeBoxStyle}>
+              <span style={detailLabelStyle}>商家资料</span>
+              <span style={{ whiteSpace: "pre-wrap" }}>
+                {[
+                  claim.vendor_name ? `商家名称：${claim.vendor_name}` : "",
+                  claim.vendor_contact_number ? `联络号码：${claim.vendor_contact_number}` : "",
+                  claim.vendor_address ? `地址：${claim.vendor_address}` : "",
+                ]
+                  .filter(Boolean)
+                  .join("\n")}
+              </span>
+            </div>
+          ) : null}
+        </div>
       ) : null}
 
       {claim.approver_data?.length || (claim.attachments || []).length || canEditAttachments || (claim.change_logs || []).length ? (
@@ -699,7 +804,21 @@ function buildEditDraft(claim: ClaimRecord): ClaimEditDraft {
     request_date: claim.request_date || "",
     department_name: claim.department_name || "",
     purpose: claim.purpose || "",
+    ref1: claim.ref1 || "",
+    ref2: claim.ref2 || "",
+    vendor_name: claim.vendor_name || "",
+    vendor_address: claim.vendor_address || "",
+    vendor_contact_number: claim.vendor_contact_number || "",
+    purchase_datetime: toDateTimeLocalValue(claim.purchase_datetime),
   };
+}
+
+function toDateTimeLocalValue(value?: string | null) {
+  if (!value) {
+    return "";
+  }
+  const match = value.match(/^(\d{4}-\d{2}-\d{2})[T ](\d{2}:\d{2})/);
+  return match ? `${match[1]}T${match[2]}` : "";
 }
 
 const attachmentActionStyle: CSSProperties = {
@@ -915,7 +1034,7 @@ function safeMoney(value?: number | string) {
   return amount.toFixed(2);
 }
 
-function formatDateTime(value?: string) {
+function formatDateTime(value?: string | null) {
   if (!value) {
     return "-";
   }

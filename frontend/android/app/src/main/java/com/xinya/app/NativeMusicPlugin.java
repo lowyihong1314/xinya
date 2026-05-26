@@ -747,8 +747,8 @@ public class NativeMusicPlugin extends Plugin {
         }
         try {
             long positionMs = musicService.getPositionMs();
-            boolean isPlaying = musicService.isPlaying();
-            loadPlaylistOnService(positionMs, isPlaying);
+            boolean playWhenReady = musicService.isPlayWhenReady();
+            loadPlaylistOnService(positionMs, playWhenReady);
         } catch (Exception e) {
             Log.w(TAG, "syncPlaylistPreservingState failed", e);
         }

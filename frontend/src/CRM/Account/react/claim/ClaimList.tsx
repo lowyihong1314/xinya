@@ -25,6 +25,7 @@ import {
 import type { ApproverUserProfile, ClaimRecord } from "./types";
 
 type ClaimListProps = {
+  isMobile: boolean;
   loading: boolean;
   claims: ClaimRecord[];
   query: string;
@@ -40,10 +41,12 @@ type ClaimListProps = {
   scopeLabel: string;
   onRefresh: () => void;
   onCreate: () => void;
+  onBatchAiCreate: () => void;
   canCreate: boolean;
 };
 
 export function ClaimList({
+  isMobile,
   loading,
   claims,
   query,
@@ -59,6 +62,7 @@ export function ClaimList({
   scopeLabel,
   onRefresh,
   onCreate,
+  onBatchAiCreate,
   canCreate,
 }: ClaimListProps) {
   const [approverUsers, setApproverUsers] = useState<Record<number, ApproverUserProfile>>({});
@@ -193,9 +197,14 @@ export function ClaimList({
               <span style={chipStyle}>{scopeLabel}</span>
 
               {canCreate ? (
-                <button type="button" style={buttonPrimaryStyle} onClick={onCreate}>
-                  新建申请
-                </button>
+                <>
+                  <button type="button" style={buttonPrimaryStyle} onClick={onCreate}>
+                    新建申请
+                  </button>
+                  <button type="button" style={buttonSecondaryStyle} onClick={onBatchAiCreate}>
+                    批量申请AI
+                  </button>
+                </>
               ) : null}
             </div>
             <div className="claim-list__pagination-actions" style={paginationActionsStyle}>
@@ -226,9 +235,9 @@ export function ClaimList({
             ref={resultContainerRef}
             style={{ ...resultContainerStyle, maxHeight: resultMaxHeight }}
           >
-            <div className="claim-list__cards" style={listStyle}>
+            <div className="claim-list__cards" style={claimListStyle(isMobile)}>
               {claims.map((claim) => (
-                <button key={claim.id} type="button" style={cardButtonStyle} onClick={() => onOpen(claim.id)}>
+                <button key={claim.id} type="button" style={claimCardStyle(isMobile)} onClick={() => onOpen(claim.id)}>
                   <div className="claim-list__card-top" style={cardTopStyle}>
                     <div className="claim-list__card-head">
                       <div className="claim-list__card-title" style={cardTitleStyle}>
@@ -279,6 +288,34 @@ const statusFilterSelectStyle = {
   ...searchInputStyle,
   width: "150px",
 } satisfies CSSProperties;
+
+function claimListStyle(isMobile: boolean): CSSProperties {
+  if (isMobile) {
+    return listStyle;
+  }
+  return {
+    display: "grid",
+    width: "100%",
+    minWidth: 0,
+    gridTemplateColumns: "repeat(auto-fill, minmax(320px, 350px))",
+    justifyContent: "center",
+    gap: "8px",
+    alignItems: "stretch",
+  };
+}
+
+function claimCardStyle(isMobile: boolean): CSSProperties {
+  if (isMobile) {
+    return cardButtonStyle;
+  }
+  return {
+    ...cardButtonStyle,
+    width: "100%",
+    maxWidth: "350px",
+    height: "250px",
+    alignSelf: "stretch",
+  };
+}
 
 function safeMoney(value?: number | string) {
   const amount = Number(value ?? 0);
