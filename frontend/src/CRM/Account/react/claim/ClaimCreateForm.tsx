@@ -69,8 +69,8 @@ export function ClaimCreateForm({
   onSubmit,
   onFilesChange,
 }: ClaimCreateFormProps) {
-  const hasReadableImage = state.files.some(isReadableBillImage);
-  const aiFillDisabled = !hasReadableImage || aiFilling || submitting;
+  const hasReadableFile = state.files.some(isReadableBillFile);
+  const aiFillDisabled = !hasReadableFile || aiFilling || submitting;
 
   return (
     <>
@@ -250,8 +250,12 @@ export function ClaimCreateForm({
   );
 }
 
-function isReadableBillImage(file: File) {
-  return file.type.startsWith("image/") || /\.(jpe?g|png|webp|bmp|tiff?)$/i.test(file.name);
+function isReadableBillFile(file: File) {
+  return (
+    file.type.startsWith("image/") ||
+    file.type === "application/pdf" ||
+    /\.(jpe?g|png|webp|bmp|tiff?|pdf)$/i.test(file.name)
+  );
 }
 
 function Field({ label, wide, children }: { label: string; wide?: boolean; children: ReactNode }) {

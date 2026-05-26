@@ -17,5 +17,6 @@ twilio
 flask_bcrypt
 gunicorn
 pypdf
+pypdfium2
 psutil
 pillow-heif

@@ -1,3 +1,4 @@
+import io
 import json
 import mimetypes
 import os
@@ -27,6 +28,10 @@ from models.user_data import Department
 READ_BILL_UPLOAD_URL = os.environ.get(
     "READ_BILL_UPLOAD_URL",
     "https://nginx.yihong1031.com/read_bill_api/upload",
+)
+READ_BILL_PARSE_TEXT_URL = os.environ.get(
+    "READ_BILL_PARSE_TEXT_URL",
+    READ_BILL_UPLOAD_URL.rstrip("/").removesuffix("/upload") + "/parse-text",
 )
 READ_BILL_ALLOWED_MODELS = {"auto", "byteplus", "local"}
 READ_BILL_IMAGE_EXTENSIONS = {".jpg", ".jpeg", ".png", ".webp", ".bmp", ".tif", ".tiff"}
@@ -93,6 +98,11 @@ def _is_read_bill_image(file_name, mime_type):
     return os.path.splitext(file_name or "")[1].lower() in READ_BILL_IMAGE_EXTENSIONS
 
 
+def _is_read_bill_pdf(file_name, mime_type):
+    normalized_mime = str(mime_type or "").split(";")[0].strip().lower()
+    return normalized_mime == "application/pdf" or os.path.splitext(file_name or "")[1].lower() == ".pdf"
+
+
 def _build_multipart_payload(fields, files):
     boundary = f"----XinyaReadBill{uuid.uuid4().hex}"
     chunks = []
@@ -131,28 +141,26 @@ def _extract_read_bill_error(payload, fallback):
     return fallback
 
 
-def read_bill_from_file(uploaded_file, model=None):
-    if not (uploaded_file and uploaded_file.filename):
-        raise ValidationError("请先选择图片附件")
+def _is_truthy_form_value(value):
+    return str(value or "").strip().lower() in {"1", "true", "yes", "on"}
 
-    selected_model = str(model or os.environ.get("READ_BILL_DEFAULT_MODEL") or "byteplus").strip().lower()
-    if selected_model not in READ_BILL_ALLOWED_MODELS:
-        raise ValidationError("AI 识别模型错误")
 
-    filename, _extension = _normalize_attachment_name(uploaded_file.filename, uploaded_file.mimetype)
-    if not _is_read_bill_image(filename, uploaded_file.mimetype):
-        raise ValidationError("AI fillin 只支持图片附件")
+def _build_read_bill_fields(model, debug=None, bypass=None):
+    form_fields = {"model": model}
+    if _is_truthy_form_value(debug):
+        form_fields["debug"] = "true"
+    if _is_truthy_form_value(bypass):
+        form_fields["bypass"] = "true"
+    return form_fields
 
-    content = uploaded_file.read()
-    if not content:
-        raise ValidationError("图片内容为空")
 
+def _request_read_bill_upload(filename, mimetype, content, form_fields):
     boundary, body = _build_multipart_payload(
-        {"model": selected_model},
+        form_fields,
         {
             "file": {
                 "filename": filename,
-                "content_type": uploaded_file.mimetype or "application/octet-stream",
+                "content_type": mimetype or "application/octet-stream",
                 "content": content,
             }
         },
@@ -192,6 +200,129 @@ def read_bill_from_file(uploaded_file, model=None):
         raise ValidationError(_extract_read_bill_error(payload, "AI fillin 失败"))
 
     return payload
+
+
+def _request_read_bill_parse_text(text, form_fields):
+    json_fields = dict(form_fields)
+    json_fields["text"] = text
+    body = json.dumps(json_fields, ensure_ascii=False).encode("utf-8")
+    request_obj = urllib.request.Request(
+        READ_BILL_PARSE_TEXT_URL,
+        data=body,
+        method="POST",
+        headers={
+            "Accept": "application/json",
+            "Content-Type": "application/json",
+            "User-Agent": "Mozilla/5.0 XinyaClaimAI/1.0",
+        },
+    )
+
+    try:
+        with urllib.request.urlopen(request_obj, timeout=60) as response:
+            response_text = response.read().decode("utf-8", errors="replace")
+    except urllib.error.HTTPError as exc:
+        response_text = exc.read().decode("utf-8", errors="replace")
+        try:
+            error_payload = json.loads(response_text)
+        except Exception:
+            error_payload = None
+        raise ValidationError(_extract_read_bill_error(error_payload, f"AI fillin 失败（{exc.code}）")) from exc
+    except urllib.error.URLError as exc:
+        raise ValidationError(f"AI fillin 服务暂时无法连接：{exc.reason}") from exc
+
+    try:
+        payload = json.loads(response_text)
+    except Exception as exc:
+        raise ValidationError("AI fillin 返回格式错误") from exc
+
+    if not isinstance(payload, dict):
+        raise ValidationError("AI fillin 返回格式错误")
+    if payload.get("success") is False or payload.get("status") == "error":
+        raise ValidationError(_extract_read_bill_error(payload, "AI fillin 失败"))
+
+    return payload
+
+
+def _extract_pdf_text(content):
+    try:
+        from pypdf import PdfReader
+
+        reader = PdfReader(io.BytesIO(content))
+        chunks = []
+        for index, page in enumerate(reader.pages):
+            if index >= 5:
+                break
+            chunks.append(page.extract_text() or "")
+        return "\n".join(chunks).strip()
+    except Exception:
+        return ""
+
+
+def _render_pdf_first_page_to_jpeg(content):
+    try:
+        import pypdfium2 as pdfium
+
+        pdf = pdfium.PdfDocument(content)
+        if len(pdf) <= 0:
+            raise ValidationError("PDF 内容为空")
+        page = pdf[0]
+        bitmap = page.render(scale=2)
+        image = bitmap.to_pil()
+        buffer = io.BytesIO()
+        image.convert("RGB").save(buffer, format="JPEG", quality=92)
+        return buffer.getvalue()
+    except ValidationError:
+        raise
+    except Exception:
+        pass
+
+    try:
+        from pdf2image import convert_from_bytes
+
+        pages = convert_from_bytes(content, dpi=200, first_page=1, last_page=1)
+    except Exception as exc:
+        raise ValidationError("PDF 无法转换成图片，请改上传图片格式收据") from exc
+
+    if not pages:
+        raise ValidationError("PDF 内容为空")
+
+    buffer = io.BytesIO()
+    pages[0].save(buffer, format="JPEG", quality=92)
+    return buffer.getvalue()
+
+
+def read_bill_from_file(uploaded_file, model=None, debug=None, bypass=None):
+    if not (uploaded_file and uploaded_file.filename):
+        raise ValidationError("请先选择图片或 PDF 附件")
+
+    selected_model = str(model or os.environ.get("READ_BILL_DEFAULT_MODEL") or "byteplus").strip().lower()
+    if selected_model not in READ_BILL_ALLOWED_MODELS:
+        raise ValidationError("AI 识别模型错误")
+
+    filename, _extension = _normalize_attachment_name(uploaded_file.filename, uploaded_file.mimetype)
+    is_pdf = _is_read_bill_pdf(filename, uploaded_file.mimetype)
+    if not (_is_read_bill_image(filename, uploaded_file.mimetype) or is_pdf):
+        raise ValidationError("AI fillin 只支持图片或 PDF 附件")
+
+    content = uploaded_file.read()
+    if not content:
+        raise ValidationError("文件内容为空")
+
+    form_fields = _build_read_bill_fields(selected_model, debug, bypass)
+
+    if is_pdf:
+        pdf_text = _extract_pdf_text(content)
+        if pdf_text:
+            try:
+                return _request_read_bill_parse_text(pdf_text, form_fields)
+            except ValidationError:
+                pass
+
+        image_content = _render_pdf_first_page_to_jpeg(content)
+        image_filename = f"{os.path.splitext(filename)[0] or 'receipt'}.jpg"
+        return _request_read_bill_upload(image_filename, "image/jpeg", image_content, form_fields)
+
+    return _request_read_bill_upload(filename, uploaded_file.mimetype, content, form_fields)
 
 
 def _parse_json_text(raw_value, field_name):

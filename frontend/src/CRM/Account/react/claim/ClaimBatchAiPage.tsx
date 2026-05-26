@@ -18,12 +18,13 @@ import {
   textareaStyle,
   wideFieldStyle,
 } from "./claimStyles";
-import { readClaimBill } from "./api";
+import { readClaimBill, submitClaim } from "./api";
 import type { AccountUser, ReadBillData, ReadBillUploadResponse } from "./types";
 import { showEventPicker, type EventPickerRecord } from "../../../shared/showEventPicker";
 
 type ClaimBatchAiPageProps = {
   onBack: () => void;
+  onSubmitted?: (result: { count: number; claimIds: number[] }) => void | Promise<void>;
 };
 
 type BatchAiClaimDraft = {
@@ -51,7 +52,7 @@ type BatchAiImageItem = {
   draft: BatchAiClaimDraft;
 };
 
-export function ClaimBatchAiPage({ onBack }: ClaimBatchAiPageProps) {
+export function ClaimBatchAiPage({ onBack, onSubmitted }: ClaimBatchAiPageProps) {
   const { user, isMobile } = useUserState();
   const accountUser = (user as AccountUser | null) ?? null;
   const inputRef = useRef<HTMLInputElement | null>(null);
@@ -62,6 +63,7 @@ export function ClaimBatchAiPage({ onBack }: ClaimBatchAiPageProps) {
   const [selectedEvent, setSelectedEvent] = useState<EventPickerRecord | null>(null);
   const [batchSubmitError, setBatchSubmitError] = useState("");
   const [batchSubmitting, setBatchSubmitting] = useState(false);
+  const [submitProgress, setSubmitProgress] = useState("");
   const [batchParsing, setBatchParsing] = useState(false);
   const previewItem = items.find((item) => item.id === previewItemId) ?? null;
   const infoItem = items.find((item) => item.id === infoItemId) ?? null;
@@ -89,7 +91,7 @@ export function ClaimBatchAiPage({ onBack }: ClaimBatchAiPageProps) {
   }, [previewItemId]);
 
   function handleChooseFiles(event: ChangeEvent<HTMLInputElement>) {
-    const files = Array.from(event.target.files || []).filter((file) => file.type.startsWith("image/"));
+    const files = Array.from(event.target.files || []).filter(isSupportedReceiptFile);
 
     previewUrlsRef.current.forEach((url) => URL.revokeObjectURL(url));
     previewUrlsRef.current = [];
@@ -141,7 +143,7 @@ export function ClaimBatchAiPage({ onBack }: ClaimBatchAiPageProps) {
     }
 
     if (!items.length) {
-      setBatchSubmitError("请先选择图片");
+      setBatchSubmitError("请先选择文件");
       return;
     }
 
@@ -154,12 +156,25 @@ export function ClaimBatchAiPage({ onBack }: ClaimBatchAiPageProps) {
       .map((item, index) => ({ index, amount: getDraftAmountNumber(item.draft) }))
       .filter((item) => item.amount <= 0);
     if (zeroAmountItems.length) {
-      setBatchSubmitError(`图片 ${zeroAmountItems.map((item) => item.index + 1).join("、")} 金额为 0，不能批量提交`);
+      setBatchSubmitError(`文件 ${zeroAmountItems.map((item) => item.index + 1).join("、")} 金额为 0，不能批量提交`);
+      return;
+    }
+
+    const missingItems = getMissingSubmitItems(items);
+    if (missingItems.length) {
+      setBatchSubmitError(
+        missingItems
+          .slice(0, 3)
+          .map((item) => `文件 ${item.index + 1} 缺少${item.fields.join("、")}`)
+          .join("；"),
+      );
       return;
     }
 
     setBatchSubmitError("");
     setBatchSubmitting(true);
+    setSubmitProgress("");
+    let submittedCount = 0;
     try {
       const sign = await render_sign_modal(null);
       if (!sign?.strokes?.length) {
@@ -176,23 +191,39 @@ export function ClaimBatchAiPage({ onBack }: ClaimBatchAiPageProps) {
         strokes: sign.strokes,
       };
 
-      console.log("batch-ai-submit", {
-        event: selectedEvent,
-        sign_json_data: signJsonData,
-        items: items.map((item, index) => ({
-          index,
-          file: item.file,
-          fileName: item.file.name,
-          parseResult: item.parseResult,
-          draft: item.draft,
-        })),
-      });
+      const claimIds: number[] = [];
+      for (const [index, item] of items.entries()) {
+        setSubmitProgress(`提交中 ${index + 1}/${items.length}`);
+        const formData = buildSubmitFormData(item, selectedEvent.id, signJsonData);
+        const result = await submitClaim(formData);
+        const claimId = Number(result.data?.id || result.request_id || 0);
+        submittedCount += 1;
+        if (claimId > 0) {
+          claimIds.push(claimId);
+        }
+      }
+
+      items.forEach((item) => URL.revokeObjectURL(item.previewUrl));
+      previewUrlsRef.current = [];
+      setItems([]);
+      setInfoItemId(null);
+      setPreviewItemId(null);
+      setSubmitProgress("");
+      if (onSubmitted) {
+        await onSubmitted({ count: items.length, claimIds });
+      } else {
+        onBack();
+      }
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "批量提交失败";
+      setBatchSubmitError(submittedCount ? `已提交 ${submittedCount}/${items.length}；${message}` : message);
     } finally {
       setBatchSubmitting(false);
+      setSubmitProgress("");
     }
   }
 
-  async function parseItem(item: BatchAiImageItem, index: number) {
+  async function parseItem(item: BatchAiImageItem, index: number, options: { debug?: boolean; bypass?: boolean } = {}) {
     setItems((prev) =>
       prev.map((current) =>
         current.id === item.id ? { ...current, parsing: true, parseError: "", parseResult: null } : current,
@@ -200,7 +231,7 @@ export function ClaimBatchAiPage({ onBack }: ClaimBatchAiPageProps) {
     );
 
     try {
-      const result = await readClaimBill(item.file);
+      const result = await readClaimBill(item.file, "byteplus", options);
       if (!result.data) {
         throw new Error("AI 没有返回识别结果");
       }
@@ -230,7 +261,16 @@ export function ClaimBatchAiPage({ onBack }: ClaimBatchAiPageProps) {
   }
 
   async function handleParseItem(item: BatchAiImageItem, index: number) {
-    await parseItem(item, index);
+    await parseItem(item, index, { debug: true });
+  }
+
+  async function handleProParseInfoItem() {
+    if (!infoItem) {
+      return;
+    }
+
+    const index = items.findIndex((item) => item.id === infoItem.id);
+    await parseItem(infoItem, index >= 0 ? index : 0, { debug: true, bypass: true });
   }
 
   async function handleBatchParse() {
@@ -282,7 +322,7 @@ export function ClaimBatchAiPage({ onBack }: ClaimBatchAiPageProps) {
         <input
           ref={inputRef}
           type="file"
-          accept="image/*"
+          accept="image/*,application/pdf"
           multiple
           style={{ display: "none" }}
           onChange={handleChooseFiles}
@@ -302,7 +342,7 @@ export function ClaimBatchAiPage({ onBack }: ClaimBatchAiPageProps) {
         <button type="button" style={buttonSecondaryStyle} onClick={() => void handlePickEvent()}>
           选择活动
         </button>
-        <span style={chipStyle}>已选择 {items.length} 张图片</span>
+        <span style={chipStyle}>已选择 {items.length} 个文件</span>
         <span style={chipStyle}>
           {selectedEvent ? `${selectedEvent.event_name || "未命名活动"} #${selectedEvent.id}` : "未选择活动"}
         </span>
@@ -332,24 +372,29 @@ export function ClaimBatchAiPage({ onBack }: ClaimBatchAiPageProps) {
                   style={imagePreviewButtonStyle}
                   onClick={() => setPreviewItemId(item.id)}
                 >
-                  <img src={item.previewUrl} alt={item.file.name} style={imageStyle} />
+                  {isPdfFile(item.file) ? (
+                    <div className="claim-batch-ai-page__pdf-thumb" style={pdfThumbStyle}>
+                      <i className="fa-regular fa-file-pdf" aria-hidden="true" style={pdfThumbIconStyle} />
+                      <span style={pdfThumbTextStyle}>PDF</span>
+                    </div>
+                  ) : (
+                    <img src={item.previewUrl} alt={item.file.name} style={imageStyle} />
+                  )}
                 </button>
                 <div className="claim-batch-ai-page__card-body" style={cardBodyStyle}>
                   <div className="claim-batch-ai-page__card-title" style={cardTitleStyle}>
-                    图片 {index + 1}
+                    文件 {index + 1}
                   </div>
                   <div className="claim-batch-ai-page__card-meta" style={cardMetaStyle}>
                     {item.file.name}
                   </div>
                   <div className="claim-batch-ai-page__card-meta" style={cardMetaStyle}>
+                    {formatReceiptFileKind(item.file)}
+                  </div>
+                  <div className="claim-batch-ai-page__card-meta" style={cardMetaStyle}>
                     {Math.round(item.file.size / 1024)} KB
                   </div>
                   {item.parsing ? <span style={chipStyle}>解析中…</span> : null}
-                  {!item.parsing && item.parseResult ? (
-                    <span style={{ ...chipStyle, color: "var(--x-color-success)" }}>
-                      已解析{formatConfidencePercent(item.parseResult.meta?.confidence) ? ` · Total 信心 ${formatConfidencePercent(item.parseResult.meta?.confidence)}` : ""}
-                    </span>
-                  ) : null}
                   {item.parseError ? (
                     <span style={{ ...chipStyle, color: "var(--x-color-danger)" }}>{item.parseError}</span>
                   ) : null}
@@ -375,7 +420,7 @@ export function ClaimBatchAiPage({ onBack }: ClaimBatchAiPageProps) {
                     </button>
                     <button type="button" style={infoButtonStyle} onClick={() => handleInfoItem(item, index)}>
                       <i className="fa-solid fa-circle-info" aria-hidden="true" />
-                      info
+                      信息
                     </button>
                   </div>
                 </div>
@@ -387,20 +432,42 @@ export function ClaimBatchAiPage({ onBack }: ClaimBatchAiPageProps) {
               <span>Grand Total RM</span>
               <strong>{formatMoney(sumDraftAmounts(items))}</strong>
             </div>
+            {batchSubmitting && submitProgress ? (
+              <span style={submitProgressChipStyle}>
+                <i className="fa-solid fa-spinner fa-spin" aria-hidden="true" />
+                {submitProgress}
+              </span>
+            ) : null}
             {batchSubmitError ? <span style={{ ...chipStyle, color: "var(--x-color-danger)" }}>{batchSubmitError}</span> : null}
             <button
               type="button"
-              style={disabledStyle(selectedEvent ? buttonPrimaryStyle : buttonSecondaryStyle, batchSubmitting)}
+              style={disabledStyle(
+                {
+                  ...(selectedEvent ? buttonPrimaryStyle : buttonSecondaryStyle),
+                  display: "inline-flex",
+                  alignItems: "center",
+                  justifyContent: "center",
+                  gap: "6px",
+                },
+                batchSubmitting,
+              )}
               onClick={() => void handleBatchSubmit()}
               disabled={batchSubmitting}
             >
-              {batchSubmitting ? "提交中…" : "批量提交"}
+              {batchSubmitting ? (
+                <>
+                  <i className="fa-solid fa-spinner fa-spin" aria-hidden="true" />
+                  {submitProgress || "提交中…"}
+                </>
+              ) : (
+                "批量提交"
+              )}
             </button>
           </div>
         </>
       ) : (
         <div className="claim-batch-ai-page__placeholder" style={placeholderStyle}>
-          请选择图片文件
+          请选择图片或 PDF 文件
         </div>
       )}
 
@@ -410,7 +477,11 @@ export function ClaimBatchAiPage({ onBack }: ClaimBatchAiPageProps) {
             <button type="button" aria-label="关闭预览" title="关闭预览" style={previewCloseButtonStyle} onClick={() => setPreviewItemId(null)}>
               X
             </button>
-            <img src={previewItem.previewUrl} alt={previewItem.file.name} style={previewImageStyle} />
+            {isPdfFile(previewItem.file) ? (
+              <iframe title={previewItem.file.name} src={previewItem.previewUrl} style={previewPdfStyle} />
+            ) : (
+              <img src={previewItem.previewUrl} alt={previewItem.file.name} style={previewImageStyle} />
+            )}
             <div className="claim-batch-ai-page__preview-name" style={previewNameStyle}>
               {previewItem.file.name}
             </div>
@@ -440,6 +511,16 @@ export function ClaimBatchAiPage({ onBack }: ClaimBatchAiPageProps) {
               ) : (
                 <span style={chipStyle}>尚未解析</span>
               )}
+              <button
+                type="button"
+                title="PRO BytePlus 解析"
+                style={disabledStyle(proParseButtonStyle, infoItem.parsing)}
+                onClick={() => void handleProParseInfoItem()}
+                disabled={infoItem.parsing}
+              >
+                <i className="fa-solid fa-wand-magic-sparkles" aria-hidden="true" />
+                {infoItem.parsing ? "PRO…" : "PRO"}
+              </button>
             </div>
 
             <div className="claim-batch-ai-page__info-grid" style={formGridStyle(isMobile)}>
@@ -566,6 +647,18 @@ export function ClaimBatchAiPage({ onBack }: ClaimBatchAiPageProps) {
 }
 
 const ACCT_DEPARTMENTS = ["法会", "心芽", "芽芽", "母会基建", "母会设备"];
+
+function isPdfFile(file: File) {
+  return file.type === "application/pdf" || /\.pdf$/i.test(file.name);
+}
+
+function isSupportedReceiptFile(file: File) {
+  return file.type.startsWith("image/") || isPdfFile(file) || /\.(jpe?g|png|webp|bmp|tiff?)$/i.test(file.name);
+}
+
+function formatReceiptFileKind(file: File) {
+  return isPdfFile(file) ? "PDF" : "图片";
+}
 
 function todayIsoDate() {
   const now = new Date();
@@ -819,6 +912,63 @@ function getDraftAmountNumber(draft: BatchAiClaimDraft) {
   return Number.isFinite(amount) ? amount : 0;
 }
 
+function getPurposeForSubmit(draft: BatchAiClaimDraft) {
+  const purpose = draft.purpose.trim();
+  return draft.acctDept ? `【做账分配：${draft.acctDept}】\n${purpose}` : purpose;
+}
+
+function getMissingSubmitItems(items: BatchAiImageItem[]) {
+  return items
+    .map((item, index) => {
+      const fields: string[] = [];
+      if (!item.draft.applicant_name.trim()) {
+        fields.push("姓名");
+      }
+      if (!item.draft.request_date) {
+        fields.push("日期");
+      }
+      if (getDraftAmountNumber(item.draft) <= 0) {
+        fields.push("金额");
+      }
+      if (!item.draft.department_name.trim()) {
+        fields.push("部门");
+      }
+      if (!item.draft.purpose.trim()) {
+        fields.push("用途说明");
+      }
+      return { index, fields };
+    })
+    .filter((item) => item.fields.length);
+}
+
+function appendTrimmed(formData: FormData, key: string, value: string) {
+  const text = value.trim();
+  if (text) {
+    formData.append(key, text);
+  }
+}
+
+function buildSubmitFormData(item: BatchAiImageItem, eventId: number, signJsonData: unknown) {
+  const formData = new FormData();
+  formData.append("sign_json_data", JSON.stringify(signJsonData));
+  formData.append("applicant_name", item.draft.applicant_name.trim());
+  formData.append("request_date", item.draft.request_date);
+  formData.append("amount", item.draft.amount);
+  formData.append("department_name", item.draft.department_name.trim());
+  formData.append("purpose", getPurposeForSubmit(item.draft));
+  formData.append("event_id", String(eventId));
+  appendTrimmed(formData, "ref1", item.draft.ref1);
+  appendTrimmed(formData, "ref2", item.draft.ref2);
+  appendTrimmed(formData, "vendor_name", item.draft.vendor_name);
+  appendTrimmed(formData, "vendor_address", item.draft.vendor_address);
+  appendTrimmed(formData, "vendor_contact_number", item.draft.vendor_contact_number);
+  if (item.draft.purchase_datetime) {
+    formData.append("purchase_datetime", item.draft.purchase_datetime);
+  }
+  formData.append("files", item.file);
+  return formData;
+}
+
 function formatMoney(value: number) {
   return Number.isFinite(value) ? value.toFixed(2) : "0.00";
 }
@@ -831,7 +981,7 @@ function ConfidenceMeter({ value }: { value: unknown }) {
   return (
     <div className="claim-batch-ai-page__confidence" style={confidenceStyle}>
       <div style={summaryLineStyle}>
-        <span style={summaryLabelStyle}>Total 信心</span>
+        <span style={summaryLabelStyle}>信心</span>
         <span style={summaryValueStyle}>{percent}%</span>
       </div>
       <div style={confidenceTrackStyle}>
@@ -911,6 +1061,8 @@ const imagePreviewButtonStyle: CSSProperties = {
   padding: 0,
   border: "none",
   cursor: "zoom-in",
+  display: "grid",
+  placeItems: "center",
 };
 
 const imageStyle: CSSProperties = {
@@ -918,6 +1070,27 @@ const imageStyle: CSSProperties = {
   width: "100%",
   height: "100%",
   objectFit: "cover",
+};
+
+const pdfThumbStyle: CSSProperties = {
+  width: "100%",
+  height: "100%",
+  display: "grid",
+  placeItems: "center",
+  gap: "6px",
+  alignContent: "center",
+  background: "linear-gradient(135deg, rgba(220,38,38,0.08), rgba(37,99,235,0.08))",
+  color: "#991b1b",
+};
+
+const pdfThumbIconStyle: CSSProperties = {
+  fontSize: "34px",
+};
+
+const pdfThumbTextStyle: CSSProperties = {
+  fontSize: "12px",
+  fontWeight: 900,
+  letterSpacing: 0,
 };
 
 const removeButtonStyle: CSSProperties = {
@@ -1037,6 +1210,14 @@ const grandTotalCopyStyle: CSSProperties = {
   gap: "8px",
 };
 
+const submitProgressChipStyle: CSSProperties = {
+  ...chipStyle,
+  color: "var(--x-color-accent)",
+  borderColor: "rgba(37,99,235,0.28)",
+  background: "rgba(37,99,235,0.08)",
+  fontWeight: 800,
+};
+
 const cardActionRowStyle: CSSProperties = {
   display: "grid",
   gridTemplateColumns: "1fr auto",
@@ -1075,6 +1256,21 @@ const batchParseButtonStyle: CSSProperties = {
   fontSize: "13px",
   fontWeight: 800,
   boxShadow: "0 6px 14px rgba(37,99,235,0.22)",
+};
+
+const proParseButtonStyle: CSSProperties = {
+  border: "1px solid rgba(124,58,237,0.28)",
+  borderRadius: "999px",
+  padding: "5px 8px",
+  background: "linear-gradient(135deg, rgba(37,99,235,0.12), rgba(124,58,237,0.16))",
+  color: "#5b21b6",
+  cursor: "pointer",
+  display: "inline-flex",
+  alignItems: "center",
+  justifyContent: "center",
+  gap: "5px",
+  fontSize: "11px",
+  fontWeight: 900,
 };
 
 const infoButtonStyle: CSSProperties = {
@@ -1118,6 +1314,14 @@ const previewImageStyle: CSSProperties = {
   width: "100%",
   maxHeight: "calc(100dvh - 90px)",
   objectFit: "contain",
+  borderRadius: "6px",
+  background: "#fff",
+};
+
+const previewPdfStyle: CSSProperties = {
+  width: "min(100%, 980px)",
+  height: "calc(100dvh - 90px)",
+  border: "none",
   borderRadius: "6px",
   background: "#fff",
 };

@@ -58,8 +58,12 @@ function buildInitialCreateState(user: AccountUser | null): CreateState {
   };
 }
 
-function isReadableBillImage(file: File) {
-  return file.type.startsWith("image/") || /\.(jpe?g|png|webp|bmp|tiff?)$/i.test(file.name);
+function isReadableBillFile(file: File) {
+  return (
+    file.type.startsWith("image/") ||
+    file.type === "application/pdf" ||
+    /\.(jpe?g|png|webp|bmp|tiff?|pdf)$/i.test(file.name)
+  );
 }
 
 function stringValue(value: unknown) {
@@ -385,9 +389,9 @@ export function ClaimWorkspace() {
       return;
     }
 
-    const receiptFile = createState.files.find(isReadableBillImage);
+    const receiptFile = createState.files.find(isReadableBillFile);
     if (!receiptFile) {
-      setError("请先上传一张图片附件");
+      setError("请先上传图片或 PDF 附件");
       return;
     }
 
@@ -725,7 +729,19 @@ export function ClaimWorkspace() {
         />
       ) : null}
 
-      {view.kind === "batchAi" ? <ClaimBatchAiPage onBack={() => setView({ kind: "list" })} /> : null}
+      {view.kind === "batchAi" ? (
+        <ClaimBatchAiPage
+          onBack={() => setView({ kind: "list" })}
+          onSubmitted={async (result) => {
+            await loadClaims();
+            setError(null);
+            setView({ kind: "list" });
+            setMessage(
+              `批量提交成功：${result.count} 个文件${result.claimIds.length ? `，单号 ${result.claimIds.map((id) => `#${id}`).join("、")}` : ""}`,
+            );
+          }}
+        />
+      ) : null}
 
       {view.kind === "create" ? (
         <ClaimCreateForm

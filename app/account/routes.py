@@ -82,7 +82,12 @@ def get_all_claim():
 def read_claim_bill():
     try:
         require_claim_submit_permission()
-        payload = read_bill_from_file(request.files.get("file"), request.form.get("model"))
+        payload = read_bill_from_file(
+            request.files.get("file"),
+            request.form.get("model"),
+            request.form.get("debug"),
+            request.form.get("bypass"),
+        )
         return jsonify({"status": "success", **payload}), 200
     except AccountError as exc:
         return _error_response(exc)

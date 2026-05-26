@@ -28,13 +28,23 @@ export async function submitClaim(formData: FormData) {
     body: formData,
     credentials: "include",
   });
-  return parseJson<{ request_id?: number }>(response);
+  return parseJson<{ request_id?: number; data?: ClaimRecord }>(response);
 }
 
-export async function readClaimBill(file: File, model = "byteplus") {
+export async function readClaimBill(
+  file: File,
+  model = "byteplus",
+  options: { debug?: boolean; bypass?: boolean } = {},
+) {
   const formData = new FormData();
   formData.append("file", file);
   formData.append("model", model);
+  if (options.debug) {
+    formData.append("debug", "true");
+  }
+  if (options.bypass) {
+    formData.append("bypass", "true");
+  }
   const response = await apiFetch("/api/account/claim/read_bill", {
     method: "POST",
     body: formData,
