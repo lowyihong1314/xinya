@@ -74,6 +74,20 @@ export async function deleteClaim(requestId: number) {
   return parseJson<{ status?: string; message?: string }>(response);
 }
 
+export async function downloadClaimReport(claimIds: number[]) {
+  const response = await apiFetch("/api/account/claim/report", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    credentials: "include",
+    body: JSON.stringify({ claim_ids: claimIds }),
+  });
+  if (!response.ok) {
+    const data = (await response.json().catch(() => ({}))) as { error?: string; message?: string };
+    throw new Error(data.error || data.message || "导出 Report 失败");
+  }
+  return response.blob();
+}
+
 export async function deleteClaimAttachment(attachmentId: number) {
   const response = await apiFetch(`/api/account/claim/attachments/${attachmentId}`, {
     method: "DELETE",

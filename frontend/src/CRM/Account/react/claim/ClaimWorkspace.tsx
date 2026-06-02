@@ -5,7 +5,7 @@ import { useUserState } from "../../../../app/UserState";
 import { showConfirmDialog, showPromptDialog } from "../../../../js/dialogs";
 import { showEventPicker } from "../../../shared/showEventPicker";
 import { render_sign_modal } from "../../../../../../static/js/sign_tools.js";
-import { decideClaim, deleteClaim, fetchClaims, readClaimBill, submitClaim } from "./api";
+import { decideClaim, deleteClaim, downloadClaimReport, fetchClaims, readClaimBill, submitClaim } from "./api";
 import { ClaimBatchAiPage } from "./ClaimBatchAiPage";
 import { ClaimCreateForm, type CreateState } from "./ClaimCreateForm";
 import { ClaimDetail } from "./ClaimDetail";
@@ -243,6 +243,9 @@ export function ClaimWorkspace() {
   const [query, setQuery] = useState("");
   const [statusFilter, setStatusFilter] = useState<ClaimStatusFilter>("all");
   const [page, setPage] = useState(1);
+  const [selectedClaimIds, setSelectedClaimIds] = useState<Set<number>>(() => new Set());
+  const [exportingSelected, setExportingSelected] = useState(false);
+  const [exportingReport, setExportingReport] = useState(false);
 
   useEffect(() => {
     const nextInitial = buildInitialCreateState(accountUser);
@@ -261,6 +264,22 @@ export function ClaimWorkspace() {
   useEffect(() => {
     setPage(1);
   }, [query, statusFilter]);
+
+  useEffect(() => {
+    const validClaimIds = new Set(claims.map((claim) => claim.id));
+    setSelectedClaimIds((prev) => {
+      let changed = false;
+      const next = new Set<number>();
+      prev.forEach((claimId) => {
+        if (validClaimIds.has(claimId)) {
+          next.add(claimId);
+        } else {
+          changed = true;
+        }
+      });
+      return changed ? next : prev;
+    });
+  }, [claims]);
 
   useEffect(() => {
     if (!message && !error) {
@@ -673,6 +692,78 @@ export function ClaimWorkspace() {
     setError(null);
   }
 
+  function handleToggleClaimSelected(claimId: number, selected: boolean) {
+    setSelectedClaimIds((prev) => {
+      const next = new Set(prev);
+      if (selected) {
+        next.add(claimId);
+      } else {
+        next.delete(claimId);
+      }
+      return next;
+    });
+  }
+
+  function handleSelectPagedClaims() {
+    if (!pagedClaims.length) {
+      return;
+    }
+    setSelectedClaimIds((prev) => {
+      const next = new Set(prev);
+      pagedClaims.forEach((claim) => next.add(claim.id));
+      return next;
+    });
+  }
+
+  function handleClearSelectedClaims() {
+    setSelectedClaimIds(new Set());
+  }
+
+  async function handleDownloadSelectedClaims() {
+    const selectedClaims = claims
+      .filter((claim) => selectedClaimIds.has(claim.id))
+      .sort((left, right) => right.id - left.id);
+
+    if (!selectedClaims.length) {
+      setError("请先选择要下载的报销申请");
+      return;
+    }
+
+    setError(null);
+    setExportingSelected(true);
+    try {
+      await exportClaimsToExcel(selectedClaims);
+      setMessage(`已下载 ${selectedClaims.length} 笔报销申请 XLSX`);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "下载 XLSX 失败");
+    } finally {
+      setExportingSelected(false);
+    }
+  }
+
+  async function handleDownloadSelectedReport() {
+    const selectedClaims = claims
+      .filter((claim) => selectedClaimIds.has(claim.id))
+      .sort((left, right) => right.id - left.id);
+
+    if (!selectedClaims.length) {
+      setError("请先选择要导出 Report 的报销申请");
+      return;
+    }
+
+    setError(null);
+    setExportingReport(true);
+    try {
+      const blob = await downloadClaimReport(selectedClaims.map((claim) => claim.id));
+      downloadBlob(blob, `报销申请_Report_${todayFilenameDate()}_${selectedClaims.length}笔.pdf`);
+      setMessage(`已导出 ${selectedClaims.length} 笔报销申请 Report`);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "导出 Report 失败");
+    } finally {
+      setExportingReport(false);
+    }
+  }
+
   return (
     <>
       {message ? (
@@ -708,6 +799,15 @@ export function ClaimWorkspace() {
           pageSize={pageSize}
           onPageChange={setPage}
           onOpen={(claimId) => setView({ kind: "detail", claimId })}
+          selectedClaimIds={selectedClaimIds}
+          selectedCount={selectedClaimIds.size}
+          exportingSelected={exportingSelected}
+          exportingReport={exportingReport}
+          onToggleClaimSelected={handleToggleClaimSelected}
+          onSelectPageClaims={handleSelectPagedClaims}
+          onClearSelectedClaims={handleClearSelectedClaims}
+          onDownloadSelectedClaims={() => void handleDownloadSelectedClaims()}
+          onDownloadSelectedReport={() => void handleDownloadSelectedReport()}
           scopeLabel={canViewAll || canReadAllClaims ? "范围：全部申请" : "范围：我的申请"}
           onRefresh={() => void loadClaims()}
           canCreate={canSubmitClaims}
@@ -797,4 +897,90 @@ function statusTextForFilter(status: string) {
     return "已拒绝";
   }
   return "待处理";
+}
+
+function formatExportMoney(value?: number | string) {
+  const amount = Number(value ?? "");
+  return Number.isFinite(amount) ? Number(amount.toFixed(2)) : "";
+}
+
+function formatExportDateTime(value?: string | null) {
+  if (!value) {
+    return "";
+  }
+  return value.replace("T", " ").slice(0, 16);
+}
+
+function formatAttachmentNames(claim: ClaimRecord) {
+  return (claim.attachments || [])
+    .map((attachment) => attachment.file_name || attachment.file_path.split(/[\\/]/).pop() || attachment.file_path)
+    .filter(Boolean)
+    .join(" | ");
+}
+
+function formatApproverSummary(claim: ClaimRecord) {
+  return (claim.approver_data || [])
+    .map((approver) =>
+      [
+        approver.reject ? "拒绝" : "批准",
+        `用户 #${approver.user_id}`,
+        approver.decided_at ? formatExportDateTime(approver.decided_at) : "",
+      ]
+        .filter(Boolean)
+        .join(" "),
+    )
+    .join(" | ");
+}
+
+function todayFilenameDate() {
+  const now = new Date();
+  const yyyy = now.getFullYear();
+  const mm = String(now.getMonth() + 1).padStart(2, "0");
+  const dd = String(now.getDate()).padStart(2, "0");
+  return `${yyyy}${mm}${dd}`;
+}
+
+function downloadBlob(blob: Blob, filename: string) {
+  const url = window.URL.createObjectURL(blob);
+  const link = document.createElement("a");
+  link.href = url;
+  link.download = filename;
+  document.body.appendChild(link);
+  link.click();
+  link.remove();
+  window.URL.revokeObjectURL(url);
+}
+
+async function exportClaimsToExcel(claims: ClaimRecord[]) {
+  const XLSX = await import("xlsx");
+  const rows = claims.map((claim) => {
+    const claimStatus = getClaimStatusForFilter(claim);
+    return {
+      单号: claim.id,
+      状态: statusTextForFilter(claimStatus),
+      申请人: claim.applicant_name || "",
+      金额: formatExportMoney(claim.amount),
+      申请日期: claim.request_date || "",
+      部门: claim.department_name || "",
+      用途: claim.purpose || "",
+      Ref1: claim.ref1 || "",
+      Ref2: claim.ref2 || "",
+      商家名称: claim.vendor_name || "",
+      商家地址: claim.vendor_address || "",
+      商家联络号码: claim.vendor_contact_number || "",
+      采购日期: formatExportDateTime(claim.purchase_datetime),
+      活动ID: claim.event_id || "",
+      活动名称: claim.event_name || "",
+      附件数量: (claim.attachments || []).length,
+      附件名称: formatAttachmentNames(claim),
+      审批记录: formatApproverSummary(claim),
+      创建时间: formatExportDateTime(claim.created_at),
+      更新时间: formatExportDateTime(claim.updated_at),
+    };
+  });
+
+  const workbook = XLSX.utils.book_new();
+  const sheet = XLSX.utils.json_to_sheet(rows);
+  XLSX.utils.book_append_sheet(workbook, sheet, "Claims");
+  XLSX.writeFile(workbook, `报销申请_${todayFilenameDate()}_${claims.length}笔.xlsx`);
 }

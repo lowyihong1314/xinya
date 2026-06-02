@@ -10,7 +10,6 @@ import {
   cardButtonStyle,
   cardMetaStyle,
   cardTitleStyle,
-  cardTopStyle,
   chipRowStyle,
   listStyle,
   paginationRowStyle,
@@ -38,6 +37,15 @@ type ClaimListProps = {
   pageSize: number;
   onPageChange: (page: number) => void;
   onOpen: (claimId: number) => void;
+  selectedClaimIds: Set<number>;
+  selectedCount: number;
+  exportingSelected: boolean;
+  exportingReport: boolean;
+  onToggleClaimSelected: (claimId: number, selected: boolean) => void;
+  onSelectPageClaims: () => void;
+  onClearSelectedClaims: () => void;
+  onDownloadSelectedClaims: () => void;
+  onDownloadSelectedReport: () => void;
   scopeLabel: string;
   onRefresh: () => void;
   onCreate: () => void;
@@ -59,6 +67,15 @@ export function ClaimList({
   pageSize,
   onPageChange,
   onOpen,
+  selectedClaimIds,
+  selectedCount,
+  exportingSelected,
+  exportingReport,
+  onToggleClaimSelected,
+  onSelectPageClaims,
+  onClearSelectedClaims,
+  onDownloadSelectedClaims,
+  onDownloadSelectedReport,
   scopeLabel,
   onRefresh,
   onCreate,
@@ -69,6 +86,7 @@ export function ClaimList({
   const [approverLoadError, setApproverLoadError] = useState("");
   const [resultMaxHeight, setResultMaxHeight] = useState("calc(100dvh - 160px)");
   const resultContainerRef = useRef<HTMLDivElement | null>(null);
+  const allVisibleSelected = claims.length > 0 && claims.every((claim) => selectedClaimIds.has(claim.id));
 
   useEffect(() => {
     const approverIds = Array.from(
@@ -195,6 +213,39 @@ export function ClaimList({
           <div className="claim-list__pagination claim-list__pagination--top" style={paginationRowTopStyle}>
             <div className="claim-list__pagination-actions" style={paginationActionsStyle}>
               <span style={chipStyle}>{scopeLabel}</span>
+              <span style={chipStyle}>共 {total} 笔 · 已选 {selectedCount}</span>
+              <button
+                type="button"
+                style={disabledButtonStyle(buttonSecondaryStyle, !claims.length || allVisibleSelected)}
+                onClick={onSelectPageClaims}
+                disabled={!claims.length || allVisibleSelected}
+              >
+                {allVisibleSelected ? "本页已选" : "选择本页"}
+              </button>
+              <button
+                type="button"
+                style={disabledButtonStyle(buttonGhostStyle, selectedCount <= 0)}
+                onClick={onClearSelectedClaims}
+                disabled={selectedCount <= 0}
+              >
+                清空选择
+              </button>
+              <button
+                type="button"
+                style={disabledButtonStyle(buttonPrimaryStyle, selectedCount <= 0 || exportingSelected)}
+                onClick={onDownloadSelectedClaims}
+                disabled={selectedCount <= 0 || exportingSelected}
+              >
+                {exportingSelected ? "生成中…" : "下载XLSX"}
+              </button>
+              <button
+                type="button"
+                style={disabledButtonStyle(buttonSecondaryStyle, selectedCount <= 0 || exportingReport)}
+                onClick={onDownloadSelectedReport}
+                disabled={selectedCount <= 0 || exportingReport}
+              >
+                {exportingReport ? "生成Report…" : "导出Report"}
+              </button>
 
               {canCreate ? (
                 <>
@@ -236,46 +287,70 @@ export function ClaimList({
             style={{ ...resultContainerStyle, maxHeight: resultMaxHeight }}
           >
             <div className="claim-list__cards" style={claimListStyle(isMobile)}>
-              {claims.map((claim) => (
-                <button key={claim.id} type="button" style={claimCardStyle(isMobile)} onClick={() => onOpen(claim.id)}>
-                  <div className="claim-list__card-top" style={cardTopStyle}>
-                    <div className="claim-list__card-head">
-                      <div className="claim-list__card-title" style={cardTitleStyle}>
-                        {claim.applicant_name || "未填姓名"} · RM {safeMoney(claim.amount)}
+              {claims.map((claim) => {
+                const claimStatus = getClaimStatus(claim);
+                const selected = selectedClaimIds.has(claim.id);
+                return (
+                  <div key={claim.id} className="claim-list__card" style={claimCardShellStyle(isMobile, selected)}>
+                    <div className="claim-list__card-select-row" style={cardSelectRowStyle}>
+                      <label className="claim-list__card-select" style={cardSelectLabelStyle}>
+                        <input
+                          type="checkbox"
+                          checked={selected}
+                          onChange={(event) => onToggleClaimSelected(claim.id, event.target.checked)}
+                          style={cardSelectInputStyle}
+                        />
+                        <span>选择</span>
+                      </label>
+                      <div className="claim-list__card-status" style={statusBadgeStyle(claimStatus)}>
+                        {statusText(claimStatus)}
                       </div>
-                      <div className="claim-list__card-meta" style={cardMetaStyle}>
-                        单号 #{claim.id} | 日期：{claim.request_date || "-"} | 部门：
-                        {claim.department_name || "-"}
+                    </div>
+                    <button
+                      type="button"
+                      className="claim-list__card-open"
+                      style={claimCardOpenStyle}
+                      onClick={() => onOpen(claim.id)}
+                    >
+                      <div className="claim-list__card-head">
+                        <div className="claim-list__card-title" style={cardTitleStyle}>
+                          {claim.applicant_name || "未填姓名"} · RM {safeMoney(claim.amount)}
+                        </div>
+                        <div className="claim-list__card-meta" style={cardMetaStyle}>
+                          单号 #{claim.id} | 日期：{claim.request_date || "-"} | 部门：
+                          {claim.department_name || "-"}
+                        </div>
                       </div>
-                    </div>
-                    <div className="claim-list__card-status" style={statusBadgeStyle(getClaimStatus(claim))}>
-                      {statusText(getClaimStatus(claim))}
-                    </div>
+                      {claim.purpose ? (
+                        <div className="claim-list__card-body" style={cardBodyStyle}>
+                          {claim.purpose}
+                        </div>
+                      ) : null}
+                      <div className="claim-list__card-chips" style={chipRowStyle}>
+                        <span style={chipStyle}>附件 {(claim.attachments || []).length}</span>
+                        {claim.event_id ? <span style={chipStyle}>活动 #{claim.event_id}</span> : null}
+                        <span style={chipStyle}>创建 {formatDateTime(claim.created_at)}</span>
+                      </div>
+                      {claim.approver_data?.length ? (
+                        <div className="claim-list__approvers" style={chipRowStyle}>
+                          {claim.approver_data.map((approver) => (
+                            <span
+                              key={`${claim.id}-${approver.user_id}-${approver.decided_at || ""}`}
+                              style={{
+                                ...chipStyle,
+                                color: approver.reject ? "var(--x-color-danger)" : "var(--x-color-success)",
+                              }}
+                            >
+                              {approver.reject ? "拒" : "批"}
+                              {resolveApproverName(approver.user_id, approverUsers)}
+                            </span>
+                          ))}
+                        </div>
+                      ) : null}
+                    </button>
                   </div>
-                  {claim.purpose ? <div className="claim-list__card-body" style={cardBodyStyle}>{claim.purpose}</div> : null}
-                  <div className="claim-list__card-chips" style={chipRowStyle}>
-                    <span style={chipStyle}>附件 {(claim.attachments || []).length}</span>
-                    {claim.event_id ? <span style={chipStyle}>活动 #{claim.event_id}</span> : null}
-                    <span style={chipStyle}>创建 {formatDateTime(claim.created_at)}</span>
-                  </div>
-                  {claim.approver_data?.length ? (
-                    <div className="claim-list__approvers" style={chipRowStyle}>
-                      {claim.approver_data.map((approver) => (
-                        <span
-                          key={`${claim.id}-${approver.user_id}-${approver.decided_at || ""}`}
-                          style={{
-                            ...chipStyle,
-                            color: approver.reject ? "var(--x-color-danger)" : "var(--x-color-success)",
-                          }}
-                        >
-                          {approver.reject ? "拒" : "批"}
-                          {resolveApproverName(approver.user_id, approverUsers)}
-                        </span>
-                      ))}
-                    </div>
-                  ) : null}
-                </button>
-              ))}
+                );
+              })}
             </div>
           </div>
         </>
@@ -288,6 +363,10 @@ const statusFilterSelectStyle = {
   ...searchInputStyle,
   width: "150px",
 } satisfies CSSProperties;
+
+function disabledButtonStyle(style: CSSProperties, disabled: boolean): CSSProperties {
+  return disabled ? { ...style, opacity: 0.55, cursor: "not-allowed" } : style;
+}
 
 function claimListStyle(isMobile: boolean): CSSProperties {
   if (isMobile) {
@@ -316,6 +395,55 @@ function claimCardStyle(isMobile: boolean): CSSProperties {
     alignSelf: "stretch",
   };
 }
+
+function claimCardShellStyle(isMobile: boolean, selected: boolean): CSSProperties {
+  const base = claimCardStyle(isMobile);
+  return {
+    ...base,
+    cursor: "default",
+    border: selected ? "1px solid var(--x-color-accent)" : base.border,
+    boxShadow: selected ? "0 0 0 1px var(--x-color-accent)" : "none",
+  };
+}
+
+const cardSelectRowStyle: CSSProperties = {
+  display: "flex",
+  justifyContent: "space-between",
+  minWidth: 0,
+  gap: "8px",
+  alignItems: "center",
+};
+
+const cardSelectLabelStyle: CSSProperties = {
+  display: "inline-flex",
+  alignItems: "center",
+  gap: "6px",
+  minHeight: "26px",
+  fontSize: "12px",
+  fontWeight: 700,
+  color: "var(--x-color-ink-muted)",
+  cursor: "pointer",
+};
+
+const cardSelectInputStyle: CSSProperties = {
+  width: "16px",
+  height: "16px",
+  margin: 0,
+  accentColor: "var(--x-color-accent)",
+};
+
+const claimCardOpenStyle: CSSProperties = {
+  width: "100%",
+  minWidth: 0,
+  border: "none",
+  padding: 0,
+  background: "transparent",
+  color: "inherit",
+  textAlign: "left",
+  cursor: "pointer",
+  display: "grid",
+  gap: "7px",
+};
 
 function safeMoney(value?: number | string) {
   const amount = Number(value ?? 0);

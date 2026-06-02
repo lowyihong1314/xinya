@@ -569,6 +569,37 @@ def list_claims_for_user(user):
     }
 
 
+def build_claim_report_context(claim_ids, user):
+    normalized_ids = []
+    seen_ids = set()
+    for raw_id in claim_ids or []:
+        try:
+            claim_id = int(raw_id)
+        except Exception as exc:
+            raise ValidationError("报销申请单号格式错误") from exc
+        if claim_id <= 0 or claim_id in seen_ids:
+            continue
+        normalized_ids.append(claim_id)
+        seen_ids.add(claim_id)
+
+    if not normalized_ids:
+        raise ValidationError("请先选择要导出的报销申请")
+    if len(normalized_ids) > 100:
+        raise ValidationError("一次最多导出 100 笔报销申请")
+
+    query = ReimbursementRequest.query.filter(ReimbursementRequest.id.in_(normalized_ids))
+    if not user_can_read_all_claims(user):
+        query = query.filter(ReimbursementRequest.applicant_user_id == user.id)
+
+    request_map = {request_obj.id: request_obj for request_obj in query.all()}
+    missing_ids = [claim_id for claim_id in normalized_ids if claim_id not in request_map]
+    if missing_ids:
+        raise PermissionDenied("部分报销申请不存在或没有权限导出")
+
+    requests = [request_map[claim_id] for claim_id in normalized_ids]
+    return [serialize_request_data(request_obj, with_children=True) for request_obj in requests]
+
+
 def record_claim_decision(request_id, payload, user):
     request_obj = _get_claim_or_raise(request_id)
     action = (payload.get("action") or "").strip().lower()
