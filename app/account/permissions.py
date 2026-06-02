@@ -18,7 +18,7 @@ def resolve_user_permissions(user):
 
 
 def user_can_submit_claims(user):
-    return "account_submit" in resolve_user_permissions(user)
+    return "account_submit_claim" in resolve_user_permissions(user)
 
 
 def user_can_read_all_claims(user):
@@ -28,7 +28,7 @@ def user_can_read_all_claims(user):
 
 def user_can_list_claims(user):
     permissions = resolve_user_permissions(user)
-    return any(permission in permissions for permission in {"account_submit", "account_read", "account_edit"})
+    return any(permission in permissions for permission in {"account_submit_claim", "account_read", "account_edit"})
 
 
 def user_can_manage_claims(user):
@@ -38,7 +38,7 @@ def user_can_manage_claims(user):
 def require_claim_submit_permission():
     user = require_authenticated_user()
     if not user_can_submit_claims(user):
-        raise PermissionDenied("没有 account_submit 权限")
+        raise PermissionDenied("没有 account_submit_claim 权限")
     return user
 
 

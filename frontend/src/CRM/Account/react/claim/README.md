@@ -30,7 +30,7 @@
 
 - Creating a claim requires applicant name, request date, amount, department, purpose, and a handwritten signature.
 - Claims can optionally link a CRM event through `showEventPicker`.
-- Claim actions are split by department permissions: `account_submit` can create, `account_read` can view all claims, and `account_edit` can approve/reject/delete.
+- Claim actions are split by department permissions: `account_submit_claim` can create, `account_read` can view all claims, and `account_edit` can approve/reject/delete.
 - Payment voucher actions are only exposed when the current user is eligible through approval state or finance permission.
 
 ## Upgrade notes

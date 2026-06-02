@@ -12,7 +12,8 @@ CHANGYOU_ROOM_CONTROL_PERMISSION = "changyou_contorl"
 permission_names = [
     "department",
     "department_edit",
-    "account_submit",
+    "account_submit_claim",
+    "account_submit_income",
     "account_read",
     "account_edit",
     "asset_read",

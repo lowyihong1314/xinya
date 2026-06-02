@@ -4,12 +4,14 @@ import android.app.Notification;
 import android.app.NotificationChannel;
 import android.app.NotificationManager;
 import android.app.PendingIntent;
-import android.app.Service;
 import android.content.Intent;
+import android.content.SharedPreferences;
 import android.graphics.Bitmap;
 import android.graphics.BitmapFactory;
+import android.net.Uri;
 import android.os.Binder;
 import android.os.Build;
+import android.os.Bundle;
 import android.os.Handler;
 import android.os.IBinder;
 import android.os.Looper;
@@ -17,8 +19,11 @@ import android.util.Log;
 import android.webkit.CookieManager;
 
 import androidx.core.app.NotificationCompat;
+import androidx.media.MediaBrowserServiceCompat;
 import androidx.media.session.MediaButtonReceiver;
 
+import android.support.v4.media.MediaBrowserCompat;
+import android.support.v4.media.MediaDescriptionCompat;
 import android.support.v4.media.MediaMetadataCompat;
 import android.support.v4.media.session.MediaSessionCompat;
 import android.support.v4.media.session.PlaybackStateCompat;
@@ -34,10 +39,20 @@ import com.google.android.exoplayer2.source.ProgressiveMediaSource;
 import com.google.android.exoplayer2.upstream.DefaultDataSource;
 import com.google.android.exoplayer2.upstream.DefaultHttpDataSource;
 
+import org.json.JSONArray;
+import org.json.JSONObject;
+
+import java.io.BufferedReader;
+import java.io.File;
+import java.io.FileInputStream;
+import java.io.FileOutputStream;
 import java.io.IOException;
 import java.io.InputStream;
+import java.io.InputStreamReader;
+import java.io.OutputStreamWriter;
 import java.net.HttpURLConnection;
 import java.net.URL;
+import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
@@ -46,12 +61,23 @@ import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.FutureTask;
 
-public class MusicService extends Service {
+public class MusicService extends MediaBrowserServiceCompat {
 
     private static final String CHANNEL_ID = "xinya_music";
     private static final int NOTIFICATION_ID = 1042;
     private static final String TAG = "MusicService";
     private static final String DEFAULT_ALBUM_LABEL = "全部歌曲";
+    private static final String DEFAULT_AUTO_BASE_URL = "https://utbabuddha.com";
+    private static final String PREFS_NAME = "xinya_music_service";
+    private static final String PREF_BASE_URL = "base_url";
+    private static final String CATALOG_FILE_NAME = "music_catalog.json";
+    private static final long CATALOG_CACHE_TTL_MS = 10 * 60 * 1000L;
+    private static final String MEDIA_ROOT = "root";
+    private static final String MEDIA_ALL = "all";
+    private static final String MEDIA_ALBUMS = "albums";
+    private static final String MEDIA_ALBUM_PREFIX = "album:";
+    private static final String MEDIA_MUSIC_PREFIX = "music:";
+    private static final String MEDIA_ALBUM_TRACK_PREFIX = "albumtrack:";
 
     // Album art target size — Samsung One UI reliably displays up to 512×512.
     private static final int ART_MAX_PX = 512;
@@ -97,12 +123,18 @@ public class MusicService extends Service {
     private int currentTrackId = -1;
     private boolean isForeground = false;
     private final Handler mainHandler = new Handler(Looper.getMainLooper());
-    private String baseUrl = "";
+    private volatile String baseUrl = "";
+
+    private final Object catalogLock = new Object();
+    private final List<NativeMusicRepository.AlbumRecord> catalogAlbums = new ArrayList<>();
+    private final List<NativeMusicRepository.MusicRecord> catalogMusics = new ArrayList<>();
+    private long catalogLoadedAtMs = 0L;
 
     // Album art cache — keeps last downloaded bitmap + its URL.
     private Bitmap currentArtBitmap = null;
     private String lastFetchedCoverUrl = null;
     private final ExecutorService coverFetchExecutor = Executors.newSingleThreadExecutor();
+    private final ExecutorService catalogExecutor = Executors.newSingleThreadExecutor();
     private final ExecutorService playbackMetricExecutor = Executors.newSingleThreadExecutor();
     private final Runnable playbackMinuteReporter = new Runnable() {
         @Override
@@ -129,6 +161,11 @@ public class MusicService extends Service {
     @Override
     public void onCreate() {
         super.onCreate();
+        SharedPreferences prefs = getSharedPreferences(PREFS_NAME, MODE_PRIVATE);
+        baseUrl = NativeMusicRepository.normalizeBaseUrl(
+            prefs.getString(PREF_BASE_URL, DEFAULT_AUTO_BASE_URL)
+        );
+        loadCatalogSnapshot();
         notificationManager = getSystemService(NotificationManager.class);
         createNotificationChannel();
         initPlayer();
@@ -141,11 +178,18 @@ public class MusicService extends Service {
     }
 
     @Override
-    public IBinder onBind(Intent intent) { return binder; }
+    public IBinder onBind(Intent intent) {
+        String action = intent != null ? intent.getAction() : null;
+        if (MediaBrowserServiceCompat.SERVICE_INTERFACE.equals(action)) {
+            return super.onBind(intent);
+        }
+        return binder;
+    }
 
     @Override
     public void onDestroy() {
         coverFetchExecutor.shutdown();
+        catalogExecutor.shutdown();
         playbackMetricExecutor.shutdown();
         mainHandler.removeCallbacks(playbackMinuteReporter);
         recycleBitmap();
@@ -208,6 +252,21 @@ public class MusicService extends Service {
             @Override public void onPause() { pause(); }
 
             @Override
+            public void onPrepareFromMediaId(String mediaId, Bundle extras) {
+                playFromBrowserMediaId(mediaId, false);
+            }
+
+            @Override
+            public void onPlayFromMediaId(String mediaId, Bundle extras) {
+                playFromBrowserMediaId(mediaId, true);
+            }
+
+            @Override
+            public void onPlayFromSearch(String query, Bundle extras) {
+                playFirstSearchResult(query);
+            }
+
+            @Override
             public void onSkipToNext() {
                 skipToNext();
             }
@@ -221,6 +280,7 @@ public class MusicService extends Service {
             public void onSeekTo(long pos) { seekTo(pos); }
         });
         mediaSession.setActive(true);
+        setSessionToken(mediaSession.getSessionToken());
         updatePlaybackState();
     }
 
@@ -229,8 +289,39 @@ public class MusicService extends Service {
     public void setEventCallback(EventCallback callback) { eventCallback = callback; }
 
     public void setBaseUrl(String baseUrl) {
-        this.baseUrl = NativeMusicRepository.normalizeBaseUrl(baseUrl);
+        String normalized = NativeMusicRepository.normalizeBaseUrl(baseUrl);
+        if (normalized.isEmpty()) {
+            return;
+        }
+        String previous = this.baseUrl;
+        this.baseUrl = normalized;
+        getSharedPreferences(PREFS_NAME, MODE_PRIVATE)
+            .edit()
+            .putString(PREF_BASE_URL, normalized)
+            .apply();
+        if (!normalized.equals(previous)) {
+            clearCatalog();
+        }
         runOnPlayerThread(this::updatePlaybackMinuteReporting);
+    }
+
+    public void setCatalog(
+        List<NativeMusicRepository.AlbumRecord> albums,
+        List<NativeMusicRepository.MusicRecord> musics
+    ) {
+        synchronized (catalogLock) {
+            catalogAlbums.clear();
+            if (albums != null) {
+                catalogAlbums.addAll(albums);
+            }
+            catalogMusics.clear();
+            if (musics != null) {
+                catalogMusics.addAll(musics);
+            }
+            catalogLoadedAtMs = System.currentTimeMillis();
+        }
+        persistCatalogSnapshotAsync(albums, musics);
+        notifyCatalogChanged();
     }
 
     public void setPlaylist(List<PlaylistItem> items, int startIndex, int exoRepeatMode) {
@@ -415,6 +506,527 @@ public class MusicService extends Service {
         });
     }
 
+    // ── Android Auto media browser ───────────────────────────────────────────
+
+    @Override
+    public BrowserRoot onGetRoot(String clientPackageName, int clientUid, Bundle rootHints) {
+        return new BrowserRoot(MEDIA_ROOT, null);
+    }
+
+    @Override
+    public void onLoadChildren(String parentId, Result<List<MediaBrowserCompat.MediaItem>> result) {
+        result.detach();
+        catalogExecutor.execute(() -> {
+            List<MediaBrowserCompat.MediaItem> items;
+            try {
+                String nodeId = parentId != null ? parentId : MEDIA_ROOT;
+                if (!MEDIA_ROOT.equals(nodeId)) {
+                    ensureCatalogLoaded();
+                }
+                items = buildBrowserChildren(parentId);
+            } catch (Exception e) {
+                Log.w(TAG, "Android Auto catalog load failed: " + e.getMessage());
+                items = new ArrayList<>();
+            }
+            result.sendResult(items);
+        });
+    }
+
+    private List<MediaBrowserCompat.MediaItem> buildBrowserChildren(String parentId) {
+        String nodeId = parentId != null ? parentId : MEDIA_ROOT;
+        List<NativeMusicRepository.AlbumRecord> albums;
+        List<NativeMusicRepository.MusicRecord> musics;
+        synchronized (catalogLock) {
+            albums = new ArrayList<>(catalogAlbums);
+            musics = new ArrayList<>(catalogMusics);
+        }
+
+        List<MediaBrowserCompat.MediaItem> items = new ArrayList<>();
+        if (MEDIA_ROOT.equals(nodeId)) {
+            items.add(buildBrowsableMediaItem(MEDIA_ALL, "全部歌曲", musics.size() + " 首", ""));
+            items.add(buildBrowsableMediaItem(MEDIA_ALBUMS, "专辑", albums.size() + " 个", ""));
+            return items;
+        }
+
+        if (MEDIA_ALL.equals(nodeId)) {
+            for (NativeMusicRepository.MusicRecord music : musics) {
+                items.add(buildPlayableMediaItem(music, null));
+            }
+            return items;
+        }
+
+        if (MEDIA_ALBUMS.equals(nodeId)) {
+            for (NativeMusicRepository.AlbumRecord album : albums) {
+                int count = countAlbumTracks(musics, album.id);
+                items.add(
+                    buildBrowsableMediaItem(
+                        MEDIA_ALBUM_PREFIX + album.id,
+                        nonEmpty(album.name, DEFAULT_ALBUM_LABEL),
+                        count + " 首",
+                        resolveBrowserCoverUrl(album)
+                    )
+                );
+            }
+            return items;
+        }
+
+        if (nodeId.startsWith(MEDIA_ALBUM_PREFIX)) {
+            Integer albumId = parseIdAfterPrefix(nodeId, MEDIA_ALBUM_PREFIX);
+            if (albumId == null) {
+                return items;
+            }
+            for (NativeMusicRepository.MusicRecord music : musics) {
+                if (matchesAlbum(music, albumId)) {
+                    items.add(buildPlayableMediaItem(music, albumId));
+                }
+            }
+        }
+        return items;
+    }
+
+    private MediaBrowserCompat.MediaItem buildBrowsableMediaItem(
+        String mediaId,
+        String title,
+        String subtitle,
+        String iconUrl
+    ) {
+        MediaDescriptionCompat.Builder description = new MediaDescriptionCompat.Builder()
+            .setMediaId(mediaId)
+            .setTitle(nonEmpty(title, DEFAULT_ALBUM_LABEL))
+            .setSubtitle(subtitle != null ? subtitle : "");
+        description.setIconUri(resolveArtworkUri(iconUrl));
+        return new MediaBrowserCompat.MediaItem(
+            description.build(),
+            MediaBrowserCompat.MediaItem.FLAG_BROWSABLE
+        );
+    }
+
+    private MediaBrowserCompat.MediaItem buildPlayableMediaItem(
+        NativeMusicRepository.MusicRecord music,
+        Integer albumContextId
+    ) {
+        String mediaId = albumContextId != null
+            ? MEDIA_ALBUM_TRACK_PREFIX + albumContextId + ":" + music.id
+            : MEDIA_MUSIC_PREFIX + music.id;
+        MediaDescriptionCompat.Builder description = new MediaDescriptionCompat.Builder()
+            .setMediaId(mediaId)
+            .setTitle(nonEmpty(music.title, "Untitled"))
+            .setSubtitle(resolveMusicAlbumName(music));
+        String iconUrl = resolveBrowserCoverUrl(music);
+        description.setIconUri(resolveArtworkUri(iconUrl));
+        return new MediaBrowserCompat.MediaItem(
+            description.build(),
+            MediaBrowserCompat.MediaItem.FLAG_PLAYABLE
+        );
+    }
+
+    private void playFromBrowserMediaId(String mediaId, boolean playWhenReady) {
+        BrowserSelection selection = parseBrowserSelection(mediaId);
+        if (selection == null) {
+            return;
+        }
+        catalogExecutor.execute(() -> {
+            try {
+                loadBrowserSelection(selection, playWhenReady);
+            } catch (Exception e) {
+                Log.w(TAG, "Android Auto play failed: " + e.getMessage());
+            }
+        });
+    }
+
+    private void playFirstSearchResult(String query) {
+        catalogExecutor.execute(() -> {
+            try {
+                ensureCatalogLoaded();
+                String normalizedQuery = query != null ? query.trim().toLowerCase() : "";
+                NativeMusicRepository.MusicRecord match = null;
+                synchronized (catalogLock) {
+                    for (NativeMusicRepository.MusicRecord music : catalogMusics) {
+                        if (normalizedQuery.isEmpty()
+                            || nonEmpty(music.title, "").toLowerCase().contains(normalizedQuery)
+                            || resolveMusicAlbumName(music).toLowerCase().contains(normalizedQuery)) {
+                            match = music;
+                            break;
+                        }
+                    }
+                }
+                if (match != null) {
+                    loadBrowserSelection(new BrowserSelection(match.id, null), true);
+                }
+            } catch (Exception e) {
+                Log.w(TAG, "Android Auto search failed: " + e.getMessage());
+            }
+        });
+    }
+
+    private void loadBrowserSelection(BrowserSelection selection, boolean playWhenReady) throws Exception {
+        ensureCatalogLoaded();
+        List<NativeMusicRepository.MusicRecord> musics = new ArrayList<>();
+        synchronized (catalogLock) {
+            for (NativeMusicRepository.MusicRecord music : catalogMusics) {
+                if (selection.albumId == null || matchesAlbum(music, selection.albumId)) {
+                    musics.add(music);
+                }
+            }
+            if (musics.isEmpty() && !catalogMusics.isEmpty()) {
+                musics.addAll(catalogMusics);
+            }
+        }
+
+        List<PlaylistItem> items = new ArrayList<>();
+        int startIndex = -1;
+        for (NativeMusicRepository.MusicRecord music : musics) {
+            if (music.id == selection.musicId) {
+                startIndex = items.size();
+            }
+            items.add(buildBrowserPlaylistItem(music));
+        }
+        if (items.isEmpty() || startIndex < 0) {
+            return;
+        }
+        loadPlaylist(items, startIndex, Player.REPEAT_MODE_OFF, false, 0L, playWhenReady);
+    }
+
+    private PlaylistItem buildBrowserPlaylistItem(NativeMusicRepository.MusicRecord music) {
+        String normalizedBaseUrl = getEffectiveBaseUrl();
+        return new PlaylistItem(
+            music.id,
+            normalizedBaseUrl + "/api/music/download/" + music.id,
+            music.title,
+            resolveMusicAlbumName(music),
+            resolveBrowserCoverUrl(music)
+        );
+    }
+
+    private void ensureCatalogLoaded() throws Exception {
+        long now = System.currentTimeMillis();
+        boolean hasExistingCatalog;
+        synchronized (catalogLock) {
+            hasExistingCatalog = !catalogMusics.isEmpty();
+            if (hasExistingCatalog && now - catalogLoadedAtMs < CATALOG_CACHE_TTL_MS) {
+                return;
+            }
+        }
+
+        String normalizedBaseUrl = getEffectiveBaseUrl();
+        String cookie = getCookieOnMainThread(normalizedBaseUrl + "/api/music/albums");
+        try {
+            NativeMusicRepository.LibraryPayload payload =
+                NativeMusicRepository.loadLibrary(normalizedBaseUrl, cookie, false);
+            setCatalog(payload.albums, payload.musics);
+        } catch (Exception e) {
+            if (hasExistingCatalog) {
+                Log.w(TAG, "Keeping cached Android Auto catalog: " + e.getMessage());
+                return;
+            }
+            throw e;
+        }
+    }
+
+    private void clearCatalog() {
+        synchronized (catalogLock) {
+            catalogAlbums.clear();
+            catalogMusics.clear();
+            catalogLoadedAtMs = 0L;
+        }
+    }
+
+    private void loadCatalogSnapshot() {
+        File file = new File(getFilesDir(), CATALOG_FILE_NAME);
+        if (!file.exists()) {
+            return;
+        }
+        try {
+            JSONObject root = new JSONObject(readTextFile(file));
+            String savedBaseUrl = root.optString("base_url", "");
+            if (!savedBaseUrl.trim().isEmpty() && DEFAULT_AUTO_BASE_URL.equals(baseUrl)) {
+                baseUrl = NativeMusicRepository.normalizeBaseUrl(savedBaseUrl);
+            }
+
+            List<NativeMusicRepository.AlbumRecord> albums = new ArrayList<>();
+            Map<Integer, NativeMusicRepository.AlbumRecord> albumById = new HashMap<>();
+            JSONArray albumArray = root.optJSONArray("albums");
+            if (albumArray != null) {
+                for (int i = 0; i < albumArray.length(); i++) {
+                    JSONObject item = albumArray.getJSONObject(i);
+                    NativeMusicRepository.AlbumRecord album = new NativeMusicRepository.AlbumRecord(
+                        item.optInt("id", 0),
+                        item.optString("name", ""),
+                        item.optString("cover_url", ""),
+                        item.optString("image", ""),
+                        0.0,
+                        item.optString("description", null),
+                        item.optString("created_at", null)
+                    );
+                    albums.add(album);
+                    albumById.put(album.id, album);
+                }
+            }
+
+            List<NativeMusicRepository.MusicRecord> musics = new ArrayList<>();
+            JSONArray musicArray = root.optJSONArray("musics");
+            if (musicArray != null) {
+                for (int i = 0; i < musicArray.length(); i++) {
+                    JSONObject item = musicArray.getJSONObject(i);
+                    Integer albumId = optNullableInt(item, "album_id");
+                    NativeMusicRepository.AlbumRecord album = albumId != null ? albumById.get(albumId) : null;
+                    musics.add(new NativeMusicRepository.MusicRecord(
+                        item.optInt("id", 0),
+                        item.optString("title", ""),
+                        albumId,
+                        optNullableInt(item, "artist_id"),
+                        item.optString("file_name", null),
+                        item.optString("file_type", null),
+                        optNullableLong(item, "file_size"),
+                        optNullableInt(item, "duration"),
+                        item.optString("cover_url", ""),
+                        item.optDouble("play_minutes", 0.0),
+                        item.optString("created_at", null),
+                        album
+                    ));
+                }
+            }
+
+            synchronized (catalogLock) {
+                catalogAlbums.clear();
+                catalogAlbums.addAll(albums);
+                catalogMusics.clear();
+                catalogMusics.addAll(musics);
+                catalogLoadedAtMs = System.currentTimeMillis();
+            }
+        } catch (Exception e) {
+            Log.w(TAG, "Failed to load Android Auto catalog snapshot: " + e.getMessage());
+        }
+    }
+
+    private void persistCatalogSnapshotAsync(
+        List<NativeMusicRepository.AlbumRecord> albums,
+        List<NativeMusicRepository.MusicRecord> musics
+    ) {
+        List<NativeMusicRepository.AlbumRecord> albumSnapshot =
+            albums != null ? new ArrayList<>(albums) : new ArrayList<>();
+        List<NativeMusicRepository.MusicRecord> musicSnapshot =
+            musics != null ? new ArrayList<>(musics) : new ArrayList<>();
+        if (albumSnapshot.isEmpty() && musicSnapshot.isEmpty()) {
+            return;
+        }
+        catalogExecutor.execute(() -> {
+            try {
+                JSONObject root = new JSONObject();
+                root.put("base_url", getEffectiveBaseUrl());
+                JSONArray albumArray = new JSONArray();
+                for (NativeMusicRepository.AlbumRecord album : albumSnapshot) {
+                    if (album == null || album.id <= 0) continue;
+                    JSONObject item = new JSONObject();
+                    item.put("id", album.id);
+                    item.put("name", album.name);
+                    item.put("cover_url", album.coverUrl);
+                    item.put("image", album.image);
+                    item.put("description", album.description);
+                    item.put("created_at", album.createdAt);
+                    albumArray.put(item);
+                }
+                root.put("albums", albumArray);
+
+                JSONArray musicArray = new JSONArray();
+                for (NativeMusicRepository.MusicRecord music : musicSnapshot) {
+                    if (music == null || music.id <= 0) continue;
+                    JSONObject item = new JSONObject();
+                    item.put("id", music.id);
+                    item.put("title", music.title);
+                    item.put("album_id", music.albumId != null ? music.albumId : JSONObject.NULL);
+                    item.put("artist_id", music.artistId != null ? music.artistId : JSONObject.NULL);
+                    item.put("file_name", music.fileName);
+                    item.put("file_type", music.fileType);
+                    item.put("file_size", music.fileSize != null ? music.fileSize : JSONObject.NULL);
+                    item.put("duration", music.duration != null ? music.duration : JSONObject.NULL);
+                    item.put("cover_url", music.coverUrl);
+                    item.put("play_minutes", music.playMinutes);
+                    item.put("created_at", music.createdAt);
+                    musicArray.put(item);
+                }
+                root.put("musics", musicArray);
+                writeTextFile(new File(getFilesDir(), CATALOG_FILE_NAME), root.toString());
+            } catch (Exception e) {
+                Log.w(TAG, "Failed to save Android Auto catalog snapshot: " + e.getMessage());
+            }
+        });
+    }
+
+    private void notifyCatalogChanged() {
+        mainHandler.post(() -> {
+            notifyChildrenChanged(MEDIA_ROOT);
+            notifyChildrenChanged(MEDIA_ALL);
+            notifyChildrenChanged(MEDIA_ALBUMS);
+            List<NativeMusicRepository.AlbumRecord> albums;
+            synchronized (catalogLock) {
+                albums = new ArrayList<>(catalogAlbums);
+            }
+            for (NativeMusicRepository.AlbumRecord album : albums) {
+                if (album != null && album.id > 0) {
+                    notifyChildrenChanged(MEDIA_ALBUM_PREFIX + album.id);
+                }
+            }
+        });
+    }
+
+    private String readTextFile(File file) throws IOException {
+        StringBuilder builder = new StringBuilder();
+        try (
+            BufferedReader reader = new BufferedReader(
+                new InputStreamReader(new FileInputStream(file), StandardCharsets.UTF_8)
+            )
+        ) {
+            String line;
+            while ((line = reader.readLine()) != null) {
+                builder.append(line);
+            }
+        }
+        return builder.toString();
+    }
+
+    private void writeTextFile(File file, String text) throws IOException {
+        try (
+            OutputStreamWriter writer = new OutputStreamWriter(
+                new FileOutputStream(file, false),
+                StandardCharsets.UTF_8
+            )
+        ) {
+            writer.write(text);
+        }
+    }
+
+    private Integer optNullableInt(JSONObject item, String key) {
+        try {
+            return item.has(key) && !item.isNull(key) ? item.getInt(key) : null;
+        } catch (Exception e) {
+            return null;
+        }
+    }
+
+    private Long optNullableLong(JSONObject item, String key) {
+        try {
+            return item.has(key) && !item.isNull(key) ? item.getLong(key) : null;
+        } catch (Exception e) {
+            return null;
+        }
+    }
+
+    private String getEffectiveBaseUrl() {
+        String normalized = NativeMusicRepository.normalizeBaseUrl(baseUrl);
+        return normalized.isEmpty() ? DEFAULT_AUTO_BASE_URL : normalized;
+    }
+
+    private String getCookieOnMainThread(String url) {
+        if (Looper.myLooper() == Looper.getMainLooper()) {
+            try { return CookieManager.getInstance().getCookie(url); } catch (Exception e) { return null; }
+        }
+        FutureTask<String> task = new FutureTask<>(() -> {
+            try { return CookieManager.getInstance().getCookie(url); } catch (Exception e) { return null; }
+        });
+        mainHandler.post(task);
+        try { return task.get(); } catch (Exception e) { return null; }
+    }
+
+    private int countAlbumTracks(List<NativeMusicRepository.MusicRecord> musics, int albumId) {
+        int count = 0;
+        for (NativeMusicRepository.MusicRecord music : musics) {
+            if (matchesAlbum(music, albumId)) {
+                count += 1;
+            }
+        }
+        return count;
+    }
+
+    private boolean matchesAlbum(NativeMusicRepository.MusicRecord music, int albumId) {
+        if (music == null) {
+            return false;
+        }
+        if (music.albumId != null && music.albumId == albumId) {
+            return true;
+        }
+        return music.album != null && music.album.id == albumId;
+    }
+
+    private String resolveMusicAlbumName(NativeMusicRepository.MusicRecord music) {
+        if (music != null && music.album != null && music.album.name != null && !music.album.name.isEmpty()) {
+            return music.album.name;
+        }
+        return DEFAULT_ALBUM_LABEL;
+    }
+
+    private String resolveBrowserCoverUrl(NativeMusicRepository.MusicRecord music) {
+        if (music != null && music.album != null) {
+            String albumCoverUrl = resolveBrowserCoverUrl(music.album);
+            if (!albumCoverUrl.isEmpty()) {
+                return albumCoverUrl;
+            }
+        }
+        if (music != null && music.coverUrl != null && !music.coverUrl.isEmpty()) {
+            return music.coverUrl;
+        }
+        return getEffectiveBaseUrl() + "/api/music/album_cover/defult.jpeg";
+    }
+
+    private String resolveBrowserCoverUrl(NativeMusicRepository.AlbumRecord album) {
+        if (album != null && album.image != null && !album.image.isEmpty()) {
+            return album.image;
+        }
+        if (album != null && album.coverUrl != null && !album.coverUrl.isEmpty()) {
+            return album.coverUrl;
+        }
+        return "";
+    }
+
+    private Uri resolveArtworkUri(String remoteUrl) {
+        return AlbumArtProvider.buildArtworkUri(this, remoteUrl);
+    }
+
+    private BrowserSelection parseBrowserSelection(String mediaId) {
+        if (mediaId == null) {
+            return null;
+        }
+        if (mediaId.startsWith(MEDIA_MUSIC_PREFIX)) {
+            Integer musicId = parseIdAfterPrefix(mediaId, MEDIA_MUSIC_PREFIX);
+            return musicId != null ? new BrowserSelection(musicId, null) : null;
+        }
+        if (mediaId.startsWith(MEDIA_ALBUM_TRACK_PREFIX)) {
+            String suffix = mediaId.substring(MEDIA_ALBUM_TRACK_PREFIX.length());
+            String[] parts = suffix.split(":", 2);
+            if (parts.length != 2) {
+                return null;
+            }
+            try {
+                return new BrowserSelection(Integer.parseInt(parts[1]), Integer.parseInt(parts[0]));
+            } catch (NumberFormatException e) {
+                return null;
+            }
+        }
+        return null;
+    }
+
+    private Integer parseIdAfterPrefix(String value, String prefix) {
+        try {
+            return Integer.parseInt(value.substring(prefix.length()));
+        } catch (Exception e) {
+            return null;
+        }
+    }
+
+    private String nonEmpty(String value, String fallback) {
+        return value != null && !value.trim().isEmpty() ? value : fallback;
+    }
+
+    private static class BrowserSelection {
+        final int musicId;
+        final Integer albumId;
+
+        BrowserSelection(int musicId, Integer albumId) {
+            this.musicId = musicId;
+            this.albumId = albumId;
+        }
+    }
+
     // ── Notification ─────────────────────────────────────────────────────────
 
     /**
@@ -475,6 +1087,13 @@ public class MusicService extends Service {
             .putString(MediaMetadataCompat.METADATA_KEY_DISPLAY_TITLE, title)
             .putString(MediaMetadataCompat.METADATA_KEY_DISPLAY_SUBTITLE, currentAlbum)
             .putLong(MediaMetadataCompat.METADATA_KEY_DURATION, getDurationMs());
+
+        if (currentCoverUrl != null && !currentCoverUrl.isEmpty()) {
+            String artworkUri = resolveArtworkUri(currentCoverUrl).toString();
+            meta.putString(MediaMetadataCompat.METADATA_KEY_DISPLAY_ICON_URI, artworkUri)
+                .putString(MediaMetadataCompat.METADATA_KEY_ART_URI, artworkUri)
+                .putString(MediaMetadataCompat.METADATA_KEY_ALBUM_ART_URI, artworkUri);
+        }
 
         if (art != null) {
             // Three keys for maximum device compatibility:
@@ -696,6 +1315,9 @@ public class MusicService extends Service {
             PlaybackStateCompat.ACTION_PLAY |
             PlaybackStateCompat.ACTION_PAUSE |
             PlaybackStateCompat.ACTION_PLAY_PAUSE |
+            PlaybackStateCompat.ACTION_PREPARE_FROM_MEDIA_ID |
+            PlaybackStateCompat.ACTION_PLAY_FROM_MEDIA_ID |
+            PlaybackStateCompat.ACTION_PLAY_FROM_SEARCH |
             PlaybackStateCompat.ACTION_SKIP_TO_NEXT |
             PlaybackStateCompat.ACTION_SKIP_TO_PREVIOUS |
             PlaybackStateCompat.ACTION_SEEK_TO;

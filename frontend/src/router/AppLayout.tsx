@@ -3,6 +3,7 @@ import type { CSSProperties } from "react";
 import { Outlet, useLocation, useNavigate } from "react-router-dom";
 
 import { useUserState } from "../app/UserState";
+import { IS_APK } from "../js/apiBase";
 import { CHANGYOU_PATH, MUSIC_PLAYER_PATH, MUSIC_ROOT_PATH } from "../music/router/paths";
 import { useEnsureDesignTokens } from "../theme/designTokens";
 import { AppChromeProvider } from "./AppChromeContext";
@@ -84,7 +85,7 @@ export function AppLayout() {
   }, [navbarVisible]);
 
   const visibleItems = NAV_ITEMS.filter(
-    (item) => (!item.auth || user) && !(user && item.key === "login"),
+    (item) => (!item.auth || user || (IS_APK && item.key === "music")) && !(user && item.key === "login"),
   );
   const activeKey = pageKeyFromPath(location.pathname);
   const exitTarget = lastPrimaryPathRef.current || visibleItems[0]?.path || "/";

@@ -586,7 +586,8 @@
 
 先复用现有权限：
 
-- `account_submit`
+- `account_submit_claim`
+- `account_submit_income`
 - `account_read`
 - `account_edit`
 

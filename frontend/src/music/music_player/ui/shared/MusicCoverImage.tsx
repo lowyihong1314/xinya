@@ -1,6 +1,8 @@
 import { useEffect, useMemo, useState, type ComponentProps } from "react";
 
 import { CachedImage } from "../../../../components/CachedMedia";
+import { IS_APK } from "../../../../js/apiBase";
+import { buildMusicCoverSourceCacheKey } from "../../logic/musicCoverUtils";
 import { resolveAlbumCoverCandidates, type MusicCoverSource } from "../../shared/musicCoverSources";
 
 type MusicCoverImageProps = Omit<ComponentProps<typeof CachedImage>, "src"> & {
@@ -31,7 +33,11 @@ export function MusicCoverImage({
 
   const safeCandidateIndex = Math.min(candidateIndex, Math.max(coverCandidates.length - 1, 0));
   const activeSource = coverCandidates[safeCandidateIndex];
-  const scopedCacheKey = cacheKey ? `${cacheKey}:candidate:${safeCandidateIndex}` : undefined;
+  const sourceCacheKey =
+    activeSource && /^https?:\/\//i.test(activeSource)
+      ? buildMusicCoverSourceCacheKey(activeSource)
+      : undefined;
+  const scopedCacheKey = sourceCacheKey ?? (cacheKey ? `${cacheKey}:candidate:${safeCandidateIndex}` : undefined);
   const scopedRefreshKey =
     refreshKey == null ? safeCandidateIndex : `${String(refreshKey)}:${safeCandidateIndex}`;
 
@@ -41,6 +47,7 @@ export function MusicCoverImage({
       src={activeSource}
       cacheKey={scopedCacheKey}
       refreshKey={scopedRefreshKey}
+      staleWhileRevalidate={IS_APK}
       onError={(event) => {
         if (safeCandidateIndex < coverCandidates.length - 1) {
           setCandidateIndex(safeCandidateIndex + 1);

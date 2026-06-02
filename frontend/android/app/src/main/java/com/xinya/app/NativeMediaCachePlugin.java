@@ -59,6 +59,7 @@ public class NativeMediaCachePlugin extends Plugin {
         String sourceUrl = call.getString("url");
         String cacheKey = call.getString("cacheKey", sourceUrl);
         boolean force = call.getBoolean("force", false);
+        boolean staleWhileRevalidate = call.getBoolean("staleWhileRevalidate", false);
 
         if (sourceUrl == null || sourceUrl.trim().isEmpty()) {
             call.reject("url is required");
@@ -72,7 +73,7 @@ public class NativeMediaCachePlugin extends Plugin {
 
         executor.execute(() -> {
             try {
-                CacheEntry entry = cacheMediaInternal(sourceUrl, cacheKey, force);
+                CacheEntry entry = cacheMediaInternal(sourceUrl, cacheKey, force, staleWhileRevalidate);
                 JSObject result = new JSObject();
                 result.put("fileUri", Uri.fromFile(entry.file).toString());
                 result.put("mimeType", entry.mimeType);
@@ -128,7 +129,12 @@ public class NativeMediaCachePlugin extends Plugin {
         });
     }
 
-    private CacheEntry cacheMediaInternal(String sourceUrl, String cacheKey, boolean force) throws Exception {
+    private CacheEntry cacheMediaInternal(
+        String sourceUrl,
+        String cacheKey,
+        boolean force,
+        boolean staleWhileRevalidate
+    ) throws Exception {
         ensureCacheRoot();
 
         String hash = sha256(cacheKey);
@@ -137,6 +143,9 @@ public class NativeMediaCachePlugin extends Plugin {
         File existingFile = existingMeta == null ? null : resolveDataFile(existingMeta);
 
         if (!force && canReuseExistingEntry(existingMeta, existingFile, sourceUrl)) {
+            if (staleWhileRevalidate) {
+                refreshEntryInBackground(sourceUrl, cacheKey);
+            }
             return new CacheEntry(
                 existingFile,
                 existingMeta.optString("mimeType", ""),
@@ -144,27 +153,42 @@ public class NativeMediaCachePlugin extends Plugin {
             );
         }
 
-        if (existingMeta != null) {
-            deleteQuietly(existingFile);
-            deleteQuietly(metaFile);
-        }
-
         DownloadResult download = downloadToTempFile(sourceUrl, hash);
         String extension = guessExtension(download.finalUrl, download.mimeType);
         File finalFile = new File(cacheRoot, hash + extension);
         File previousFile = existingFile;
+        File backupFile = null;
 
-        if (finalFile.exists() && !finalFile.delete()) {
+        if (previousFile != null && previousFile.equals(finalFile) && finalFile.exists()) {
+            backupFile = new File(cacheRoot, hash + ".backup");
+            deleteQuietly(backupFile);
+            if (!finalFile.renameTo(backupFile)) {
+                throw new IllegalStateException("Unable to prepare cached media replacement");
+            }
+        } else if (finalFile.exists() && !finalFile.delete()) {
             throw new IllegalStateException("Unable to replace cached media file");
         }
 
-        if (!download.file.renameTo(finalFile)) {
-            copyFile(download.file, finalFile);
-            deleteQuietly(download.file);
+        try {
+            if (!download.file.renameTo(finalFile)) {
+                copyFile(download.file, finalFile);
+                deleteQuietly(download.file);
+            }
+        } catch (Exception error) {
+            deleteQuietly(finalFile);
+            if (backupFile != null && backupFile.exists()) {
+                //noinspection ResultOfMethodCallIgnored
+                backupFile.renameTo(finalFile);
+            }
+            throw error;
         }
 
+        deleteQuietly(backupFile);
         if (previousFile != null && !previousFile.equals(finalFile)) {
             deleteQuietly(previousFile);
+        }
+        if (existingMeta != null) {
+            deleteQuietly(metaFile);
         }
 
         JSONObject nextMeta = new JSONObject();
@@ -178,6 +202,17 @@ public class NativeMediaCachePlugin extends Plugin {
         writeMeta(metaFile, nextMeta);
 
         return new CacheEntry(finalFile, download.mimeType, finalFile.length());
+    }
+
+    private void refreshEntryInBackground(String sourceUrl, String cacheKey) {
+        executor.execute(() -> {
+            try {
+                cacheMediaInternal(sourceUrl, cacheKey, true, false);
+            } catch (Exception error) {
+                // Keep the stale file. This path is intentionally best-effort so
+                // album covers remain available when the APK opens offline.
+            }
+        });
     }
 
     private boolean canReuseExistingEntry(JSONObject meta, File existingFile, String sourceUrl) {

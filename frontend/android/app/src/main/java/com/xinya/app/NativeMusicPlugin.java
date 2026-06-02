@@ -64,6 +64,7 @@ public class NativeMusicPlugin extends Plugin {
             bound = true;
             binding = false;
             syncServiceBaseUrl();
+            pushCatalogToService();
             musicService.setEventCallback((event, data) -> runOnMainThread(() -> {
                 if (musicService != null) {
                     int currentTrackId = musicService.getCurrentTrackId();
@@ -598,6 +599,7 @@ public class NativeMusicPlugin extends Plugin {
                 }
             }
         }
+        pushCatalogToService();
     }
 
     private JSObject buildSnapshot() {
@@ -875,6 +877,23 @@ public class NativeMusicPlugin extends Plugin {
                 musicService.setBaseUrl(baseUrlSnapshot);
             }
         });
+    }
+
+    private void pushCatalogToService() {
+        MusicService service = musicService;
+        if (service == null) {
+            return;
+        }
+        List<NativeMusicRepository.AlbumRecord> albumSnapshot;
+        List<NativeMusicRepository.MusicRecord> musicSnapshot;
+        synchronized (stateLock) {
+            if (albums.isEmpty() && musics.isEmpty()) {
+                return;
+            }
+            albumSnapshot = new ArrayList<>(albums);
+            musicSnapshot = new ArrayList<>(musics);
+        }
+        service.setCatalog(albumSnapshot, musicSnapshot);
     }
 
     private String getCookie(String url) {

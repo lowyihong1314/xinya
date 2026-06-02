@@ -66,3 +66,7 @@ export function resolveTrackAlbumName(musicId: number, musics: MusicRecord[], al
 export function buildMusicCoverCacheKey(scope: string, id: number | string): string {
   return `music-cover:${MUSIC_COVER_CACHE_VERSION}:${scope}:${id}`;
 }
+
+export function buildMusicCoverSourceCacheKey(source: string): string {
+  return `music-cover:${MUSIC_COVER_CACHE_VERSION}:source:${source}`;
+}

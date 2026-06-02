@@ -11,6 +11,7 @@ export interface NativeMediaCachePlugin {
     url: string;
     cacheKey: string;
     force?: boolean;
+    staleWhileRevalidate?: boolean;
   }): Promise<NativeMediaCacheResult>;
 
   invalidate(options: {
@@ -31,6 +32,7 @@ export type NativeCacheOptions = {
   cacheKey?: string;
   refreshKey?: string | number | boolean | null;
   resolveRelativeToApi?: boolean;
+  staleWhileRevalidate?: boolean;
 };
 
 type ResolvedCacheEntry = {
@@ -41,6 +43,7 @@ type ResolvedCacheEntry = {
 
 const resolvedMediaCache = new Map<string, ResolvedCacheEntry>();
 const pendingMediaCache = new Map<string, Promise<string>>();
+const staleRevalidatedCache = new Set<string>();
 
 function resolveCapacitor() {
   return (globalThis as typeof globalThis & { Capacitor?: CapacitorLike }).Capacitor ?? null;
@@ -116,6 +119,46 @@ function resolveLocalFileSrc(fileUri: string) {
   return fileUri;
 }
 
+function buildCacheIdentity(cacheKey: string, source: string, refreshToken: string) {
+  return `${cacheKey}\n${source}\n${refreshToken}`;
+}
+
+function forgetStaleRevalidatedCache(options: { cacheKey?: string; prefix?: string }) {
+  const { cacheKey, prefix } = options;
+  if (cacheKey) {
+    const identityPrefix = `${cacheKey}\n`;
+    for (const key of [...staleRevalidatedCache]) {
+      if (key.startsWith(identityPrefix)) {
+        staleRevalidatedCache.delete(key);
+      }
+    }
+  }
+
+  if (prefix) {
+    for (const key of [...staleRevalidatedCache]) {
+      if (key.startsWith(prefix)) {
+        staleRevalidatedCache.delete(key);
+      }
+    }
+  }
+}
+
+function revalidateNativeCachedUrlOnce(cacheKey: string, source: string, refreshToken: string) {
+  const identity = buildCacheIdentity(cacheKey, source, refreshToken);
+  if (staleRevalidatedCache.has(identity)) {
+    return;
+  }
+  staleRevalidatedCache.add(identity);
+  void NativeMediaCache.cacheMedia({
+    url: source,
+    cacheKey,
+    staleWhileRevalidate: true,
+  }).catch((error) => {
+    staleRevalidatedCache.delete(identity);
+    console.warn("revalidateNativeCachedUrlOnce failed:", error);
+  });
+}
+
 export async function invalidateNativeMediaCache(options: {
   cacheKey?: string;
   prefix?: string;
@@ -139,6 +182,7 @@ export async function invalidateNativeMediaCache(options: {
       }
     }
   }
+  forgetStaleRevalidatedCache(options);
 
   if (!IS_APK || (!cacheKey && !prefix)) {
     return;
@@ -154,6 +198,7 @@ export async function invalidateNativeMediaCache(options: {
 export async function clearAllNativeMediaCache() {
   resolvedMediaCache.clear();
   pendingMediaCache.clear();
+  staleRevalidatedCache.clear();
 
   if (!IS_APK) {
     return;
@@ -183,6 +228,9 @@ export async function resolveNativeCachedUrl(
     && cached.source === normalizedSource
     && cached.refreshToken === refreshToken
   ) {
+    if (options.staleWhileRevalidate) {
+      revalidateNativeCachedUrlOnce(cacheKey, normalizedSource, refreshToken);
+    }
     return cached.resolvedUrl;
   }
 
@@ -199,9 +247,15 @@ export async function resolveNativeCachedUrl(
     return pending;
   }
 
+  const identity = buildCacheIdentity(cacheKey, normalizedSource, refreshToken);
+  if (options.staleWhileRevalidate) {
+    staleRevalidatedCache.add(identity);
+  }
+
   const task = NativeMediaCache.cacheMedia({
     url: normalizedSource,
     cacheKey,
+    staleWhileRevalidate: options.staleWhileRevalidate,
   })
     .then((result) => {
       const fileUri = result.fileUri ? String(result.fileUri) : "";
@@ -216,6 +270,7 @@ export async function resolveNativeCachedUrl(
     .catch((error) => {
       console.warn("resolveNativeCachedUrl failed:", error);
       resolvedMediaCache.delete(cacheKey);
+      staleRevalidatedCache.delete(identity);
       return normalizedSource;
     })
     .finally(() => {

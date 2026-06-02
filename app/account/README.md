@@ -23,4 +23,5 @@ Handles reimbursement claims and payment voucher download.
 
 - API paths intentionally keep legacy frontend compatibility.
 - Business logic should stay in `services.py`; avoid adding ORM-heavy logic to `routes.py`.
-- Claim permissions are split into `account_submit`, `account_read`, and `account_edit`; legacy `account` is no longer used.
+- Claim permissions are split into `account_submit_claim`, `account_read`, and `account_edit`; legacy `account` / `account_submit` are no longer used.
+- `account_submit_income` is reserved for income submission flows; read/edit finance access still uses `account_read` / `account_edit`.

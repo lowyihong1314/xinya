@@ -357,7 +357,7 @@ export function ClaimWorkspace() {
     accountUser?.departments?.flatMap((department) => department.permissions || []).map((permission) => permission.name || "") ??
     [];
   const claimPermissionNames = new Set(claimPermissions);
-  const canSubmitClaims = claimPermissionNames.has("account_submit");
+  const canSubmitClaims = claimPermissionNames.has("account_submit_claim");
   const canReadAllClaims = claimPermissionNames.has("account_read") || claimPermissionNames.has("account_edit");
   const canEditClaims = claimPermissionNames.has("account_edit");
 

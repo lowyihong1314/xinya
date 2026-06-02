@@ -20,6 +20,7 @@ function useCachedMediaSource(
   cacheKey?: string,
   refreshKey?: string | number | boolean | null,
   resolveRelativeToApi?: boolean,
+  staleWhileRevalidate?: boolean,
 ) {
   const normalizedSource = normalizeMediaSource(src, { resolveRelativeToApi });
   const [resolvedSource, setResolvedSource] = useState(normalizedSource);
@@ -38,6 +39,7 @@ function useCachedMediaSource(
       cacheKey,
       refreshKey,
       resolveRelativeToApi,
+      staleWhileRevalidate,
     }).then((nextSource) => {
       if (!cancelled) {
         setResolvedSource(nextSource);
@@ -47,7 +49,7 @@ function useCachedMediaSource(
     return () => {
       cancelled = true;
     };
-  }, [cacheKey, normalizedSource, refreshKey, resolveRelativeToApi]);
+  }, [cacheKey, normalizedSource, refreshKey, resolveRelativeToApi, staleWhileRevalidate]);
 
   return resolvedSource;
 }
@@ -58,11 +60,12 @@ export const CachedImage = forwardRef<HTMLImageElement, CachedImageProps>(functi
     cacheKey,
     refreshKey,
     resolveRelativeToApi,
+    staleWhileRevalidate,
     ...props
   },
   ref,
 ) {
-  const resolvedSource = useCachedMediaSource(src, cacheKey, refreshKey, resolveRelativeToApi);
+  const resolvedSource = useCachedMediaSource(src, cacheKey, refreshKey, resolveRelativeToApi, staleWhileRevalidate);
   return <img ref={ref} src={resolvedSource || undefined} {...props} />;
 });
 
@@ -72,10 +75,11 @@ export const CachedVideo = forwardRef<HTMLVideoElement, CachedVideoProps>(functi
     cacheKey,
     refreshKey,
     resolveRelativeToApi,
+    staleWhileRevalidate,
     ...props
   },
   ref,
 ) {
-  const resolvedSource = useCachedMediaSource(src, cacheKey, refreshKey, resolveRelativeToApi);
+  const resolvedSource = useCachedMediaSource(src, cacheKey, refreshKey, resolveRelativeToApi, staleWhileRevalidate);
   return <video ref={ref} src={resolvedSource || undefined} {...props} />;
 });
