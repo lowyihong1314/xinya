@@ -16,6 +16,7 @@ import android.os.Looper;
 import android.text.TextUtils;
 import android.view.Gravity;
 import android.view.MotionEvent;
+import android.view.OrientationEventListener;
 import android.view.ScaleGestureDetector;
 import android.view.View;
 import android.view.ViewGroup;
@@ -52,7 +53,9 @@ import org.json.JSONObject;
 
 import java.io.File;
 import java.text.SimpleDateFormat;
+import java.util.ArrayList;
 import java.util.Date;
+import java.util.List;
 import java.util.Locale;
 import java.util.concurrent.TimeUnit;
 import java.util.UUID;
@@ -88,8 +91,10 @@ public class NativeCameraCaptureActivity extends AppCompatActivity {
     }
 
     private final Handler handler = new Handler(Looper.getMainLooper());
+    private final List<TextView> rotatingTextViews = new ArrayList<>();
 
     private FrameLayout rootLayout;
+    private OrientationEventListener orientationEventListener;
     private LifecycleCameraController cameraController;
     private PreviewView previewView;
     private TextView statusText;
@@ -120,6 +125,7 @@ public class NativeCameraCaptureActivity extends AppCompatActivity {
     private boolean previewHadMultiTouch = false;
     private CameraSelector cameraSelector = CameraSelector.DEFAULT_BACK_CAMERA;
     private AspectMode selectedAspectMode = ASPECT_MODES[0];
+    private int controlsRotationDegrees = 0;
 
     private final Runnable startRecordingRunnable = () -> {
         longPressStartedRecording = true;
@@ -134,6 +140,7 @@ public class NativeCameraCaptureActivity extends AppCompatActivity {
         eventName = getIntent().getStringExtra(EXTRA_EVENT_NAME);
         baseUrl = normalizeBaseUrl(getIntent().getStringExtra(EXTRA_BASE_URL));
         buildUi();
+        setupOrientationListener();
 
         if (ContextCompat.checkSelfPermission(this, Manifest.permission.CAMERA) == PackageManager.PERMISSION_GRANTED) {
             startCamera();
@@ -143,11 +150,30 @@ public class NativeCameraCaptureActivity extends AppCompatActivity {
     }
 
     @Override
+    protected void onResume() {
+        super.onResume();
+        if (orientationEventListener != null && orientationEventListener.canDetectOrientation()) {
+            orientationEventListener.enable();
+        }
+    }
+
+    @Override
+    protected void onPause() {
+        if (orientationEventListener != null) {
+            orientationEventListener.disable();
+        }
+        super.onPause();
+    }
+
+    @Override
     protected void onDestroy() {
         handler.removeCallbacksAndMessages(null);
         stopVideoRecording();
         if (cameraController != null) {
             cameraController.unbind();
+        }
+        if (orientationEventListener != null) {
+            orientationEventListener.disable();
         }
         super.onDestroy();
     }
@@ -170,12 +196,77 @@ public class NativeCameraCaptureActivity extends AppCompatActivity {
         }
     }
 
+    private void setupOrientationListener() {
+        orientationEventListener = new OrientationEventListener(this) {
+            @Override
+            public void onOrientationChanged(int orientation) {
+                if (orientation == OrientationEventListener.ORIENTATION_UNKNOWN) {
+                    return;
+                }
+                int nextRotation = controlRotationForOrientation(orientation);
+                if (nextRotation != controlsRotationDegrees) {
+                    controlsRotationDegrees = nextRotation;
+                    applyControlsRotation();
+                }
+            }
+        };
+    }
+
+    private int controlRotationForOrientation(int orientation) {
+        int deviceRotation;
+        if (orientation < 45 || orientation >= 315) {
+            deviceRotation = 0;
+        } else if (orientation < 135) {
+            deviceRotation = 90;
+        } else if (orientation < 225) {
+            deviceRotation = 180;
+        } else {
+            deviceRotation = 270;
+        }
+        return (360 - deviceRotation) % 360;
+    }
+
+    private void registerRotatingTextView(TextView view) {
+        if (view == null || rotatingTextViews.contains(view)) {
+            return;
+        }
+        rotatingTextViews.add(view);
+        view.setRotation(controlsRotationDegrees);
+    }
+
+    private void unregisterRotatingChildren(ViewGroup group) {
+        if (group == null) {
+            return;
+        }
+        for (int index = 0; index < group.getChildCount(); index += 1) {
+            View child = group.getChildAt(index);
+            if (child instanceof TextView) {
+                rotatingTextViews.remove(child);
+            } else if (child instanceof ViewGroup) {
+                unregisterRotatingChildren((ViewGroup) child);
+            }
+        }
+    }
+
+    private void applyControlsRotation() {
+        for (int index = rotatingTextViews.size() - 1; index >= 0; index -= 1) {
+            TextView view = rotatingTextViews.get(index);
+            if (view == null || view.getParent() == null) {
+                rotatingTextViews.remove(index);
+                continue;
+            }
+            view.animate().rotation(controlsRotationDegrees).setDuration(140).start();
+        }
+    }
+
     private void buildUi() {
         enableFullscreenLayout();
 
         FrameLayout root = new FrameLayout(this);
         rootLayout = root;
         root.setBackgroundColor(Color.BLACK);
+        root.setClipChildren(false);
+        root.setClipToPadding(false);
 
         previewView = new PreviewView(this);
         previewView.setScaleType(PreviewView.ScaleType.FILL_CENTER);
@@ -192,13 +283,16 @@ public class NativeCameraCaptureActivity extends AppCompatActivity {
 
         FrameLayout topBar = new FrameLayout(this);
         topBar.setPadding(dp(18), dp(34), dp(18), 0);
+        topBar.setClipChildren(false);
+        topBar.setClipToPadding(false);
         root.addView(topBar, new FrameLayout.LayoutParams(
             ViewGroup.LayoutParams.MATCH_PARENT,
-            dp(142),
+            dp(166),
             Gravity.TOP
         ));
 
         TextView closeButton = iconButton("×", 46, 26);
+        registerRotatingTextView(closeButton);
         closeButton.setOnClickListener((view) -> finishWithResult());
         FrameLayout.LayoutParams closeParams = new FrameLayout.LayoutParams(dp(46), dp(46), Gravity.LEFT | Gravity.TOP);
         topBar.addView(closeButton, closeParams);
@@ -212,6 +306,7 @@ public class NativeCameraCaptureActivity extends AppCompatActivity {
         statusText.setGravity(Gravity.CENTER);
         statusText.setBackground(pillDrawable(Color.argb(64, 0, 0, 0), Color.TRANSPARENT, 0));
         statusText.setText(eventName != null && !eventName.trim().isEmpty() ? eventName : "相机");
+        registerRotatingTextView(statusText);
         FrameLayout.LayoutParams statusParams = new FrameLayout.LayoutParams(
             ViewGroup.LayoutParams.MATCH_PARENT,
             dp(46),
@@ -227,6 +322,7 @@ public class NativeCameraCaptureActivity extends AppCompatActivity {
         counterText.setGravity(Gravity.CENTER);
         counterText.setBackground(pillDrawable(Color.argb(82, 0, 0, 0), Color.argb(70, 255, 255, 255), 1));
         counterText.setText("0");
+        registerRotatingTextView(counterText);
         FrameLayout.LayoutParams counterParams = new FrameLayout.LayoutParams(dp(58), dp(36), Gravity.RIGHT | Gravity.TOP);
         counterParams.setMargins(0, dp(5), 0, 0);
         topBar.addView(counterText, counterParams);
@@ -239,6 +335,7 @@ public class NativeCameraCaptureActivity extends AppCompatActivity {
         recordingBadge.setGravity(Gravity.CENTER);
         recordingBadge.setVisibility(View.GONE);
         recordingBadge.setBackground(pillDrawable(Color.rgb(220, 38, 38), Color.TRANSPARENT, 0));
+        registerRotatingTextView(recordingBadge);
         FrameLayout.LayoutParams recordingParams = new FrameLayout.LayoutParams(dp(62), dp(30), Gravity.TOP | Gravity.CENTER_HORIZONTAL);
         recordingParams.setMargins(0, dp(54), 0, 0);
         topBar.addView(recordingBadge, recordingParams);
@@ -247,12 +344,14 @@ public class NativeCameraCaptureActivity extends AppCompatActivity {
         aspectStrip.setOrientation(LinearLayout.HORIZONTAL);
         aspectStrip.setGravity(Gravity.CENTER);
         aspectStrip.setPadding(0, 0, 0, 0);
+        aspectStrip.setClipChildren(false);
+        aspectStrip.setClipToPadding(false);
         FrameLayout.LayoutParams aspectParams = new FrameLayout.LayoutParams(
             ViewGroup.LayoutParams.WRAP_CONTENT,
-            dp(34),
+            dp(40),
             Gravity.TOP | Gravity.CENTER_HORIZONTAL
         );
-        aspectParams.setMargins(0, dp(86), 0, 0);
+        aspectParams.setMargins(0, dp(92), 0, 0);
         topBar.addView(aspectStrip, aspectParams);
         buildAspectButtons();
 
@@ -260,6 +359,8 @@ public class NativeCameraCaptureActivity extends AppCompatActivity {
         zoomStrip.setOrientation(LinearLayout.HORIZONTAL);
         zoomStrip.setGravity(Gravity.CENTER);
         zoomStrip.setPadding(dp(5), dp(5), dp(5), dp(5));
+        zoomStrip.setClipChildren(false);
+        zoomStrip.setClipToPadding(false);
         zoomStrip.setBackground(pillDrawable(Color.argb(104, 0, 0, 0), Color.argb(44, 255, 255, 255), 1));
         FrameLayout.LayoutParams zoomStripParams = new FrameLayout.LayoutParams(
             ViewGroup.LayoutParams.WRAP_CONTENT,
@@ -272,6 +373,8 @@ public class NativeCameraCaptureActivity extends AppCompatActivity {
 
         FrameLayout bottomBar = new FrameLayout(this);
         bottomBar.setPadding(dp(24), 0, dp(24), dp(24));
+        bottomBar.setClipChildren(false);
+        bottomBar.setClipToPadding(false);
         root.addView(bottomBar, new FrameLayout.LayoutParams(
             ViewGroup.LayoutParams.MATCH_PARENT,
             dp(132),
@@ -279,6 +382,7 @@ public class NativeCameraCaptureActivity extends AppCompatActivity {
         ));
 
         torchButton = iconButton("⚡", 58, 22);
+        registerRotatingTextView(torchButton);
         torchButton.setOnClickListener((view) -> toggleTorch());
         FrameLayout.LayoutParams torchParams = new FrameLayout.LayoutParams(dp(58), dp(58), Gravity.LEFT | Gravity.CENTER_VERTICAL);
         bottomBar.addView(torchButton, torchParams);
@@ -293,6 +397,7 @@ public class NativeCameraCaptureActivity extends AppCompatActivity {
         bottomBar.addView(shutterButton, shutterParams);
 
         flipButton = iconButton("⇄", 58, 24);
+        registerRotatingTextView(flipButton);
         flipButton.setOnClickListener((view) -> flipCamera());
         FrameLayout.LayoutParams flipParams = new FrameLayout.LayoutParams(dp(58), dp(58), Gravity.RIGHT | Gravity.CENTER_VERTICAL);
         bottomBar.addView(flipButton, flipParams);
@@ -348,7 +453,7 @@ public class NativeCameraCaptureActivity extends AppCompatActivity {
     }
 
     private void focusAt(float x, float y) {
-        showFocusRing(x, y);
+        showFocusRingAtPreviewPoint(x, y);
         if (cameraController == null || previewView == null) {
             return;
         }
@@ -362,6 +467,20 @@ public class NativeCameraCaptureActivity extends AppCompatActivity {
             cameraController.getCameraControl().startFocusAndMetering(action);
         } catch (Exception ignored) {
         }
+    }
+
+    private void showFocusRingAtPreviewPoint(float x, float y) {
+        if (previewView == null || rootLayout == null) {
+            showFocusRing(x, y);
+            return;
+        }
+        int[] previewLocation = new int[2];
+        int[] rootLocation = new int[2];
+        previewView.getLocationOnScreen(previewLocation);
+        rootLayout.getLocationOnScreen(rootLocation);
+        float rootX = previewLocation[0] - rootLocation[0] + x;
+        float rootY = previewLocation[1] - rootLocation[1] + y;
+        showFocusRing(rootX, rootY);
     }
 
     private boolean handleShutterTouch(MotionEvent event) {
@@ -527,6 +646,7 @@ public class NativeCameraCaptureActivity extends AppCompatActivity {
         if (zoomStrip == null) {
             return;
         }
+        unregisterRotatingChildren(zoomStrip);
         zoomStrip.removeAllViews();
         for (float zoom : QUICK_ZOOMS) {
             if (zoom > maxZoomRatio + 0.05f && zoom > 1f) {
@@ -550,6 +670,7 @@ public class NativeCameraCaptureActivity extends AppCompatActivity {
         button.setPadding(0, 0, 0, 0);
         button.setBackground(pillDrawable(active ? Color.WHITE : Color.TRANSPARENT, Color.argb(active ? 0 : 70, 255, 255, 255), 1));
         button.setOnClickListener((view) -> setNativeZoomRatio(zoom));
+        registerRotatingTextView(button);
         return button;
     }
 
@@ -557,10 +678,11 @@ public class NativeCameraCaptureActivity extends AppCompatActivity {
         if (aspectStrip == null) {
             return;
         }
+        unregisterRotatingChildren(aspectStrip);
         aspectStrip.removeAllViews();
         for (AspectMode mode : ASPECT_MODES) {
             TextView button = aspectButton(mode);
-            LinearLayout.LayoutParams params = new LinearLayout.LayoutParams(dp(mode == selectedAspectMode ? 64 : 58), dp(34));
+            LinearLayout.LayoutParams params = new LinearLayout.LayoutParams(dp(mode == selectedAspectMode ? 66 : 60), dp(38));
             params.setMargins(dp(4), 0, dp(4), 0);
             aspectStrip.addView(button, params);
         }
@@ -578,6 +700,7 @@ public class NativeCameraCaptureActivity extends AppCompatActivity {
         button.setPadding(0, 0, 0, 0);
         button.setBackground(pillDrawable(active ? Color.WHITE : Color.argb(72, 0, 0, 0), Color.argb(active ? 0 : 64, 255, 255, 255), 1));
         button.setOnClickListener((view) -> switchAspectMode(mode));
+        registerRotatingTextView(button);
         return button;
     }
 
@@ -662,8 +785,11 @@ public class NativeCameraCaptureActivity extends AppCompatActivity {
             return;
         }
         FrameLayout.LayoutParams params = (FrameLayout.LayoutParams) focusRing.getLayoutParams();
-        params.leftMargin = Math.max(0, Math.round(x - dp(39)));
-        params.topMargin = Math.max(0, Math.round(y - dp(39)));
+        int ringRadius = dp(39);
+        int maxLeft = rootLayout != null ? Math.max(0, rootLayout.getWidth() - dp(78)) : Integer.MAX_VALUE;
+        int maxTop = rootLayout != null ? Math.max(0, rootLayout.getHeight() - dp(78)) : Integer.MAX_VALUE;
+        params.leftMargin = Math.min(maxLeft, Math.max(0, Math.round(x - ringRadius)));
+        params.topMargin = Math.min(maxTop, Math.max(0, Math.round(y - ringRadius)));
         focusRing.setLayoutParams(params);
         focusRing.setAlpha(1f);
         focusRing.setVisibility(View.VISIBLE);
