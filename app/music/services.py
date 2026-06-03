@@ -3,7 +3,6 @@ import os
 from flask import jsonify
 from flask_login import current_user
 from sqlalchemy.orm import joinedload
-from werkzeug.utils import secure_filename
 
 from app.timezone import malaysia_now_naive
 from models import db
@@ -18,14 +17,15 @@ from models.music import (
 )
 
 from .storage import (
-    ALBUM_IMAGE_DIR,
     MUSIC_DIR,
     SUPPORTED_AUDIO_FORMATS_LABEL,
+    allowed_album_image_extension,
     allowed_audio_extension,
     delete_music_cache,
     delete_music_file,
     detect_audio_mime,
     replace_music_upload,
+    save_album_cover_upload,
     save_music_upload,
     stream_music_file,
 )
@@ -93,13 +93,13 @@ def upload_album_cover(album_id, file):
     if not file:
         return jsonify({"error": "未选择图片"}), 400
 
-    ext = os.path.splitext(file.filename)[1].lower()
-    if ext not in [".jpg", ".jpeg", ".png", ".gif", ".webp"]:
+    if not allowed_album_image_extension(file.filename):
         return jsonify({"error": "仅支持 JPG/PNG/GIF/WEBP 图片"}), 400
 
-    filename = secure_filename(f"{album_id}{ext}")
-    save_path = os.path.join(ALBUM_IMAGE_DIR, filename)
-    file.save(save_path)
+    try:
+        filename = save_album_cover_upload(file, album_id)
+    except Exception as exc:
+        return jsonify({"error": "封面压缩失败", "detail": str(exc)}), 500
 
     album.cover_url = f"/api/music/album_cover/{filename}"
     db.session.commit()

@@ -39,6 +39,11 @@ ALLOWED_AUDIO_EXTENSIONS = {
     ".3g2",
 }
 
+ALLOWED_ALBUM_IMAGE_EXTENSIONS = {".jpg", ".jpeg", ".png", ".gif", ".webp"}
+ALBUM_COVER_MAX_DIMENSION = 1200
+ALBUM_COVER_JPEG_QUALITY = 82
+ALBUM_COVER_CACHE_MAX_AGE = 30 * 24 * 60 * 60
+
 SUPPORTED_AUDIO_FORMATS_LABEL = "MP3/MP4/WAV/WMA/M4A/M4B/AAC/OGG/FLAC/OPUS/WEBM/AIFF/AMR/3GP"
 
 AUDIO_MIME_OVERRIDES = {
@@ -66,6 +71,10 @@ def allowed_audio_extension(filename):
     return Path(filename).suffix.lower() in ALLOWED_AUDIO_EXTENSIONS
 
 
+def allowed_album_image_extension(filename):
+    return Path(filename).suffix.lower() in ALLOWED_ALBUM_IMAGE_EXTENSIONS
+
+
 def save_music_upload(file_storage):
     ext = Path(file_storage.filename).suffix.lower()
     file_id = uuid.uuid4().hex
@@ -80,6 +89,48 @@ def replace_music_upload(file_storage, old_file_name=None):
     if old_file_name and old_file_name != file_name:
         delete_music_file(old_file_name)
     return file_name, file_path, ext
+
+
+def save_album_cover_upload(file_storage, album_id):
+    from PIL import Image, ImageOps
+
+    filename = f"{int(album_id)}.jpg"
+    file_path = os.path.join(ALBUM_IMAGE_DIR, filename)
+    tmp_path = f"{file_path}.tmp"
+
+    with Image.open(file_storage.stream) as image:
+        image = ImageOps.exif_transpose(image)
+        if image.mode in ("RGBA", "LA") or "transparency" in image.info:
+            rgba_image = image.convert("RGBA")
+            background = Image.new("RGB", rgba_image.size, (255, 255, 255))
+            background.paste(rgba_image, mask=rgba_image.getchannel("A"))
+            image = background
+        else:
+            image = image.convert("RGB")
+
+        resampling = getattr(Image, "Resampling", Image).LANCZOS
+        image.thumbnail((ALBUM_COVER_MAX_DIMENSION, ALBUM_COVER_MAX_DIMENSION), resampling)
+        image.save(
+            tmp_path,
+            format="JPEG",
+            quality=ALBUM_COVER_JPEG_QUALITY,
+            optimize=True,
+            progressive=True,
+        )
+
+    os.replace(tmp_path, file_path)
+    _delete_album_cover_variants(album_id, keep_filename=filename)
+    return filename
+
+
+def _delete_album_cover_variants(album_id, keep_filename=None):
+    prefix = f"{int(album_id)}."
+    for name in os.listdir(ALBUM_IMAGE_DIR):
+        if not name.startswith(prefix) or name == keep_filename:
+            continue
+        path = os.path.join(ALBUM_IMAGE_DIR, name)
+        if os.path.isfile(path):
+            os.remove(path)
 
 
 def detect_audio_mime(ext):
@@ -127,7 +178,11 @@ def serve_album_image(filename):
     if not os.path.exists(file_path):
         return jsonify({"error": "图片不存在"}), 404
     mime_type, _ = mimetypes.guess_type(file_path)
-    return send_file(file_path, mimetype=mime_type or "application/octet-stream")
+    return send_file(
+        file_path,
+        mimetype=mime_type or "application/octet-stream",
+        max_age=ALBUM_COVER_CACHE_MAX_AGE,
+    )
 
 
 def delete_music_cache(music_id):

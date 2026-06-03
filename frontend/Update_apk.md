@@ -363,10 +363,18 @@ xcodebuild \
 
 ### APK 听歌记录
 
-- [ ] 已登录用户在 APK 能看到 `听歌记录` / `Listening Activity` 页签，不需要 `music_edit`。
-- [ ] `Listening Activity` 能显示后端 `minute_logs`，包含带小数秒的 `isoformat()` 时间。
-- [ ] `add_one_minute` 只有已登录用户可写入 minute log，不需要 `music_edit`，未登录返回 401。
-- [ ] 切到 `Listening Activity` 时会刷新数据；停留该页时约每分钟刷新一次。
+- [x] 已登录用户在 APK 能看到 `听歌记录` / `Listening Activity` 页签，不需要 `music_edit`。
+- [x] `Listening Activity` 能显示后端 `minute_logs`，包含带小数秒的 `isoformat()` 时间。
+- [x] `add_one_minute` 只有已登录用户可写入 minute log，不需要 `music_edit`，未登录返回 401。
+- [x] 切到 `Listening Activity` 时会刷新数据；停留该页时约每分钟刷新一次。
+
+KVM 验证：2026-06-03 用 `lowyihong` 登录后，`NativeAuth.setSession` 成功，`GET /api/music/minute_logs` 返回 200，`POST /api/music/add_one_minute/<music_id>` 返回 200，`/#/music/music_player/history` 显示 `LISTENING ACTIVITY`。
+
+### Album Cover 加载
+
+- [x] album cover 上传改为服务端压缩保存，最长边限制 1200px，JPEG quality 82，避免手机端列表加载原始大图。
+- [x] `/api/music/album_cover/<filename>` 增加 30 天 `Cache-Control`，减少重复请求。
+- [x] 2026-06-03 已压缩 `/srv/flaskapp/xinya/database/album_image` 现有 JPG/JPEG 封面；例如 `10.jpg` 从约 2MB 降到约 20KB，`35.jpg` 从约 580KB 降到约 104KB。
 
 ---
 

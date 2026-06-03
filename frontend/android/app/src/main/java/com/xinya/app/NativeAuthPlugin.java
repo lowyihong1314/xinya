@@ -20,7 +20,6 @@ import java.net.HttpURLConnection;
 import java.net.URL;
 import java.nio.charset.StandardCharsets;
 import java.security.KeyStore;
-import java.security.SecureRandom;
 import java.util.Iterator;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
@@ -39,10 +38,8 @@ public class NativeAuthPlugin extends Plugin {
     private static final String KEYSTORE_ALIAS = "xinya_native_auth_key";
     private static final String ANDROID_KEYSTORE = "AndroidKeyStore";
     private static final int GCM_TAG_BITS = 128;
-    private static final int GCM_IV_BYTES = 12;
 
     private final ExecutorService executor = Executors.newSingleThreadExecutor();
-    private final SecureRandom secureRandom = new SecureRandom();
     private SharedPreferences prefs;
 
     @Override
@@ -177,10 +174,9 @@ public class NativeAuthPlugin extends Plugin {
     }
 
     private void writeSession(JSONObject session) throws Exception {
-        byte[] iv = new byte[GCM_IV_BYTES];
-        secureRandom.nextBytes(iv);
         Cipher cipher = Cipher.getInstance("AES/GCM/NoPadding");
-        cipher.init(Cipher.ENCRYPT_MODE, getOrCreateKey(), new GCMParameterSpec(GCM_TAG_BITS, iv));
+        cipher.init(Cipher.ENCRYPT_MODE, getOrCreateKey());
+        byte[] iv = cipher.getIV();
         byte[] encrypted = cipher.doFinal(session.toString().getBytes(StandardCharsets.UTF_8));
 
         getPrefs()

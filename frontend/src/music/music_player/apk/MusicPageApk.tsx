@@ -1,8 +1,10 @@
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import type { CSSProperties } from "react";
+import { useLocation, useNavigate } from "react-router-dom";
 
 import { useUserState } from "../../../app/UserState";
 import { ensureDesignTokens } from "../../../theme/designTokens";
+import { MUSIC_PLAYER_PATH } from "../../router/paths";
 import {
   PINNED_ALL_SONGS_AUDIO_CACHE_SCOPE,
   buildMusicAudioRevision,
@@ -38,13 +40,40 @@ async function noopAsync() {
   return undefined;
 }
 
+function getApkRouteSection(pathname: string, canViewListening: boolean): MusicPlaybackSection {
+  const relativePath = pathname.startsWith(`${MUSIC_PLAYER_PATH}/`)
+    ? pathname.slice(MUSIC_PLAYER_PATH.length + 1)
+    : "";
+  const [section] = relativePath.split("/").filter(Boolean);
+
+  if (section === "player" || section === "queue") {
+    return section;
+  }
+  if (section === "history" && canViewListening) {
+    return "history";
+  }
+  return "browse";
+}
+
+function buildApkSectionPath(section: MusicPlaybackSection) {
+  if (section === "player" || section === "queue" || section === "history") {
+    return `${MUSIC_PLAYER_PATH}/${section}`;
+  }
+  return MUSIC_PLAYER_PATH;
+}
+
 export function MusicPageApk() {
   ensureDesignTokens();
 
+  const location = useLocation();
+  const navigate = useNavigate();
   const { isAuthenticated } = useUserState();
   const canViewListening = isAuthenticated;
   const [snapshot, setSnapshot] = useState<MusicSnapshot>(EMPTY_SNAPSHOT);
-  const [activeSection, setActiveSection] = useState<MusicPlaybackSection>("browse");
+  const activeSection = useMemo(
+    () => getApkRouteSection(location.pathname, canViewListening),
+    [canViewListening, location.pathname],
+  );
   const [screen, setScreen] = useState<ApkScreen>("albums");
   const [selectedAlbumId, setSelectedAlbumId] = useState<number | null>(null);
   const [showAllSongs, setShowAllSongs] = useState(false);
@@ -304,6 +333,17 @@ export function MusicPageApk() {
     [cacheChainTracks],
   );
 
+  const selectSection = useCallback(
+    (section: MusicPlaybackSection) => {
+      const nextSection = section === "history" && !canViewListening ? "browse" : section;
+      const nextPath = buildApkSectionPath(nextSection);
+      if (location.pathname !== nextPath) {
+        navigate(nextPath);
+      }
+    },
+    [canViewListening, location.pathname, navigate],
+  );
+
   useEffect(() => {
     let cancelled = false;
 
@@ -319,6 +359,13 @@ export function MusicPageApk() {
       cancelled = true;
     };
   }, [cacheChainSignature]);
+
+  useEffect(() => {
+    if (canViewListening || !location.pathname.startsWith(`${MUSIC_PLAYER_PATH}/history`)) {
+      return;
+    }
+    navigate(MUSIC_PLAYER_PATH, { replace: true });
+  }, [canViewListening, location.pathname, navigate]);
 
   const albumNameByMusicId = useMemo(
     () =>
@@ -419,7 +466,7 @@ export function MusicPageApk() {
   }
 
   function handleSelectTrack(musicId: number) {
-    setActiveSection("player");
+    selectSection("player");
     void runNativeAction(NativeApkMusic.playMusic(musicId, resolveTrackSelectionQueueIds()));
   }
 
@@ -461,7 +508,7 @@ export function MusicPageApk() {
       <div style={layoutStyle}>
         <MobileMusicShell
           activeSection={activeSection}
-          onSectionChange={setActiveSection}
+          onSectionChange={selectSection}
           sectionTabs={sectionTabs}
           browsePane={
             <MusicWorkspacePanel
@@ -515,7 +562,7 @@ export function MusicPageApk() {
               onUploadMusic={noopAsync}
               onSelectTrack={handleSelectTrack}
               onQueueTrack={(musicId) => {
-                setActiveSection("queue");
+                selectSection("queue");
                 void runNativeAction(NativeApkMusic.appendToQueue(musicId));
               }}
               onSaveTrack={noopAsync}
@@ -552,7 +599,7 @@ export function MusicPageApk() {
               queue={queue}
               currentMusic={currentMusic}
               currentMusicId={currentMusic?.id ?? null}
-              onOpenPlayer={() => setActiveSection("player")}
+              onOpenPlayer={() => selectSection("player")}
               onPlayFromQueue={(musicId) => void runNativeAction(NativeApkMusic.playFromQueue(musicId))}
               onRemoveFromQueue={(musicId) => void runNativeAction(NativeApkMusic.removeFromQueue(musicId))}
               onClearQueue={() => void runNativeAction(NativeApkMusic.clearQueue())}
