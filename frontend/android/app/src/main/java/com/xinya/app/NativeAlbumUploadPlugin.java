@@ -4,6 +4,7 @@ import android.app.Activity;
 import android.content.ClipData;
 import android.content.ContentResolver;
 import android.content.Intent;
+import android.content.pm.ActivityInfo;
 import android.content.pm.PackageManager;
 import android.database.Cursor;
 import android.graphics.ImageFormat;
@@ -54,6 +55,7 @@ public class NativeAlbumUploadPlugin extends Plugin {
     private File pendingCaptureFile;
     private String pendingCaptureMimeType;
     private String pendingCaptureName;
+    private Integer previousRequestedOrientation;
 
     @PluginMethod
     public void pickAndUpload(PluginCall call) {
@@ -193,6 +195,34 @@ public class NativeAlbumUploadPlugin extends Plugin {
     public void getStatus(PluginCall call) {
         String jobId = call.getString("jobId", "");
         call.resolve(statusToJSObject(NativeAlbumUploadStore.readStatus(getContext(), jobId)));
+    }
+
+    @PluginMethod
+    public void setCameraOrientationLock(PluginCall call) {
+        boolean locked = Boolean.TRUE.equals(call.getBoolean("locked", false));
+        Activity activity = getActivity();
+        if (activity == null) {
+            call.reject("Activity is unavailable");
+            return;
+        }
+
+        activity.runOnUiThread(() -> {
+            if (locked) {
+                if (previousRequestedOrientation == null) {
+                    previousRequestedOrientation = activity.getRequestedOrientation();
+                }
+                activity.setRequestedOrientation(ActivityInfo.SCREEN_ORIENTATION_PORTRAIT);
+            } else {
+                int restoreOrientation = previousRequestedOrientation != null
+                    ? previousRequestedOrientation
+                    : ActivityInfo.SCREEN_ORIENTATION_UNSPECIFIED;
+                previousRequestedOrientation = null;
+                activity.setRequestedOrientation(restoreOrientation);
+            }
+            JSObject result = new JSObject();
+            updateStatus(result, "locked", locked);
+            call.resolve(result);
+        });
     }
 
     @PluginMethod

@@ -82,6 +82,10 @@ export interface NativeAlbumUploadPlugin {
   }): Promise<NativeAlbumUploadStatus>;
 
   getCameraProfile(): Promise<NativeAlbumCameraProfile>;
+
+  setCameraOrientationLock?(options: {
+    locked: boolean;
+  }): Promise<{ locked?: boolean }>;
 }
 
 function createUnavailablePlugin(): NativeAlbumUploadPlugin {
@@ -94,6 +98,7 @@ function createUnavailablePlugin(): NativeAlbumUploadPlugin {
     getStatus: async () => ({ status: "idle" }),
     cancel: async () => ({ status: "idle" }),
     getCameraProfile: async () => ({ hasCamera: false, samsungEnhancedMode: false }),
+    setCameraOrientationLock: async (options) => ({ locked: options.locked }),
   };
 }
 

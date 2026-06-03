@@ -30,6 +30,13 @@ type ContinuousCapturePanelProps = {
 
 type FacingMode = "environment" | "user";
 type CaptureOrientation = "portrait" | "landscape";
+type CaptureScreenOrientation = ScreenOrientation & {
+  lock?: (orientation: "portrait-primary") => Promise<void>;
+  unlock?: () => void;
+};
+type SensorPermissionConstructor = {
+  requestPermission?: () => Promise<"granted" | "denied" | "default">;
+};
 type ZoomSettings = {
   supported: boolean;
   min: number;
@@ -78,6 +85,8 @@ export function ContinuousCapturePanel({
   const refreshTimerRef = useRef<number | null>(null);
   const objectUrlsRef = useRef<Set<string>>(new Set());
   const mountedRef = useRef(true);
+  const captureOrientationRef = useRef<CaptureOrientation>("portrait");
+  const orientationSensorActiveRef = useRef(false);
 
   const [facingMode, setFacingMode] = useState<FacingMode>("environment");
   const [cameraReady, setCameraReady] = useState(false);
@@ -88,8 +97,7 @@ export function ContinuousCapturePanel({
   const [cameraProfile, setCameraProfile] = useState<NativeAlbumCameraProfile | null>(null);
   const [gridEnabled, setGridEnabled] = useState(true);
   const [zoomSettings, setZoomSettings] = useState<ZoomSettings | null>(null);
-  const [captureOrientation, setCaptureOrientation] = useState<CaptureOrientation>(detectViewportOrientation);
-  const [viewportOrientation, setViewportOrientation] = useState<CaptureOrientation>(detectViewportOrientation);
+  const [captureOrientation, setCaptureOrientation] = useState<CaptureOrientation>("portrait");
 
   const stats = useMemo(() => {
     return {
@@ -136,7 +144,7 @@ export function ContinuousCapturePanel({
         if (videoRef.current) {
           preparePreviewVideo(videoRef.current, stream);
           await videoRef.current.play();
-          updateCaptureOrientation();
+          updateCaptureOrientationFromVideo();
         }
         setCameraReady(true);
       } catch (error) {
@@ -158,19 +166,43 @@ export function ContinuousCapturePanel({
   }, [facingMode]);
 
   useEffect(() => {
-    const handleOrientationChange = () => {
-      setViewportOrientation(detectViewportOrientation());
-      updateCaptureOrientation();
+    const releaseCameraScreenLock = lockCameraScreenForCapture(isMobile);
+    return releaseCameraScreenLock;
+  }, [isMobile]);
+
+  useEffect(() => {
+    let canceled = false;
+
+    const handleDeviceOrientation = (event: DeviceOrientationEvent) => {
+      applySensorOrientation(detectOrientationFromDeviceOrientation(event));
     };
-    window.addEventListener("resize", handleOrientationChange);
-    window.addEventListener("orientationchange", handleOrientationChange);
-    screen.orientation?.addEventListener?.("change", handleOrientationChange);
+
+    const handleDeviceMotion = (event: DeviceMotionEvent) => {
+      applySensorOrientation(detectOrientationFromDeviceMotion(event));
+    };
+
+    const startSensorListeners = () => {
+      if (canceled || typeof window === "undefined") {
+        return;
+      }
+      window.addEventListener("deviceorientation", handleDeviceOrientation, true);
+      window.addEventListener("devicemotion", handleDeviceMotion, true);
+    };
+
+    void requestDeviceSensorPermission().finally(startSensorListeners);
 
     return () => {
+      canceled = true;
+      if (typeof window !== "undefined") {
+        window.removeEventListener("deviceorientation", handleDeviceOrientation, true);
+        window.removeEventListener("devicemotion", handleDeviceMotion, true);
+      }
+    };
+  }, []);
+
+  useEffect(() => {
+    return () => {
       mountedRef.current = false;
-      window.removeEventListener("resize", handleOrientationChange);
-      window.removeEventListener("orientationchange", handleOrientationChange);
-      screen.orientation?.removeEventListener?.("change", handleOrientationChange);
       clearLongPressTimer();
       if (refreshTimerRef.current) {
         window.clearTimeout(refreshTimerRef.current);
@@ -430,13 +462,31 @@ export function ContinuousCapturePanel({
     onExit();
   }
 
-  function updateCaptureOrientation() {
+  function applyCaptureOrientation(orientation: CaptureOrientation) {
+    captureOrientationRef.current = orientation;
+    setCaptureOrientation(orientation);
+  }
+
+  function applySensorOrientation(orientation: CaptureOrientation | null) {
+    if (!orientation) {
+      return;
+    }
+    orientationSensorActiveRef.current = true;
+    if (orientation !== captureOrientationRef.current) {
+      applyCaptureOrientation(orientation);
+    }
+  }
+
+  function updateCaptureOrientationFromVideo() {
+    if (orientationSensorActiveRef.current) {
+      return;
+    }
     const video = videoRef.current;
-    setCaptureOrientation(detectCaptureOrientation(video));
+    applyCaptureOrientation(detectCaptureOrientation(video, captureOrientationRef.current));
   }
 
   function handlePreviewFrameReady() {
-    updateCaptureOrientation();
+    updateCaptureOrientationFromVideo();
     if (streamRef.current) {
       setCameraReady(true);
     }
@@ -480,7 +530,6 @@ export function ContinuousCapturePanel({
   const visibleItems = items.slice(0, MAX_VISIBLE_ITEMS);
   const zoomSupported = Boolean(zoomSettings?.supported);
   const zoomValue = zoomSettings?.value ?? 1;
-  const orientationMismatch = cameraReady && captureOrientation !== viewportOrientation;
   const latestItem = visibleItems[0] || null;
 
   return (
@@ -495,7 +544,7 @@ export function ContinuousCapturePanel({
           onLoadedMetadata={handlePreviewFrameReady}
           onLoadedData={handlePreviewFrameReady}
           onCanPlay={handlePreviewFrameReady}
-          onResize={updateCaptureOrientation}
+          onResize={updateCaptureOrientationFromVideo}
         />
         <div style={cameraTopOverlayStyle}>
           <button type="button" style={iconButtonStyle} onClick={handleExit} aria-label="退出">
@@ -505,7 +554,7 @@ export function ContinuousCapturePanel({
             <span style={cameraModeStyle}>{recording ? "录像中" : cameraProfile?.isSamsung ? "Samsung" : "相机"}</span>
             <span style={cameraTitleTextStyle}>{eventName || `活动 #${eventId}`}</span>
           </div>
-          <div style={orientationPillStyle(orientationMismatch)}>
+          <div style={orientationPillStyle}>
             {captureOrientation === "landscape" ? "横向" : "竖向"}
           </div>
         </div>
@@ -603,7 +652,7 @@ export function ContinuousCapturePanel({
         <div style={captureHintRowStyle}>
           <span>点按拍照</span>
           <span>长按录像</span>
-          <span>{orientationMismatch ? "设备与画面方向不同" : captureOrientation === "landscape" ? "横向画面" : "竖向画面"}</span>
+          <span>{captureOrientation === "landscape" ? "横向拍摄" : "竖向拍摄"}</span>
         </div>
 
         <div style={uploadStripStyle(isMobile)}>
@@ -662,18 +711,98 @@ function readZoomSettings(stream: MediaStream): ZoomSettings {
   };
 }
 
-function detectViewportOrientation(): CaptureOrientation {
-  if (typeof window === "undefined") {
-    return "portrait";
-  }
-  return window.innerWidth > window.innerHeight ? "landscape" : "portrait";
-}
-
-function detectCaptureOrientation(video: HTMLVideoElement | null): CaptureOrientation {
+function detectCaptureOrientation(video: HTMLVideoElement | null, fallback: CaptureOrientation): CaptureOrientation {
   if (video?.videoWidth && video.videoHeight) {
     return video.videoWidth >= video.videoHeight ? "landscape" : "portrait";
   }
-  return detectViewportOrientation();
+  return fallback;
+}
+
+function detectOrientationFromDeviceOrientation(event: DeviceOrientationEvent): CaptureOrientation | null {
+  const beta = typeof event.beta === "number" ? event.beta : null;
+  const gamma = typeof event.gamma === "number" ? event.gamma : null;
+  if (beta === null || gamma === null) {
+    return null;
+  }
+
+  const absBeta = Math.abs(beta);
+  const absGamma = Math.abs(gamma);
+  if (Math.max(absBeta, absGamma) < 35) {
+    return null;
+  }
+  if (absGamma > absBeta + 12) {
+    return "landscape";
+  }
+  if (absBeta > absGamma + 12) {
+    return "portrait";
+  }
+  return null;
+}
+
+function detectOrientationFromDeviceMotion(event: DeviceMotionEvent): CaptureOrientation | null {
+  const gravity = event.accelerationIncludingGravity;
+  const x = typeof gravity?.x === "number" ? gravity.x : null;
+  const y = typeof gravity?.y === "number" ? gravity.y : null;
+  if (x === null || y === null) {
+    return null;
+  }
+
+  const absX = Math.abs(x);
+  const absY = Math.abs(y);
+  if (Math.max(absX, absY) < 4) {
+    return null;
+  }
+  if (absX > absY + 1.2) {
+    return "landscape";
+  }
+  if (absY > absX + 1.2) {
+    return "portrait";
+  }
+  return null;
+}
+
+async function requestDeviceSensorPermission() {
+  const permissionConstructors: SensorPermissionConstructor[] = [];
+  if (typeof DeviceOrientationEvent !== "undefined") {
+    permissionConstructors.push(DeviceOrientationEvent as unknown as SensorPermissionConstructor);
+  }
+  if (typeof DeviceMotionEvent !== "undefined") {
+    permissionConstructors.push(DeviceMotionEvent as unknown as SensorPermissionConstructor);
+  }
+
+  for (const permissionConstructor of permissionConstructors) {
+    if (typeof permissionConstructor.requestPermission !== "function") {
+      continue;
+    }
+    await permissionConstructor.requestPermission().catch(() => "denied");
+  }
+}
+
+function lockCameraScreenForCapture(isMobile: boolean) {
+  if (!isMobile) {
+    return () => undefined;
+  }
+
+  void NativeAlbumUploadPluginBridge.setCameraOrientationLock?.({ locked: true }).catch(() => undefined);
+
+  const orientation = typeof screen !== "undefined"
+    ? (screen.orientation as CaptureScreenOrientation | undefined)
+    : undefined;
+  let shouldUnlockScreen = false;
+  if (orientation?.lock) {
+    void orientation.lock("portrait-primary")
+      .then(() => {
+        shouldUnlockScreen = true;
+      })
+      .catch(() => undefined);
+  }
+
+  return () => {
+    void NativeAlbumUploadPluginBridge.setCameraOrientationLock?.({ locked: false }).catch(() => undefined);
+    if (shouldUnlockScreen) {
+      orientation?.unlock?.();
+    }
+  };
 }
 
 async function requestCameraStream(facingMode: FacingMode) {
@@ -918,19 +1047,17 @@ const cameraTitleTextStyle: CSSProperties = {
   fontWeight: 800,
 };
 
-function orientationPillStyle(warn: boolean): CSSProperties {
-  return {
-    minWidth: "48px",
-    padding: "8px 10px",
-    borderRadius: "999px",
-    textAlign: "center",
-    border: warn ? "1px solid rgba(251,191,36,0.55)" : "1px solid rgba(255,255,255,0.14)",
-    background: warn ? "rgba(251,191,36,0.18)" : "rgba(0,0,0,0.44)",
-    color: "#fff",
-    fontSize: "12px",
-    fontWeight: 900,
-  };
-}
+const orientationPillStyle: CSSProperties = {
+  minWidth: "48px",
+  padding: "8px 10px",
+  borderRadius: "999px",
+  textAlign: "center",
+  border: "1px solid rgba(255,255,255,0.14)",
+  background: "rgba(0,0,0,0.44)",
+  color: "#fff",
+  fontSize: "12px",
+  fontWeight: 900,
+};
 
 const gridOverlayStyle: CSSProperties = {
   position: "absolute",
