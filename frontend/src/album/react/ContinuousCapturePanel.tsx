@@ -37,32 +37,17 @@ type CaptureScreenOrientation = ScreenOrientation & {
 type SensorPermissionConstructor = {
   requestPermission?: () => Promise<"granted" | "denied" | "default">;
 };
-type ZoomSettings = {
-  supported: boolean;
-  min: number;
-  max: number;
-  step: number;
-  value: number;
-};
-
-type ZoomTrackCapabilities = MediaTrackCapabilities & {
-  zoom?: {
-    min?: number;
-    max?: number;
-    step?: number;
-  };
-};
-
-type ZoomTrackSettings = MediaTrackSettings & {
-  zoom?: number;
-};
-
-type ZoomTrackConstraintSet = MediaTrackConstraintSet & {
-  zoom?: number;
+type PointerPoint = {
+  x: number;
+  y: number;
 };
 
 const LONG_PRESS_MS = 520;
 const MAX_VISIBLE_ITEMS = 8;
+const SOFTWARE_ZOOM_MIN = 1;
+const SOFTWARE_ZOOM_MAX = 10;
+const SOFTWARE_ZOOM_STEP = 0.1;
+const QUICK_ZOOM_VALUES = [1, 2, 3, 5, 10];
 
 export function ContinuousCapturePanel({
   eventId,
@@ -87,6 +72,12 @@ export function ContinuousCapturePanel({
   const mountedRef = useRef(true);
   const captureOrientationRef = useRef<CaptureOrientation>("portrait");
   const orientationSensorActiveRef = useRef(false);
+  const zoomValueRef = useRef(SOFTWARE_ZOOM_MIN);
+  const pointerPointsRef = useRef<Map<number, PointerPoint>>(new Map());
+  const pinchStartRef = useRef<{ distance: number; zoom: number } | null>(null);
+  const recordingCanvasRef = useRef<HTMLCanvasElement | null>(null);
+  const recordingFrameRef = useRef<number | null>(null);
+  const recordingCanvasStreamRef = useRef<MediaStream | null>(null);
 
   const [facingMode, setFacingMode] = useState<FacingMode>("environment");
   const [cameraReady, setCameraReady] = useState(false);
@@ -96,7 +87,7 @@ export function ContinuousCapturePanel({
   const [items, setItems] = useState<CaptureUploadItem[]>([]);
   const [cameraProfile, setCameraProfile] = useState<NativeAlbumCameraProfile | null>(null);
   const [gridEnabled, setGridEnabled] = useState(true);
-  const [zoomSettings, setZoomSettings] = useState<ZoomSettings | null>(null);
+  const [zoomValue, setZoomValue] = useState(SOFTWARE_ZOOM_MIN);
   const [captureOrientation, setCaptureOrientation] = useState<CaptureOrientation>("portrait");
 
   const stats = useMemo(() => {
@@ -129,7 +120,7 @@ export function ContinuousCapturePanel({
     async function openCamera() {
       setCameraReady(false);
       setCameraError(null);
-      setZoomSettings(null);
+      setZoomLevel(SOFTWARE_ZOOM_MIN);
       stopStream();
 
       try {
@@ -140,7 +131,6 @@ export function ContinuousCapturePanel({
         }
 
         streamRef.current = stream;
-        setZoomSettings(readZoomSettings(stream));
         if (videoRef.current) {
           preparePreviewVideo(videoRef.current, stream);
           await videoRef.current.play();
@@ -209,6 +199,7 @@ export function ContinuousCapturePanel({
       }
       stopRecording();
       stopStream();
+      stopRecordingCanvasStream();
       objectUrlsRef.current.forEach((url) => URL.revokeObjectURL(url));
       objectUrlsRef.current.clear();
     };
@@ -338,7 +329,7 @@ export function ContinuousCapturePanel({
       return;
     }
 
-    context.drawImage(video, 0, 0, size.width, size.height);
+    drawZoomedVideoFrame(context, video, size.width, size.height, zoomValueRef.current);
     const photoQuality = clampPhotoQuality(cameraProfile?.recommendedPhotoQuality ?? 0.9);
     const blob = await new Promise<Blob | null>((resolve) => canvas.toBlob(resolve, "image/jpeg", photoQuality));
     if (!blob) {
@@ -370,8 +361,9 @@ export function ContinuousCapturePanel({
 
     try {
       const mimeType = pickRecorderMimeType(cameraProfile);
+      const recordingStream = createZoomedRecordingStream() || streamRef.current;
       recordingChunksRef.current = [];
-      const recorder = new MediaRecorder(streamRef.current, mimeType ? { mimeType } : undefined);
+      const recorder = new MediaRecorder(recordingStream, mimeType ? { mimeType } : undefined);
       mediaRecorderRef.current = recorder;
       recordingStartedByPressRef.current = true;
       recordingRef.current = true;
@@ -388,6 +380,7 @@ export function ContinuousCapturePanel({
         const resolvedType = recorder.mimeType || mimeType || "video/webm";
         recordingChunksRef.current = [];
         recordingRef.current = false;
+        stopRecordingCanvasStream();
         if (mountedRef.current) {
           setRecording(false);
         }
@@ -407,6 +400,7 @@ export function ContinuousCapturePanel({
       };
       recorder.onerror = () => {
         recordingRef.current = false;
+        stopRecordingCanvasStream();
         if (mountedRef.current) {
           setRecording(false);
           setToast("录像失败");
@@ -417,6 +411,7 @@ export function ContinuousCapturePanel({
     } catch (error) {
       recordingStartedByPressRef.current = false;
       recordingRef.current = false;
+      stopRecordingCanvasStream();
       setRecording(false);
       setToast(error instanceof Error ? error.message : "录像启动失败");
     }
@@ -426,8 +421,49 @@ export function ContinuousCapturePanel({
     const recorder = mediaRecorderRef.current;
     if (recorder && recorder.state !== "inactive") {
       recorder.stop();
+    } else {
+      stopRecordingCanvasStream();
     }
     mediaRecorderRef.current = null;
+  }
+
+  function createZoomedRecordingStream() {
+    const video = videoRef.current;
+    if (!video || typeof HTMLCanvasElement === "undefined") {
+      return null;
+    }
+    const canvas = recordingCanvasRef.current || document.createElement("canvas");
+    recordingCanvasRef.current = canvas;
+    const sourceWidth = video.videoWidth || 1280;
+    const sourceHeight = video.videoHeight || 720;
+    const size = scaleCaptureDimensions(sourceWidth, sourceHeight, cameraProfile?.recommendedVideoWidth ?? 1920);
+    canvas.width = size.width;
+    canvas.height = size.height;
+    const context = canvas.getContext("2d");
+    if (!context || typeof canvas.captureStream !== "function") {
+      return null;
+    }
+
+    const renderFrame = () => {
+      drawZoomedVideoFrame(context, video, canvas.width, canvas.height, zoomValueRef.current);
+      recordingFrameRef.current = window.requestAnimationFrame(renderFrame);
+    };
+    renderFrame();
+    const frameRate = clampNumber(cameraProfile?.recommendedFrameRate, 15, 30, 30);
+    const stream = canvas.captureStream(frameRate);
+    recordingCanvasStreamRef.current = stream;
+    return stream;
+  }
+
+  function stopRecordingCanvasStream() {
+    if (recordingFrameRef.current) {
+      window.cancelAnimationFrame(recordingFrameRef.current);
+      recordingFrameRef.current = null;
+    }
+    if (recordingCanvasStreamRef.current) {
+      stopTracks(recordingCanvasStreamRef.current);
+      recordingCanvasStreamRef.current = null;
+    }
   }
 
   function handleShutterDown(event: ReactPointerEvent<HTMLButtonElement>) {
@@ -492,55 +528,95 @@ export function ContinuousCapturePanel({
     }
   }
 
+  function setZoomLevel(value: number) {
+    const nextValue = clampNumber(value, SOFTWARE_ZOOM_MIN, SOFTWARE_ZOOM_MAX, SOFTWARE_ZOOM_MIN);
+    zoomValueRef.current = nextValue;
+    setZoomValue(nextValue);
+  }
+
   function handleZoomInput(value: string) {
     const parsed = Number(value);
-    if (!Number.isFinite(parsed) || !zoomSettings?.supported) {
+    if (!Number.isFinite(parsed)) {
       return;
     }
-    const nextValue = clampNumber(parsed, zoomSettings.min, zoomSettings.max, zoomSettings.value);
-    setZoomSettings((current) => (current ? { ...current, value: nextValue } : current));
-    void applyZoom(nextValue);
+    setZoomLevel(parsed);
   }
 
   function resetZoom() {
-    if (!zoomSettings?.supported) {
-      return;
-    }
-    const nextValue = clampNumber(1, zoomSettings.min, zoomSettings.max, zoomSettings.min);
-    setZoomSettings((current) => (current ? { ...current, value: nextValue } : current));
-    void applyZoom(nextValue);
+    setZoomLevel(SOFTWARE_ZOOM_MIN);
   }
 
-  async function applyZoom(value: number) {
-    const track = streamRef.current?.getVideoTracks()[0];
-    if (!track?.applyConstraints) {
+  function handleCameraStagePointerDown(event: ReactPointerEvent<HTMLDivElement>) {
+    if (!cameraReady || isInteractiveCaptureTarget(event.target)) {
       return;
     }
     try {
-      await track.applyConstraints({
-        advanced: [{ zoom: value } as ZoomTrackConstraintSet],
-      });
+      event.currentTarget.setPointerCapture?.(event.pointerId);
     } catch {
-      if (mountedRef.current) {
-        setToast("缩放调整失败");
-      }
+      // Some WebView builds can reject pointer capture for transient pointers.
+    }
+    pointerPointsRef.current.set(event.pointerId, { x: event.clientX, y: event.clientY });
+    updatePinchStart();
+  }
+
+  function handleCameraStagePointerMove(event: ReactPointerEvent<HTMLDivElement>) {
+    if (!pointerPointsRef.current.has(event.pointerId)) {
+      return;
+    }
+    pointerPointsRef.current.set(event.pointerId, { x: event.clientX, y: event.clientY });
+    const points = Array.from(pointerPointsRef.current.values());
+    if (points.length < 2 || !pinchStartRef.current) {
+      return;
+    }
+    event.preventDefault();
+    const distance = pointerDistance(points[0], points[1]);
+    if (distance <= 0) {
+      return;
+    }
+    setZoomLevel(pinchStartRef.current.zoom * (distance / pinchStartRef.current.distance));
+  }
+
+  function handleCameraStagePointerUp(event: ReactPointerEvent<HTMLDivElement>) {
+    pointerPointsRef.current.delete(event.pointerId);
+    try {
+      event.currentTarget.releasePointerCapture?.(event.pointerId);
+    } catch {
+      // Ignore release errors when the pointer was not captured by this element.
+    }
+    updatePinchStart();
+  }
+
+  function updatePinchStart() {
+    const points = Array.from(pointerPointsRef.current.values());
+    if (points.length < 2) {
+      pinchStartRef.current = null;
+      return;
+    }
+    const distance = pointerDistance(points[0], points[1]);
+    if (distance > 0) {
+      pinchStartRef.current = { distance, zoom: zoomValueRef.current };
     }
   }
 
   const visibleItems = items.slice(0, MAX_VISIBLE_ITEMS);
-  const zoomSupported = Boolean(zoomSettings?.supported);
-  const zoomValue = zoomSettings?.value ?? 1;
   const latestItem = visibleItems[0] || null;
 
   return (
     <div style={capturePanelStyle(isMobile)}>
-      <div style={cameraStageStyle}>
+      <div
+        style={cameraStageStyle}
+        onPointerDown={handleCameraStagePointerDown}
+        onPointerMove={handleCameraStagePointerMove}
+        onPointerUp={handleCameraStagePointerUp}
+        onPointerCancel={handleCameraStagePointerUp}
+        onPointerLeave={handleCameraStagePointerUp}
+      >
         <video
           ref={videoRef}
           muted
           playsInline
           autoPlay
-          style={videoStyle(facingMode, cameraReady)}
+          style={videoStyle(facingMode, cameraReady, zoomValue)}
           onLoadedMetadata={handlePreviewFrameReady}
           onLoadedData={handlePreviewFrameReady}
           onCanPlay={handlePreviewFrameReady}
@@ -572,6 +648,19 @@ export function ContinuousCapturePanel({
           </div>
         ) : null}
         {recording ? <div style={recordBadgeStyle}>REC</div> : null}
+        <div style={zoomQuickStripStyle}>
+          {QUICK_ZOOM_VALUES.map((value) => (
+            <button
+              key={value}
+              type="button"
+              style={zoomQuickButtonStyle(isActiveZoomValue(value, zoomValue))}
+              disabled={!cameraReady}
+              onClick={() => setZoomLevel(value)}
+            >
+              {formatZoomValue(value)}x
+            </button>
+          ))}
+        </div>
         <div style={cameraStatsStyle}>
           <span>上传 {stats.success}</span>
           <span>等待 {stats.uploading}</span>
@@ -588,27 +677,27 @@ export function ContinuousCapturePanel({
         >
           九宫格
         </button>
-        <div style={zoomControlStyle(zoomSupported)}>
+        <div style={zoomControlStyle(cameraReady)}>
           <button
             type="button"
             style={zoomResetButtonStyle}
             onClick={resetZoom}
-            disabled={!zoomSupported || recording}
+            disabled={!cameraReady}
           >
             1x
           </button>
           <input
             type="range"
-            min={zoomSettings?.min ?? 1}
-            max={zoomSettings?.max ?? 1}
-            step={zoomSettings?.step ?? 0.1}
+            min={SOFTWARE_ZOOM_MIN}
+            max={SOFTWARE_ZOOM_MAX}
+            step={SOFTWARE_ZOOM_STEP}
             value={zoomValue}
-            disabled={!zoomSupported || recording}
+            disabled={!cameraReady}
             onChange={(event) => handleZoomInput(event.currentTarget.value)}
             style={zoomSliderStyle}
             aria-label="缩放"
           />
-          <span style={zoomValueStyle}>{zoomSupported ? `${formatZoomValue(zoomValue)}x` : "缩放不可用"}</span>
+          <span style={zoomValueStyle}>{formatZoomValue(zoomValue)}x</span>
         </div>
         </div>
 
@@ -675,40 +764,6 @@ export function ContinuousCapturePanel({
       </div>
     </div>
   );
-}
-
-function readZoomSettings(stream: MediaStream): ZoomSettings {
-  const track = stream.getVideoTracks()[0];
-  const capabilities = track?.getCapabilities?.() as ZoomTrackCapabilities | undefined;
-  const range = capabilities?.zoom;
-  if (
-    !track ||
-    !range ||
-    typeof range.min !== "number" ||
-    typeof range.max !== "number" ||
-    range.max <= range.min
-  ) {
-    return {
-      supported: false,
-      min: 1,
-      max: 1,
-      step: 0.1,
-      value: 1,
-    };
-  }
-
-  const settings = track.getSettings?.() as ZoomTrackSettings | undefined;
-  const min = range.min;
-  const max = Math.max(min, range.max);
-  const step = typeof range.step === "number" && range.step > 0 ? range.step : 0.1;
-  const value = clampNumber(settings?.zoom, min, max, min);
-  return {
-    supported: true,
-    min,
-    max,
-    step,
-    value,
-  };
 }
 
 function detectCaptureOrientation(video: HTMLVideoElement | null, fallback: CaptureOrientation): CaptureOrientation {
@@ -872,6 +927,43 @@ function formatZoomValue(value: number) {
   return value.toFixed(value >= 10 ? 0 : 1);
 }
 
+function formatCssZoomValue(value: number) {
+  return clampNumber(value, SOFTWARE_ZOOM_MIN, SOFTWARE_ZOOM_MAX, SOFTWARE_ZOOM_MIN).toFixed(3);
+}
+
+function isActiveZoomValue(candidate: number, current: number) {
+  return Math.abs(candidate - current) < 0.12;
+}
+
+function pointerDistance(first: PointerPoint, second: PointerPoint) {
+  return Math.hypot(first.x - second.x, first.y - second.y);
+}
+
+function isInteractiveCaptureTarget(target: EventTarget | null) {
+  return Boolean(
+    typeof HTMLElement !== "undefined" &&
+      target instanceof HTMLElement &&
+      target.closest("button,input,a,select,textarea"),
+  );
+}
+
+function drawZoomedVideoFrame(
+  context: CanvasRenderingContext2D,
+  video: HTMLVideoElement,
+  targetWidth: number,
+  targetHeight: number,
+  zoomValue: number,
+) {
+  const sourceWidth = video.videoWidth || targetWidth;
+  const sourceHeight = video.videoHeight || targetHeight;
+  const zoom = clampNumber(zoomValue, SOFTWARE_ZOOM_MIN, SOFTWARE_ZOOM_MAX, SOFTWARE_ZOOM_MIN);
+  const cropWidth = Math.max(1, sourceWidth / zoom);
+  const cropHeight = Math.max(1, sourceHeight / zoom);
+  const cropX = Math.max(0, (sourceWidth - cropWidth) / 2);
+  const cropY = Math.max(0, (sourceHeight - cropHeight) / 2);
+  context.drawImage(video, cropX, cropY, cropWidth, cropHeight, 0, 0, targetWidth, targetHeight);
+}
+
 function scaleCaptureDimensions(sourceWidth: number, sourceHeight: number, maxWidth: number) {
   const width = Math.max(1, Math.round(sourceWidth));
   const height = Math.max(1, Math.round(sourceHeight));
@@ -987,6 +1079,7 @@ const cameraStageStyle: CSSProperties = {
   display: "grid",
   placeItems: "center",
   overflow: "hidden",
+  touchAction: "none",
 };
 
 const cameraTopOverlayStyle: CSSProperties = {
@@ -1090,7 +1183,8 @@ function gridHorizontalLineStyle(top: string): CSSProperties {
   };
 }
 
-function videoStyle(facingMode: FacingMode, ready: boolean): CSSProperties {
+function videoStyle(facingMode: FacingMode, ready: boolean, zoomValue: number): CSSProperties {
+  const zoomTransform = `scale(${formatCssZoomValue(zoomValue)})`;
   return {
     position: "absolute",
     inset: 0,
@@ -1099,8 +1193,11 @@ function videoStyle(facingMode: FacingMode, ready: boolean): CSSProperties {
     height: "100%",
     objectFit: "cover",
     zIndex: 1,
-    transform: facingMode === "user" ? "scaleX(-1)" : undefined,
+    transform: facingMode === "user" ? `${zoomTransform} scaleX(-1)` : zoomTransform,
+    transformOrigin: "center",
     opacity: ready ? 1 : 0,
+    transition: "transform 120ms ease-out",
+    willChange: "transform",
   };
 }
 
@@ -1130,6 +1227,39 @@ const recordBadgeStyle: CSSProperties = {
   fontWeight: 900,
   letterSpacing: "0.08em",
 };
+
+const zoomQuickStripStyle: CSSProperties = {
+  position: "absolute",
+  left: "50%",
+  bottom: "18px",
+  zIndex: 5,
+  display: "flex",
+  alignItems: "center",
+  justifyContent: "center",
+  gap: "8px",
+  transform: "translateX(-50%)",
+  padding: "6px",
+  borderRadius: "999px",
+  background: "rgba(0,0,0,0.36)",
+  border: "1px solid rgba(255,255,255,0.1)",
+  backdropFilter: "blur(10px)",
+};
+
+function zoomQuickButtonStyle(active: boolean): CSSProperties {
+  return {
+    width: active ? "42px" : "36px",
+    height: active ? "42px" : "36px",
+    borderRadius: "50%",
+    border: active ? "1px solid rgba(255,255,255,0.84)" : "1px solid rgba(255,255,255,0.16)",
+    background: active ? "#f8fafc" : "rgba(255,255,255,0.1)",
+    color: active ? "#020305" : "#f8fafc",
+    fontSize: active ? "12px" : "11px",
+    fontWeight: 900,
+    cursor: "pointer",
+    transition: "width 120ms ease, height 120ms ease, background 120ms ease, color 120ms ease",
+    touchAction: "manipulation",
+  };
+}
 
 const cameraStatsStyle: CSSProperties = {
   position: "absolute",
