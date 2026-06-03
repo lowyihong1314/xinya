@@ -29,6 +29,7 @@ type ContinuousCapturePanelProps = {
 };
 
 type FacingMode = "environment" | "user";
+type CaptureOrientation = "portrait" | "landscape";
 type ZoomSettings = {
   supported: boolean;
   min: number;
@@ -87,6 +88,8 @@ export function ContinuousCapturePanel({
   const [cameraProfile, setCameraProfile] = useState<NativeAlbumCameraProfile | null>(null);
   const [gridEnabled, setGridEnabled] = useState(true);
   const [zoomSettings, setZoomSettings] = useState<ZoomSettings | null>(null);
+  const [captureOrientation, setCaptureOrientation] = useState<CaptureOrientation>(detectViewportOrientation);
+  const [viewportOrientation, setViewportOrientation] = useState<CaptureOrientation>(detectViewportOrientation);
 
   const stats = useMemo(() => {
     return {
@@ -133,6 +136,7 @@ export function ContinuousCapturePanel({
         if (videoRef.current) {
           videoRef.current.srcObject = stream;
           await videoRef.current.play().catch(() => undefined);
+          updateCaptureOrientation();
         }
         setCameraReady(true);
       } catch (error) {
@@ -153,8 +157,19 @@ export function ContinuousCapturePanel({
   }, [cameraProfile, facingMode]);
 
   useEffect(() => {
+    const handleOrientationChange = () => {
+      setViewportOrientation(detectViewportOrientation());
+      updateCaptureOrientation();
+    };
+    window.addEventListener("resize", handleOrientationChange);
+    window.addEventListener("orientationchange", handleOrientationChange);
+    screen.orientation?.addEventListener?.("change", handleOrientationChange);
+
     return () => {
       mountedRef.current = false;
+      window.removeEventListener("resize", handleOrientationChange);
+      window.removeEventListener("orientationchange", handleOrientationChange);
+      screen.orientation?.removeEventListener?.("change", handleOrientationChange);
       clearLongPressTimer();
       if (refreshTimerRef.current) {
         window.clearTimeout(refreshTimerRef.current);
@@ -414,6 +429,11 @@ export function ContinuousCapturePanel({
     onExit();
   }
 
+  function updateCaptureOrientation() {
+    const video = videoRef.current;
+    setCaptureOrientation(detectCaptureOrientation(video));
+  }
+
   function handleZoomInput(value: string) {
     const parsed = Number(value);
     if (!Number.isFinite(parsed) || !zoomSettings?.supported) {
@@ -452,21 +472,33 @@ export function ContinuousCapturePanel({
   const visibleItems = items.slice(0, MAX_VISIBLE_ITEMS);
   const zoomSupported = Boolean(zoomSettings?.supported);
   const zoomValue = zoomSettings?.value ?? 1;
+  const orientationMismatch = cameraReady && captureOrientation !== viewportOrientation;
+  const latestItem = visibleItems[0] || null;
 
   return (
     <div style={capturePanelStyle(isMobile)}>
-      <div style={captureTopBarStyle}>
-        <div style={captureTitleWrapStyle}>
-          <div style={captureEyebrowStyle}>{cameraProfile?.isSamsung ? "Samsung Capture" : "Live Capture"}</div>
-          <div style={captureTitleStyle}>{eventName || `活动 #${eventId}`}</div>
-        </div>
-        <button type="button" style={exitButtonStyle} onClick={handleExit}>
-          退出
-        </button>
-      </div>
-
       <div style={cameraStageStyle}>
-        <video ref={videoRef} muted playsInline autoPlay style={videoStyle(facingMode)} />
+        <video
+          ref={videoRef}
+          muted
+          playsInline
+          autoPlay
+          style={videoStyle(facingMode, cameraReady)}
+          onLoadedMetadata={updateCaptureOrientation}
+          onResize={updateCaptureOrientation}
+        />
+        <div style={cameraTopOverlayStyle}>
+          <button type="button" style={iconButtonStyle} onClick={handleExit} aria-label="退出">
+            x
+          </button>
+          <div style={cameraTitlePillStyle}>
+            <span style={cameraModeStyle}>{recording ? "录像中" : cameraProfile?.isSamsung ? "Samsung" : "相机"}</span>
+            <span style={cameraTitleTextStyle}>{eventName || `活动 #${eventId}`}</span>
+          </div>
+          <div style={orientationPillStyle(orientationMismatch)}>
+            {captureOrientation === "landscape" ? "横向" : "竖向"}
+          </div>
+        </div>
         {gridEnabled ? (
           <div style={gridOverlayStyle} aria-hidden="true">
             <span style={gridVerticalLineStyle("33.333%")} />
@@ -488,7 +520,8 @@ export function ContinuousCapturePanel({
         </div>
       </div>
 
-      <div style={captureToolBarStyle(isMobile)}>
+      <div style={nativeBottomPanelStyle(isMobile)}>
+        <div style={captureToolBarStyle(isMobile)}>
         <button
           type="button"
           style={toolToggleButtonStyle(gridEnabled)}
@@ -518,53 +551,68 @@ export function ContinuousCapturePanel({
           />
           <span style={zoomValueStyle}>{zoomSupported ? `${formatZoomValue(zoomValue)}x` : "缩放不可用"}</span>
         </div>
-      </div>
+        </div>
 
-      <div style={captureControlsStyle(isMobile)}>
-        <button
-          type="button"
-          style={sideControlButtonStyle}
-          disabled={recording}
-          onClick={() => setFacingMode((current) => (current === "environment" ? "user" : "environment"))}
-        >
-          切换
-        </button>
-        <button
-          type="button"
-          style={shutterButtonStyle(recording, cameraReady)}
-          disabled={!cameraReady}
-          onPointerDown={handleShutterDown}
-          onPointerUp={handleShutterUp}
-          onPointerCancel={handleShutterUp}
-          onContextMenu={(event) => event.preventDefault()}
-          aria-label="拍摄"
-        >
-          <span style={shutterInnerStyle(recording)} />
-        </button>
-        <button type="button" style={sideControlButtonStyle} onClick={() => void capturePhoto()} disabled={!cameraReady || recording}>
-          拍照
-        </button>
-      </div>
+        {toast ? <div style={captureToastStyle}>{toast}</div> : null}
 
-      {toast ? <div style={captureToastStyle}>{toast}</div> : null}
-
-      <div style={uploadStripStyle(isMobile)}>
-        {!visibleItems.length ? <div style={emptyStripStyle}>暂无拍摄文件</div> : null}
-        {visibleItems.map((item) => (
-          <div key={item.id} style={uploadTileStyle(item.status)}>
-            {item.type === "image" ? (
-              <CachedImage src={item.previewUrl} alt="" style={uploadThumbStyle} />
+        <div style={captureControlsStyle(isMobile)}>
+          <div style={latestPreviewSlotStyle}>
+            {latestItem ? (
+              latestItem.type === "image" ? (
+                <CachedImage src={latestItem.previewUrl} alt="" style={latestPreviewStyle(latestItem.status)} />
+              ) : (
+                <video src={latestItem.previewUrl} muted playsInline style={latestPreviewStyle(latestItem.status)} />
+              )
             ) : (
-              <video src={item.previewUrl} muted playsInline style={uploadThumbStyle} />
+              <div style={emptyLatestPreviewStyle} />
             )}
-            <div style={uploadTileMetaStyle}>
-              <div style={uploadTileNameStyle}>{item.type === "image" ? "照片" : "视频"}</div>
-              <div style={uploadTileStatusStyle(item.status)}>
-                {captureStatusLabel(item.status)} {item.status === "uploading" ? `${item.progress}%` : ""}
+          </div>
+          <button
+            type="button"
+            style={shutterButtonStyle(recording, cameraReady)}
+            disabled={!cameraReady}
+            onPointerDown={handleShutterDown}
+            onPointerUp={handleShutterUp}
+            onPointerCancel={handleShutterUp}
+            onContextMenu={(event) => event.preventDefault()}
+            aria-label="拍摄"
+          >
+            <span style={shutterInnerStyle(recording)} />
+          </button>
+          <button
+            type="button"
+            style={flipCameraButtonStyle}
+            disabled={recording}
+            onClick={() => setFacingMode((current) => (current === "environment" ? "user" : "environment"))}
+            aria-label="切换镜头"
+          >
+            <span style={flipCameraIconStyle}>↻</span>
+          </button>
+        </div>
+
+        <div style={captureHintRowStyle}>
+          <span>点按拍照</span>
+          <span>长按录像</span>
+          <span>{orientationMismatch ? "设备与画面方向不同" : captureOrientation === "landscape" ? "横向画面" : "竖向画面"}</span>
+        </div>
+
+        <div style={uploadStripStyle(isMobile)}>
+          {!visibleItems.length ? null : visibleItems.map((item) => (
+            <div key={item.id} style={uploadTileStyle(item.status)}>
+              {item.type === "image" ? (
+                <CachedImage src={item.previewUrl} alt="" style={uploadThumbStyle} />
+              ) : (
+                <video src={item.previewUrl} muted playsInline style={uploadThumbStyle} />
+              )}
+              <div style={uploadTileMetaStyle}>
+                <div style={uploadTileNameStyle}>{item.type === "image" ? "照片" : "视频"}</div>
+                <div style={uploadTileStatusStyle(item.status)}>
+                  {captureStatusLabel(item.status)} {item.status === "uploading" ? `${item.progress}%` : ""}
+                </div>
               </div>
             </div>
-          </div>
-        ))}
+          ))}
+        </div>
       </div>
     </div>
   );
@@ -602,6 +650,20 @@ function readZoomSettings(stream: MediaStream): ZoomSettings {
     step,
     value,
   };
+}
+
+function detectViewportOrientation(): CaptureOrientation {
+  if (typeof window === "undefined") {
+    return "portrait";
+  }
+  return window.innerWidth > window.innerHeight ? "landscape" : "portrait";
+}
+
+function detectCaptureOrientation(video: HTMLVideoElement | null): CaptureOrientation {
+  if (video?.videoWidth && video.videoHeight) {
+    return video.videoWidth >= video.videoHeight ? "landscape" : "portrait";
+  }
+  return detectViewportOrientation();
 }
 
 async function requestCameraStream(facingMode: FacingMode, cameraProfile: NativeAlbumCameraProfile | null) {
@@ -737,8 +799,8 @@ function capturePanelStyle(isMobile: boolean): CSSProperties {
     height: "100dvh",
     minHeight: 0,
     display: "grid",
-    gridTemplateRows: "auto minmax(0, 1fr) auto auto auto auto",
-    background: "#080b10",
+    gridTemplateRows: "minmax(0, 1fr) auto",
+    background: "#020305",
     color: "#f8fafc",
     overflow: "hidden",
     paddingBottom: isMobile ? "env(safe-area-inset-bottom)" : undefined,
@@ -796,6 +858,78 @@ const cameraStageStyle: CSSProperties = {
   overflow: "hidden",
 };
 
+const cameraTopOverlayStyle: CSSProperties = {
+  position: "absolute",
+  top: 0,
+  left: 0,
+  right: 0,
+  zIndex: 5,
+  display: "grid",
+  gridTemplateColumns: "44px minmax(0, 1fr) auto",
+  alignItems: "center",
+  gap: "10px",
+  padding: "calc(env(safe-area-inset-top) + 12px) 14px 18px",
+  background: "linear-gradient(180deg, rgba(0,0,0,0.72), rgba(0,0,0,0))",
+};
+
+const iconButtonStyle: CSSProperties = {
+  width: "42px",
+  height: "42px",
+  borderRadius: "50%",
+  border: "1px solid rgba(255,255,255,0.14)",
+  background: "rgba(0,0,0,0.44)",
+  color: "#fff",
+  fontSize: "22px",
+  lineHeight: 1,
+  fontWeight: 500,
+  cursor: "pointer",
+};
+
+const cameraTitlePillStyle: CSSProperties = {
+  minWidth: 0,
+  justifySelf: "center",
+  maxWidth: "100%",
+  display: "grid",
+  justifyItems: "center",
+  gap: "2px",
+  padding: "7px 12px",
+  borderRadius: "999px",
+  background: "rgba(0,0,0,0.38)",
+  border: "1px solid rgba(255,255,255,0.1)",
+  backdropFilter: "blur(10px)",
+};
+
+const cameraModeStyle: CSSProperties = {
+  fontSize: "10px",
+  fontWeight: 800,
+  color: "rgba(255,255,255,0.62)",
+  textTransform: "uppercase",
+};
+
+const cameraTitleTextStyle: CSSProperties = {
+  maxWidth: "54vw",
+  overflow: "hidden",
+  textOverflow: "ellipsis",
+  whiteSpace: "nowrap",
+  color: "#fff",
+  fontSize: "14px",
+  fontWeight: 800,
+};
+
+function orientationPillStyle(warn: boolean): CSSProperties {
+  return {
+    minWidth: "48px",
+    padding: "8px 10px",
+    borderRadius: "999px",
+    textAlign: "center",
+    border: warn ? "1px solid rgba(251,191,36,0.55)" : "1px solid rgba(255,255,255,0.14)",
+    background: warn ? "rgba(251,191,36,0.18)" : "rgba(0,0,0,0.44)",
+    color: "#fff",
+    fontSize: "12px",
+    fontWeight: 900,
+  };
+}
+
 const gridOverlayStyle: CSSProperties = {
   position: "absolute",
   inset: 0,
@@ -827,18 +961,20 @@ function gridHorizontalLineStyle(top: string): CSSProperties {
   };
 }
 
-function videoStyle(facingMode: FacingMode): CSSProperties {
+function videoStyle(facingMode: FacingMode, ready: boolean): CSSProperties {
   return {
     width: "100%",
     height: "100%",
     objectFit: "cover",
     transform: facingMode === "user" ? "scaleX(-1)" : undefined,
+    opacity: ready ? 1 : 0,
   };
 }
 
 const cameraOverlayStyle: CSSProperties = {
   position: "absolute",
   inset: 0,
+  zIndex: 4,
   display: "grid",
   placeItems: "center",
   padding: "20px",
@@ -850,8 +986,9 @@ const cameraOverlayStyle: CSSProperties = {
 
 const recordBadgeStyle: CSSProperties = {
   position: "absolute",
-  top: "14px",
-  left: "14px",
+  top: "calc(env(safe-area-inset-top) + 74px)",
+  left: "18px",
+  zIndex: 6,
   padding: "7px 10px",
   borderRadius: "999px",
   background: "#dc2626",
@@ -865,6 +1002,7 @@ const cameraStatsStyle: CSSProperties = {
   position: "absolute",
   right: "12px",
   bottom: "12px",
+  zIndex: 3,
   display: "flex",
   gap: "8px",
   flexWrap: "wrap",
@@ -874,14 +1012,24 @@ const cameraStatsStyle: CSSProperties = {
   fontWeight: 800,
 };
 
+function nativeBottomPanelStyle(isMobile: boolean): CSSProperties {
+  return {
+    display: "grid",
+    gap: "12px",
+    padding: isMobile ? "12px 14px 14px" : "14px 24px 18px",
+    background: "#020305",
+    borderTop: "1px solid rgba(255,255,255,0.08)",
+  };
+}
+
 function captureToolBarStyle(isMobile: boolean): CSSProperties {
   return {
     display: "grid",
     gridTemplateColumns: isMobile ? "auto minmax(0, 1fr)" : "160px minmax(0, 440px)",
     gap: "10px",
     alignItems: "center",
-    padding: isMobile ? "10px 16px 0" : "12px 28px 0",
-    background: "#080b10",
+    padding: 0,
+    background: "transparent",
   };
 }
 
@@ -946,10 +1094,69 @@ function captureControlsStyle(isMobile: boolean): CSSProperties {
     gridTemplateColumns: "1fr auto 1fr",
     alignItems: "center",
     gap: isMobile ? "14px" : "20px",
-    padding: isMobile ? "16px 20px" : "18px 28px",
-    background: "#080b10",
+    padding: isMobile ? "4px 4px 0" : "6px 10px 0",
+    background: "transparent",
   };
 }
+
+const latestPreviewSlotStyle: CSSProperties = {
+  width: "58px",
+  height: "58px",
+  alignSelf: "center",
+  justifySelf: "start",
+};
+
+function latestPreviewStyle(status: CaptureUploadStatus): CSSProperties {
+  return {
+    width: "58px",
+    height: "58px",
+    borderRadius: "12px",
+    objectFit: "cover",
+    border:
+      status === "success"
+        ? "2px solid #34d399"
+        : status === "error"
+          ? "2px solid #f87171"
+          : "2px solid rgba(255,255,255,0.48)",
+    background: "#111827",
+  };
+}
+
+const emptyLatestPreviewStyle: CSSProperties = {
+  width: "58px",
+  height: "58px",
+  borderRadius: "12px",
+  border: "1px solid rgba(255,255,255,0.16)",
+  background: "rgba(255,255,255,0.06)",
+};
+
+const flipCameraButtonStyle: CSSProperties = {
+  width: "58px",
+  height: "58px",
+  borderRadius: "50%",
+  border: "1px solid rgba(255,255,255,0.14)",
+  background: "rgba(255,255,255,0.1)",
+  color: "#fff",
+  display: "grid",
+  placeItems: "center",
+  cursor: "pointer",
+};
+
+const flipCameraIconStyle: CSSProperties = {
+  fontSize: "28px",
+  lineHeight: 1,
+  fontWeight: 800,
+};
+
+const captureHintRowStyle: CSSProperties = {
+  display: "flex",
+  justifyContent: "center",
+  gap: "14px",
+  flexWrap: "wrap",
+  color: "rgba(248,250,252,0.52)",
+  fontSize: "12px",
+  fontWeight: 700,
+};
 
 const sideControlButtonStyle: CSSProperties = {
   minHeight: "44px",
