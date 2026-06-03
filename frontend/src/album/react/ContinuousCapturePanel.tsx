@@ -3,6 +3,10 @@ import type { CSSProperties, PointerEvent as ReactPointerEvent } from "react";
 
 import { CachedImage } from "../../components/CachedMedia";
 import { uploadEventMedia } from "../../event/shared/api";
+import {
+  NativeAlbumUploadPluginBridge,
+  type NativeAlbumCameraProfile,
+} from "../../mobile/native/albumUploadPlugin";
 
 type CaptureUploadStatus = "queued" | "uploading" | "success" | "error";
 
@@ -57,6 +61,7 @@ export function ContinuousCapturePanel({
   const [recording, setRecording] = useState(false);
   const [toast, setToast] = useState<string | null>(null);
   const [items, setItems] = useState<CaptureUploadItem[]>([]);
+  const [cameraProfile, setCameraProfile] = useState<NativeAlbumCameraProfile | null>(null);
 
   const stats = useMemo(() => {
     return {
@@ -69,6 +74,21 @@ export function ContinuousCapturePanel({
 
   useEffect(() => {
     let canceled = false;
+    void NativeAlbumUploadPluginBridge.getCameraProfile()
+      .then((profile) => {
+        if (!canceled) {
+          setCameraProfile(profile);
+        }
+      })
+      .catch(() => undefined);
+
+    return () => {
+      canceled = true;
+    };
+  }, []);
+
+  useEffect(() => {
+    let canceled = false;
 
     async function openCamera() {
       setCameraReady(false);
@@ -76,7 +96,7 @@ export function ContinuousCapturePanel({
       stopStream();
 
       try {
-        const stream = await requestCameraStream(facingMode);
+        const stream = await requestCameraStream(facingMode, cameraProfile);
         if (canceled) {
           stopTracks(stream);
           return;
@@ -103,7 +123,7 @@ export function ContinuousCapturePanel({
       stopRecording();
       stopStream();
     };
-  }, [facingMode]);
+  }, [cameraProfile, facingMode]);
 
   useEffect(() => {
     return () => {
@@ -230,20 +250,22 @@ export function ContinuousCapturePanel({
       return;
     }
 
-    const width = video.videoWidth || 1280;
-    const height = video.videoHeight || 720;
+    const sourceWidth = video.videoWidth || 1280;
+    const sourceHeight = video.videoHeight || 720;
+    const size = scaleCaptureDimensions(sourceWidth, sourceHeight, cameraProfile?.recommendedPhotoMaxWidth ?? 2560);
     const canvas = canvasRef.current || document.createElement("canvas");
     canvasRef.current = canvas;
-    canvas.width = width;
-    canvas.height = height;
+    canvas.width = size.width;
+    canvas.height = size.height;
     const context = canvas.getContext("2d");
     if (!context) {
       setToast("无法读取相机画面");
       return;
     }
 
-    context.drawImage(video, 0, 0, width, height);
-    const blob = await new Promise<Blob | null>((resolve) => canvas.toBlob(resolve, "image/jpeg", 0.92));
+    context.drawImage(video, 0, 0, size.width, size.height);
+    const photoQuality = clampPhotoQuality(cameraProfile?.recommendedPhotoQuality ?? 0.9);
+    const blob = await new Promise<Blob | null>((resolve) => canvas.toBlob(resolve, "image/jpeg", photoQuality));
     if (!blob) {
       setToast("照片生成失败");
       return;
@@ -272,7 +294,7 @@ export function ContinuousCapturePanel({
     }
 
     try {
-      const mimeType = pickRecorderMimeType();
+      const mimeType = pickRecorderMimeType(cameraProfile);
       recordingChunksRef.current = [];
       const recorder = new MediaRecorder(streamRef.current, mimeType ? { mimeType } : undefined);
       mediaRecorderRef.current = recorder;
@@ -371,7 +393,7 @@ export function ContinuousCapturePanel({
     <div style={capturePanelStyle(isMobile)}>
       <div style={captureTopBarStyle}>
         <div style={captureTitleWrapStyle}>
-          <div style={captureEyebrowStyle}>Live Capture</div>
+          <div style={captureEyebrowStyle}>{cameraProfile?.isSamsung ? "Samsung Capture" : "Live Capture"}</div>
           <div style={captureTitleStyle}>{eventName || `活动 #${eventId}`}</div>
         </div>
         <button type="button" style={exitButtonStyle} onClick={handleExit}>
@@ -444,15 +466,22 @@ export function ContinuousCapturePanel({
   );
 }
 
-async function requestCameraStream(facingMode: FacingMode) {
+async function requestCameraStream(facingMode: FacingMode, cameraProfile: NativeAlbumCameraProfile | null) {
   if (!navigator.mediaDevices?.getUserMedia) {
     throw new Error("当前设备不支持相机");
   }
 
-  const video = {
+  const recommendedWidth = clampNumber(cameraProfile?.recommendedVideoWidth, 640, 3840, cameraProfile?.isSamsung ? 1280 : 1920);
+  const recommendedHeight = clampNumber(cameraProfile?.recommendedVideoHeight, 360, 2160, cameraProfile?.isSamsung ? 720 : 1080);
+  const recommendedFrameRate = clampNumber(cameraProfile?.recommendedFrameRate, 15, 60, 30);
+  const video: MediaTrackConstraints = {
     facingMode: { ideal: facingMode },
-    width: { ideal: 1920 },
-    height: { ideal: 1080 },
+    width: cameraProfile?.isSamsung ? { ideal: recommendedWidth, max: 1920 } : { ideal: recommendedWidth },
+    height: cameraProfile?.isSamsung ? { ideal: recommendedHeight, max: 1080 } : { ideal: recommendedHeight },
+    frameRate: cameraProfile?.isSamsung
+      ? { ideal: recommendedFrameRate, max: 30 }
+      : { ideal: recommendedFrameRate },
+    resizeMode: "crop-and-scale",
   };
 
   try {
@@ -470,16 +499,24 @@ function stopTracks(stream: MediaStream) {
   stream.getTracks().forEach((track) => track.stop());
 }
 
-function pickRecorderMimeType() {
+function pickRecorderMimeType(cameraProfile?: NativeAlbumCameraProfile | null) {
   if (typeof MediaRecorder === "undefined" || typeof MediaRecorder.isTypeSupported !== "function") {
     return "";
   }
-  return [
+  const samsungCandidates = [
     "video/mp4;codecs=h264,aac",
+    "video/mp4",
+    "video/webm;codecs=vp8,opus",
+    "video/webm",
+  ];
+  const defaultCandidates = [
+    "video/mp4;codecs=h264,aac",
+    "video/mp4",
     "video/webm;codecs=vp9,opus",
     "video/webm;codecs=vp8,opus",
     "video/webm",
-  ].find((type) => MediaRecorder.isTypeSupported(type)) || "";
+  ];
+  return (cameraProfile?.isSamsung ? samsungCandidates : defaultCandidates).find((type) => MediaRecorder.isTypeSupported(type)) || "";
 }
 
 function videoExtensionFromMime(mimeType: string) {
@@ -495,6 +532,31 @@ function videoExtensionFromMime(mimeType: string) {
 
 function timestampForFilename() {
   return new Date().toISOString().replace(/[-:]/g, "").replace(/\..+$/, "").replace("T", "-");
+}
+
+function scaleCaptureDimensions(sourceWidth: number, sourceHeight: number, maxWidth: number) {
+  const width = Math.max(1, Math.round(sourceWidth));
+  const height = Math.max(1, Math.round(sourceHeight));
+  const boundedMaxWidth = clampNumber(maxWidth, 640, 4096, 2560);
+  if (width <= boundedMaxWidth) {
+    return { width, height };
+  }
+  const ratio = boundedMaxWidth / width;
+  return {
+    width: boundedMaxWidth,
+    height: Math.max(1, Math.round(height * ratio)),
+  };
+}
+
+function clampPhotoQuality(value: number) {
+  return Math.min(0.95, Math.max(0.72, value));
+}
+
+function clampNumber(value: number | null | undefined, min: number, max: number, fallback: number) {
+  if (typeof value !== "number" || !Number.isFinite(value)) {
+    return fallback;
+  }
+  return Math.min(max, Math.max(min, value));
 }
 
 function captureStatusLabel(status: CaptureUploadStatus) {

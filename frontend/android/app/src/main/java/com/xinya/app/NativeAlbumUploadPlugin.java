@@ -4,9 +4,18 @@ import android.app.Activity;
 import android.content.ClipData;
 import android.content.ContentResolver;
 import android.content.Intent;
+import android.content.pm.PackageManager;
 import android.database.Cursor;
+import android.graphics.ImageFormat;
+import android.hardware.camera2.CameraCharacteristics;
+import android.hardware.camera2.CameraManager;
+import android.hardware.camera2.params.StreamConfigurationMap;
+import android.media.MediaRecorder;
 import android.net.Uri;
+import android.os.Build;
 import android.provider.MediaStore;
+import android.util.Range;
+import android.util.Size;
 import android.provider.OpenableColumns;
 import android.webkit.CookieManager;
 
@@ -205,6 +214,49 @@ public class NativeAlbumUploadPlugin extends Plugin {
             }
         }
         call.resolve(statusToJSObject(status));
+    }
+
+    @PluginMethod
+    public void getCameraProfile(PluginCall call) {
+        JSObject profile = new JSObject();
+        String manufacturer = Build.MANUFACTURER != null ? Build.MANUFACTURER : "";
+        String brand = Build.BRAND != null ? Build.BRAND : "";
+        String model = Build.MODEL != null ? Build.MODEL : "";
+        boolean isSamsung = "samsung".equalsIgnoreCase(manufacturer) || "samsung".equalsIgnoreCase(brand);
+        PackageManager packageManager = getContext().getPackageManager();
+
+        updateStatus(profile, "manufacturer", manufacturer);
+        updateStatus(profile, "brand", brand);
+        updateStatus(profile, "model", model);
+        updateStatus(profile, "sdkInt", Build.VERSION.SDK_INT);
+        updateStatus(profile, "isSamsung", isSamsung);
+        updateStatus(profile, "isEmulator", isLikelyEmulator());
+        updateStatus(profile, "hasCamera", packageManager.hasSystemFeature(PackageManager.FEATURE_CAMERA_ANY));
+        updateStatus(profile, "hasBackCamera", packageManager.hasSystemFeature(PackageManager.FEATURE_CAMERA));
+        updateStatus(profile, "hasFrontCamera", packageManager.hasSystemFeature(PackageManager.FEATURE_CAMERA_FRONT));
+        updateStatus(profile, "recommendedPhotoMaxWidth", isSamsung ? 1920 : 2560);
+        updateStatus(profile, "recommendedPhotoQuality", isSamsung ? 0.88 : 0.9);
+        updateStatus(profile, "recommendedVideoWidth", isSamsung ? 1280 : 1920);
+        updateStatus(profile, "recommendedVideoHeight", isSamsung ? 720 : 1080);
+        updateStatus(profile, "recommendedFrameRate", 30);
+
+        CameraCapabilitySummary summary = readCameraCapabilities();
+        updateStatus(profile, "supportsCamera2", summary.supportsCamera2);
+        updateStatus(profile, "backCameraCount", summary.backCameraCount);
+        updateStatus(profile, "frontCameraCount", summary.frontCameraCount);
+        updateStatus(profile, "externalCameraCount", summary.externalCameraCount);
+        updateStatus(profile, "hasFlash", summary.hasFlash);
+        updateStatus(profile, "hasOpticalStabilization", summary.hasOpticalStabilization);
+        updateStatus(profile, "hasVideoStabilization", summary.hasVideoStabilization);
+        updateStatus(profile, "supportsHighSpeedVideo", summary.supportsHighSpeedVideo);
+        updateStatus(profile, "maxPhotoWidth", summary.maxPhotoWidth);
+        updateStatus(profile, "maxPhotoHeight", summary.maxPhotoHeight);
+        updateStatus(profile, "maxVideoWidth", summary.maxVideoWidth);
+        updateStatus(profile, "maxVideoHeight", summary.maxVideoHeight);
+        updateStatus(profile, "hardwareLevels", summary.hardwareLevels);
+        updateStatus(profile, "cameras", summary.cameras);
+        updateStatus(profile, "samsungEnhancedMode", isSamsung && summary.supportsCamera2 && summary.backCameraCount > 0);
+        call.resolve(profile);
     }
 
     private Set<Uri> extractUris(Intent data) {
@@ -408,5 +460,196 @@ public class NativeAlbumUploadPlugin extends Plugin {
             normalized = normalized.substring(0, normalized.length() - 1);
         }
         return normalized;
+    }
+
+    private CameraCapabilitySummary readCameraCapabilities() {
+        CameraCapabilitySummary summary = new CameraCapabilitySummary();
+        try {
+            CameraManager cameraManager = (CameraManager) getContext().getSystemService(Activity.CAMERA_SERVICE);
+            if (cameraManager == null) {
+                return summary;
+            }
+
+            for (String cameraId : cameraManager.getCameraIdList()) {
+                CameraCharacteristics characteristics = cameraManager.getCameraCharacteristics(cameraId);
+                JSObject camera = new JSObject();
+                updateStatus(camera, "id", cameraId);
+
+                Integer facing = characteristics.get(CameraCharacteristics.LENS_FACING);
+                String facingName = cameraFacingName(facing);
+                updateStatus(camera, "facing", facingName);
+                if ("back".equals(facingName)) {
+                    summary.backCameraCount += 1;
+                } else if ("front".equals(facingName)) {
+                    summary.frontCameraCount += 1;
+                } else if ("external".equals(facingName)) {
+                    summary.externalCameraCount += 1;
+                }
+
+                Integer hardwareLevel = characteristics.get(CameraCharacteristics.INFO_SUPPORTED_HARDWARE_LEVEL);
+                String hardwareLevelName = cameraHardwareLevelName(hardwareLevel);
+                updateStatus(camera, "hardwareLevel", hardwareLevelName);
+                if (hardwareLevelName.length() > 0) {
+                    summary.hardwareLevels.put(hardwareLevelName);
+                }
+                if (hardwareLevel != null && hardwareLevel != CameraCharacteristics.INFO_SUPPORTED_HARDWARE_LEVEL_LEGACY) {
+                    summary.supportsCamera2 = true;
+                }
+
+                Boolean flashAvailable = characteristics.get(CameraCharacteristics.FLASH_INFO_AVAILABLE);
+                boolean hasFlash = flashAvailable != null && flashAvailable;
+                updateStatus(camera, "hasFlash", hasFlash);
+                summary.hasFlash = summary.hasFlash || hasFlash;
+
+                boolean hasOpticalStabilization = intArrayContains(
+                    characteristics.get(CameraCharacteristics.LENS_INFO_AVAILABLE_OPTICAL_STABILIZATION),
+                    CameraCharacteristics.LENS_OPTICAL_STABILIZATION_MODE_ON
+                );
+                boolean hasVideoStabilization = intArrayContains(
+                    characteristics.get(CameraCharacteristics.CONTROL_AVAILABLE_VIDEO_STABILIZATION_MODES),
+                    CameraCharacteristics.CONTROL_VIDEO_STABILIZATION_MODE_ON
+                );
+                updateStatus(camera, "hasOpticalStabilization", hasOpticalStabilization);
+                updateStatus(camera, "hasVideoStabilization", hasVideoStabilization);
+                summary.hasOpticalStabilization = summary.hasOpticalStabilization || hasOpticalStabilization;
+                summary.hasVideoStabilization = summary.hasVideoStabilization || hasVideoStabilization;
+
+                StreamConfigurationMap streamMap = characteristics.get(CameraCharacteristics.SCALER_STREAM_CONFIGURATION_MAP);
+                if (streamMap != null) {
+                    Size maxPhotoSize = maxSize(streamMap.getOutputSizes(ImageFormat.JPEG));
+                    Size maxVideoSize = maxSize(streamMap.getOutputSizes(MediaRecorder.class));
+                    if (maxPhotoSize != null) {
+                        updateStatus(camera, "maxPhotoWidth", maxPhotoSize.getWidth());
+                        updateStatus(camera, "maxPhotoHeight", maxPhotoSize.getHeight());
+                        summary.maxPhotoWidth = Math.max(summary.maxPhotoWidth, maxPhotoSize.getWidth());
+                        summary.maxPhotoHeight = Math.max(summary.maxPhotoHeight, maxPhotoSize.getHeight());
+                    }
+                    if (maxVideoSize != null) {
+                        updateStatus(camera, "maxVideoWidth", maxVideoSize.getWidth());
+                        updateStatus(camera, "maxVideoHeight", maxVideoSize.getHeight());
+                        summary.maxVideoWidth = Math.max(summary.maxVideoWidth, maxVideoSize.getWidth());
+                        summary.maxVideoHeight = Math.max(summary.maxVideoHeight, maxVideoSize.getHeight());
+                    }
+                    boolean supportsHighSpeedVideo = streamMap.getHighSpeedVideoSizes().length > 0;
+                    updateStatus(camera, "supportsHighSpeedVideo", supportsHighSpeedVideo);
+                    summary.supportsHighSpeedVideo = summary.supportsHighSpeedVideo || supportsHighSpeedVideo;
+                }
+
+                Range<Integer>[] fpsRanges = characteristics.get(CameraCharacteristics.CONTROL_AE_AVAILABLE_TARGET_FPS_RANGES);
+                if (fpsRanges != null && fpsRanges.length > 0) {
+                    JSONArray ranges = new JSONArray();
+                    for (Range<Integer> range : fpsRanges) {
+                        JSObject fps = new JSObject();
+                        updateStatus(fps, "min", range.getLower());
+                        updateStatus(fps, "max", range.getUpper());
+                        ranges.put(fps);
+                    }
+                    updateStatus(camera, "fpsRanges", ranges);
+                }
+
+                summary.cameras.put(camera);
+            }
+        } catch (Exception ignored) {
+        }
+        return summary;
+    }
+
+    private boolean isLikelyEmulator() {
+        String fingerprint = Build.FINGERPRINT != null ? Build.FINGERPRINT.toLowerCase(Locale.US) : "";
+        String model = Build.MODEL != null ? Build.MODEL.toLowerCase(Locale.US) : "";
+        String product = Build.PRODUCT != null ? Build.PRODUCT.toLowerCase(Locale.US) : "";
+        String hardware = Build.HARDWARE != null ? Build.HARDWARE.toLowerCase(Locale.US) : "";
+        return fingerprint.contains("generic")
+            || fingerprint.contains("unknown")
+            || model.contains("google_sdk")
+            || model.contains("emulator")
+            || model.contains("android sdk built for")
+            || product.contains("sdk")
+            || product.contains("emulator")
+            || hardware.contains("goldfish")
+            || hardware.contains("ranchu");
+    }
+
+    private String cameraFacingName(Integer facing) {
+        if (facing == null) {
+            return "";
+        }
+        if (facing == CameraCharacteristics.LENS_FACING_BACK) {
+            return "back";
+        }
+        if (facing == CameraCharacteristics.LENS_FACING_FRONT) {
+            return "front";
+        }
+        if (facing == CameraCharacteristics.LENS_FACING_EXTERNAL) {
+            return "external";
+        }
+        return "unknown";
+    }
+
+    private String cameraHardwareLevelName(Integer hardwareLevel) {
+        if (hardwareLevel == null) {
+            return "";
+        }
+        if (hardwareLevel == CameraCharacteristics.INFO_SUPPORTED_HARDWARE_LEVEL_LEGACY) {
+            return "legacy";
+        }
+        if (hardwareLevel == CameraCharacteristics.INFO_SUPPORTED_HARDWARE_LEVEL_LIMITED) {
+            return "limited";
+        }
+        if (hardwareLevel == CameraCharacteristics.INFO_SUPPORTED_HARDWARE_LEVEL_FULL) {
+            return "full";
+        }
+        if (hardwareLevel == CameraCharacteristics.INFO_SUPPORTED_HARDWARE_LEVEL_3) {
+            return "level_3";
+        }
+        return "unknown";
+    }
+
+    private boolean intArrayContains(int[] values, int target) {
+        if (values == null) {
+            return false;
+        }
+        for (int value : values) {
+            if (value == target) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    private Size maxSize(Size[] sizes) {
+        if (sizes == null || sizes.length == 0) {
+            return null;
+        }
+        Size best = null;
+        long bestPixels = -1L;
+        for (Size size : sizes) {
+            if (size == null) {
+                continue;
+            }
+            long pixels = (long) size.getWidth() * (long) size.getHeight();
+            if (pixels > bestPixels) {
+                best = size;
+                bestPixels = pixels;
+            }
+        }
+        return best;
+    }
+
+    private static final class CameraCapabilitySummary {
+        boolean supportsCamera2 = false;
+        int backCameraCount = 0;
+        int frontCameraCount = 0;
+        int externalCameraCount = 0;
+        boolean hasFlash = false;
+        boolean hasOpticalStabilization = false;
+        boolean hasVideoStabilization = false;
+        boolean supportsHighSpeedVideo = false;
+        int maxPhotoWidth = 0;
+        int maxPhotoHeight = 0;
+        int maxVideoWidth = 0;
+        int maxVideoHeight = 0;
+        final JSONArray hardwareLevels = new JSONArray();
+        final JSONArray cameras = new JSONArray();
     }
 }

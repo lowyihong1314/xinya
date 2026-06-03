@@ -14,6 +14,53 @@ export type NativeAlbumUploadStatus = {
   updatedAt?: number;
 };
 
+export type NativeAlbumCameraInfo = {
+  id?: string;
+  facing?: "back" | "front" | "external" | "unknown" | "";
+  hardwareLevel?: "legacy" | "limited" | "full" | "level_3" | "unknown" | "";
+  hasFlash?: boolean;
+  hasOpticalStabilization?: boolean;
+  hasVideoStabilization?: boolean;
+  supportsHighSpeedVideo?: boolean;
+  maxPhotoWidth?: number;
+  maxPhotoHeight?: number;
+  maxVideoWidth?: number;
+  maxVideoHeight?: number;
+  fpsRanges?: Array<{ min?: number; max?: number }>;
+};
+
+export type NativeAlbumCameraProfile = {
+  manufacturer?: string;
+  brand?: string;
+  model?: string;
+  sdkInt?: number;
+  isSamsung?: boolean;
+  isEmulator?: boolean;
+  hasCamera?: boolean;
+  hasBackCamera?: boolean;
+  hasFrontCamera?: boolean;
+  supportsCamera2?: boolean;
+  backCameraCount?: number;
+  frontCameraCount?: number;
+  externalCameraCount?: number;
+  hasFlash?: boolean;
+  hasOpticalStabilization?: boolean;
+  hasVideoStabilization?: boolean;
+  supportsHighSpeedVideo?: boolean;
+  maxPhotoWidth?: number;
+  maxPhotoHeight?: number;
+  maxVideoWidth?: number;
+  maxVideoHeight?: number;
+  recommendedPhotoMaxWidth?: number;
+  recommendedPhotoQuality?: number;
+  recommendedVideoWidth?: number;
+  recommendedVideoHeight?: number;
+  recommendedFrameRate?: number;
+  samsungEnhancedMode?: boolean;
+  hardwareLevels?: string[];
+  cameras?: NativeAlbumCameraInfo[];
+};
+
 export interface NativeAlbumUploadPlugin {
   pickAndUpload(options: {
     eventId: number;
@@ -33,6 +80,8 @@ export interface NativeAlbumUploadPlugin {
   cancel(options?: {
     jobId?: string;
   }): Promise<NativeAlbumUploadStatus>;
+
+  getCameraProfile(): Promise<NativeAlbumCameraProfile>;
 }
 
 function createUnavailablePlugin(): NativeAlbumUploadPlugin {
@@ -44,6 +93,7 @@ function createUnavailablePlugin(): NativeAlbumUploadPlugin {
     captureAndUpload: missing,
     getStatus: async () => ({ status: "idle" }),
     cancel: async () => ({ status: "idle" }),
+    getCameraProfile: async () => ({ hasCamera: false, samsungEnhancedMode: false }),
   };
 }
 
@@ -54,7 +104,8 @@ function isNativeAlbumUploadPlugin(value: unknown): value is NativeAlbumUploadPl
       typeof (value as NativeAlbumUploadPlugin).pickAndUpload === "function" &&
       typeof (value as NativeAlbumUploadPlugin).captureAndUpload === "function" &&
       typeof (value as NativeAlbumUploadPlugin).getStatus === "function" &&
-      typeof (value as NativeAlbumUploadPlugin).cancel === "function",
+      typeof (value as NativeAlbumUploadPlugin).cancel === "function" &&
+      typeof (value as NativeAlbumUploadPlugin).getCameraProfile === "function",
   );
 }
 
