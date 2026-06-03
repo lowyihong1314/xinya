@@ -14,6 +14,7 @@ import { EventFlowModal } from "./EventFlowModal";
 import { UploadMediaModal } from "./UploadMediaModal";
 import { useUserState } from "../../app/UserState";
 import { downloadUrlOrShare } from "../../js/browserActions";
+import { smartImageURL } from "../../js/get_img";
 import { show_alert } from "../../js/show_alert";
 import { hasUserPermission } from "../../app/permissions";
 import {
@@ -22,6 +23,9 @@ import {
   type MediaNotification,
 } from "./mediaRealtime";
 import { openBrochurePreviewModal } from "../../event/shared/brochurePreview";
+
+const DEFAULT_DOCUMENT_TITLE = "地南佛学会";
+const DEFAULT_DOCUMENT_ICON = "/favicon.ico";
 
 export function EventDetailPage() {
   useEnsureDesignTokens();
@@ -52,6 +56,55 @@ export function EventDetailPage() {
 
   useEffect(() => {
     detailRef.current = detail;
+  }, [detail]);
+
+  useEffect(() => {
+    if (!detail || typeof document === "undefined") {
+      return;
+    }
+
+    let active = true;
+    const title = detail.event_name || `活动 #${detail.id}`;
+    const description = buildEventDocumentDescription(detail);
+    const canonicalUrl = typeof window !== "undefined" ? `${window.location.origin}/event/${detail.id}` : "";
+
+    document.title = title;
+    setDocumentMeta("name", "description", description);
+    setDocumentMeta("property", "og:type", "article");
+    setDocumentMeta("property", "og:site_name", "UTBA");
+    setDocumentMeta("property", "og:title", title);
+    setDocumentMeta("property", "og:description", description);
+    if (canonicalUrl) {
+      setDocumentMeta("property", "og:url", canonicalUrl);
+    }
+    setDocumentMeta("name", "twitter:card", "summary_large_image");
+    setDocumentMeta("name", "twitter:title", title);
+    setDocumentMeta("name", "twitter:description", description);
+
+    if (detail.event_image?.id) {
+      void smartImageURL(detail.event_image.id, "cache")
+        .then((imageUrl) => {
+          if (!active || !isUsableDocumentImage(imageUrl)) {
+            return;
+          }
+          const absoluteImageUrl = toAbsoluteDocumentUrl(imageUrl);
+          setDocumentIcon(absoluteImageUrl);
+          setDocumentMeta("property", "og:image", absoluteImageUrl);
+          setDocumentMeta("property", "og:image:secure_url", absoluteImageUrl);
+          setDocumentMeta("property", "og:image:alt", title);
+          setDocumentMeta("name", "twitter:image", absoluteImageUrl);
+        })
+        .catch(() => undefined);
+    } else {
+      setDocumentIcon(DEFAULT_DOCUMENT_ICON);
+    }
+
+    return () => {
+      active = false;
+      document.title = DEFAULT_DOCUMENT_TITLE;
+      setDocumentIcon(DEFAULT_DOCUMENT_ICON);
+      removeManagedDocumentMeta();
+    };
   }, [detail]);
 
   useEffect(() => {
@@ -431,6 +484,73 @@ function formatDateRange(start?: string, end?: string) {
   const startDate = start.slice(0, 10);
   const endDate = end?.slice(0, 10);
   return endDate && endDate !== startDate ? `${startDate} - ${endDate}` : startDate;
+}
+
+function buildEventDocumentDescription(detail: EventDetailRecord) {
+  return [
+    detail.datetime ? formatDateRange(detail.datetime, detail.end_datetime) : "",
+    detail.location,
+    detail.type,
+    detail.target,
+    detail.purpose,
+  ]
+    .map((part) => String(part || "").trim())
+    .filter(Boolean)
+    .join(" · ")
+    .slice(0, 220) || "UTBA 活动详情";
+}
+
+function findDocumentMeta(attribute: "name" | "property", key: string) {
+  return Array.from(document.head.querySelectorAll("meta")).find(
+    (element) => element.getAttribute(attribute) === key,
+  ) as HTMLMetaElement | undefined;
+}
+
+function setDocumentMeta(attribute: "name" | "property", key: string, content: string) {
+  if (!content) {
+    return;
+  }
+  let element = findDocumentMeta(attribute, key);
+  if (!element) {
+    element = document.createElement("meta");
+    element.setAttribute(attribute, key);
+    element.dataset.xinyaEventMeta = "true";
+    document.head.appendChild(element);
+  }
+  element.content = content;
+}
+
+function removeManagedDocumentMeta() {
+  document.head.querySelectorAll('meta[data-xinya-event-meta="true"]').forEach((element) => {
+    element.remove();
+  });
+}
+
+function setDocumentIcon(href: string) {
+  const rels = ["icon", "apple-touch-icon"];
+  rels.forEach((rel) => {
+    let element = Array.from(document.head.querySelectorAll("link")).find((link) => {
+      return (link.getAttribute("rel") || "").split(/\s+/).includes(rel);
+    }) as HTMLLinkElement | undefined;
+    if (!element) {
+      element = document.createElement("link");
+      element.rel = rel;
+      document.head.appendChild(element);
+    }
+    element.href = href;
+  });
+}
+
+function toAbsoluteDocumentUrl(url: string) {
+  try {
+    return new URL(url, window.location.origin).toString();
+  } catch {
+    return url;
+  }
+}
+
+function isUsableDocumentImage(url: string) {
+  return Boolean(url && !url.includes("broken-image.png"));
 }
 
 function heroStyle(hasCover: boolean, isMobile: boolean): CSSProperties {
