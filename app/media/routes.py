@@ -1,8 +1,10 @@
+import os
+
 from flask import Blueprint, abort, jsonify, request, send_file
 from flask_login import login_required
 
 from app.auth import permission_required
-from app.media.paths import BROKEN_IMAGE_PATH
+from app.media.paths import BROKEN_IMAGE_PATH, event_photo_base_dir
 from app.media.services import (
     create_album_file,
     delete_album_file,
@@ -13,16 +15,59 @@ from app.media.services import (
     resolve_media_path,
     rotate_album_file,
 )
-from app.media.utils import allowed_file, build_zip_from_files, ensure_jpeg_cache_file, parse_file_ids
+from app.media.utils import (
+    JPEG_CACHE_SOURCE_EXTS,
+    allowed_file,
+    build_zip_from_files,
+    ensure_jpeg_cache_file,
+    parse_file_ids,
+)
 from models import db
 
 media_bp = Blueprint("media", __name__)
 nginx_media_router = Blueprint("media_file", __name__)
 
 
+def _event_photo_cache_source_path(filepath):
+    normalized = filepath.replace("\\", "/").strip("/")
+    parts = normalized.split("/")
+    if len(parts) != 5 or parts[:3] != ["CACHE", "UTBA", "event_photo"]:
+        return None
+
+    event_code, cache_name = parts[3], parts[4]
+    stem, ext = os.path.splitext(cache_name)
+    if not stem or ext.lower() != ".jpeg":
+        return None
+
+    source_dir = event_photo_base_dir(event_code)
+    if not os.path.isdir(source_dir):
+        return None
+
+    candidates = []
+    for source_name in os.listdir(source_dir):
+        source_stem, source_ext = os.path.splitext(source_name)
+        if source_stem != stem or source_ext.lower() not in JPEG_CACHE_SOURCE_EXTS:
+            continue
+        source_path = os.path.join(source_dir, source_name)
+        if os.path.isfile(source_path):
+            candidates.append(source_path)
+    return sorted(candidates)[0] if candidates else None
+
+
+def _ensure_event_photo_cache_file(filepath, real_path):
+    source_path = _event_photo_cache_source_path(filepath)
+    if not source_path:
+        return real_path
+    try:
+        return ensure_jpeg_cache_file(source_path, os.path.dirname(real_path))
+    except Exception as exc:
+        print(f"[MEDIA] Failed to rebuild cache for {filepath}: {exc}")
+        return real_path
+
+
 def _send_resolved_media_file(filepath):
     real_path = resolve_media_path(filepath)
-    import os
+    real_path = _ensure_event_photo_cache_file(filepath, real_path)
 
     if not os.path.isfile(real_path):
         return send_file(
