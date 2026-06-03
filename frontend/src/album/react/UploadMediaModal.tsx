@@ -9,6 +9,7 @@ import {
   type NativeAlbumUploadStatus,
 } from "../../mobile/native/albumUploadPlugin";
 import { isMobileNativeRuntime } from "../../mobile/native/capacitor";
+import { ContinuousCapturePanel } from "./ContinuousCapturePanel";
 
 type UploadQueueItem = {
   id: string;
@@ -64,10 +65,9 @@ export function UploadMediaModal({
   const [toast, setToast] = useState<string | null>(null);
   const [nativeStatus, setNativeStatus] = useState<NativeAlbumUploadStatus | null>(null);
   const [nativeBusy, setNativeBusy] = useState(false);
+  const [captureOpen, setCaptureOpen] = useState(false);
   const queueRef = useRef<UploadQueueItem[]>([]);
   const nativeRefreshedJobsRef = useRef<Set<string>>(new Set());
-  const cameraImageInputRef = useRef<HTMLInputElement | null>(null);
-  const cameraVideoInputRef = useRef<HTMLInputElement | null>(null);
 
   useEffect(() => {
     queueRef.current = queue;
@@ -304,28 +304,6 @@ export function UploadMediaModal({
     }
   }
 
-  async function handleNativeCaptureAndUpload(mediaType: "image" | "video") {
-    setNativeBusy(true);
-    setToast(null);
-    try {
-      const status = await NativeAlbumUploadPluginBridge.captureAndUpload({
-        eventId,
-        baseUrl: API_BASE,
-        mediaType,
-      });
-      setNativeStatus(status);
-      if (status.total && status.total > 0) {
-        setToast(mediaType === "video" ? "录像已交给后台上传" : "照片已交给后台上传");
-      } else {
-        setToast("没有拍摄文件");
-      }
-    } catch (error) {
-      setToast(error instanceof Error ? error.message : "拍摄上传启动失败");
-    } finally {
-      setNativeBusy(false);
-    }
-  }
-
   async function handleNativeCancel() {
     if (!nativeStatus?.jobId) {
       return;
@@ -344,229 +322,211 @@ export function UploadMediaModal({
   }
 
   return (
-    <div style={overlayStyle(isMobile)} onClick={onClose}>
-      <div style={modalStyle(isMobile)} onClick={(event) => event.stopPropagation()}>
-        <div style={headerStyle(isMobile)}>
-          <div>
-            <div style={eyebrowStyle}>Media Upload</div>
-            <h2 style={titleStyle(isMobile)}>上传文件</h2>
-            <p style={copyStyle}>{eventName || `活动 #${eventId}`}</p>
-          </div>
-          <button type="button" style={closeButtonStyle(isMobile)} onClick={onClose}>
-            关闭
-          </button>
-        </div>
-
-        <div style={bodyStyle(isMobile)}>
-          {useNativeAlbumUpload ? (
-            <div style={nativeActionGridStyle(isMobile)}>
-              <button
-                type="button"
-                style={dropzoneButtonStyle(isMobile, nativeBusy || nativeUploadActive)}
-                onClick={() => void handleNativePickAndUpload()}
-                disabled={nativeBusy || nativeUploadActive}
-              >
-                <div style={dropTitleStyle(isMobile)}>选择图片或视频</div>
-                <div style={dropCopyStyle}>App 会交给系统后台上传，关闭窗口或切到后台后仍会继续。</div>
-              </button>
-              <button
-                type="button"
-                style={captureButtonStyle(isMobile, nativeBusy || nativeUploadActive)}
-                onClick={() => void handleNativeCaptureAndUpload("image")}
-                disabled={nativeBusy || nativeUploadActive}
-              >
-                拍照上传
-              </button>
-              <button
-                type="button"
-                style={captureButtonStyle(isMobile, nativeBusy || nativeUploadActive)}
-                onClick={() => void handleNativeCaptureAndUpload("video")}
-                disabled={nativeBusy || nativeUploadActive}
-              >
-                录像上传
+    <div style={overlayStyle(isMobile)} onClick={captureOpen ? undefined : onClose}>
+      <div style={modalStyle(isMobile, captureOpen)} onClick={(event) => event.stopPropagation()}>
+        {captureOpen ? (
+          <ContinuousCapturePanel
+            eventId={eventId}
+            eventName={eventName}
+            isMobile={isMobile}
+            onExit={() => setCaptureOpen(false)}
+            onUploaded={onUploaded}
+          />
+        ) : (
+          <>
+            <div style={headerStyle(isMobile)}>
+              <div>
+                <div style={eyebrowStyle}>Media Upload</div>
+                <h2 style={titleStyle(isMobile)}>上传文件</h2>
+                <p style={copyStyle}>{eventName || `活动 #${eventId}`}</p>
+              </div>
+              <button type="button" style={closeButtonStyle(isMobile)} onClick={onClose}>
+                关闭
               </button>
             </div>
-          ) : (
-            <div style={nativeActionGridStyle(isMobile)}>
-              <label style={dropzoneStyle(isMobile)}>
-                <input
-                  type="file"
-                  multiple
-                  accept="image/*,video/*"
-                  style={{ display: "none" }}
-                  onChange={(event) => {
-                    addFiles(event.target.files);
-                    event.currentTarget.value = "";
-                  }}
-                />
-                <div style={dropTitleStyle(isMobile)}>选择图片或视频</div>
-                <div style={dropCopyStyle}>支持多次追加选择，上传成功后会自动刷新照片墙。</div>
-              </label>
-              {isMobile ? (
-                <>
-                  <input
-                    ref={cameraImageInputRef}
-                    type="file"
-                    accept="image/*"
-                    capture="environment"
-                    style={{ display: "none" }}
-                    onChange={(event) => {
-                      addFiles(event.target.files);
-                      event.currentTarget.value = "";
-                    }}
-                  />
-                  <input
-                    ref={cameraVideoInputRef}
-                    type="file"
-                    accept="video/*"
-                    capture="environment"
-                    style={{ display: "none" }}
-                    onChange={(event) => {
-                      addFiles(event.target.files);
-                      event.currentTarget.value = "";
-                    }}
-                  />
-                  <button type="button" style={captureButtonStyle(isMobile, uploading)} onClick={() => cameraImageInputRef.current?.click()} disabled={uploading}>
-                    拍照
+
+            <div style={bodyStyle(isMobile)}>
+              {useNativeAlbumUpload ? (
+                <div style={nativeActionGridStyle(isMobile)}>
+                  <button
+                    type="button"
+                    style={dropzoneButtonStyle(isMobile, nativeBusy || nativeUploadActive)}
+                    onClick={() => void handleNativePickAndUpload()}
+                    disabled={nativeBusy || nativeUploadActive}
+                  >
+                    <div style={dropTitleStyle(isMobile)}>选择图片或视频</div>
+                    <div style={dropCopyStyle}>App 会交给系统后台上传，关闭窗口或切到后台后仍会继续。</div>
                   </button>
-                  <button type="button" style={captureButtonStyle(isMobile, uploading)} onClick={() => cameraVideoInputRef.current?.click()} disabled={uploading}>
-                    录像
+                  <button
+                    type="button"
+                    style={captureButtonStyle(isMobile, nativeBusy || nativeUploadActive)}
+                    onClick={() => setCaptureOpen(true)}
+                    disabled={nativeBusy || nativeUploadActive}
+                  >
+                    拍摄
                   </button>
-                </>
-              ) : null}
-            </div>
-          )}
-
-          {toast ? <div style={toastStyle}>{toast}</div> : null}
-
-          {useNativeAlbumUpload ? (
-            <div style={nativePanelStyle}>
-              <div style={nativeHeaderStyle(isMobile)}>
-                <div>
-                  <div style={nativeTitleStyle}>后台上传</div>
-                  <div style={fileSubStyle}>
-                    {nativeStatus?.status && nativeStatus.status !== "idle"
-                      ? nativeStatusLabel(nativeStatus)
-                      : "当前没有后台上传任务"}
-                  </div>
                 </div>
-                <div style={statusStyle(nativeProgressStatus(nativeStatus))}>{nativeStatusLabel(nativeStatus)}</div>
-              </div>
-              <div style={nativeMetaGridStyle(isMobile)}>
-                <div style={nativeMetaItemStyle}>
-                  <span style={nativeMetaLabelStyle}>总数</span>
-                  <strong>{nativeStatus?.total ?? 0}</strong>
-                </div>
-                <div style={nativeMetaItemStyle}>
-                  <span style={nativeMetaLabelStyle}>完成</span>
-                  <strong>{nativeStatus?.completed ?? 0}</strong>
-                </div>
-                <div style={nativeMetaItemStyle}>
-                  <span style={nativeMetaLabelStyle}>失败</span>
-                  <strong>{nativeStatus?.failed ?? 0}</strong>
-                </div>
-              </div>
-              {nativeStatus?.currentFile ? (
-                <div style={fileSubStyle}>当前：{nativeStatus.currentFile}</div>
-              ) : null}
-              {nativeStatus?.error ? <div style={nativeErrorStyle}>{nativeStatus.error}</div> : null}
-              <div style={progressRowStyle}>
-                <div style={progressTrackStyle}>
-                  <div style={progressFillStyle(nativeProgress, nativeProgressStatus(nativeStatus))} />
-                </div>
-                <div style={progressTextStyle(nativeProgressStatus(nativeStatus))}>{nativeProgress}%</div>
-              </div>
-            </div>
-          ) : (
-            <>
-              <div style={queueHeaderStyle}>
-                <span>{queue.length} 个待处理文件</span>
-                <span>
-                  成功 {stats.successCount} / 失败 {stats.failedCount}
-                </span>
-              </div>
-
-              <div style={queueStyle}>
-                {!queue.length ? <div style={placeholderStyle}>当前还没有选择文件</div> : null}
-                {queue.map((item) => (
-                  <div key={item.id} style={queueItemStyle(item.status, isMobile)}>
-                    {item.previewUrl ? (
-                      <CachedImage src={item.previewUrl} alt={item.file.name} style={previewImageStyle(isMobile)} />
-                    ) : (
-                      <div style={videoTileStyle(isMobile)}>VIDEO</div>
-                    )}
-                    <div style={fileMetaStyle}>
-                      <div style={fileHeaderRowStyle(isMobile)}>
-                        <div style={fileNameStyle(isMobile)}>{item.file.name}</div>
-                        <div style={statusStyle(item.status)}>{statusLabel(item.status)}</div>
-                      </div>
-                      <div style={fileSubStyle}>
-                        {(item.file.size / 1024 / 1024).toFixed(2)} MB
-                        {item.error ? ` · ${item.error}` : ""}
-                      </div>
-                      <div style={progressRowStyle}>
-                        <div style={progressTrackStyle}>
-                          <div style={progressFillStyle(item.progress, item.status)} />
-                        </div>
-                        <div style={progressTextStyle(item.status)}>{item.progress}%</div>
-                      </div>
-                    </div>
+              ) : (
+                <div style={nativeActionGridStyle(isMobile)}>
+                  <label style={dropzoneStyle(isMobile)}>
+                    <input
+                      type="file"
+                      multiple
+                      accept="image/*,video/*"
+                      style={{ display: "none" }}
+                      onChange={(event) => {
+                        addFiles(event.target.files);
+                        event.currentTarget.value = "";
+                      }}
+                    />
+                    <div style={dropTitleStyle(isMobile)}>选择图片或视频</div>
+                    <div style={dropCopyStyle}>支持多次追加选择，上传成功后会自动刷新照片墙。</div>
+                  </label>
+                  {isMobile ? (
                     <button
                       type="button"
-                      style={removeButtonStyle(isMobile)}
-                      onClick={() => removeItem(item.id)}
-                      disabled={uploading && item.status === "uploading"}
+                      style={captureButtonStyle(isMobile, uploading)}
+                      onClick={() => setCaptureOpen(true)}
+                      disabled={uploading}
                     >
-                      移除
+                      拍摄
                     </button>
-                  </div>
-                ))}
-              </div>
-            </>
-          )}
-        </div>
+                  ) : null}
+                </div>
+              )}
 
-        <div style={footerStyle(isMobile)}>
-          {useNativeAlbumUpload ? (
-            <>
-              <button type="button" style={secondaryButtonStyle(isMobile)} onClick={onClose}>
-                {nativeUploadActive ? "关闭并后台等待" : "关闭"}
-              </button>
-              {nativeUploadActive ? (
-                <button
-                  type="button"
-                  style={dangerFooterButtonStyle(isMobile)}
-                  onClick={() => void handleNativeCancel()}
-                  disabled={nativeBusy}
-                >
-                  取消后台上传
-                </button>
-              ) : null}
-              <button
-                type="button"
-                style={primaryButtonStyle(isMobile)}
-                disabled={nativeBusy || nativeUploadActive}
-                onClick={() => void handleNativePickAndUpload()}
-              >
-                {nativeBusy ? "打开中…" : "选择并后台上传"}
-              </button>
-            </>
-          ) : (
-            <>
-              <button type="button" style={secondaryButtonStyle(isMobile)} onClick={onClose}>
-                取消
-              </button>
-              <button
-                type="button"
-                style={primaryButtonStyle(isMobile)}
-                disabled={uploading || !queue.some((item) => item.status !== "success")}
-                onClick={() => void handleUpload()}
-              >
-                {uploading ? "上传中…" : "开始上传"}
-              </button>
-            </>
-          )}
-        </div>
+              {toast ? <div style={toastStyle}>{toast}</div> : null}
+
+              {useNativeAlbumUpload ? (
+                <div style={nativePanelStyle}>
+                  <div style={nativeHeaderStyle(isMobile)}>
+                    <div>
+                      <div style={nativeTitleStyle}>后台上传</div>
+                      <div style={fileSubStyle}>
+                        {nativeStatus?.status && nativeStatus.status !== "idle"
+                          ? nativeStatusLabel(nativeStatus)
+                          : "当前没有后台上传任务"}
+                      </div>
+                    </div>
+                    <div style={statusStyle(nativeProgressStatus(nativeStatus))}>{nativeStatusLabel(nativeStatus)}</div>
+                  </div>
+                  <div style={nativeMetaGridStyle(isMobile)}>
+                    <div style={nativeMetaItemStyle}>
+                      <span style={nativeMetaLabelStyle}>总数</span>
+                      <strong>{nativeStatus?.total ?? 0}</strong>
+                    </div>
+                    <div style={nativeMetaItemStyle}>
+                      <span style={nativeMetaLabelStyle}>完成</span>
+                      <strong>{nativeStatus?.completed ?? 0}</strong>
+                    </div>
+                    <div style={nativeMetaItemStyle}>
+                      <span style={nativeMetaLabelStyle}>失败</span>
+                      <strong>{nativeStatus?.failed ?? 0}</strong>
+                    </div>
+                  </div>
+                  {nativeStatus?.currentFile ? (
+                    <div style={fileSubStyle}>当前：{nativeStatus.currentFile}</div>
+                  ) : null}
+                  {nativeStatus?.error ? <div style={nativeErrorStyle}>{nativeStatus.error}</div> : null}
+                  <div style={progressRowStyle}>
+                    <div style={progressTrackStyle}>
+                      <div style={progressFillStyle(nativeProgress, nativeProgressStatus(nativeStatus))} />
+                    </div>
+                    <div style={progressTextStyle(nativeProgressStatus(nativeStatus))}>{nativeProgress}%</div>
+                  </div>
+                </div>
+              ) : (
+                <>
+                  <div style={queueHeaderStyle}>
+                    <span>{queue.length} 个待处理文件</span>
+                    <span>
+                      成功 {stats.successCount} / 失败 {stats.failedCount}
+                    </span>
+                  </div>
+
+                  <div style={queueStyle}>
+                    {!queue.length ? <div style={placeholderStyle}>当前还没有选择文件</div> : null}
+                    {queue.map((item) => (
+                      <div key={item.id} style={queueItemStyle(item.status, isMobile)}>
+                        {item.previewUrl ? (
+                          <CachedImage src={item.previewUrl} alt={item.file.name} style={previewImageStyle(isMobile)} />
+                        ) : (
+                          <div style={videoTileStyle(isMobile)}>VIDEO</div>
+                        )}
+                        <div style={fileMetaStyle}>
+                          <div style={fileHeaderRowStyle(isMobile)}>
+                            <div style={fileNameStyle(isMobile)}>{item.file.name}</div>
+                            <div style={statusStyle(item.status)}>{statusLabel(item.status)}</div>
+                          </div>
+                          <div style={fileSubStyle}>
+                            {(item.file.size / 1024 / 1024).toFixed(2)} MB
+                            {item.error ? ` · ${item.error}` : ""}
+                          </div>
+                          <div style={progressRowStyle}>
+                            <div style={progressTrackStyle}>
+                              <div style={progressFillStyle(item.progress, item.status)} />
+                            </div>
+                            <div style={progressTextStyle(item.status)}>{item.progress}%</div>
+                          </div>
+                        </div>
+                        <button
+                          type="button"
+                          style={removeButtonStyle(isMobile)}
+                          onClick={() => removeItem(item.id)}
+                          disabled={uploading && item.status === "uploading"}
+                        >
+                          移除
+                        </button>
+                      </div>
+                    ))}
+                  </div>
+                </>
+              )}
+            </div>
+
+            <div style={footerStyle(isMobile)}>
+              {useNativeAlbumUpload ? (
+                <>
+                  <button type="button" style={secondaryButtonStyle(isMobile)} onClick={onClose}>
+                    {nativeUploadActive ? "关闭并后台等待" : "关闭"}
+                  </button>
+                  {nativeUploadActive ? (
+                    <button
+                      type="button"
+                      style={dangerFooterButtonStyle(isMobile)}
+                      onClick={() => void handleNativeCancel()}
+                      disabled={nativeBusy}
+                    >
+                      取消后台上传
+                    </button>
+                  ) : null}
+                  <button
+                    type="button"
+                    style={primaryButtonStyle(isMobile)}
+                    disabled={nativeBusy || nativeUploadActive}
+                    onClick={() => void handleNativePickAndUpload()}
+                  >
+                    {nativeBusy ? "打开中…" : "选择并后台上传"}
+                  </button>
+                </>
+              ) : (
+                <>
+                  <button type="button" style={secondaryButtonStyle(isMobile)} onClick={onClose}>
+                    取消
+                  </button>
+                  <button
+                    type="button"
+                    style={primaryButtonStyle(isMobile)}
+                    disabled={uploading || !queue.some((item) => item.status !== "success")}
+                    onClick={() => void handleUpload()}
+                  >
+                    {uploading ? "上传中…" : "开始上传"}
+                  </button>
+                </>
+              )}
+            </div>
+          </>
+        )}
       </div>
     </div>
   );
@@ -639,10 +599,11 @@ function overlayStyle(isMobile: boolean): CSSProperties {
   };
 }
 
-function modalStyle(isMobile: boolean): CSSProperties {
+function modalStyle(isMobile: boolean, captureOpen = false): CSSProperties {
   return {
-    width: "min(920px, 100%)",
-    maxHeight: isMobile ? "94vh" : "90vh",
+    width: captureOpen ? "min(980px, 100%)" : "min(920px, 100%)",
+    height: captureOpen ? (isMobile ? "calc(100vh - 20px)" : "min(780px, 90vh)") : undefined,
+    maxHeight: captureOpen ? undefined : isMobile ? "94vh" : "90vh",
     overflow: "hidden",
     borderRadius: "var(--x-radius-lg)",
     background: "var(--x-color-panel-strongest)",
@@ -722,7 +683,7 @@ function dropzoneButtonStyle(isMobile: boolean, disabled: boolean): CSSPropertie
 function nativeActionGridStyle(isMobile: boolean): CSSProperties {
   return {
     display: "grid",
-    gridTemplateColumns: isMobile ? "1fr 1fr" : "minmax(0, 1fr) auto auto",
+    gridTemplateColumns: isMobile ? "1fr" : "minmax(0, 1fr) auto",
     gap: "10px",
     alignItems: "stretch",
   };
