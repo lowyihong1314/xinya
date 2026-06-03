@@ -321,19 +321,24 @@ export function UploadMediaModal({
     }
   }
 
+  if (captureOpen) {
+    return (
+      <div style={captureFullscreenStyle}>
+        <ContinuousCapturePanel
+          eventId={eventId}
+          eventName={eventName}
+          isMobile={isMobile}
+          onExit={() => setCaptureOpen(false)}
+          onUploaded={onUploaded}
+        />
+      </div>
+    );
+  }
+
   return (
-    <div style={overlayStyle(isMobile)} onClick={captureOpen ? undefined : onClose}>
-      <div style={modalStyle(isMobile, captureOpen)} onClick={(event) => event.stopPropagation()}>
-        {captureOpen ? (
-          <ContinuousCapturePanel
-            eventId={eventId}
-            eventName={eventName}
-            isMobile={isMobile}
-            onExit={() => setCaptureOpen(false)}
-            onUploaded={onUploaded}
-          />
-        ) : (
-          <>
+    <div style={overlayStyle(isMobile)} onClick={onClose}>
+      <div style={modalStyle(isMobile)} onClick={(event) => event.stopPropagation()}>
+        <>
             <div style={headerStyle(isMobile)}>
               <div>
                 <div style={eyebrowStyle}>Media Upload</div>
@@ -525,8 +530,7 @@ export function UploadMediaModal({
                 </>
               )}
             </div>
-          </>
-        )}
+        </>
       </div>
     </div>
   );
@@ -599,11 +603,18 @@ function overlayStyle(isMobile: boolean): CSSProperties {
   };
 }
 
-function modalStyle(isMobile: boolean, captureOpen = false): CSSProperties {
+const captureFullscreenStyle: CSSProperties = {
+  position: "fixed",
+  inset: 0,
+  zIndex: 1300,
+  background: "#080b10",
+  overflow: "hidden",
+};
+
+function modalStyle(isMobile: boolean): CSSProperties {
   return {
-    width: captureOpen ? "min(980px, 100%)" : "min(920px, 100%)",
-    height: captureOpen ? (isMobile ? "calc(100vh - 20px)" : "min(780px, 90vh)") : undefined,
-    maxHeight: captureOpen ? undefined : isMobile ? "94vh" : "90vh",
+    width: "min(920px, 100%)",
+    maxHeight: isMobile ? "94vh" : "90vh",
     overflow: "hidden",
     borderRadius: "var(--x-radius-lg)",
     background: "var(--x-color-panel-strongest)",

@@ -29,6 +29,29 @@ type ContinuousCapturePanelProps = {
 };
 
 type FacingMode = "environment" | "user";
+type ZoomSettings = {
+  supported: boolean;
+  min: number;
+  max: number;
+  step: number;
+  value: number;
+};
+
+type ZoomTrackCapabilities = MediaTrackCapabilities & {
+  zoom?: {
+    min?: number;
+    max?: number;
+    step?: number;
+  };
+};
+
+type ZoomTrackSettings = MediaTrackSettings & {
+  zoom?: number;
+};
+
+type ZoomTrackConstraintSet = MediaTrackConstraintSet & {
+  zoom?: number;
+};
 
 const LONG_PRESS_MS = 520;
 const MAX_VISIBLE_ITEMS = 8;
@@ -62,6 +85,8 @@ export function ContinuousCapturePanel({
   const [toast, setToast] = useState<string | null>(null);
   const [items, setItems] = useState<CaptureUploadItem[]>([]);
   const [cameraProfile, setCameraProfile] = useState<NativeAlbumCameraProfile | null>(null);
+  const [gridEnabled, setGridEnabled] = useState(true);
+  const [zoomSettings, setZoomSettings] = useState<ZoomSettings | null>(null);
 
   const stats = useMemo(() => {
     return {
@@ -93,6 +118,7 @@ export function ContinuousCapturePanel({
     async function openCamera() {
       setCameraReady(false);
       setCameraError(null);
+      setZoomSettings(null);
       stopStream();
 
       try {
@@ -103,6 +129,7 @@ export function ContinuousCapturePanel({
         }
 
         streamRef.current = stream;
+        setZoomSettings(readZoomSettings(stream));
         if (videoRef.current) {
           videoRef.current.srcObject = stream;
           await videoRef.current.play().catch(() => undefined);
@@ -387,7 +414,44 @@ export function ContinuousCapturePanel({
     onExit();
   }
 
+  function handleZoomInput(value: string) {
+    const parsed = Number(value);
+    if (!Number.isFinite(parsed) || !zoomSettings?.supported) {
+      return;
+    }
+    const nextValue = clampNumber(parsed, zoomSettings.min, zoomSettings.max, zoomSettings.value);
+    setZoomSettings((current) => (current ? { ...current, value: nextValue } : current));
+    void applyZoom(nextValue);
+  }
+
+  function resetZoom() {
+    if (!zoomSettings?.supported) {
+      return;
+    }
+    const nextValue = clampNumber(1, zoomSettings.min, zoomSettings.max, zoomSettings.min);
+    setZoomSettings((current) => (current ? { ...current, value: nextValue } : current));
+    void applyZoom(nextValue);
+  }
+
+  async function applyZoom(value: number) {
+    const track = streamRef.current?.getVideoTracks()[0];
+    if (!track?.applyConstraints) {
+      return;
+    }
+    try {
+      await track.applyConstraints({
+        advanced: [{ zoom: value } as ZoomTrackConstraintSet],
+      });
+    } catch {
+      if (mountedRef.current) {
+        setToast("缩放调整失败");
+      }
+    }
+  }
+
   const visibleItems = items.slice(0, MAX_VISIBLE_ITEMS);
+  const zoomSupported = Boolean(zoomSettings?.supported);
+  const zoomValue = zoomSettings?.value ?? 1;
 
   return (
     <div style={capturePanelStyle(isMobile)}>
@@ -403,6 +467,14 @@ export function ContinuousCapturePanel({
 
       <div style={cameraStageStyle}>
         <video ref={videoRef} muted playsInline autoPlay style={videoStyle(facingMode)} />
+        {gridEnabled ? (
+          <div style={gridOverlayStyle} aria-hidden="true">
+            <span style={gridVerticalLineStyle("33.333%")} />
+            <span style={gridVerticalLineStyle("66.666%")} />
+            <span style={gridHorizontalLineStyle("33.333%")} />
+            <span style={gridHorizontalLineStyle("66.666%")} />
+          </div>
+        ) : null}
         {!cameraReady ? (
           <div style={cameraOverlayStyle}>
             {cameraError || "相机准备中"}
@@ -413,6 +485,38 @@ export function ContinuousCapturePanel({
           <span>上传 {stats.success}</span>
           <span>等待 {stats.uploading}</span>
           <span>失败 {stats.failed}</span>
+        </div>
+      </div>
+
+      <div style={captureToolBarStyle(isMobile)}>
+        <button
+          type="button"
+          style={toolToggleButtonStyle(gridEnabled)}
+          onClick={() => setGridEnabled((current) => !current)}
+        >
+          九宫格
+        </button>
+        <div style={zoomControlStyle(zoomSupported)}>
+          <button
+            type="button"
+            style={zoomResetButtonStyle}
+            onClick={resetZoom}
+            disabled={!zoomSupported || recording}
+          >
+            1x
+          </button>
+          <input
+            type="range"
+            min={zoomSettings?.min ?? 1}
+            max={zoomSettings?.max ?? 1}
+            step={zoomSettings?.step ?? 0.1}
+            value={zoomValue}
+            disabled={!zoomSupported || recording}
+            onChange={(event) => handleZoomInput(event.currentTarget.value)}
+            style={zoomSliderStyle}
+            aria-label="缩放"
+          />
+          <span style={zoomValueStyle}>{zoomSupported ? `${formatZoomValue(zoomValue)}x` : "缩放不可用"}</span>
         </div>
       </div>
 
@@ -464,6 +568,40 @@ export function ContinuousCapturePanel({
       </div>
     </div>
   );
+}
+
+function readZoomSettings(stream: MediaStream): ZoomSettings {
+  const track = stream.getVideoTracks()[0];
+  const capabilities = track?.getCapabilities?.() as ZoomTrackCapabilities | undefined;
+  const range = capabilities?.zoom;
+  if (
+    !track ||
+    !range ||
+    typeof range.min !== "number" ||
+    typeof range.max !== "number" ||
+    range.max <= range.min
+  ) {
+    return {
+      supported: false,
+      min: 1,
+      max: 1,
+      step: 0.1,
+      value: 1,
+    };
+  }
+
+  const settings = track.getSettings?.() as ZoomTrackSettings | undefined;
+  const min = range.min;
+  const max = Math.max(min, range.max);
+  const step = typeof range.step === "number" && range.step > 0 ? range.step : 0.1;
+  const value = clampNumber(settings?.zoom, min, max, min);
+  return {
+    supported: true,
+    min,
+    max,
+    step,
+    value,
+  };
 }
 
 async function requestCameraStream(facingMode: FacingMode, cameraProfile: NativeAlbumCameraProfile | null) {
@@ -534,6 +672,13 @@ function timestampForFilename() {
   return new Date().toISOString().replace(/[-:]/g, "").replace(/\..+$/, "").replace("T", "-");
 }
 
+function formatZoomValue(value: number) {
+  if (!Number.isFinite(value)) {
+    return "1.0";
+  }
+  return value.toFixed(value >= 10 ? 0 : 1);
+}
+
 function scaleCaptureDimensions(sourceWidth: number, sourceHeight: number, maxWidth: number) {
   const width = Math.max(1, Math.round(sourceWidth));
   const height = Math.max(1, Math.round(sourceHeight));
@@ -588,13 +733,15 @@ function captureStatusLabel(status: CaptureUploadStatus) {
 
 function capturePanelStyle(isMobile: boolean): CSSProperties {
   return {
-    height: isMobile ? "calc(100vh - 20px)" : "min(780px, 90vh)",
+    width: "100vw",
+    height: "100dvh",
     minHeight: 0,
     display: "grid",
-    gridTemplateRows: "auto minmax(0, 1fr) auto auto auto",
+    gridTemplateRows: "auto minmax(0, 1fr) auto auto auto auto",
     background: "#080b10",
     color: "#f8fafc",
     overflow: "hidden",
+    paddingBottom: isMobile ? "env(safe-area-inset-bottom)" : undefined,
   };
 }
 
@@ -649,6 +796,37 @@ const cameraStageStyle: CSSProperties = {
   overflow: "hidden",
 };
 
+const gridOverlayStyle: CSSProperties = {
+  position: "absolute",
+  inset: 0,
+  pointerEvents: "none",
+  zIndex: 2,
+};
+
+function gridVerticalLineStyle(left: string): CSSProperties {
+  return {
+    position: "absolute",
+    top: 0,
+    bottom: 0,
+    left,
+    width: "1px",
+    background: "rgba(255,255,255,0.42)",
+    boxShadow: "0 0 0 1px rgba(0,0,0,0.16)",
+  };
+}
+
+function gridHorizontalLineStyle(top: string): CSSProperties {
+  return {
+    position: "absolute",
+    left: 0,
+    right: 0,
+    top,
+    height: "1px",
+    background: "rgba(255,255,255,0.42)",
+    boxShadow: "0 0 0 1px rgba(0,0,0,0.16)",
+  };
+}
+
 function videoStyle(facingMode: FacingMode): CSSProperties {
   return {
     width: "100%",
@@ -694,6 +872,72 @@ const cameraStatsStyle: CSSProperties = {
   color: "#f8fafc",
   fontSize: "12px",
   fontWeight: 800,
+};
+
+function captureToolBarStyle(isMobile: boolean): CSSProperties {
+  return {
+    display: "grid",
+    gridTemplateColumns: isMobile ? "auto minmax(0, 1fr)" : "160px minmax(0, 440px)",
+    gap: "10px",
+    alignItems: "center",
+    padding: isMobile ? "10px 16px 0" : "12px 28px 0",
+    background: "#080b10",
+  };
+}
+
+function toolToggleButtonStyle(enabled: boolean): CSSProperties {
+  return {
+    minHeight: "38px",
+    padding: "0 12px",
+    borderRadius: "999px",
+    border: enabled ? "1px solid rgba(20,184,166,0.72)" : "1px solid rgba(255,255,255,0.16)",
+    background: enabled ? "rgba(20,184,166,0.22)" : "rgba(255,255,255,0.08)",
+    color: "#f8fafc",
+    fontWeight: 800,
+    cursor: "pointer",
+    whiteSpace: "nowrap",
+  };
+}
+
+function zoomControlStyle(supported: boolean): CSSProperties {
+  return {
+    minHeight: "38px",
+    minWidth: 0,
+    display: "grid",
+    gridTemplateColumns: "auto minmax(0, 1fr) auto",
+    alignItems: "center",
+    gap: "10px",
+    padding: "0 12px",
+    borderRadius: "999px",
+    border: "1px solid rgba(255,255,255,0.14)",
+    background: "rgba(255,255,255,0.08)",
+    opacity: supported ? 1 : 0.64,
+  };
+}
+
+const zoomResetButtonStyle: CSSProperties = {
+  minWidth: "34px",
+  height: "28px",
+  padding: 0,
+  border: "1px solid rgba(255,255,255,0.16)",
+  borderRadius: "999px",
+  background: "rgba(255,255,255,0.1)",
+  color: "#f8fafc",
+  fontWeight: 900,
+  cursor: "pointer",
+};
+
+const zoomSliderStyle: CSSProperties = {
+  width: "100%",
+  accentColor: "#14b8a6",
+};
+
+const zoomValueStyle: CSSProperties = {
+  minWidth: "54px",
+  textAlign: "right",
+  fontSize: "12px",
+  fontWeight: 900,
+  color: "#f8fafc",
 };
 
 function captureControlsStyle(isMobile: boolean): CSSProperties {
