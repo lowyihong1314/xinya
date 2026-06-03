@@ -20,7 +20,7 @@ from app.media.paths import (
     event_photo_mp4_dir,
     to_short_data_path,
 )
-from app.media.utils import ensure_jpeg_cache_file, get_duration, is_video_valid
+from app.media.utils import ensure_jpeg_cache_file, get_duration, is_video_valid, remove_jpeg_cache_file
 from app.media.video_tasks import current_video_tasks
 from models import db
 from models.event_data import AlbumFiles, EventData
@@ -642,8 +642,7 @@ def rotate_album_file(file_id, angle):
     img.rotate(-angle, expand=True).save(base_path)
 
     cache_file = os.path.join(event_photo_cache_dir(file.event.event_code), f"{os.path.splitext(file.file_name)[0]}.jpeg")
-    if os.path.exists(cache_file):
-        os.remove(cache_file)
+    remove_jpeg_cache_file(cache_file)
 
     _emit_event_room(
         file.event.event_code,
@@ -668,7 +667,9 @@ def delete_album_file(file):
         event_photo_mp4_dir(file.event.event_code),
         secure_filename(stem + "_web.mp4"),
     )
-    for path in [base_path, cache_path, cache_video_path, base_video_path]:
+    remove_jpeg_cache_file(cache_path)
+
+    for path in [base_path, cache_video_path, base_video_path]:
         if os.path.exists(path):
             try:
                 os.remove(path)

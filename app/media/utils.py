@@ -6,13 +6,60 @@ import subprocess
 import zipfile
 
 import pillow_heif
-from PIL import Image
+from PIL import Image, ImageOps
 from flask import Response, request, send_file
 from werkzeug.utils import secure_filename
 
 from app.media.constants import ALLOWED_EXTENSIONS, IMAGE_EXTS, VIDEO_EXTS
 
 JPEG_CACHE_SOURCE_EXTS = IMAGE_EXTS | {".heic", ".heif"}
+JPEG_CACHE_VERSION = "exif-orientation-normalized-v2"
+EXIF_ORIENTATION_TAG = 274
+
+
+def jpeg_cache_version_path(cache_path):
+    return f"{cache_path}.cache_version"
+
+
+def _read_jpeg_cache_version(cache_path):
+    try:
+        with open(jpeg_cache_version_path(cache_path), encoding="utf-8") as file_obj:
+            return file_obj.read().strip()
+    except OSError:
+        return ""
+
+
+def _write_jpeg_cache_version(cache_path):
+    version_path = jpeg_cache_version_path(cache_path)
+    tmp_path = f"{version_path}.tmp.{os.getpid()}"
+    try:
+        with open(tmp_path, "w", encoding="utf-8") as file_obj:
+            file_obj.write(f"{JPEG_CACHE_VERSION}\n")
+        os.replace(tmp_path, version_path)
+    finally:
+        if os.path.exists(tmp_path):
+            os.remove(tmp_path)
+
+
+def remove_jpeg_cache_file(cache_path):
+    for path in [cache_path, jpeg_cache_version_path(cache_path)]:
+        try:
+            os.remove(path)
+        except FileNotFoundError:
+            pass
+
+
+def _normal_orientation_exif():
+    exif = Image.Exif()
+    exif[EXIF_ORIENTATION_TAG] = 1
+    return exif.tobytes()
+
+
+def _save_normalized_jpeg_cache(img, tmp_path):
+    img = ImageOps.exif_transpose(img)
+    if img.mode != "RGB":
+        img = img.convert("RGB")
+    img.save(tmp_path, "JPEG", quality=85, exif=_normal_orientation_exif())
 
 
 def _sniff_image_ext(img_path):
@@ -136,6 +183,8 @@ def jpeg_cache_path_for_source(img_path, cache_root=None):
 def is_cache_stale(source_path, cache_path):
     if not os.path.exists(cache_path):
         return True
+    if _read_jpeg_cache_version(cache_path) != JPEG_CACHE_VERSION:
+        return True
     try:
         return os.path.getmtime(cache_path) < os.path.getmtime(source_path)
     except OSError:
@@ -153,9 +202,7 @@ def compress_new_cache_file(img_path, cache_root=None):
     try:
         if ext in IMAGE_EXTS:
             with Image.open(img_path) as img:
-                if img.mode != "RGB":
-                    img = img.convert("RGB")
-                img.save(tmp_path, "JPEG", quality=85)
+                _save_normalized_jpeg_cache(img, tmp_path)
         elif ext in [".heic", ".heif"]:
             heif_file = pillow_heif.read_heif(img_path)
             img = Image.frombytes(
@@ -166,12 +213,11 @@ def compress_new_cache_file(img_path, cache_root=None):
                 heif_file.mode,
                 heif_file.stride,
             )
-            if img.mode != "RGB":
-                img = img.convert("RGB")
-            img.save(tmp_path, "JPEG", quality=85)
+            _save_normalized_jpeg_cache(img, tmp_path)
         else:
             raise ValueError(f"不支持的文件类型: {ext}")
         os.replace(tmp_path, out_path)
+        _write_jpeg_cache_version(out_path)
     finally:
         if os.path.exists(tmp_path):
             os.remove(tmp_path)
