@@ -13,12 +13,15 @@ import android.net.Uri;
 import android.os.Bundle;
 import android.os.Handler;
 import android.os.Looper;
+import android.text.TextUtils;
 import android.view.Gravity;
 import android.view.MotionEvent;
+import android.view.ScaleGestureDetector;
 import android.view.View;
 import android.view.ViewGroup;
+import android.view.Window;
+import android.view.WindowManager;
 import android.webkit.CookieManager;
-import android.widget.Button;
 import android.widget.FrameLayout;
 import android.widget.LinearLayout;
 import android.widget.TextView;
@@ -27,8 +30,11 @@ import android.widget.Toast;
 import androidx.annotation.NonNull;
 import androidx.appcompat.app.AppCompatActivity;
 import androidx.camera.core.CameraSelector;
+import androidx.camera.core.FocusMeteringAction;
 import androidx.camera.core.ImageCapture;
 import androidx.camera.core.ImageCaptureException;
+import androidx.camera.core.MeteringPoint;
+import androidx.camera.core.MeteringPointFactory;
 import androidx.camera.core.ZoomState;
 import androidx.camera.video.FileOutputOptions;
 import androidx.camera.video.Recording;
@@ -47,6 +53,7 @@ import java.io.File;
 import java.text.SimpleDateFormat;
 import java.util.Date;
 import java.util.Locale;
+import java.util.concurrent.TimeUnit;
 import java.util.UUID;
 
 public class NativeCameraCaptureActivity extends AppCompatActivity {
@@ -67,10 +74,13 @@ public class NativeCameraCaptureActivity extends AppCompatActivity {
     private TextView zoomText;
     private TextView counterText;
     private TextView focusRing;
-    private Button shutterButton;
-    private Button flipButton;
-    private Button torchButton;
+    private TextView recordingBadge;
+    private FrameLayout shutterButton;
+    private View shutterCore;
+    private TextView flipButton;
+    private TextView torchButton;
     private LinearLayout zoomStrip;
+    private ScaleGestureDetector scaleGestureDetector;
 
     private int eventId;
     private String eventName;
@@ -83,6 +93,8 @@ public class NativeCameraCaptureActivity extends AppCompatActivity {
     private File activeVideoFile;
     private float maxZoomRatio = 1f;
     private float currentZoomRatio = 1f;
+    private float pinchStartZoomRatio = 1f;
+    private boolean previewHadMultiTouch = false;
     private CameraSelector cameraSelector = CameraSelector.DEFAULT_BACK_CAMERA;
 
     private final Runnable startRecordingRunnable = () -> {
@@ -117,6 +129,14 @@ public class NativeCameraCaptureActivity extends AppCompatActivity {
     }
 
     @Override
+    public void onWindowFocusChanged(boolean hasFocus) {
+        super.onWindowFocusChanged(hasFocus);
+        if (hasFocus) {
+            enableFullscreenLayout();
+        }
+    }
+
+    @Override
     public void onRequestPermissionsResult(int requestCode, @NonNull String[] permissions, @NonNull int[] grantResults) {
         super.onRequestPermissionsResult(requestCode, permissions, grantResults);
         if (requestCode == REQUEST_CAMERA_PERMISSION && grantResults.length > 0 && grantResults[0] == PackageManager.PERMISSION_GRANTED) {
@@ -127,6 +147,8 @@ public class NativeCameraCaptureActivity extends AppCompatActivity {
     }
 
     private void buildUi() {
+        enableFullscreenLayout();
+
         FrameLayout root = new FrameLayout(this);
         root.setBackgroundColor(Color.BLACK);
 
@@ -137,36 +159,61 @@ public class NativeCameraCaptureActivity extends AppCompatActivity {
             ViewGroup.LayoutParams.MATCH_PARENT
         ));
 
-        focusRing = new TextView(this);
-        focusRing.setText("");
-        focusRing.setVisibility(View.GONE);
-        focusRing.setBackground(circleDrawable(Color.TRANSPARENT, Color.argb(230, 255, 255, 255), 2));
-        root.addView(focusRing, new FrameLayout.LayoutParams(dp(72), dp(72), Gravity.TOP | Gravity.START));
-
-        LinearLayout topBar = new LinearLayout(this);
-        topBar.setGravity(Gravity.CENTER_VERTICAL);
-        topBar.setPadding(dp(14), dp(14), dp(14), dp(10));
-        topBar.setBackgroundColor(Color.argb(120, 0, 0, 0));
-        topBar.setOrientation(LinearLayout.HORIZONTAL);
-        root.addView(topBar, new FrameLayout.LayoutParams(
+        View topScrim = new View(this);
+        topScrim.setBackground(new GradientDrawable(
+            GradientDrawable.Orientation.TOP_BOTTOM,
+            new int[] { Color.argb(185, 0, 0, 0), Color.TRANSPARENT }
+        ));
+        root.addView(topScrim, new FrameLayout.LayoutParams(
             ViewGroup.LayoutParams.MATCH_PARENT,
-            ViewGroup.LayoutParams.WRAP_CONTENT,
+            dp(148),
             Gravity.TOP
         ));
 
-        Button closeButton = pillButton("退出");
+        View bottomScrim = new View(this);
+        bottomScrim.setBackground(new GradientDrawable(
+            GradientDrawable.Orientation.BOTTOM_TOP,
+            new int[] { Color.argb(230, 0, 0, 0), Color.TRANSPARENT }
+        ));
+        root.addView(bottomScrim, new FrameLayout.LayoutParams(
+            ViewGroup.LayoutParams.MATCH_PARENT,
+            dp(292),
+            Gravity.BOTTOM
+        ));
+
+        focusRing = new TextView(this);
+        focusRing.setText("");
+        focusRing.setVisibility(View.GONE);
+        focusRing.setBackground(circleDrawable(Color.TRANSPARENT, Color.argb(235, 255, 214, 82), 2));
+        root.addView(focusRing, new FrameLayout.LayoutParams(dp(78), dp(78), Gravity.TOP | Gravity.START));
+
+        FrameLayout topBar = new FrameLayout(this);
+        topBar.setPadding(dp(18), dp(18), dp(18), 0);
+        root.addView(topBar, new FrameLayout.LayoutParams(
+            ViewGroup.LayoutParams.MATCH_PARENT,
+            dp(112),
+            Gravity.TOP
+        ));
+
+        TextView closeButton = iconButton("×", 46, 26);
         closeButton.setOnClickListener((view) -> finishWithResult());
-        topBar.addView(closeButton, new LinearLayout.LayoutParams(dp(64), dp(42)));
+        FrameLayout.LayoutParams closeParams = new FrameLayout.LayoutParams(dp(46), dp(46), Gravity.LEFT | Gravity.TOP);
+        topBar.addView(closeButton, closeParams);
 
         statusText = new TextView(this);
         statusText.setTextColor(Color.WHITE);
         statusText.setTextSize(14);
         statusText.setTypeface(Typeface.DEFAULT_BOLD);
-        statusText.setSingleLine(false);
+        statusText.setSingleLine(true);
+        statusText.setEllipsize(TextUtils.TruncateAt.END);
         statusText.setGravity(Gravity.CENTER);
         statusText.setText(eventName != null && !eventName.trim().isEmpty() ? eventName : "原生相机");
-        LinearLayout.LayoutParams statusParams = new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f);
-        statusParams.setMargins(dp(10), 0, dp(10), 0);
+        FrameLayout.LayoutParams statusParams = new FrameLayout.LayoutParams(
+            ViewGroup.LayoutParams.MATCH_PARENT,
+            dp(46),
+            Gravity.TOP | Gravity.CENTER_HORIZONTAL
+        );
+        statusParams.setMargins(dp(68), 0, dp(88), 0);
         topBar.addView(statusText, statusParams);
 
         counterText = new TextView(this);
@@ -174,59 +221,74 @@ public class NativeCameraCaptureActivity extends AppCompatActivity {
         counterText.setTextSize(12);
         counterText.setTypeface(Typeface.DEFAULT_BOLD);
         counterText.setGravity(Gravity.CENTER);
-        counterText.setBackground(pillDrawable(Color.argb(120, 0, 0, 0), Color.argb(40, 255, 255, 255), 1));
+        counterText.setBackground(pillDrawable(Color.argb(82, 0, 0, 0), Color.argb(70, 255, 255, 255), 1));
         counterText.setText("0");
-        topBar.addView(counterText, new LinearLayout.LayoutParams(dp(54), dp(36)));
+        FrameLayout.LayoutParams counterParams = new FrameLayout.LayoutParams(dp(58), dp(36), Gravity.RIGHT | Gravity.TOP);
+        counterParams.setMargins(0, dp(5), 0, 0);
+        topBar.addView(counterText, counterParams);
+
+        recordingBadge = new TextView(this);
+        recordingBadge.setText("REC");
+        recordingBadge.setTextColor(Color.WHITE);
+        recordingBadge.setTextSize(12);
+        recordingBadge.setTypeface(Typeface.DEFAULT_BOLD);
+        recordingBadge.setGravity(Gravity.CENTER);
+        recordingBadge.setVisibility(View.GONE);
+        recordingBadge.setBackground(pillDrawable(Color.rgb(220, 38, 38), Color.TRANSPARENT, 0));
+        FrameLayout.LayoutParams recordingParams = new FrameLayout.LayoutParams(dp(62), dp(30), Gravity.TOP | Gravity.CENTER_HORIZONTAL);
+        recordingParams.setMargins(0, dp(54), 0, 0);
+        topBar.addView(recordingBadge, recordingParams);
 
         zoomText = new TextView(this);
         zoomText.setTextColor(Color.WHITE);
-        zoomText.setTextSize(15);
+        zoomText.setTextSize(13);
         zoomText.setTypeface(Typeface.DEFAULT_BOLD);
         zoomText.setGravity(Gravity.CENTER);
-        zoomText.setBackground(pillDrawable(Color.argb(120, 0, 0, 0), Color.argb(40, 255, 255, 255), 1));
-        FrameLayout.LayoutParams zoomTextParams = new FrameLayout.LayoutParams(dp(72), dp(42), Gravity.TOP | Gravity.RIGHT);
-        zoomTextParams.setMargins(0, dp(76), dp(14), 0);
+        zoomText.setBackground(pillDrawable(Color.argb(74, 0, 0, 0), Color.argb(50, 255, 255, 255), 1));
+        FrameLayout.LayoutParams zoomTextParams = new FrameLayout.LayoutParams(dp(58), dp(34), Gravity.RIGHT | Gravity.BOTTOM);
+        zoomTextParams.setMargins(0, 0, dp(20), dp(168));
         root.addView(zoomText, zoomTextParams);
 
         zoomStrip = new LinearLayout(this);
         zoomStrip.setOrientation(LinearLayout.HORIZONTAL);
         zoomStrip.setGravity(Gravity.CENTER);
-        zoomStrip.setPadding(dp(6), dp(6), dp(6), dp(6));
-        zoomStrip.setBackground(pillDrawable(Color.argb(105, 0, 0, 0), Color.argb(24, 255, 255, 255), 1));
+        zoomStrip.setPadding(dp(5), dp(5), dp(5), dp(5));
+        zoomStrip.setBackground(pillDrawable(Color.argb(104, 0, 0, 0), Color.argb(44, 255, 255, 255), 1));
         FrameLayout.LayoutParams zoomStripParams = new FrameLayout.LayoutParams(
             ViewGroup.LayoutParams.WRAP_CONTENT,
             ViewGroup.LayoutParams.WRAP_CONTENT,
             Gravity.BOTTOM | Gravity.CENTER_HORIZONTAL
         );
-        zoomStripParams.setMargins(0, 0, 0, dp(132));
+        zoomStripParams.setMargins(0, 0, 0, dp(146));
         root.addView(zoomStrip, zoomStripParams);
         buildZoomButtons();
 
-        LinearLayout bottomBar = new LinearLayout(this);
-        bottomBar.setGravity(Gravity.CENTER);
-        bottomBar.setPadding(dp(18), dp(14), dp(18), dp(22));
-        bottomBar.setOrientation(LinearLayout.HORIZONTAL);
-        bottomBar.setBackgroundColor(Color.argb(170, 0, 0, 0));
+        FrameLayout bottomBar = new FrameLayout(this);
+        bottomBar.setPadding(dp(24), 0, dp(24), dp(24));
         root.addView(bottomBar, new FrameLayout.LayoutParams(
             ViewGroup.LayoutParams.MATCH_PARENT,
-            ViewGroup.LayoutParams.WRAP_CONTENT,
+            dp(132),
             Gravity.BOTTOM
         ));
 
-        torchButton = roundButton("灯");
+        torchButton = iconButton("⚡", 58, 22);
         torchButton.setOnClickListener((view) -> toggleTorch());
-        bottomBar.addView(torchButton, new LinearLayout.LayoutParams(dp(58), dp(58), 1f));
+        FrameLayout.LayoutParams torchParams = new FrameLayout.LayoutParams(dp(58), dp(58), Gravity.LEFT | Gravity.CENTER_VERTICAL);
+        bottomBar.addView(torchButton, torchParams);
 
-        shutterButton = roundButton("");
-        shutterButton.setBackground(circleDrawable(Color.WHITE, Color.argb(210, 255, 255, 255), 5));
+        shutterButton = new FrameLayout(this);
+        shutterButton.setBackground(circleDrawable(Color.TRANSPARENT, Color.argb(240, 255, 255, 255), 4));
         shutterButton.setOnTouchListener((view, event) -> handleShutterTouch(event));
-        LinearLayout.LayoutParams shutterParams = new LinearLayout.LayoutParams(dp(84), dp(84));
-        shutterParams.setMargins(dp(34), 0, dp(34), 0);
+        shutterCore = new View(this);
+        shutterCore.setBackground(circleDrawable(Color.WHITE, Color.TRANSPARENT, 0));
+        shutterButton.addView(shutterCore, new FrameLayout.LayoutParams(dp(64), dp(64), Gravity.CENTER));
+        FrameLayout.LayoutParams shutterParams = new FrameLayout.LayoutParams(dp(88), dp(88), Gravity.CENTER);
         bottomBar.addView(shutterButton, shutterParams);
 
-        flipButton = roundButton("↻");
+        flipButton = iconButton("⇄", 58, 24);
         flipButton.setOnClickListener((view) -> flipCamera());
-        bottomBar.addView(flipButton, new LinearLayout.LayoutParams(dp(58), dp(58), 1f));
+        FrameLayout.LayoutParams flipParams = new FrameLayout.LayoutParams(dp(58), dp(58), Gravity.RIGHT | Gravity.CENTER_VERTICAL);
+        bottomBar.addView(flipButton, flipParams);
 
         setContentView(root);
     }
@@ -240,16 +302,57 @@ public class NativeCameraCaptureActivity extends AppCompatActivity {
             cameraController.setTapToFocusEnabled(true);
             cameraController.bindToLifecycle(this);
             previewView.setController(cameraController);
-            previewView.setOnTouchListener((view, event) -> {
-                if (event.getAction() == MotionEvent.ACTION_UP) {
-                    showFocusRing(event.getX(), event.getY());
+            scaleGestureDetector = new ScaleGestureDetector(this, new ScaleGestureDetector.SimpleOnScaleGestureListener() {
+                @Override
+                public boolean onScaleBegin(ScaleGestureDetector detector) {
+                    pinchStartZoomRatio = currentZoomRatio;
+                    return true;
                 }
-                return false;
+
+                @Override
+                public boolean onScale(ScaleGestureDetector detector) {
+                    setNativeZoomRatio(pinchStartZoomRatio * detector.getScaleFactor());
+                    return true;
+                }
             });
+            previewView.setOnTouchListener((view, event) -> handlePreviewTouch(event));
             cameraController.getZoomState().observe(this, this::updateZoomState);
-            setStatus("点击画面对焦，双指缩放");
+            setStatus("相机已开启");
         } catch (Exception error) {
             setStatus(error.getMessage() != null ? error.getMessage() : "无法打开原生相机");
+        }
+    }
+
+    private boolean handlePreviewTouch(MotionEvent event) {
+        if (scaleGestureDetector != null) {
+            scaleGestureDetector.onTouchEvent(event);
+        }
+        if (event.getPointerCount() > 1) {
+            previewHadMultiTouch = true;
+        }
+        if (event.getAction() == MotionEvent.ACTION_UP && event.getPointerCount() == 1 && !previewHadMultiTouch) {
+            focusAt(event.getX(), event.getY());
+        }
+        if (event.getAction() == MotionEvent.ACTION_UP || event.getAction() == MotionEvent.ACTION_CANCEL) {
+            previewHadMultiTouch = false;
+        }
+        return true;
+    }
+
+    private void focusAt(float x, float y) {
+        showFocusRing(x, y);
+        if (cameraController == null || previewView == null) {
+            return;
+        }
+        try {
+            MeteringPointFactory factory = previewView.getMeteringPointFactory();
+            MeteringPoint point = factory.createPoint(x, y);
+            FocusMeteringAction action = new FocusMeteringAction.Builder(point, FocusMeteringAction.FLAG_AF)
+                .addPoint(point, FocusMeteringAction.FLAG_AE)
+                .setAutoCancelDuration(3, TimeUnit.SECONDS)
+                .build();
+            cameraController.getCameraControl().startFocusAndMetering(action);
+        } catch (Exception ignored) {
         }
     }
 
@@ -315,7 +418,7 @@ public class NativeCameraCaptureActivity extends AppCompatActivity {
                     public void accept(VideoRecordEvent event) {
                         if (event instanceof VideoRecordEvent.Start) {
                             setStatus("录像中");
-                            shutterButton.setBackground(circleDrawable(Color.rgb(239, 68, 68), Color.argb(210, 255, 255, 255), 5));
+                            setRecordingUi(true);
                         } else if (event instanceof VideoRecordEvent.Finalize) {
                             handleVideoFinalized((VideoRecordEvent.Finalize) event);
                         }
@@ -341,7 +444,7 @@ public class NativeCameraCaptureActivity extends AppCompatActivity {
         File file = activeVideoFile;
         activeVideoFile = null;
         activeRecording = null;
-        shutterButton.setBackground(circleDrawable(Color.WHITE, Color.argb(210, 255, 255, 255), 5));
+        setRecordingUi(false);
         if (file == null) {
             return;
         }
@@ -389,7 +492,15 @@ public class NativeCameraCaptureActivity extends AppCompatActivity {
     }
 
     private void updateTorchButton() {
-        torchButton.setText(torchEnabled ? "关灯" : "灯");
+        if (torchButton != null) {
+            torchButton.setText("⚡");
+            torchButton.setTextColor(torchEnabled ? Color.rgb(255, 214, 82) : Color.WHITE);
+            torchButton.setBackground(circleDrawable(
+                torchEnabled ? Color.argb(58, 255, 214, 82) : Color.argb(56, 0, 0, 0),
+                torchEnabled ? Color.argb(180, 255, 214, 82) : Color.argb(62, 255, 255, 255),
+                1
+            ));
+        }
     }
 
     private void updateZoomState(ZoomState zoomState) {
@@ -408,23 +519,26 @@ public class NativeCameraCaptureActivity extends AppCompatActivity {
         }
         zoomStrip.removeAllViews();
         for (float zoom : QUICK_ZOOMS) {
-            Button button = zoomButton(zoom);
-            LinearLayout.LayoutParams params = new LinearLayout.LayoutParams(dp(isActiveZoom(zoom) ? 42 : 36), dp(isActiveZoom(zoom) ? 42 : 36));
-            params.setMargins(dp(4), 0, dp(4), 0);
+            if (zoom > maxZoomRatio + 0.05f && zoom > 1f) {
+                continue;
+            }
+            TextView button = zoomButton(zoom);
+            LinearLayout.LayoutParams params = new LinearLayout.LayoutParams(dp(isActiveZoom(zoom) ? 48 : 42), dp(34));
+            params.setMargins(dp(3), 0, dp(3), 0);
             zoomStrip.addView(button, params);
         }
     }
 
-    private Button zoomButton(float zoom) {
+    private TextView zoomButton(float zoom) {
         boolean active = isActiveZoom(zoom);
-        Button button = new Button(this);
-        button.setAllCaps(false);
+        TextView button = new TextView(this);
         button.setText(formatZoom(zoom));
         button.setTextSize(active ? 12 : 11);
         button.setTypeface(Typeface.DEFAULT_BOLD);
         button.setTextColor(active ? Color.BLACK : Color.WHITE);
+        button.setGravity(Gravity.CENTER);
         button.setPadding(0, 0, 0, 0);
-        button.setBackground(circleDrawable(active ? Color.WHITE : Color.argb(80, 255, 255, 255), Color.argb(50, 255, 255, 255), 1));
+        button.setBackground(pillDrawable(active ? Color.WHITE : Color.TRANSPARENT, Color.argb(active ? 0 : 70, 255, 255, 255), 1));
         button.setOnClickListener((view) -> setNativeZoomRatio(zoom));
         return button;
     }
@@ -450,8 +564,8 @@ public class NativeCameraCaptureActivity extends AppCompatActivity {
             return;
         }
         FrameLayout.LayoutParams params = (FrameLayout.LayoutParams) focusRing.getLayoutParams();
-        params.leftMargin = Math.max(0, Math.round(x - dp(36)));
-        params.topMargin = Math.max(0, Math.round(y - dp(36)));
+        params.leftMargin = Math.max(0, Math.round(x - dp(39)));
+        params.topMargin = Math.max(0, Math.round(y - dp(39)));
         focusRing.setLayoutParams(params);
         focusRing.setAlpha(1f);
         focusRing.setVisibility(View.VISIBLE);
@@ -584,33 +698,62 @@ public class NativeCameraCaptureActivity extends AppCompatActivity {
     }
 
     private String formatZoom(float value) {
-        return value >= 10f
-            ? String.format(Locale.US, "%.0fx", value)
-            : String.format(Locale.US, "%.1fx", value);
+        int rounded = Math.round(value);
+        if (Math.abs(value - rounded) < 0.06f) {
+            return String.format(Locale.US, "%dx", rounded);
+        }
+        return String.format(Locale.US, "%.1fx", value);
     }
 
-    private Button pillButton(String text) {
-        Button button = new Button(this);
-        button.setAllCaps(false);
+    private void enableFullscreenLayout() {
+        Window window = getWindow();
+        window.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON);
+        window.setStatusBarColor(Color.TRANSPARENT);
+        window.setNavigationBarColor(Color.BLACK);
+        window.getDecorView().setSystemUiVisibility(
+            View.SYSTEM_UI_FLAG_IMMERSIVE_STICKY
+                | View.SYSTEM_UI_FLAG_FULLSCREEN
+                | View.SYSTEM_UI_FLAG_HIDE_NAVIGATION
+                | View.SYSTEM_UI_FLAG_LAYOUT_FULLSCREEN
+                | View.SYSTEM_UI_FLAG_LAYOUT_HIDE_NAVIGATION
+                | View.SYSTEM_UI_FLAG_LAYOUT_STABLE
+        );
+    }
+
+    private TextView iconButton(String text, int sizeDp, int textSizeSp) {
+        TextView button = new TextView(this);
         button.setText(text);
         button.setTextColor(Color.WHITE);
-        button.setTextSize(13);
+        button.setTextSize(textSizeSp);
         button.setTypeface(Typeface.DEFAULT_BOLD);
-        button.setPadding(0, 0, 0, 0);
-        button.setBackground(pillDrawable(Color.argb(95, 255, 255, 255), Color.argb(40, 255, 255, 255), 1));
+        button.setGravity(Gravity.CENTER);
+        button.setPadding(0, 0, 0, dp(1));
+        button.setMinWidth(dp(sizeDp));
+        button.setMinHeight(dp(sizeDp));
+        button.setBackground(circleDrawable(Color.argb(56, 0, 0, 0), Color.argb(62, 255, 255, 255), 1));
+        button.setClickable(true);
+        button.setFocusable(true);
         return button;
     }
 
-    private Button roundButton(String text) {
-        Button button = new Button(this);
-        button.setAllCaps(false);
-        button.setText(text);
-        button.setTextColor(Color.WHITE);
-        button.setTextSize(17);
-        button.setTypeface(Typeface.DEFAULT_BOLD);
-        button.setPadding(0, 0, 0, 0);
-        button.setBackground(circleDrawable(Color.argb(80, 255, 255, 255), Color.argb(50, 255, 255, 255), 1));
-        return button;
+    private void setRecordingUi(boolean recording) {
+        if (recordingBadge != null) {
+            recordingBadge.setVisibility(recording ? View.VISIBLE : View.GONE);
+        }
+        if (shutterButton != null) {
+            shutterButton.setBackground(circleDrawable(
+                Color.TRANSPARENT,
+                recording ? Color.argb(235, 248, 113, 113) : Color.argb(240, 255, 255, 255),
+                recording ? 3 : 4
+            ));
+        }
+        if (shutterCore != null) {
+            shutterCore.setBackground(circleDrawable(
+                recording ? Color.rgb(220, 38, 38) : Color.WHITE,
+                Color.TRANSPARENT,
+                0
+            ));
+        }
     }
 
     private GradientDrawable pillDrawable(int fillColor, int strokeColor, int strokeWidthDp) {
