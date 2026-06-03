@@ -125,7 +125,7 @@ export function ContinuousCapturePanel({
       stopStream();
 
       try {
-        const stream = await requestCameraStream(facingMode, cameraProfile);
+        const stream = await requestCameraStream(facingMode);
         if (canceled) {
           stopTracks(stream);
           return;
@@ -154,7 +154,7 @@ export function ContinuousCapturePanel({
       stopRecording();
       stopStream();
     };
-  }, [cameraProfile, facingMode]);
+  }, [facingMode]);
 
   useEffect(() => {
     const handleOrientationChange = () => {
@@ -666,33 +666,16 @@ function detectCaptureOrientation(video: HTMLVideoElement | null): CaptureOrient
   return detectViewportOrientation();
 }
 
-async function requestCameraStream(facingMode: FacingMode, cameraProfile: NativeAlbumCameraProfile | null) {
+async function requestCameraStream(facingMode: FacingMode) {
   if (!navigator.mediaDevices?.getUserMedia) {
     throw new Error("当前设备不支持相机");
   }
 
-  const recommendedWidth = clampNumber(cameraProfile?.recommendedVideoWidth, 640, 3840, cameraProfile?.isSamsung ? 1280 : 1920);
-  const recommendedHeight = clampNumber(cameraProfile?.recommendedVideoHeight, 360, 2160, cameraProfile?.isSamsung ? 720 : 1080);
-  const recommendedFrameRate = clampNumber(cameraProfile?.recommendedFrameRate, 15, 60, 30);
   const video: MediaTrackConstraints = {
     facingMode: { ideal: facingMode },
-    width: cameraProfile?.isSamsung ? { ideal: recommendedWidth, max: 1920 } : { ideal: recommendedWidth },
-    height: cameraProfile?.isSamsung ? { ideal: recommendedHeight, max: 1080 } : { ideal: recommendedHeight },
-    frameRate: cameraProfile?.isSamsung
-      ? { ideal: recommendedFrameRate, max: 30 }
-      : { ideal: recommendedFrameRate },
-    resizeMode: "crop-and-scale",
   };
 
-  try {
-    return await navigator.mediaDevices.getUserMedia({ video, audio: true });
-  } catch (error) {
-    try {
-      return await navigator.mediaDevices.getUserMedia({ video, audio: false });
-    } catch {
-      throw error;
-    }
-  }
+  return navigator.mediaDevices.getUserMedia({ video, audio: false });
 }
 
 function stopTracks(stream: MediaStream) {
