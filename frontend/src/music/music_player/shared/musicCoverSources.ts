@@ -14,7 +14,7 @@ const LOCAL_COVER_ROOT = `${API_BASE}/api/music/album_cover`;
 
 export const DEFAULT_REMOTE_COVER_URL = `${REMOTE_COVER_ROOT}/defult.jpeg`;
 export const DEFAULT_LOCAL_COVER_URL = `${LOCAL_COVER_ROOT}/defult.jpeg`;
-export const DEFAULT_COVER_CANDIDATES = [DEFAULT_REMOTE_COVER_URL, DEFAULT_LOCAL_COVER_URL];
+export const DEFAULT_COVER_CANDIDATES = [DEFAULT_LOCAL_COVER_URL, DEFAULT_REMOTE_COVER_URL];
 
 function isRemotePreferredCoverUrl(value?: string | null) {
   return Boolean(value && /^https?:\/\/utbabuddha\.com(?:\/|$)/i.test(String(value).trim()));
@@ -55,6 +55,10 @@ function normalizeDirectCoverUrl(value?: string | null): string | null {
   }
 
   if (trimmed.startsWith("/")) {
+    if (trimmed.startsWith("/static/album_image/")) {
+      const filename = extractCoverFilename(trimmed);
+      return filename ? buildLocalCoverUrl(filename) : null;
+    }
     return `${API_BASE}${trimmed}`;
   }
 
@@ -75,10 +79,12 @@ export function resolveAlbumCoverCandidates(source?: MusicCoverSource): string[]
   const filename = extractCoverFilename(rawPrimary) ?? extractCoverFilename(rawFallback);
   const candidates: string[] = [];
 
+  if (filename) {
+    pushCoverCandidate(candidates, buildLocalCoverUrl(filename));
+  }
+
   if (isRemotePreferredCoverUrl(rawPrimary)) {
     pushCoverCandidate(candidates, rawPrimary);
-  } else if (filename) {
-    pushCoverCandidate(candidates, buildRemoteCoverUrl(filename));
   } else {
     pushCoverCandidate(candidates, rawPrimary);
   }
@@ -92,7 +98,7 @@ export function resolveAlbumCoverCandidates(source?: MusicCoverSource): string[]
   }
 
   if (filename) {
-    pushCoverCandidate(candidates, buildLocalCoverUrl(filename));
+    pushCoverCandidate(candidates, buildRemoteCoverUrl(filename));
   }
 
   for (const fallback of DEFAULT_COVER_CANDIDATES) {

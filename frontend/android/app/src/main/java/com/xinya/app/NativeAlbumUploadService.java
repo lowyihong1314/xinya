@@ -22,6 +22,7 @@ import org.json.JSONObject;
 import java.io.BufferedInputStream;
 import java.io.BufferedOutputStream;
 import java.io.ByteArrayOutputStream;
+import java.io.File;
 import java.io.InputStream;
 import java.io.OutputStream;
 import java.net.HttpURLConnection;
@@ -155,6 +156,8 @@ public class NativeAlbumUploadService extends Service {
             } catch (Exception error) {
                 failed += 1;
                 updateStatus(status, "error", error.getMessage() != null ? error.getMessage() : "上传失败");
+            } finally {
+                cleanupLocalItem(item);
             }
 
             updateStatus(status, "completed", completed);
@@ -364,6 +367,24 @@ public class NativeAlbumUploadService extends Service {
             value = "media";
         }
         return value.replace("\"", "_").replace("\r", "_").replace("\n", "_");
+    }
+
+    private void cleanupLocalItem(JSONObject item) {
+        String localPath = item.optString("localPath", "");
+        if (localPath == null || localPath.trim().isEmpty()) {
+            return;
+        }
+        try {
+            File file = new File(localPath);
+            File cacheDir = getCacheDir();
+            String filePath = file.getCanonicalPath();
+            String cachePath = cacheDir.getCanonicalPath();
+            if (filePath.startsWith(cachePath) && file.exists()) {
+                //noinspection ResultOfMethodCallIgnored
+                file.delete();
+            }
+        } catch (Exception ignored) {
+        }
     }
 
     private void updateNotification(JSONObject status) {

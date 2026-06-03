@@ -53,6 +53,9 @@
 - [x] 给 native cache 加容量限制、LRU 清理、debug 页面和手机端媒体缓存空间设置。
 - [x] APK album 多图片/视频上传改为 Android foreground service 后台上传。
 - [x] iOS album 多图片/视频上传改为 `URLSession` background upload。
+- [x] 手机端 album detail 上传入口增加直接拍照 / 录像并上传；APK/iOS 走原生拍摄后交给后台上传任务。
+- [x] 手机端 image detail 增加 `分享图片`，优先调用系统分享面板分享图片文件，失败时分享图片链接。
+- [x] 手机端 URL 展示优化：`支付页 URL` 等长链接改为紧凑单行显示，保留复制 / 打开操作，避免撑破 UI。
 
 ### 第六阶段：Mobile Auth / Cache 长期方案
 
@@ -374,6 +377,8 @@ KVM 验证：2026-06-03 用 `lowyihong` 登录后，`NativeAuth.setSession` 成�
 
 - [x] album cover 上传改为服务端压缩保存，最长边限制 1200px，JPEG quality 82，避免手机端列表加载原始大图。
 - [x] `/api/music/album_cover/<filename>` 增加 30 天 `Cache-Control`，减少重复请求。
+- [x] 手机端 album cover cache key 升级到 `album-cover-compressed-v3`，旧 APK 已缓存的大封面不会被新版继续复用。
+- [x] album cover 候选 URL 改为当前 `API_BASE` 的 `/api/music/album_cover` 优先，KVM/本地 API 不再先卡外网域名。
 - [x] 2026-06-03 已压缩 `/srv/flaskapp/xinya/database/album_image` 现有 JPG/JPEG 封面；例如 `10.jpg` 从约 2MB 降到约 20KB，`35.jpg` 从约 580KB 降到约 104KB。
 
 ---

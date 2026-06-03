@@ -6,11 +6,13 @@ import android.content.ContentResolver;
 import android.content.Intent;
 import android.database.Cursor;
 import android.net.Uri;
+import android.provider.MediaStore;
 import android.provider.OpenableColumns;
 import android.webkit.CookieManager;
 
 import androidx.activity.result.ActivityResult;
 import androidx.core.content.ContextCompat;
+import androidx.core.content.FileProvider;
 
 import com.getcapacitor.JSObject;
 import com.getcapacitor.Plugin;
@@ -22,7 +24,11 @@ import com.getcapacitor.annotation.CapacitorPlugin;
 import org.json.JSONArray;
 import org.json.JSONObject;
 
+import java.io.File;
+import java.text.SimpleDateFormat;
+import java.util.Date;
 import java.util.LinkedHashSet;
+import java.util.Locale;
 import java.util.Set;
 import java.util.UUID;
 
@@ -34,6 +40,11 @@ public class NativeAlbumUploadPlugin extends Plugin {
         "image/*",
         "video/*"
     };
+
+    private Uri pendingCaptureUri;
+    private File pendingCaptureFile;
+    private String pendingCaptureMimeType;
+    private String pendingCaptureName;
 
     @PluginMethod
     public void pickAndUpload(PluginCall call) {
@@ -55,6 +66,48 @@ public class NativeAlbumUploadPlugin extends Plugin {
         intent.putExtra(Intent.EXTRA_MIME_TYPES, ACCEPTED_MIME_TYPES);
         intent.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION | Intent.FLAG_GRANT_PERSISTABLE_URI_PERMISSION);
         startActivityForResult(call, intent, "handlePickedFiles");
+    }
+
+    @PluginMethod
+    public void captureAndUpload(PluginCall call) {
+        Integer eventId = call.getInt("eventId");
+        String baseUrl = normalizeBaseUrl(call.getString("baseUrl", ""));
+        String mediaType = call.getString("mediaType", "image");
+        if (eventId == null || eventId <= 0) {
+            call.reject("eventId is required");
+            return;
+        }
+        if (baseUrl.isEmpty()) {
+            call.reject("baseUrl is required");
+            return;
+        }
+
+        boolean captureVideo = "video".equalsIgnoreCase(mediaType);
+        try {
+            File captureFile = createCaptureFile(captureVideo);
+            Uri captureUri = FileProvider.getUriForFile(
+                getContext(),
+                getContext().getPackageName() + ".fileprovider",
+                captureFile
+            );
+            Intent intent = new Intent(captureVideo ? MediaStore.ACTION_VIDEO_CAPTURE : MediaStore.ACTION_IMAGE_CAPTURE);
+            intent.putExtra(MediaStore.EXTRA_OUTPUT, captureUri);
+            intent.setClipData(ClipData.newRawUri("capture", captureUri));
+            intent.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION | Intent.FLAG_GRANT_WRITE_URI_PERMISSION);
+            if (intent.resolveActivity(getContext().getPackageManager()) == null) {
+                deleteQuietly(captureFile);
+                call.reject("Camera is unavailable");
+                return;
+            }
+
+            pendingCaptureUri = captureUri;
+            pendingCaptureFile = captureFile;
+            pendingCaptureMimeType = captureVideo ? "video/mp4" : "image/jpeg";
+            pendingCaptureName = captureFile.getName();
+            startActivityForResult(call, intent, "handleCapturedFile");
+        } catch (Exception error) {
+            call.reject(error.getMessage() != null ? error.getMessage() : "Unable to open camera");
+        }
     }
 
     @ActivityCallback
@@ -85,31 +138,45 @@ public class NativeAlbumUploadPlugin extends Plugin {
                 items.put(buildItem(uri));
             }
 
-            String jobId = UUID.randomUUID().toString();
-            JSONObject status = newStatus(jobId, eventId, items.length());
-            NativeAlbumUploadStore.writeStatus(getContext(), status);
-
-            String authorization = NativeAuthSessionStore.getAuthorizationHeader(getContext());
-            String cookie = authorization == null || authorization.trim().isEmpty()
-                ? getCookieHeader(baseUrl)
-                : null;
-
-            Intent serviceIntent = new Intent(getContext(), NativeAlbumUploadService.class);
-            serviceIntent.setAction(NativeAlbumUploadService.ACTION_ENQUEUE);
-            serviceIntent.putExtra(NativeAlbumUploadService.EXTRA_JOB_ID, jobId);
-            serviceIntent.putExtra(NativeAlbumUploadService.EXTRA_EVENT_ID, eventId);
-            serviceIntent.putExtra(NativeAlbumUploadService.EXTRA_BASE_URL, baseUrl);
-            serviceIntent.putExtra(NativeAlbumUploadService.EXTRA_ITEMS, items.toString());
-            if (authorization != null && !authorization.trim().isEmpty()) {
-                serviceIntent.putExtra(NativeAlbumUploadService.EXTRA_AUTHORIZATION, authorization);
-            }
-            if (cookie != null && !cookie.trim().isEmpty()) {
-                serviceIntent.putExtra(NativeAlbumUploadService.EXTRA_COOKIE, cookie);
-            }
-            ContextCompat.startForegroundService(getContext(), serviceIntent);
-            call.resolve(statusToJSObject(NativeAlbumUploadStore.readStatus(getContext(), jobId)));
+            enqueueUpload(call, eventId, baseUrl, items);
         } catch (Exception error) {
             call.reject(error.getMessage() != null ? error.getMessage() : "Native album upload failed");
+        }
+    }
+
+    @ActivityCallback
+    private void handleCapturedFile(PluginCall call, ActivityResult result) {
+        if (call == null) {
+            clearPendingCapture(false);
+            return;
+        }
+
+        if (result.getResultCode() != Activity.RESULT_OK) {
+            clearPendingCapture(true);
+            call.resolve(statusToJSObject(NativeAlbumUploadStore.idleStatus()));
+            return;
+        }
+
+        try {
+            Uri uri = result.getData() != null && result.getData().getData() != null
+                ? result.getData().getData()
+                : pendingCaptureUri;
+            if (uri == null) {
+                clearPendingCapture(true);
+                call.resolve(statusToJSObject(NativeAlbumUploadStore.idleStatus()));
+                return;
+            }
+
+            Integer eventIdValue = call.getInt("eventId");
+            int eventId = eventIdValue != null ? eventIdValue : 0;
+            String baseUrl = normalizeBaseUrl(call.getString("baseUrl", ""));
+            JSONArray items = new JSONArray();
+            items.put(buildCapturedItem(uri));
+            clearPendingCapture(false);
+            enqueueUpload(call, eventId, baseUrl, items);
+        } catch (Exception error) {
+            clearPendingCapture(true);
+            call.reject(error.getMessage() != null ? error.getMessage() : "Native album capture failed");
         }
     }
 
@@ -212,6 +279,85 @@ public class NativeAlbumUploadPlugin extends Plugin {
         updateStatus(item, "mimeType", mimeType);
         updateStatus(item, "size", size);
         return item;
+    }
+
+    private JSONObject buildCapturedItem(Uri uri) {
+        JSONObject item = buildItem(uri);
+        if (pendingCaptureName != null && !pendingCaptureName.trim().isEmpty()) {
+            updateStatus(item, "name", pendingCaptureName);
+        }
+        if (pendingCaptureMimeType != null && !pendingCaptureMimeType.trim().isEmpty()) {
+            updateStatus(item, "mimeType", pendingCaptureMimeType);
+        }
+        if (pendingCaptureFile != null) {
+            updateStatus(item, "size", pendingCaptureFile.length());
+            updateStatus(item, "localPath", pendingCaptureFile.getAbsolutePath());
+        }
+        return item;
+    }
+
+    private void enqueueUpload(PluginCall call, int eventId, String baseUrl, JSONArray items) {
+        String jobId = UUID.randomUUID().toString();
+        JSONObject status = newStatus(jobId, eventId, items.length());
+        NativeAlbumUploadStore.writeStatus(getContext(), status);
+
+        String authorization = NativeAuthSessionStore.getAuthorizationHeader(getContext());
+        String cookie = authorization == null || authorization.trim().isEmpty()
+            ? getCookieHeader(baseUrl)
+            : null;
+
+        Intent serviceIntent = new Intent(getContext(), NativeAlbumUploadService.class);
+        serviceIntent.setAction(NativeAlbumUploadService.ACTION_ENQUEUE);
+        serviceIntent.putExtra(NativeAlbumUploadService.EXTRA_JOB_ID, jobId);
+        serviceIntent.putExtra(NativeAlbumUploadService.EXTRA_EVENT_ID, eventId);
+        serviceIntent.putExtra(NativeAlbumUploadService.EXTRA_BASE_URL, baseUrl);
+        serviceIntent.putExtra(NativeAlbumUploadService.EXTRA_ITEMS, items.toString());
+        if (authorization != null && !authorization.trim().isEmpty()) {
+            serviceIntent.putExtra(NativeAlbumUploadService.EXTRA_AUTHORIZATION, authorization);
+        }
+        if (cookie != null && !cookie.trim().isEmpty()) {
+            serviceIntent.putExtra(NativeAlbumUploadService.EXTRA_COOKIE, cookie);
+        }
+        ContextCompat.startForegroundService(getContext(), serviceIntent);
+        call.resolve(statusToJSObject(NativeAlbumUploadStore.readStatus(getContext(), jobId)));
+    }
+
+    private File createCaptureFile(boolean video) throws Exception {
+        File captureDir = new File(getContext().getCacheDir(), "album-capture");
+        if (!captureDir.exists() && !captureDir.mkdirs()) {
+            throw new IllegalStateException("Unable to prepare camera cache");
+        }
+        String timestamp = new SimpleDateFormat("yyyyMMdd_HHmmss", Locale.US).format(new Date());
+        String prefix = video ? "video_" : "photo_";
+        String extension = video ? ".mp4" : ".jpg";
+        File file = new File(captureDir, prefix + timestamp + "_" + UUID.randomUUID().toString() + extension);
+        if (!file.createNewFile()) {
+            throw new IllegalStateException("Unable to create camera file");
+        }
+        return file;
+    }
+
+    private void clearPendingCapture(boolean deleteFile) {
+        if (deleteFile && pendingCaptureFile != null) {
+            deleteQuietly(pendingCaptureFile);
+        }
+        pendingCaptureUri = null;
+        pendingCaptureFile = null;
+        pendingCaptureMimeType = null;
+        pendingCaptureName = null;
+    }
+
+    private void deleteQuietly(File file) {
+        if (file == null) {
+            return;
+        }
+        try {
+            if (file.exists()) {
+                //noinspection ResultOfMethodCallIgnored
+                file.delete();
+            }
+        } catch (Exception ignored) {
+        }
     }
 
     private JSONObject newStatus(String jobId, int eventId, int total) {

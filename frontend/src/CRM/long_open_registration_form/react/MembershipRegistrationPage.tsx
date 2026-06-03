@@ -534,7 +534,11 @@ function urlBoxStyle(isMobile: boolean): CSSProperties {
     borderRadius: isMobile ? "12px" : "14px",
     background: "var(--x-color-panel-strong)",
     border: "1px solid var(--x-color-line-soft)",
-    wordBreak: "break-all",
+    maxWidth: "100%",
+    overflow: "hidden",
+    textOverflow: isMobile ? "ellipsis" : undefined,
+    whiteSpace: isMobile ? "nowrap" : "normal",
+    wordBreak: isMobile ? "normal" : "break-all",
     fontSize: isMobile ? "12px" : "13px",
   };
 }

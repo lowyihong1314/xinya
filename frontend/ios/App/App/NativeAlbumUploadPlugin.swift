@@ -6,11 +6,12 @@ import UniformTypeIdentifiers
 import WebKit
 
 @objc(NativeAlbumUploadPlugin)
-public class NativeAlbumUploadPlugin: CAPPlugin, CAPBridgedPlugin, PHPickerViewControllerDelegate, URLSessionTaskDelegate {
+public class NativeAlbumUploadPlugin: CAPPlugin, CAPBridgedPlugin, PHPickerViewControllerDelegate, UIImagePickerControllerDelegate, UINavigationControllerDelegate, URLSessionTaskDelegate {
     public let identifier = "NativeAlbumUploadPlugin"
     public let jsName = "NativeAlbumUpload"
     public let pluginMethods: [CAPPluginMethod] = [
         CAPPluginMethod(name: "pickAndUpload", returnType: CAPPluginReturnPromise),
+        CAPPluginMethod(name: "captureAndUpload", returnType: CAPPluginReturnPromise),
         CAPPluginMethod(name: "getStatus", returnType: CAPPluginReturnPromise),
         CAPPluginMethod(name: "cancel", returnType: CAPPluginReturnPromise)
     ]
@@ -26,6 +27,7 @@ public class NativeAlbumUploadPlugin: CAPPlugin, CAPBridgedPlugin, PHPickerViewC
 
     private var backgroundSession: URLSession?
     private var activePickCall: CAPPluginCall?
+    private var activeCaptureCall: CAPPluginCall?
 
     public static func handleEventsForBackgroundURLSession(identifier: String, completionHandler: @escaping () -> Void) {
         if identifier == sessionIdentifier {
@@ -50,7 +52,7 @@ public class NativeAlbumUploadPlugin: CAPPlugin, CAPBridgedPlugin, PHPickerViewC
             call.reject("baseUrl is required")
             return
         }
-        guard activePickCall == nil else {
+        guard activePickCall == nil, activeCaptureCall == nil else {
             call.reject("A picker is already open")
             return
         }
@@ -64,6 +66,50 @@ public class NativeAlbumUploadPlugin: CAPPlugin, CAPBridgedPlugin, PHPickerViewC
             configuration.preferredAssetRepresentationMode = .current
             let picker = PHPickerViewController(configuration: configuration)
             picker.delegate = self
+            self.bridge?.viewController?.present(picker, animated: true)
+        }
+    }
+
+    @objc func captureAndUpload(_ call: CAPPluginCall) {
+        guard let eventId = call.getInt("eventId"), eventId > 0 else {
+            call.reject("eventId is required")
+            return
+        }
+        let baseUrl = normalizeBaseUrl(call.getString("baseUrl", ""))
+        guard !baseUrl.isEmpty else {
+            call.reject("baseUrl is required")
+            return
+        }
+        guard activePickCall == nil, activeCaptureCall == nil else {
+            call.reject("A picker is already open")
+            return
+        }
+        guard UIImagePickerController.isSourceTypeAvailable(.camera) else {
+            call.reject("Camera is unavailable")
+            return
+        }
+
+        let mediaType = call.getString("mediaType", "image").lowercased()
+        let requestedIdentifier = mediaType == "video" ? UTType.movie.identifier : UTType.image.identifier
+        let availableTypes = UIImagePickerController.availableMediaTypes(for: .camera) ?? []
+        guard availableTypes.contains(requestedIdentifier) else {
+            call.reject(mediaType == "video" ? "Video capture is unavailable" : "Photo capture is unavailable")
+            return
+        }
+
+        activeCaptureCall = call
+        DispatchQueue.main.async { [weak self] in
+            guard let self else { return }
+            let picker = UIImagePickerController()
+            picker.sourceType = .camera
+            picker.mediaTypes = [requestedIdentifier]
+            picker.delegate = self
+            picker.videoQuality = .typeHigh
+            if mediaType == "video" {
+                picker.cameraCaptureMode = .video
+            } else {
+                picker.cameraCaptureMode = .photo
+            }
             self.bridge?.viewController?.present(picker, animated: true)
         }
     }
@@ -118,6 +164,99 @@ public class NativeAlbumUploadPlugin: CAPPlugin, CAPBridgedPlugin, PHPickerViewC
                 self.resolve(call, self.readStatus(jobId: jobId))
             } catch {
                 self.reject(call, error, fallback: "Native album upload failed")
+            }
+        }
+    }
+
+    public func imagePickerControllerDidCancel(_ picker: UIImagePickerController) {
+        DispatchQueue.main.async {
+            picker.dismiss(animated: true)
+        }
+        guard let call = activeCaptureCall else {
+            return
+        }
+        activeCaptureCall = nil
+        resolve(call, idleStatus())
+    }
+
+    public func imagePickerController(
+        _ picker: UIImagePickerController,
+        didFinishPickingMediaWithInfo info: [UIImagePickerController.InfoKey: Any]
+    ) {
+        DispatchQueue.main.async {
+            picker.dismiss(animated: true)
+        }
+
+        guard let call = activeCaptureCall else {
+            return
+        }
+        activeCaptureCall = nil
+
+        let eventId = call.getInt("eventId") ?? 0
+        let baseUrl = normalizeBaseUrl(call.getString("baseUrl", ""))
+
+        queue.async { [weak self] in
+            guard let self else { return }
+            var cleanupUrl: URL?
+            do {
+                let jobId = UUID().uuidString
+                let uploadUrl = try self.uploadEndpoint(baseUrl: baseUrl)
+                let authorization = nativeAlbumAuthorizationHeader()
+                let cookie = authorization == nil ? self.cookieHeaderBlocking(for: uploadUrl.absoluteString) : nil
+                var status = self.newStatus(jobId: jobId, eventId: eventId, total: 1)
+                self.writeStatus(status)
+
+                let item: UploadBody
+                if let mediaUrl = info[.mediaURL] as? URL {
+                    cleanupUrl = mediaUrl
+                    let extensionName = mediaUrl.pathExtension.isEmpty ? "mov" : mediaUrl.pathExtension
+                    item = try self.prepareMultipartBody(
+                        sourceUrl: mediaUrl,
+                        fileName: self.capturedFileName(prefix: "video", extensionName: extensionName),
+                        mimeType: self.mimeType(for: mediaUrl),
+                        jobId: jobId,
+                        eventId: eventId
+                    )
+                } else if let image = info[.originalImage] as? UIImage {
+                    let imageUrl = try self.writeCapturedImage(image)
+                    cleanupUrl = imageUrl
+                    item = try self.prepareMultipartBody(
+                        sourceUrl: imageUrl,
+                        fileName: self.capturedFileName(prefix: "photo", extensionName: "jpg"),
+                        mimeType: "image/jpeg",
+                        jobId: jobId,
+                        eventId: eventId
+                    )
+                } else {
+                    throw nativeAlbumUploadError("Unable to read captured media")
+                }
+
+                var request = URLRequest(url: uploadUrl)
+                request.httpMethod = "POST"
+                request.timeoutInterval = 120
+                request.setValue("application/json", forHTTPHeaderField: "Accept")
+                request.setValue("multipart/form-data; boundary=\(item.boundary)", forHTTPHeaderField: "Content-Type")
+                if let authorization, !authorization.isEmpty {
+                    request.setValue(authorization, forHTTPHeaderField: "Authorization")
+                } else if let cookie, !cookie.isEmpty {
+                    request.setValue(cookie, forHTTPHeaderField: "Cookie")
+                }
+
+                let task = self.uploadSession().uploadTask(with: request, fromFile: item.bodyUrl)
+                task.taskDescription = self.taskDescription(jobId: jobId, name: item.name, bodyPath: item.bodyUrl.path)
+                task.resume()
+
+                status["status"] = "running"
+                self.writeStatus(status)
+                if let cleanupUrl {
+                    try? FileManager.default.removeItem(at: cleanupUrl)
+                }
+                self.resolve(call, self.readStatus(jobId: jobId))
+            } catch {
+                if let cleanupUrl {
+                    try? FileManager.default.removeItem(at: cleanupUrl)
+                }
+                self.reject(call, error, fallback: "Native album capture failed")
             }
         }
     }
@@ -403,6 +542,27 @@ public class NativeAlbumUploadPlugin: CAPPlugin, CAPBridgedPlugin, PHPickerViewC
     private func fileName(for url: URL) -> String {
         let name = url.lastPathComponent.trimmingCharacters(in: .whitespacesAndNewlines)
         return name.isEmpty ? "media" : name
+    }
+
+    private func capturedFileName(prefix: String, extensionName: String) -> String {
+        let formatter = DateFormatter()
+        formatter.locale = Locale(identifier: "en_US_POSIX")
+        formatter.dateFormat = "yyyyMMdd_HHmmss"
+        let timestamp = formatter.string(from: Date())
+        let trimmedExtension = extensionName.trimmingCharacters(in: .whitespacesAndNewlines)
+        let normalizedExtension = trimmedExtension.isEmpty ? "dat" : trimmedExtension
+        return "\(prefix)_\(timestamp)_\(UUID().uuidString).\(normalizedExtension)"
+    }
+
+    private func writeCapturedImage(_ image: UIImage) throws -> URL {
+        let root = try ensureUploadRoot().appendingPathComponent("captured", isDirectory: true)
+        try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
+        let url = root.appendingPathComponent(capturedFileName(prefix: "photo", extensionName: "jpg"))
+        guard let data = image.jpegData(compressionQuality: 0.92) else {
+            throw nativeAlbumUploadError("Unable to encode captured image")
+        }
+        try data.write(to: url, options: .atomic)
+        return url
     }
 
     private func mimeType(for url: URL) -> String {

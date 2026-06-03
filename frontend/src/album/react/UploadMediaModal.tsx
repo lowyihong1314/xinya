@@ -66,6 +66,8 @@ export function UploadMediaModal({
   const [nativeBusy, setNativeBusy] = useState(false);
   const queueRef = useRef<UploadQueueItem[]>([]);
   const nativeRefreshedJobsRef = useRef<Set<string>>(new Set());
+  const cameraImageInputRef = useRef<HTMLInputElement | null>(null);
+  const cameraVideoInputRef = useRef<HTMLInputElement | null>(null);
 
   useEffect(() => {
     queueRef.current = queue;
@@ -302,6 +304,28 @@ export function UploadMediaModal({
     }
   }
 
+  async function handleNativeCaptureAndUpload(mediaType: "image" | "video") {
+    setNativeBusy(true);
+    setToast(null);
+    try {
+      const status = await NativeAlbumUploadPluginBridge.captureAndUpload({
+        eventId,
+        baseUrl: API_BASE,
+        mediaType,
+      });
+      setNativeStatus(status);
+      if (status.total && status.total > 0) {
+        setToast(mediaType === "video" ? "录像已交给后台上传" : "照片已交给后台上传");
+      } else {
+        setToast("没有拍摄文件");
+      }
+    } catch (error) {
+      setToast(error instanceof Error ? error.message : "拍摄上传启动失败");
+    } finally {
+      setNativeBusy(false);
+    }
+  }
+
   async function handleNativeCancel() {
     if (!nativeStatus?.jobId) {
       return;
@@ -335,29 +359,82 @@ export function UploadMediaModal({
 
         <div style={bodyStyle(isMobile)}>
           {useNativeAlbumUpload ? (
-            <button
-              type="button"
-              style={dropzoneButtonStyle(isMobile, nativeBusy || nativeUploadActive)}
-              onClick={() => void handleNativePickAndUpload()}
-              disabled={nativeBusy || nativeUploadActive}
-            >
-              <div style={dropTitleStyle(isMobile)}>选择图片或视频</div>
-              <div style={dropCopyStyle}>App 会交给系统后台上传，关闭窗口或切到后台后仍会继续。</div>
-            </button>
+            <div style={nativeActionGridStyle(isMobile)}>
+              <button
+                type="button"
+                style={dropzoneButtonStyle(isMobile, nativeBusy || nativeUploadActive)}
+                onClick={() => void handleNativePickAndUpload()}
+                disabled={nativeBusy || nativeUploadActive}
+              >
+                <div style={dropTitleStyle(isMobile)}>选择图片或视频</div>
+                <div style={dropCopyStyle}>App 会交给系统后台上传，关闭窗口或切到后台后仍会继续。</div>
+              </button>
+              <button
+                type="button"
+                style={captureButtonStyle(isMobile, nativeBusy || nativeUploadActive)}
+                onClick={() => void handleNativeCaptureAndUpload("image")}
+                disabled={nativeBusy || nativeUploadActive}
+              >
+                拍照上传
+              </button>
+              <button
+                type="button"
+                style={captureButtonStyle(isMobile, nativeBusy || nativeUploadActive)}
+                onClick={() => void handleNativeCaptureAndUpload("video")}
+                disabled={nativeBusy || nativeUploadActive}
+              >
+                录像上传
+              </button>
+            </div>
           ) : (
-            <label style={dropzoneStyle(isMobile)}>
-              <input
-                type="file"
-                multiple
-                style={{ display: "none" }}
-                onChange={(event) => {
-                  addFiles(event.target.files);
-                  event.currentTarget.value = "";
-                }}
-              />
-              <div style={dropTitleStyle(isMobile)}>选择图片或视频</div>
-              <div style={dropCopyStyle}>支持多次追加选择，上传成功后会自动刷新照片墙。</div>
-            </label>
+            <div style={nativeActionGridStyle(isMobile)}>
+              <label style={dropzoneStyle(isMobile)}>
+                <input
+                  type="file"
+                  multiple
+                  accept="image/*,video/*"
+                  style={{ display: "none" }}
+                  onChange={(event) => {
+                    addFiles(event.target.files);
+                    event.currentTarget.value = "";
+                  }}
+                />
+                <div style={dropTitleStyle(isMobile)}>选择图片或视频</div>
+                <div style={dropCopyStyle}>支持多次追加选择，上传成功后会自动刷新照片墙。</div>
+              </label>
+              {isMobile ? (
+                <>
+                  <input
+                    ref={cameraImageInputRef}
+                    type="file"
+                    accept="image/*"
+                    capture="environment"
+                    style={{ display: "none" }}
+                    onChange={(event) => {
+                      addFiles(event.target.files);
+                      event.currentTarget.value = "";
+                    }}
+                  />
+                  <input
+                    ref={cameraVideoInputRef}
+                    type="file"
+                    accept="video/*"
+                    capture="environment"
+                    style={{ display: "none" }}
+                    onChange={(event) => {
+                      addFiles(event.target.files);
+                      event.currentTarget.value = "";
+                    }}
+                  />
+                  <button type="button" style={captureButtonStyle(isMobile, uploading)} onClick={() => cameraImageInputRef.current?.click()} disabled={uploading}>
+                    拍照
+                  </button>
+                  <button type="button" style={captureButtonStyle(isMobile, uploading)} onClick={() => cameraVideoInputRef.current?.click()} disabled={uploading}>
+                    录像
+                  </button>
+                </>
+              ) : null}
+            </div>
           )}
 
           {toast ? <div style={toastStyle}>{toast}</div> : null}
@@ -620,6 +697,7 @@ function bodyStyle(isMobile: boolean): CSSProperties {
 function dropzoneStyle(isMobile: boolean): CSSProperties {
   return {
     display: "grid",
+    gridColumn: isMobile ? "1 / -1" : undefined,
     gap: "8px",
     padding: isMobile ? "16px" : "20px",
     borderRadius: "var(--x-radius-md)",
@@ -638,6 +716,30 @@ function dropzoneButtonStyle(isMobile: boolean, disabled: boolean): CSSPropertie
     textAlign: "left",
     opacity: disabled ? 0.68 : 1,
     cursor: disabled ? "not-allowed" : "pointer",
+  };
+}
+
+function nativeActionGridStyle(isMobile: boolean): CSSProperties {
+  return {
+    display: "grid",
+    gridTemplateColumns: isMobile ? "1fr 1fr" : "minmax(0, 1fr) auto auto",
+    gap: "10px",
+    alignItems: "stretch",
+  };
+}
+
+function captureButtonStyle(isMobile: boolean, disabled: boolean): CSSProperties {
+  return {
+    padding: isMobile ? "12px" : "0 18px",
+    minHeight: isMobile ? "48px" : undefined,
+    borderRadius: "var(--x-radius-md)",
+    border: "1px solid var(--x-color-line-soft)",
+    background: "var(--x-color-panel)",
+    color: "var(--x-color-ink)",
+    font: "inherit",
+    fontWeight: 800,
+    cursor: disabled ? "not-allowed" : "pointer",
+    opacity: disabled ? 0.68 : 1,
   };
 }
 

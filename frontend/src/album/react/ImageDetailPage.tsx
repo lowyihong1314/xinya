@@ -107,7 +107,9 @@ export function ImageDetailPage({ isMobile, user }: { isMobile: boolean; user?: 
   const { imageId } = useParams();
   const { file, event, mediaSource, loading, error, reloadCurrent } = useImageDetail(imageId);
   const [actionError, setActionError] = useState<string | null>(null);
+  const [actionNotice, setActionNotice] = useState<string | null>(null);
   const [rotating, setRotating] = useState(false);
+  const [sharing, setSharing] = useState(false);
   const [viewerOpen, setViewerOpen] = useState(false);
   const canEditEvent = hasUserPermission(user, "event_edit");
 
@@ -119,6 +121,7 @@ export function ImageDetailPage({ isMobile, user }: { isMobile: boolean; user?: 
 
   useEffect(() => {
     setActionError(null);
+    setActionNotice(null);
   }, [imageId]);
 
   const isVideo = mediaSource?.kind === "video" || isVideoFile(file?.file_type);
@@ -147,6 +150,7 @@ export function ImageDetailPage({ isMobile, user }: { isMobile: boolean; user?: 
   }
 
   const canOpenOriginal = Boolean(mediaSource && mediaSource.kind !== "unsupported" && mediaSource.originalUrl);
+  const canShareImage = Boolean(isMobile && mediaSource?.kind === "image" && mediaSource.originalUrl);
 
   function openOriginal() {
     if (!mediaSource || mediaSource.kind === "unsupported" || !mediaSource.originalUrl) {
@@ -177,6 +181,46 @@ export function ImageDetailPage({ isMobile, user }: { isMobile: boolean; user?: 
       setActionError(err instanceof Error ? err.message : "旋转失败");
     } finally {
       setRotating(false);
+    }
+  }
+
+  async function shareImage() {
+    if (!file || mediaSource?.kind !== "image" || !mediaSource.originalUrl || sharing) {
+      return;
+    }
+
+    setSharing(true);
+    setActionError(null);
+    setActionNotice(null);
+
+    const title = event?.event_name || file.file_name || `图片 #${file.id}`;
+    const text = file.file_name || title;
+    const url = mediaSource.originalUrl;
+
+    try {
+      if (typeof navigator.share !== "function") {
+        await navigator.clipboard?.writeText(url);
+        setActionNotice("这个设备不支持系统分享，已复制图片链接。");
+        return;
+      }
+
+      const shareFile = await buildShareFile(url, file);
+      if (shareFile && canNavigatorShareFiles([shareFile])) {
+        await navigator.share({
+          title,
+          text,
+          files: [shareFile],
+        });
+        return;
+      }
+
+      await navigator.share({ title, text, url });
+    } catch (err) {
+      if (!isShareAbort(err)) {
+        setActionError(err instanceof Error ? err.message : "分享失败");
+      }
+    } finally {
+      setSharing(false);
     }
   }
 
@@ -253,6 +297,11 @@ export function ImageDetailPage({ isMobile, user }: { isMobile: boolean; user?: 
                   {viewerActionLabel}
                 </button>
               ) : null}
+              {isMobile && mediaSource?.kind === "image" ? (
+                <button type="button" style={ghostButtonStyle(isMobile)} onClick={() => void shareImage()} disabled={!canShareImage || sharing}>
+                  {sharing ? "分享中…" : "分享图片"}
+                </button>
+              ) : null}
               <button type="button" style={primaryButtonStyle(isMobile)} onClick={openOriginal} disabled={!canOpenOriginal}>
                 {openOriginalLabel}
               </button>
@@ -260,6 +309,7 @@ export function ImageDetailPage({ isMobile, user }: { isMobile: boolean; user?: 
           </header>
 
           {actionError ? <div style={inlineErrorStyle}>{actionError}</div> : null}
+          {actionNotice ? <div style={inlineNoticeStyle}>{actionNotice}</div> : null}
 
           <main style={contentStyle(isMobile)}>
             <section style={viewerPanelStyle(isMobile)}>
@@ -667,6 +717,59 @@ function formatDate(value?: string) {
   return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}-${String(date.getDate()).padStart(2, "0")} ${String(date.getHours()).padStart(2, "0")}:${String(date.getMinutes()).padStart(2, "0")}`;
 }
 
+async function buildShareFile(url: string, file: FileRecord): Promise<File | null> {
+  try {
+    const response = await apiFetch(url, { credentials: "include" });
+    if (!response.ok) {
+      return null;
+    }
+    const blob = await response.blob();
+    const mimeType = blob.type || imageMimeType(file.file_type);
+    if (!mimeType.startsWith("image/")) {
+      return null;
+    }
+    return new File([blob], shareFileName(file), { type: mimeType });
+  } catch {
+    return null;
+  }
+}
+
+function canNavigatorShareFiles(files: File[]) {
+  const nav = navigator as Navigator & { canShare?: (data: ShareData) => boolean };
+  if (typeof nav.canShare !== "function") {
+    return true;
+  }
+  try {
+    return nav.canShare({ files });
+  } catch {
+    return false;
+  }
+}
+
+function shareFileName(file: FileRecord) {
+  const existing = String(file.file_name || "").trim();
+  if (existing) {
+    return existing;
+  }
+  const extension = String(file.file_type || "jpg").replace(/^\.+/, "") || "jpg";
+  return `image-${file.id}.${extension}`;
+}
+
+function imageMimeType(fileType?: string) {
+  const normalized = String(fileType || "").toLowerCase();
+  if (normalized === "jpg") return "image/jpeg";
+  if (normalized === "heic") return "image/heic";
+  if (normalized === "heif") return "image/heif";
+  return normalized ? `image/${normalized}` : "image/jpeg";
+}
+
+function isShareAbort(error: unknown) {
+  if (!(error instanceof Error)) {
+    return false;
+  }
+  return error.name === "AbortError" || /cancel/i.test(error.message);
+}
+
 const pageStyle: CSSProperties = {
   minHeight: "calc(100vh - 60px)",
   background: "linear-gradient(180deg, var(--x-color-canvas) 0%, var(--x-color-panel-alt) 48%, var(--x-color-accent-soft) 100%)",
@@ -747,6 +850,16 @@ const inlineErrorStyle: CSSProperties = {
   background: "var(--x-color-danger-soft)",
   border: "1px solid var(--x-color-danger-border)",
   color: "var(--x-color-danger)",
+  fontSize: "14px",
+  fontWeight: 700,
+};
+
+const inlineNoticeStyle: CSSProperties = {
+  padding: "12px 14px",
+  borderRadius: "18px",
+  background: "var(--x-color-accent-soft)",
+  border: "1px solid var(--x-color-accent-border)",
+  color: "var(--x-color-accent-strong)",
   fontSize: "14px",
   fontWeight: 700,
 };

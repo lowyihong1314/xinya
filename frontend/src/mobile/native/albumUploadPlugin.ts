@@ -20,6 +20,12 @@ export interface NativeAlbumUploadPlugin {
     baseUrl: string;
   }): Promise<NativeAlbumUploadStatus>;
 
+  captureAndUpload(options: {
+    eventId: number;
+    baseUrl: string;
+    mediaType: "image" | "video";
+  }): Promise<NativeAlbumUploadStatus>;
+
   getStatus(options?: {
     jobId?: string;
   }): Promise<NativeAlbumUploadStatus>;
@@ -35,6 +41,7 @@ function createUnavailablePlugin(): NativeAlbumUploadPlugin {
   };
   return {
     pickAndUpload: missing,
+    captureAndUpload: missing,
     getStatus: async () => ({ status: "idle" }),
     cancel: async () => ({ status: "idle" }),
   };
@@ -45,6 +52,7 @@ function isNativeAlbumUploadPlugin(value: unknown): value is NativeAlbumUploadPl
     value &&
       typeof value === "object" &&
       typeof (value as NativeAlbumUploadPlugin).pickAndUpload === "function" &&
+      typeof (value as NativeAlbumUploadPlugin).captureAndUpload === "function" &&
       typeof (value as NativeAlbumUploadPlugin).getStatus === "function" &&
       typeof (value as NativeAlbumUploadPlugin).cancel === "function",
   );

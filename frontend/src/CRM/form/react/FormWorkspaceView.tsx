@@ -276,12 +276,13 @@ export function FormWorkspaceView(props: {
           {selectedForm && props.detailLoading ? <div style={placeholderStyle}>正在加载详细资料…</div> : null}
 
           {selectedForm && !props.detailLoading && iframeUrl !== null ? (
-            <IframeView url={iframeUrl} onBack={() => setIframeUrl(null)} />
+            <IframeView url={iframeUrl} isMobile={isMobile} onBack={() => setIframeUrl(null)} />
           ) : null}
 
           {selectedForm && !props.detailLoading && shareView !== null && iframeUrl === null ? (
             <ShareFormView
               formId={selectedForm.id}
+              isMobile={isMobile}
               title={selectedForm.title}
               {...(shareView === "share_payment"
                 ? {
@@ -681,6 +682,7 @@ function LinkedEventCard({
 
 function ShareFormView({
   formId,
+  isMobile,
   title,
   urlPath,
   heading = "分享报名表格",
@@ -690,6 +692,7 @@ function ShareFormView({
   onOpenIframe,
 }: {
   formId: number;
+  isMobile: boolean;
   title: string;
   urlPath?: string;
   heading?: string;
@@ -776,7 +779,7 @@ function ShareFormView({
       <div style={shareGridStyle}>
         <div style={sectionStyle}>
           <div style={fieldLabelStyle}>{urlLabel}</div>
-          <div style={urlBoxStyle}>{formUrl}</div>
+          <DisplayUrl url={formUrl} isMobile={isMobile} />
           <div style={footerActionsStyle}>
             <button type="button" style={primaryButtonStyle} onClick={handleCopy}>
               Copy
@@ -803,13 +806,21 @@ function ShareFormView({
   );
 }
 
-function IframeView({ url, onBack }: { url: string; onBack: () => void }) {
+function DisplayUrl({ url, isMobile }: { url: string; isMobile: boolean }) {
+  return (
+    <div style={urlBoxStyle(isMobile)} title={url}>
+      {formatDisplayUrl(url, isMobile)}
+    </div>
+  );
+}
+
+function IframeView({ url, isMobile, onBack }: { url: string; isMobile: boolean; onBack: () => void }) {
   return (
     <section style={panelStyle}>
       <div style={panelHeaderStyle}>
         <div>
           <div style={sectionEyebrowStyle}>Preview</div>
-          <h4 style={sectionTitleStyle}>{url}</h4>
+          <h4 style={urlHeadingStyle(isMobile)} title={url}>{formatDisplayUrl(url, isMobile)}</h4>
         </div>
         <button type="button" style={secondaryButtonStyle} onClick={onBack}>
           ← 返回
@@ -818,6 +829,21 @@ function IframeView({ url, onBack }: { url: string; onBack: () => void }) {
       <iframe src={url} style={iframeStyle} title="页面预览" />
     </section>
   );
+}
+
+function formatDisplayUrl(value: string, isMobile: boolean) {
+  if (!isMobile) {
+    return value;
+  }
+
+  try {
+    const url = new URL(value, typeof window !== "undefined" ? window.location.origin : undefined);
+    const path = `${url.pathname}${url.search}${url.hash}`;
+    const compactPath = path.length > 34 ? `…${path.slice(-34)}` : path;
+    return `${url.origin}${compactPath}`;
+  } catch {
+    return value.length > 52 ? `${value.slice(0, 18)}…${value.slice(-30)}` : value;
+  }
 }
 
 function CreateFormModal({
@@ -1394,6 +1420,31 @@ const chipStyle: CSSProperties = { padding: "4px 7px", borderRadius: "999px", ba
 const shareGridStyle: CSSProperties = { display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(240px, 1fr))", gap: "8px", alignItems: "start" };
 const shareInfoCardStyle: CSSProperties = { padding: "10px", borderRadius: "6px", border: "1px solid var(--x-color-line-soft)", background: "var(--x-color-panel-strong)", display: "grid", gap: "4px" };
 const shareTitleStyle: CSSProperties = { fontSize: "16px", fontWeight: 700, color: "var(--x-color-ink)" };
-const urlBoxStyle: CSSProperties = { padding: "8px 10px", borderRadius: "6px", border: "1px solid var(--x-color-line-soft)", background: "var(--x-color-panel-strong)", color: "var(--x-color-ink)", wordBreak: "break-all" };
+function urlBoxStyle(isMobile: boolean): CSSProperties {
+  return {
+    padding: "8px 10px",
+    borderRadius: "6px",
+    border: "1px solid var(--x-color-line-soft)",
+    background: "var(--x-color-panel-strong)",
+    color: "var(--x-color-ink)",
+    maxWidth: "100%",
+    overflow: "hidden",
+    textOverflow: isMobile ? "ellipsis" : undefined,
+    whiteSpace: isMobile ? "nowrap" : "normal",
+    wordBreak: isMobile ? "normal" : "break-all",
+    fontSize: isMobile ? "12px" : undefined,
+    fontFamily: "var(--x-font-mono, ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace)",
+  };
+}
+function urlHeadingStyle(isMobile: boolean): CSSProperties {
+  return {
+    ...sectionTitleStyle,
+    maxWidth: "100%",
+    overflow: "hidden",
+    textOverflow: "ellipsis",
+    whiteSpace: isMobile ? "nowrap" : "normal",
+    wordBreak: isMobile ? "normal" : "break-all",
+  };
+}
 const qrPreviewStyle: CSSProperties = { minHeight: "220px", padding: "10px", borderRadius: "6px", border: "1px solid var(--x-color-line-soft)", background: "var(--x-color-panel-strong)", display: "grid", placeItems: "center" };
 const qrImageStyle: CSSProperties = { width: "100%", maxWidth: "240px", height: "auto", display: "block" };

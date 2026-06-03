@@ -4,7 +4,7 @@ import {
 } from "../shared/musicCoverSources";
 import type { AlbumRecord, MusicRecord } from "./types";
 
-const MUSIC_COVER_CACHE_VERSION = "album-cover-api-v2";
+const MUSIC_COVER_CACHE_VERSION = "album-cover-compressed-v3";
 
 /**
  * Default cover image shown when no album/track cover is available.
