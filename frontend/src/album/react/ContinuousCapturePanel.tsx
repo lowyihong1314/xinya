@@ -110,7 +110,7 @@ export function ContinuousCapturePanel({
         setCameraReady(true);
       } catch (error) {
         if (!canceled) {
-          setCameraError(error instanceof Error ? error.message : "无法打开相机");
+          setCameraError(cameraErrorMessage(error));
         }
       }
     }
@@ -490,7 +490,7 @@ async function requestCameraStream(facingMode: FacingMode, cameraProfile: Native
     try {
       return await navigator.mediaDevices.getUserMedia({ video, audio: false });
     } catch {
-      throw error instanceof Error ? error : new Error("无法打开相机");
+      throw error;
     }
   }
 }
@@ -557,6 +557,26 @@ function clampNumber(value: number | null | undefined, min: number, max: number,
     return fallback;
   }
   return Math.min(max, Math.max(min, value));
+}
+
+function cameraErrorMessage(error: unknown) {
+  const namedError = error as { name?: string; message?: string } | null | undefined;
+  const name = (namedError?.name || "").toLowerCase();
+  const message = (namedError?.message || "").toLowerCase();
+
+  if (name.includes("notfound") || message.includes("device not found")) {
+    return "未找到可用相机";
+  }
+  if (name.includes("notallowed") || name.includes("security")) {
+    return "需要允许相机权限";
+  }
+  if (name.includes("notreadable")) {
+    return "相机正在被其他应用使用";
+  }
+  if (name.includes("overconstrained")) {
+    return "当前相机不支持请求参数";
+  }
+  return "无法打开相机";
 }
 
 function captureStatusLabel(status: CaptureUploadStatus) {
