@@ -73,6 +73,12 @@ export interface NativeAlbumUploadPlugin {
     mediaType: "image" | "video";
   }): Promise<NativeAlbumUploadStatus>;
 
+  openNativeCameraCapture?(options: {
+    eventId: number;
+    baseUrl: string;
+    eventName?: string;
+  }): Promise<NativeAlbumUploadStatus>;
+
   getStatus(options?: {
     jobId?: string;
   }): Promise<NativeAlbumUploadStatus>;

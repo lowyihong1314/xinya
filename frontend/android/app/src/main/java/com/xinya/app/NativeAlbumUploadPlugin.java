@@ -121,6 +121,27 @@ public class NativeAlbumUploadPlugin extends Plugin {
         }
     }
 
+    @PluginMethod
+    public void openNativeCameraCapture(PluginCall call) {
+        Integer eventId = call.getInt("eventId");
+        String baseUrl = normalizeBaseUrl(call.getString("baseUrl", ""));
+        String eventName = call.getString("eventName", "");
+        if (eventId == null || eventId <= 0) {
+            call.reject("eventId is required");
+            return;
+        }
+        if (baseUrl.isEmpty()) {
+            call.reject("baseUrl is required");
+            return;
+        }
+
+        Intent intent = new Intent(getContext(), NativeCameraCaptureActivity.class);
+        intent.putExtra(NativeCameraCaptureActivity.EXTRA_EVENT_ID, eventId);
+        intent.putExtra(NativeCameraCaptureActivity.EXTRA_BASE_URL, baseUrl);
+        intent.putExtra(NativeCameraCaptureActivity.EXTRA_EVENT_NAME, eventName != null ? eventName : "");
+        startActivityForResult(call, intent, "handleNativeCameraCapture");
+    }
+
     @ActivityCallback
     private void handlePickedFiles(PluginCall call, ActivityResult result) {
         if (call == null) {
@@ -153,6 +174,14 @@ public class NativeAlbumUploadPlugin extends Plugin {
         } catch (Exception error) {
             call.reject(error.getMessage() != null ? error.getMessage() : "Native album upload failed");
         }
+    }
+
+    @ActivityCallback
+    private void handleNativeCameraCapture(PluginCall call, ActivityResult result) {
+        if (call == null) {
+            return;
+        }
+        call.resolve(statusToJSObject(NativeAlbumUploadStore.readStatus(getContext(), "")));
     }
 
     @ActivityCallback

@@ -304,6 +304,33 @@ export function UploadMediaModal({
     }
   }
 
+  async function handleNativeCameraCapture() {
+    if (!NativeAlbumUploadPluginBridge.openNativeCameraCapture) {
+      setCaptureOpen(true);
+      return;
+    }
+
+    setNativeBusy(true);
+    setToast(null);
+    try {
+      const status = await NativeAlbumUploadPluginBridge.openNativeCameraCapture({
+        eventId,
+        baseUrl: API_BASE,
+        eventName,
+      });
+      setNativeStatus(status);
+      await refreshAfterNativeUpload(status);
+      if (status.total && status.total > 0) {
+        setToast("拍摄文件已交给后台上传");
+      }
+    } catch (error) {
+      setToast(error instanceof Error ? error.message : "原生相机打开失败");
+      setCaptureOpen(true);
+    } finally {
+      setNativeBusy(false);
+    }
+  }
+
   async function handleNativeCancel() {
     if (!nativeStatus?.jobId) {
       return;
@@ -365,10 +392,10 @@ export function UploadMediaModal({
                   <button
                     type="button"
                     style={captureButtonStyle(isMobile, nativeBusy || nativeUploadActive)}
-                    onClick={() => setCaptureOpen(true)}
+                    onClick={() => void handleNativeCameraCapture()}
                     disabled={nativeBusy || nativeUploadActive}
                   >
-                    拍摄
+                    {nativeBusy ? "打开中…" : "拍摄"}
                   </button>
                 </div>
               ) : (
