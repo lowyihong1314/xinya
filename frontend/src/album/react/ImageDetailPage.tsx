@@ -129,11 +129,11 @@ export function ImageDetailPage({ isMobile, user }: { isMobile: boolean; user?: 
   const canRotate = canRotateFile(file?.file_type);
   const supportsViewer = mediaSource?.kind === "image" || mediaSource?.kind === "video";
   const openOriginalLabel = isVideo ? "打开原文件" : "打开原图";
-  const viewerActionLabel = viewerOpen ? "关闭全屏" : isVideo ? "打开全屏" : "查看大图";
+  const viewerActionLabel = isVideo ? (viewerOpen ? "关闭全屏" : "打开全屏") : "查看大图";
   const viewStatus = isVideo
     ? `视频模式，可直接播放，也可${viewerOpen ? "关闭" : "打开"}全屏播放器。`
     : supportsViewer
-      ? `图片模式，可在当前页预览，也可${viewerOpen ? "关闭" : "打开"}全屏查看。`
+      ? "图片模式，可在当前页预览，也可打开新页面查看大图。"
       : "当前文件建议直接打开原文件查看。";
 
   function goBack() {
@@ -235,17 +235,39 @@ export function ImageDetailPage({ isMobile, user }: { isMobile: boolean; user?: 
     }
   }
 
+  function openLargeView() {
+    if (!file || !mediaSource || mediaSource.kind === "unsupported") {
+      return;
+    }
+    if (mediaSource.kind === "image") {
+      window.open(buildImageShareUrl(file.id), "_blank", "noopener,noreferrer");
+      return;
+    }
+    setViewerOpen((current) => !current);
+  }
+
+  function openViewerFrame() {
+    if (!file || !mediaSource || mediaSource.kind === "unsupported") {
+      return;
+    }
+    if (mediaSource.kind === "image") {
+      window.open(buildImageShareUrl(file.id), "_blank", "noopener,noreferrer");
+      return;
+    }
+    setViewerOpen(true);
+  }
+
   function handleViewerFrameKeyDown(event: ReactKeyboardEvent<HTMLDivElement>) {
     if (!supportsViewer) {
       return;
     }
     if (event.key === "Enter" || event.key === " ") {
       event.preventDefault();
-      setViewerOpen(true);
+      openViewerFrame();
     }
   }
 
-  const viewer = viewerOpen ? (
+  const viewer = viewerOpen && mediaSource?.kind === "video" ? (
     <ImageDetailViewer
       isMobile={isMobile}
       file={file}
@@ -304,7 +326,7 @@ export function ImageDetailPage({ isMobile, user }: { isMobile: boolean; user?: 
                 </>
               ) : null}
               {supportsViewer ? (
-                <button type="button" style={ghostButtonStyle(isMobile)} onClick={() => setViewerOpen((current) => !current)}>
+                <button type="button" style={ghostButtonStyle(isMobile)} onClick={openLargeView}>
                   {viewerActionLabel}
                 </button>
               ) : null}
@@ -336,11 +358,11 @@ export function ImageDetailPage({ isMobile, user }: { isMobile: boolean; user?: 
 
               <div
                 style={viewerFrameStyle(isMobile, supportsViewer)}
-                onClick={supportsViewer ? () => setViewerOpen(true) : undefined}
+                onClick={supportsViewer ? openViewerFrame : undefined}
                 onKeyDown={handleViewerFrameKeyDown}
                 role={supportsViewer ? "button" : undefined}
                 tabIndex={supportsViewer ? 0 : undefined}
-                aria-label={supportsViewer ? "打开全屏媒体查看器" : undefined}
+                aria-label={supportsViewer ? (mediaSource?.kind === "image" ? "打开图片页面" : "打开全屏媒体查看器") : undefined}
               >
                 <InlineMediaPreview isMobile={isMobile} file={file} mediaSource={mediaSource} />
               </div>

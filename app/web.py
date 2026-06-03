@@ -16,6 +16,9 @@ EVENT_SHARE_CACHE_SECONDS = 300
 EVENT_SHARE_IMAGE_EXTS = IMAGE_EXTS | {".heic", ".heif"}
 IMAGE_SHARE_CACHE_SECONDS = 300
 VIDEO_SHARE_POSTER_SUFFIX = "_share_poster.jpeg"
+SHARE_ICON_SIZE = 192
+SHARE_ICON_SUFFIX = "_share_icon.png"
+BROWSER_IMAGE_EXTS = {".jpg", ".jpeg", ".png", ".gif", ".webp", ".bmp"}
 
 
 def _absolute_url(path):
@@ -110,10 +113,89 @@ def _fallback_share_image_url():
     return _media_file_url(path, version)
 
 
-def _event_share_image_url(event):
+def _share_icon_path(source_path):
+    if not source_path or not os.path.exists(source_path):
+        return ""
+
+    stem, _ = os.path.splitext(source_path)
+    output_path = f"{stem}{SHARE_ICON_SUFFIX}"
+    try:
+        if os.path.exists(output_path) and os.path.getmtime(output_path) >= os.path.getmtime(source_path):
+            from PIL import Image
+
+            with Image.open(output_path) as icon:
+                if icon.size == (SHARE_ICON_SIZE, SHARE_ICON_SIZE):
+                    return output_path
+    except OSError:
+        pass
+    except Exception:
+        try:
+            os.remove(output_path)
+        except OSError:
+            pass
+
+    tmp_path = f"{output_path}.tmp.{os.getpid()}.png"
+    try:
+        from PIL import Image, ImageOps
+
+        with Image.open(source_path) as raw_image:
+            image = ImageOps.exif_transpose(raw_image).convert("RGB")
+            width, height = image.size
+            side = min(width, height)
+            left = max(0, (width - side) // 2)
+            top = max(0, (height - side) // 2)
+            image = image.crop((left, top, left + side, top + side))
+            resampling = getattr(getattr(Image, "Resampling", Image), "LANCZOS")
+            image = image.resize((SHARE_ICON_SIZE, SHARE_ICON_SIZE), resampling)
+            image.save(tmp_path, "PNG", optimize=True)
+        os.replace(tmp_path, output_path)
+        return output_path
+    except Exception as exc:
+        print(f"[WEB] Failed to build share icon for {source_path}: {exc}")
+        return ""
+    finally:
+        if os.path.exists(tmp_path):
+            os.remove(tmp_path)
+
+
+def _share_icon_url_for_path(path, fallback):
+    try:
+        source_path = resolve_media_path(path)
+    except Exception:
+        source_path = ""
+
+    icon_path = _share_icon_path(source_path)
+    if icon_path:
+        icon_short_path = to_short_data_path(icon_path)
+        version = _version_for_public_path(icon_short_path, fallback)
+        return _media_file_url(icon_short_path, version)
+    return _fallback_share_image_url()
+
+
+def _browser_source_image_url(album_file, ext):
+    if ext not in BROWSER_IMAGE_EXTS:
+        return ""
+
+    event = getattr(album_file, "event", None)
+    event_code = getattr(event, "event_code", None)
+    filename = secure_filename(getattr(album_file, "file_name", "") or "")
+    if not event_code or not filename:
+        return ""
+
+    source_path = os.path.join(event_photo_base_dir(event_code), filename)
+    if not os.path.exists(source_path):
+        return ""
+
+    path = to_short_data_path(source_path)
+    version = _version_for_public_path(path, album_file.id)
+    return _media_file_url(path, version)
+
+
+def _event_share_image_urls(event):
     album_file = _pick_event_share_image(event)
     if not album_file:
-        return _fallback_share_image_url()
+        fallback = _fallback_share_image_url()
+        return fallback, fallback
 
     try:
         payload = get_event_image_payload(album_file.id, "cache")
@@ -122,11 +204,12 @@ def _event_share_image_url(event):
         if payload.get("ready") and payload.get("path"):
             path = payload["path"]
             version = _version_for_public_path(path, album_file.id)
-            return _media_file_url(path, version)
+            return _media_file_url(path, version), _share_icon_url_for_path(path, album_file.id)
     except Exception:
         pass
 
-    return _fallback_share_image_url()
+    fallback = _fallback_share_image_url()
+    return fallback, fallback
 
 
 def _run_video_poster_ffmpeg(source_path, output_path, seek_seconds):
@@ -189,7 +272,7 @@ def _video_share_poster_path(album_file):
     return ""
 
 
-def _image_file_share_url(album_file):
+def _image_file_share_urls(album_file):
     ext = _album_file_ext(album_file)
     if ext in EVENT_SHARE_IMAGE_EXTS:
         try:
@@ -199,20 +282,27 @@ def _image_file_share_url(album_file):
             if payload.get("ready") and payload.get("path"):
                 path = payload["path"]
                 version = _version_for_public_path(path, album_file.id)
-                return _media_file_url(path, version)
+                image_url = _media_file_url(path, version)
+                icon_url = _share_icon_url_for_path(path, album_file.id)
+                body_image_url = _browser_source_image_url(album_file, ext) or image_url
+                return image_url, icon_url, body_image_url
         except Exception as exc:
             print(f"[WEB] Failed to prepare image share cache for file {album_file.id}: {exc}")
-        return _fallback_share_image_url()
+        fallback = _fallback_share_image_url()
+        return fallback, fallback, fallback
 
     if ext in VIDEO_EXTS:
         poster_path = _video_share_poster_path(album_file)
         if poster_path:
             path = to_short_data_path(poster_path)
             version = _version_for_public_path(path, album_file.id)
-            return _media_file_url(path, version)
-        return _fallback_share_image_url()
+            image_url = _media_file_url(path, version)
+            return image_url, _share_icon_url_for_path(path, album_file.id), image_url
+        fallback = _fallback_share_image_url()
+        return fallback, fallback, fallback
 
-    return _fallback_share_image_url()
+    fallback = _fallback_share_image_url()
+    return fallback, fallback, fallback
 
 
 def _image_share_description(album_file, event):
@@ -244,7 +334,7 @@ def register_web_routes(app):
     def event_share(event_id):
         event = EventData.query.get_or_404(event_id)
         title = _compact_text(event.event_name, f"活动 #{event.id}", 90)
-        image_url = _event_share_image_url(event)
+        image_url, icon_url = _event_share_image_urls(event)
         canonical_url = _absolute_url(f"/event/{event.id}")
         app_url = _absolute_url(f"/#/event/{event.id}")
         response = make_response(
@@ -254,7 +344,7 @@ def register_web_routes(app):
                 title=title,
                 description=_event_share_description(event),
                 image_url=image_url,
-                icon_url=image_url,
+                icon_url=icon_url,
                 canonical_url=canonical_url,
                 app_url=app_url,
             )
@@ -267,7 +357,7 @@ def register_web_routes(app):
         album_file = AlbumFiles.query.get_or_404(file_id)
         event = EventData.query.get(album_file.event_id) if album_file.event_id else None
         title = _compact_text(getattr(event, "event_name", None), f"媒体 #{album_file.id}", 90)
-        image_url = _image_file_share_url(album_file)
+        image_url, icon_url, body_image_url = _image_file_share_urls(album_file)
         canonical_url = _absolute_url(f"/image/{album_file.id}")
         response = make_response(
             render_template(
@@ -275,7 +365,8 @@ def register_web_routes(app):
                 title=title,
                 description=_image_share_description(album_file, event),
                 image_url=image_url,
-                icon_url=image_url,
+                body_image_url=body_image_url,
+                icon_url=icon_url,
                 canonical_url=canonical_url,
             )
         )
