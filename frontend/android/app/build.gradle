@@ -1,5 +1,44 @@
 apply plugin: 'com.android.application'
 
+def localSigningProperties = new Properties()
+def localSigningPropertiesFile = rootProject.file('signing.properties')
+if (localSigningPropertiesFile.exists()) {
+    localSigningPropertiesFile.withInputStream { stream ->
+        localSigningProperties.load(stream)
+    }
+}
+
+def signingValue = { propName, envName ->
+    def localValue = localSigningProperties.getProperty(propName)
+    if (localValue != null && !localValue.toString().trim().isEmpty()) {
+        return localValue.toString()
+    }
+    def projectValue = project.findProperty(propName)?.toString()
+    if (projectValue != null && !projectValue.trim().isEmpty()) {
+        return projectValue
+    }
+    def envValue = System.getenv(envName)
+    if (envValue != null && !envValue.trim().isEmpty()) {
+        return envValue
+    }
+    return null
+}
+
+def releaseStoreFile = signingValue('xinyaReleaseStoreFile', 'XINYA_RELEASE_STORE_FILE') ?: 'utba-release.keystore'
+def releaseStorePassword = signingValue('xinyaReleaseStorePassword', 'XINYA_RELEASE_STORE_PASSWORD')
+def releaseKeyAlias = signingValue('xinyaReleaseKeyAlias', 'XINYA_RELEASE_KEY_ALIAS')
+def releaseKeyPassword = signingValue('xinyaReleaseKeyPassword', 'XINYA_RELEASE_KEY_PASSWORD')
+def hasReleaseSigning = releaseStorePassword && releaseKeyAlias && releaseKeyPassword
+def requestedReleaseBuild = gradle.startParameter.taskNames.any { taskName ->
+    taskName.toLowerCase(Locale.ROOT).contains('release')
+}
+if (requestedReleaseBuild && !hasReleaseSigning) {
+    throw new GradleException(
+        'Release signing is not configured. Copy signing.properties.example to signing.properties, ' +
+        'or set XINYA_RELEASE_STORE_PASSWORD, XINYA_RELEASE_KEY_ALIAS, and XINYA_RELEASE_KEY_PASSWORD.'
+    )
+}
+
 def versionCodeProp = project.findProperty('appVersionCode')?.toString()
 def versionNameProp = project.findProperty('appVersionName')?.toString()
 def resolvedVersionCode = versionCodeProp ? versionCodeProp.toInteger() : 1
@@ -23,10 +62,10 @@ android {
     }
     signingConfigs {
         release {
-            storeFile file('utba-release.keystore')
-            storePassword 'utba2024release'
-            keyAlias 'utba'
-            keyPassword 'utba2024release'
+            storeFile file(releaseStoreFile)
+            storePassword releaseStorePassword
+            keyAlias releaseKeyAlias
+            keyPassword releaseKeyPassword
         }
     }
     buildTypes {

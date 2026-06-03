@@ -18,7 +18,7 @@ import {
   textareaStyle,
   wideFieldStyle,
 } from "./claimStyles";
-import { readClaimBill, submitClaim } from "./api";
+import { readClaimBill, submitClaim, type ReadBillModel } from "./api";
 import type { AccountUser, ReadBillData, ReadBillUploadResponse } from "./types";
 import { showEventPicker, type EventPickerRecord } from "../../../shared/showEventPicker";
 
@@ -223,7 +223,12 @@ export function ClaimBatchAiPage({ onBack, onSubmitted }: ClaimBatchAiPageProps)
     }
   }
 
-  async function parseItem(item: BatchAiImageItem, index: number, options: { debug?: boolean; bypass?: boolean } = {}) {
+  async function parseItem(
+    item: BatchAiImageItem,
+    index: number,
+    model: ReadBillModel = "auto",
+    options: { debug?: boolean } = {},
+  ) {
     setItems((prev) =>
       prev.map((current) =>
         current.id === item.id ? { ...current, parsing: true, parseError: "", parseResult: null } : current,
@@ -231,7 +236,7 @@ export function ClaimBatchAiPage({ onBack, onSubmitted }: ClaimBatchAiPageProps)
     );
 
     try {
-      const result = await readClaimBill(item.file, "byteplus", options);
+      const result = await readClaimBill(item.file, model, options);
       if (!result.data) {
         throw new Error("AI 没有返回识别结果");
       }
@@ -261,7 +266,7 @@ export function ClaimBatchAiPage({ onBack, onSubmitted }: ClaimBatchAiPageProps)
   }
 
   async function handleParseItem(item: BatchAiImageItem, index: number) {
-    await parseItem(item, index, { debug: true });
+    await parseItem(item, index, "auto", { debug: true });
   }
 
   async function handleProParseInfoItem() {
@@ -270,7 +275,7 @@ export function ClaimBatchAiPage({ onBack, onSubmitted }: ClaimBatchAiPageProps)
     }
 
     const index = items.findIndex((item) => item.id === infoItem.id);
-    await parseItem(infoItem, index >= 0 ? index : 0, { debug: true, bypass: true });
+    await parseItem(infoItem, index >= 0 ? index : 0, "byteplus", { debug: true });
   }
 
   async function handleBatchParse() {
@@ -736,14 +741,14 @@ function normalizeReceiptDate(value: unknown) {
 }
 
 function buildPurposeFromReadBill(data: ReadBillData) {
-  const merchantName = stringValue(data.merchantName);
-  const receiptNumber = stringValue(data.receiptNumber);
-  const expenseCategory = stringValue(data.expenseCategory);
+  const merchantName = stringValue(data.merchantName || data.merchant_name);
+  const receiptNumber = stringValue(data.receiptNumber || data.receipt_number);
+  const expenseCategory = stringValue(data.expenseCategory || data.expense_category);
   const description = stringValue(data.description);
   const itemSummary = (data.receiptItems || data.receipt_items || [])
     .map((item) => {
       const itemDescription = stringValue(item.description);
-      const lineTotal = normalizeMoneyValue(item.lineTotal);
+      const lineTotal = normalizeMoneyValue(item.lineTotal || item.line_total);
       return [itemDescription, lineTotal ? `RM ${lineTotal}` : ""].filter(Boolean).join(" ");
     })
     .filter(Boolean)
@@ -820,11 +825,11 @@ function normalizeReceiptDateTime(value: unknown) {
 function buildReceiptItemsText(data: ReadBillData) {
   return (data.receiptItems || data.receipt_items || [])
     .map((item, index) => {
-      const itemNumber = stringValue(item.itemNumber) || String(index + 1);
+      const itemNumber = stringValue(item.itemNumber || item.item_number) || String(index + 1);
       const description = stringValue(item.description);
       const quantity = stringValue(item.quantity);
-      const category = stringValue(item.expenseCategory);
-      const lineTotal = normalizeMoneyValue(item.lineTotal);
+      const category = stringValue(item.expenseCategory || item.expense_category);
+      const lineTotal = normalizeMoneyValue(item.lineTotal || item.line_total);
       return [
         `${itemNumber}.`,
         description,

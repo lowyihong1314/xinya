@@ -1,83 +1,17 @@
 import { IS_APK } from "./apiBase";
+import {
+  NativeResponseCachePluginBridge,
+  type CachedResponseHeaders,
+  type NativeResponseCachePlugin,
+} from "../mobile/native/responseCachePlugin";
+export type {
+  CachedResponseHeaders,
+  NativeCacheStats as NativeResponseCacheStats,
+  NativeResponseCacheEntry,
+  NativeResponseCachePlugin,
+} from "../mobile/native/responseCachePlugin";
 
-type CachedResponseHeaders = Record<string, string>;
-
-export type NativeResponseCacheEntry = {
-  exists?: boolean;
-  url?: string;
-  status?: number;
-  statusText?: string;
-  headers?: CachedResponseHeaders;
-  body?: string;
-  updatedAt?: number;
-};
-
-export interface NativeResponseCachePlugin {
-  setEntry(options: {
-    cacheKey: string;
-    url: string;
-    status: number;
-    statusText?: string;
-    headers?: CachedResponseHeaders;
-    body?: string;
-  }): Promise<void>;
-
-  getEntry(options: {
-    cacheKey: string;
-  }): Promise<NativeResponseCacheEntry>;
-
-  invalidate(options: {
-    cacheKey?: string;
-    prefix?: string;
-  }): Promise<void>;
-
-  clearAll(): Promise<void>;
-}
-
-type CapacitorLike = {
-  registerPlugin?: <T>(name: string) => T;
-  Plugins?: Record<string, unknown>;
-};
-
-function resolveCapacitor() {
-  return (globalThis as typeof globalThis & { Capacitor?: CapacitorLike }).Capacitor ?? null;
-}
-
-function createUnavailablePlugin(): NativeResponseCachePlugin {
-  const noop = async () => undefined;
-  const missing = async () => {
-    throw new Error("NativeResponseCache plugin is unavailable in this runtime");
-  };
-
-  return {
-    setEntry: missing,
-    getEntry: missing,
-    invalidate: noop,
-    clearAll: noop,
-  };
-}
-
-function isNativeResponseCachePlugin(value: unknown): value is NativeResponseCachePlugin {
-  return Boolean(
-    value
-      && typeof value === "object"
-      && typeof (value as NativeResponseCachePlugin).setEntry === "function"
-      && typeof (value as NativeResponseCachePlugin).getEntry === "function"
-      && typeof (value as NativeResponseCachePlugin).invalidate === "function"
-      && typeof (value as NativeResponseCachePlugin).clearAll === "function",
-  );
-}
-
-export const NativeResponseCache: NativeResponseCachePlugin = (() => {
-  const capacitor = resolveCapacitor();
-  const fromGlobal = capacitor?.Plugins?.NativeResponseCache;
-  if (isNativeResponseCachePlugin(fromGlobal)) return fromGlobal;
-  const register = capacitor?.registerPlugin;
-  if (typeof register === "function") {
-    return register<NativeResponseCachePlugin>("NativeResponseCache");
-  }
-  return createUnavailablePlugin();
-})();
+export const NativeResponseCache: NativeResponseCachePlugin = NativeResponseCachePluginBridge;
 
 export async function readNativeResponseCacheEntry(cacheKey: string) {
   if (!IS_APK || !cacheKey) {
@@ -140,5 +74,49 @@ export async function clearAllNativeResponseCache() {
     await NativeResponseCache.clearAll();
   } catch (error) {
     console.warn("clearAllNativeResponseCache failed:", error);
+  }
+}
+
+export async function getNativeResponseCacheStats() {
+  if (!IS_APK) {
+    return {
+      entryCount: 0,
+      totalBytes: 0,
+      maxBytes: 0,
+      trimmedEntries: 0,
+      trimmedBytes: 0,
+    };
+  }
+
+  try {
+    return await NativeResponseCache.getStats();
+  } catch (error) {
+    console.warn("getNativeResponseCacheStats failed:", error);
+    return {
+      entryCount: 0,
+      totalBytes: 0,
+      maxBytes: 0,
+      trimmedEntries: 0,
+      trimmedBytes: 0,
+    };
+  }
+}
+
+export async function trimNativeResponseCache(maxBytes?: number) {
+  if (!IS_APK) {
+    return {
+      entryCount: 0,
+      totalBytes: 0,
+      maxBytes: 0,
+      trimmedEntries: 0,
+      trimmedBytes: 0,
+    };
+  }
+
+  try {
+    return await NativeResponseCache.trim({ maxBytes });
+  } catch (error) {
+    console.warn("trimNativeResponseCache failed:", error);
+    return await getNativeResponseCacheStats();
   }
 }

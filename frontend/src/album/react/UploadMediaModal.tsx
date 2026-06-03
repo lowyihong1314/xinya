@@ -3,6 +3,12 @@ import { CSSProperties, useEffect, useMemo, useRef, useState } from "react";
 import { useUserState } from "../../app/UserState";
 import { CachedImage } from "../../components/CachedMedia";
 import { uploadEventMedia } from "../../event/shared/api";
+import { API_BASE, IS_APK } from "../../js/apiBase";
+import {
+  NativeAlbumUploadPluginBridge,
+  type NativeAlbumUploadStatus,
+} from "../../mobile/native/albumUploadPlugin";
+import { isMobileNativeRuntime } from "../../mobile/native/capacitor";
 
 type UploadQueueItem = {
   id: string;
@@ -56,7 +62,10 @@ export function UploadMediaModal({
   const [queue, setQueue] = useState<UploadQueueItem[]>([]);
   const [uploading, setUploading] = useState(false);
   const [toast, setToast] = useState<string | null>(null);
+  const [nativeStatus, setNativeStatus] = useState<NativeAlbumUploadStatus | null>(null);
+  const [nativeBusy, setNativeBusy] = useState(false);
   const queueRef = useRef<UploadQueueItem[]>([]);
+  const nativeRefreshedJobsRef = useRef<Set<string>>(new Set());
 
   useEffect(() => {
     queueRef.current = queue;
@@ -77,6 +86,61 @@ export function UploadMediaModal({
     const failedCount = queue.filter((item) => item.status === "error").length;
     return { successCount, failedCount };
   }, [queue]);
+  const useNativeAlbumUpload = IS_APK && isMobileNativeRuntime();
+  const nativeUploadActive = isNativeUploadActive(nativeStatus);
+  const nativeProgress = getNativeUploadProgress(nativeStatus);
+
+  useEffect(() => {
+    if (!useNativeAlbumUpload) {
+      return;
+    }
+
+    let canceled = false;
+    void NativeAlbumUploadPluginBridge.getStatus()
+      .then((status) => {
+        if (canceled || !status.status || status.status === "idle") {
+          return;
+        }
+        setNativeStatus(status);
+        void refreshAfterNativeUpload(status);
+      })
+      .catch(() => undefined);
+
+    return () => {
+      canceled = true;
+    };
+  }, [onUploaded, useNativeAlbumUpload]);
+
+  useEffect(() => {
+    if (!useNativeAlbumUpload || !nativeStatus?.jobId || !isNativeUploadActive(nativeStatus)) {
+      return;
+    }
+
+    let canceled = false;
+    const jobId = nativeStatus.jobId;
+    const refresh = async () => {
+      try {
+        const status = await NativeAlbumUploadPluginBridge.getStatus({ jobId });
+        if (canceled) {
+          return;
+        }
+        setNativeStatus(status);
+        await refreshAfterNativeUpload(status);
+      } catch {
+        // Keep the last visible status; the service writes durable progress locally.
+      }
+    };
+
+    void refresh();
+    const timer = window.setInterval(() => {
+      void refresh();
+    }, 1200);
+
+    return () => {
+      canceled = true;
+      window.clearInterval(timer);
+    };
+  }, [nativeStatus?.jobId, nativeStatus?.status, onUploaded, useNativeAlbumUpload]);
 
   function patchQueueItem(itemId: string, updater: (item: UploadQueueItem) => UploadQueueItem) {
     setQueue((prev) => prev.map((item) => (item.id === itemId ? updater(item) : item)));
@@ -205,6 +269,56 @@ export function UploadMediaModal({
     }
   }
 
+  async function refreshAfterNativeUpload(status: NativeAlbumUploadStatus) {
+    const jobId = status.jobId;
+    if (!jobId || !isNativeUploadTerminal(status) || nativeRefreshedJobsRef.current.has(jobId)) {
+      return;
+    }
+
+    nativeRefreshedJobsRef.current.add(jobId);
+    if ((status.completed ?? 0) > 0) {
+      await onUploaded();
+    }
+  }
+
+  async function handleNativePickAndUpload() {
+    setNativeBusy(true);
+    setToast(null);
+    try {
+      const status = await NativeAlbumUploadPluginBridge.pickAndUpload({
+        eventId,
+        baseUrl: API_BASE,
+      });
+      setNativeStatus(status);
+      if (status.total && status.total > 0) {
+        setToast(`已交给后台上传：${status.total} 个文件`);
+      } else {
+        setToast("没有选择文件");
+      }
+    } catch (error) {
+      setToast(error instanceof Error ? error.message : "后台上传启动失败");
+    } finally {
+      setNativeBusy(false);
+    }
+  }
+
+  async function handleNativeCancel() {
+    if (!nativeStatus?.jobId) {
+      return;
+    }
+
+    setNativeBusy(true);
+    try {
+      const status = await NativeAlbumUploadPluginBridge.cancel({ jobId: nativeStatus.jobId });
+      setNativeStatus(status);
+      setToast("已取消后台上传");
+    } catch (error) {
+      setToast(error instanceof Error ? error.message : "取消后台上传失败");
+    } finally {
+      setNativeBusy(false);
+    }
+  }
+
   return (
     <div style={overlayStyle(isMobile)} onClick={onClose}>
       <div style={modalStyle(isMobile)} onClick={(event) => event.stopPropagation()}>
@@ -220,79 +334,161 @@ export function UploadMediaModal({
         </div>
 
         <div style={bodyStyle(isMobile)}>
-          <label style={dropzoneStyle(isMobile)}>
-            <input
-              type="file"
-              multiple
-              style={{ display: "none" }}
-              onChange={(event) => {
-                addFiles(event.target.files);
-                event.currentTarget.value = "";
-              }}
-            />
-            <div style={dropTitleStyle(isMobile)}>选择图片或视频</div>
-            <div style={dropCopyStyle}>支持多次追加选择，上传成功后会自动刷新照片墙。</div>
-          </label>
+          {useNativeAlbumUpload ? (
+            <button
+              type="button"
+              style={dropzoneButtonStyle(isMobile, nativeBusy || nativeUploadActive)}
+              onClick={() => void handleNativePickAndUpload()}
+              disabled={nativeBusy || nativeUploadActive}
+            >
+              <div style={dropTitleStyle(isMobile)}>选择图片或视频</div>
+              <div style={dropCopyStyle}>App 会交给系统后台上传，关闭窗口或切到后台后仍会继续。</div>
+            </button>
+          ) : (
+            <label style={dropzoneStyle(isMobile)}>
+              <input
+                type="file"
+                multiple
+                style={{ display: "none" }}
+                onChange={(event) => {
+                  addFiles(event.target.files);
+                  event.currentTarget.value = "";
+                }}
+              />
+              <div style={dropTitleStyle(isMobile)}>选择图片或视频</div>
+              <div style={dropCopyStyle}>支持多次追加选择，上传成功后会自动刷新照片墙。</div>
+            </label>
+          )}
 
           {toast ? <div style={toastStyle}>{toast}</div> : null}
 
-          <div style={queueHeaderStyle}>
-            <span>{queue.length} 个待处理文件</span>
-            <span>
-              成功 {stats.successCount} / 失败 {stats.failedCount}
-            </span>
-          </div>
-
-          <div style={queueStyle}>
-            {!queue.length ? <div style={placeholderStyle}>当前还没有选择文件</div> : null}
-            {queue.map((item) => (
-              <div key={item.id} style={queueItemStyle(item.status, isMobile)}>
-                {item.previewUrl ? (
-                  <CachedImage src={item.previewUrl} alt={item.file.name} style={previewImageStyle(isMobile)} />
-                ) : (
-                  <div style={videoTileStyle(isMobile)}>VIDEO</div>
-                )}
-                <div style={fileMetaStyle}>
-                  <div style={fileHeaderRowStyle(isMobile)}>
-                    <div style={fileNameStyle(isMobile)}>{item.file.name}</div>
-                    <div style={statusStyle(item.status)}>{statusLabel(item.status)}</div>
-                  </div>
+          {useNativeAlbumUpload ? (
+            <div style={nativePanelStyle}>
+              <div style={nativeHeaderStyle(isMobile)}>
+                <div>
+                  <div style={nativeTitleStyle}>后台上传</div>
                   <div style={fileSubStyle}>
-                    {(item.file.size / 1024 / 1024).toFixed(2)} MB
-                    {item.error ? ` · ${item.error}` : ""}
-                  </div>
-                  <div style={progressRowStyle}>
-                    <div style={progressTrackStyle}>
-                      <div style={progressFillStyle(item.progress, item.status)} />
-                    </div>
-                    <div style={progressTextStyle(item.status)}>{item.progress}%</div>
+                    {nativeStatus?.status && nativeStatus.status !== "idle"
+                      ? nativeStatusLabel(nativeStatus)
+                      : "当前没有后台上传任务"}
                   </div>
                 </div>
-                <button
-                  type="button"
-                  style={removeButtonStyle(isMobile)}
-                  onClick={() => removeItem(item.id)}
-                  disabled={uploading && item.status === "uploading"}
-                >
-                  移除
-                </button>
+                <div style={statusStyle(nativeProgressStatus(nativeStatus))}>{nativeStatusLabel(nativeStatus)}</div>
               </div>
-            ))}
-          </div>
+              <div style={nativeMetaGridStyle(isMobile)}>
+                <div style={nativeMetaItemStyle}>
+                  <span style={nativeMetaLabelStyle}>总数</span>
+                  <strong>{nativeStatus?.total ?? 0}</strong>
+                </div>
+                <div style={nativeMetaItemStyle}>
+                  <span style={nativeMetaLabelStyle}>完成</span>
+                  <strong>{nativeStatus?.completed ?? 0}</strong>
+                </div>
+                <div style={nativeMetaItemStyle}>
+                  <span style={nativeMetaLabelStyle}>失败</span>
+                  <strong>{nativeStatus?.failed ?? 0}</strong>
+                </div>
+              </div>
+              {nativeStatus?.currentFile ? (
+                <div style={fileSubStyle}>当前：{nativeStatus.currentFile}</div>
+              ) : null}
+              {nativeStatus?.error ? <div style={nativeErrorStyle}>{nativeStatus.error}</div> : null}
+              <div style={progressRowStyle}>
+                <div style={progressTrackStyle}>
+                  <div style={progressFillStyle(nativeProgress, nativeProgressStatus(nativeStatus))} />
+                </div>
+                <div style={progressTextStyle(nativeProgressStatus(nativeStatus))}>{nativeProgress}%</div>
+              </div>
+            </div>
+          ) : (
+            <>
+              <div style={queueHeaderStyle}>
+                <span>{queue.length} 个待处理文件</span>
+                <span>
+                  成功 {stats.successCount} / 失败 {stats.failedCount}
+                </span>
+              </div>
+
+              <div style={queueStyle}>
+                {!queue.length ? <div style={placeholderStyle}>当前还没有选择文件</div> : null}
+                {queue.map((item) => (
+                  <div key={item.id} style={queueItemStyle(item.status, isMobile)}>
+                    {item.previewUrl ? (
+                      <CachedImage src={item.previewUrl} alt={item.file.name} style={previewImageStyle(isMobile)} />
+                    ) : (
+                      <div style={videoTileStyle(isMobile)}>VIDEO</div>
+                    )}
+                    <div style={fileMetaStyle}>
+                      <div style={fileHeaderRowStyle(isMobile)}>
+                        <div style={fileNameStyle(isMobile)}>{item.file.name}</div>
+                        <div style={statusStyle(item.status)}>{statusLabel(item.status)}</div>
+                      </div>
+                      <div style={fileSubStyle}>
+                        {(item.file.size / 1024 / 1024).toFixed(2)} MB
+                        {item.error ? ` · ${item.error}` : ""}
+                      </div>
+                      <div style={progressRowStyle}>
+                        <div style={progressTrackStyle}>
+                          <div style={progressFillStyle(item.progress, item.status)} />
+                        </div>
+                        <div style={progressTextStyle(item.status)}>{item.progress}%</div>
+                      </div>
+                    </div>
+                    <button
+                      type="button"
+                      style={removeButtonStyle(isMobile)}
+                      onClick={() => removeItem(item.id)}
+                      disabled={uploading && item.status === "uploading"}
+                    >
+                      移除
+                    </button>
+                  </div>
+                ))}
+              </div>
+            </>
+          )}
         </div>
 
         <div style={footerStyle(isMobile)}>
-          <button type="button" style={secondaryButtonStyle(isMobile)} onClick={onClose}>
-            取消
-          </button>
-          <button
-            type="button"
-            style={primaryButtonStyle(isMobile)}
-            disabled={uploading || !queue.some((item) => item.status !== "success")}
-            onClick={() => void handleUpload()}
-          >
-            {uploading ? "上传中…" : "开始上传"}
-          </button>
+          {useNativeAlbumUpload ? (
+            <>
+              <button type="button" style={secondaryButtonStyle(isMobile)} onClick={onClose}>
+                {nativeUploadActive ? "关闭并后台等待" : "关闭"}
+              </button>
+              {nativeUploadActive ? (
+                <button
+                  type="button"
+                  style={dangerFooterButtonStyle(isMobile)}
+                  onClick={() => void handleNativeCancel()}
+                  disabled={nativeBusy}
+                >
+                  取消后台上传
+                </button>
+              ) : null}
+              <button
+                type="button"
+                style={primaryButtonStyle(isMobile)}
+                disabled={nativeBusy || nativeUploadActive}
+                onClick={() => void handleNativePickAndUpload()}
+              >
+                {nativeBusy ? "打开中…" : "选择并后台上传"}
+              </button>
+            </>
+          ) : (
+            <>
+              <button type="button" style={secondaryButtonStyle(isMobile)} onClick={onClose}>
+                取消
+              </button>
+              <button
+                type="button"
+                style={primaryButtonStyle(isMobile)}
+                disabled={uploading || !queue.some((item) => item.status !== "success")}
+                onClick={() => void handleUpload()}
+              >
+                {uploading ? "上传中…" : "开始上传"}
+              </button>
+            </>
+          )}
         </div>
       </div>
     </div>
@@ -304,6 +500,54 @@ function statusLabel(status: UploadQueueItem["status"]) {
   if (status === "error") return "失败";
   if (status === "uploading") return "上传中";
   return "待上传";
+}
+
+function isNativeUploadActive(status: NativeAlbumUploadStatus | null | undefined) {
+  return status?.status === "queued" || status?.status === "running";
+}
+
+function isNativeUploadTerminal(status: NativeAlbumUploadStatus | null | undefined) {
+  return (
+    status?.status === "success" ||
+    status?.status === "partial" ||
+    status?.status === "error" ||
+    status?.status === "canceled"
+  );
+}
+
+function getNativeUploadProgress(status: NativeAlbumUploadStatus | null | undefined) {
+  const total = Math.max(0, status?.total ?? 0);
+  if (!total) {
+    return 0;
+  }
+  const completed = Math.max(0, Math.min(total, status?.completed ?? 0));
+  const currentProgress = isNativeUploadTerminal(status)
+    ? 100
+    : Math.max(0, Math.min(100, status?.currentProgress ?? 0));
+  return Math.max(0, Math.min(100, Math.round(((completed * 100) + currentProgress) / total)));
+}
+
+function nativeProgressStatus(status: NativeAlbumUploadStatus | null | undefined): UploadQueueItem["status"] {
+  if (status?.status === "success") {
+    return "success";
+  }
+  if (status?.status === "partial" || status?.status === "error" || status?.status === "canceled") {
+    return "error";
+  }
+  if (status?.status === "queued" || status?.status === "running") {
+    return "uploading";
+  }
+  return "queued";
+}
+
+function nativeStatusLabel(status: NativeAlbumUploadStatus | null | undefined) {
+  if (status?.status === "success") return "完成";
+  if (status?.status === "partial") return "部分完成";
+  if (status?.status === "error") return "失败";
+  if (status?.status === "canceled") return "已取消";
+  if (status?.status === "running") return "上传中";
+  if (status?.status === "queued") return "等待中";
+  return "空闲";
 }
 
 function overlayStyle(isMobile: boolean): CSSProperties {
@@ -382,6 +626,18 @@ function dropzoneStyle(isMobile: boolean): CSSProperties {
     border: "1px dashed var(--x-color-accent-border)",
     background: "var(--x-color-accent-tint)",
     cursor: "pointer",
+  };
+}
+
+function dropzoneButtonStyle(isMobile: boolean, disabled: boolean): CSSProperties {
+  return {
+    ...dropzoneStyle(isMobile),
+    width: "100%",
+    appearance: "none",
+    font: "inherit",
+    textAlign: "left",
+    opacity: disabled ? 0.68 : 1,
+    cursor: disabled ? "not-allowed" : "pointer",
   };
 }
 
@@ -602,6 +858,56 @@ const placeholderStyle: CSSProperties = {
   color: "var(--x-color-ink-muted)",
 };
 
+const nativePanelStyle: CSSProperties = {
+  display: "grid",
+  gap: "14px",
+  padding: "14px",
+  borderRadius: "var(--x-radius-md)",
+  background: "var(--x-color-panel)",
+  border: "1px solid var(--x-color-line-soft)",
+};
+
+function nativeHeaderStyle(isMobile: boolean): CSSProperties {
+  return {
+    display: "flex",
+    justifyContent: "space-between",
+    alignItems: isMobile ? "flex-start" : "center",
+    gap: "12px",
+    flexDirection: isMobile ? "column" : "row",
+  };
+}
+
+const nativeTitleStyle: CSSProperties = {
+  fontSize: "16px",
+  fontWeight: 800,
+  color: "var(--x-color-ink)",
+};
+
+function nativeMetaGridStyle(isMobile: boolean): CSSProperties {
+  return {
+    display: "grid",
+    gridTemplateColumns: isMobile ? "repeat(3, minmax(0, 1fr))" : "repeat(3, 120px)",
+    gap: "10px",
+  };
+}
+
+const nativeMetaItemStyle: CSSProperties = {
+  display: "grid",
+  gap: "4px",
+  minWidth: 0,
+};
+
+const nativeMetaLabelStyle: CSSProperties = {
+  fontSize: "12px",
+  color: "var(--x-color-ink-muted)",
+};
+
+const nativeErrorStyle: CSSProperties = {
+  fontSize: "13px",
+  color: "var(--x-color-danger)",
+  wordBreak: "break-word",
+};
+
 function footerStyle(isMobile: boolean): CSSProperties {
   return {
     padding: isMobile ? "16px" : "18px 22px",
@@ -633,6 +939,19 @@ function primaryButtonStyle(isMobile: boolean): CSSProperties {
     border: "none",
     background: "linear-gradient(135deg, var(--x-color-accent), var(--x-color-info))",
     color: "#fff",
+    fontWeight: 700,
+    cursor: "pointer",
+    width: isMobile ? "100%" : undefined,
+  };
+}
+
+function dangerFooterButtonStyle(isMobile: boolean): CSSProperties {
+  return {
+    padding: "12px 18px",
+    borderRadius: "999px",
+    border: "1px solid var(--x-color-danger-border)",
+    background: "var(--x-color-panel)",
+    color: "var(--x-color-danger)",
     fontWeight: 700,
     cursor: "pointer",
     width: isMobile ? "100%" : undefined,

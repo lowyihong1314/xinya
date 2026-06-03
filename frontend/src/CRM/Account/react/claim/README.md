@@ -21,6 +21,7 @@
 
 - `ClaimWorkspace.tsx` loads claims with `fetchClaims()` and keeps local list/create/detail state in React.
 - New claims are submitted as `FormData` through `submitClaim()`, including attachments and serialized signature data.
+- Receipt AI fill uses `readClaimBill()`, which sends `model=auto` by default. Re-parse uses `debug=true`; PRO parse uses `model=byteplus&debug=true`.
 - Claim approval goes through `decideClaim()` and can require signature/comment data.
 - Claim deletion goes through `deleteClaim()` and is limited to edit-capable finance users.
 - Voucher sharing uses `/api/account/print_payment_voucher/share_payment_voucher/:requestId`.

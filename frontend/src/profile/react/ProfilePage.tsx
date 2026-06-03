@@ -5,7 +5,25 @@ import { Link, useNavigate, useParams } from "react-router-dom";
 import { useUserState } from "../../app/UserState";
 import { CachedImage } from "../../components/CachedMedia";
 import { useEnsureDesignTokens } from "../../theme/designTokens";
-import { API_BASE } from "../../js/apiBase";
+import { API_BASE, IS_APK } from "../../js/apiBase";
+import {
+  clearAllNativeMediaCache,
+  getNativeMediaCacheStats,
+  mediaCacheBytesToGb,
+  NATIVE_MEDIA_CACHE_DEFAULT_GB,
+  NATIVE_MEDIA_CACHE_MAX_GB,
+  NATIVE_MEDIA_CACHE_MIN_GB,
+  setNativeMediaCacheMaxGb,
+  trimNativeMediaCache,
+  type NativeMediaCacheStats,
+} from "../../js/nativeMediaCache";
+import {
+  clearAllNativeResponseCache,
+  getNativeResponseCacheStats,
+  trimNativeResponseCache,
+  type NativeResponseCacheStats,
+} from "../../js/nativeResponseCache";
+import { isMobileNativeRuntime } from "../../mobile/native/capacitor";
 import { changeMyPassword, fetchAppReleases, fetchMyFootprints, startMembershipRenewal, updateProfile, uploadProfileImage } from "./api";
 import { MembershipActionCard } from "./MembershipActionCard";
 import type {
@@ -23,6 +41,11 @@ type PasswordFormValues = {
   currentPassword: string;
   newPassword: string;
   confirmPassword: string;
+};
+
+type NativeCacheDebugStats = {
+  media: NativeMediaCacheStats;
+  response: NativeResponseCacheStats;
 };
 
 const DEFAULT_SECTION: ProfileSectionKey = "overview";
@@ -202,6 +225,39 @@ function emptyPasswordFormValues(): PasswordFormValues {
   };
 }
 
+function emptyNativeCacheStats() {
+  return {
+    entryCount: 0,
+    totalBytes: 0,
+    maxBytes: 0,
+    trimmedEntries: 0,
+    trimmedBytes: 0,
+  };
+}
+
+function emptyNativeCacheDebugStats(): NativeCacheDebugStats {
+  return {
+    media: emptyNativeCacheStats(),
+    response: emptyNativeCacheStats(),
+  };
+}
+
+function formatBytes(value: number | null | undefined) {
+  const bytes = Number(value || 0);
+  if (!Number.isFinite(bytes) || bytes <= 0) {
+    return "0 B";
+  }
+  const units = ["B", "KB", "MB", "GB"];
+  let amount = bytes;
+  let unitIndex = 0;
+  while (amount >= 1024 && unitIndex < units.length - 1) {
+    amount /= 1024;
+    unitIndex += 1;
+  }
+  const digits = amount >= 10 || unitIndex === 0 ? 0 : 1;
+  return `${amount.toFixed(digits)} ${units[unitIndex]}`;
+}
+
 function formatDateTime(value: string | null | undefined) {
   if (!value) {
     return "未记录";
@@ -349,7 +405,11 @@ export function ProfilePage() {
   const [footprintsError, setFootprintsError] = useState<string | null>(null);
   const [appReleases, setAppReleases] = useState<AppRelease[]>([]);
   const [appReleasesLoading, setAppReleasesLoading] = useState(false);
+  const [nativeCacheStats, setNativeCacheStats] = useState<NativeCacheDebugStats>(emptyNativeCacheDebugStats);
+  const [nativeCacheLoading, setNativeCacheLoading] = useState(false);
+  const [mediaCacheLimitGb, setMediaCacheLimitGb] = useState(NATIVE_MEDIA_CACHE_DEFAULT_GB);
   const appReleasesFetched = useRef(false);
+  const isNativeMobileRuntime = IS_APK && isMobileNativeRuntime();
 
   async function loadFootprints() {
     if (!isAuthenticated || !profileUser?.id) {
@@ -374,6 +434,26 @@ export function ProfilePage() {
       setFootprintsError(err instanceof Error ? err.message : "足迹加载失败");
     } finally {
       setFootprintsLoading(false);
+    }
+  }
+
+  async function loadNativeCacheStats() {
+    if (!isNativeMobileRuntime) {
+      setNativeCacheStats(emptyNativeCacheDebugStats());
+      setNativeCacheLoading(false);
+      return;
+    }
+
+    setNativeCacheLoading(true);
+    try {
+      const [media, response] = await Promise.all([
+        getNativeMediaCacheStats(),
+        getNativeResponseCacheStats(),
+      ]);
+      setNativeCacheStats({ media, response });
+      setMediaCacheLimitGb(mediaCacheBytesToGb(media.maxBytes));
+    } finally {
+      setNativeCacheLoading(false);
     }
   }
 
@@ -421,6 +501,13 @@ export function ProfilePage() {
       .catch(() => setAppReleases([]))
       .finally(() => setAppReleasesLoading(false));
   }, [activeSection]);
+
+  useEffect(() => {
+    if (activeSection !== "account" || !isNativeMobileRuntime) {
+      return;
+    }
+    void loadNativeCacheStats();
+  }, [activeSection, isNativeMobileRuntime]);
 
   const avatarSrc = useMemo(() => {
     if (!profileUser?.username) {
@@ -561,6 +648,76 @@ export function ProfilePage() {
       setError(err instanceof Error ? err.message : "生成续费链接失败");
     } finally {
       setMembershipActionBusy(false);
+    }
+  }
+
+  async function handleRefreshNativeCaches() {
+    setError(null);
+    try {
+      await loadNativeCacheStats();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "读取本机缓存失败");
+    }
+  }
+
+  async function handleTrimNativeCaches() {
+    if (!isNativeMobileRuntime) {
+      return;
+    }
+
+    setNativeCacheLoading(true);
+    setError(null);
+    try {
+      const [media, response] = await Promise.all([
+        trimNativeMediaCache(),
+        trimNativeResponseCache(),
+      ]);
+      setNativeCacheStats({ media, response });
+      setMessage("本机缓存已裁剪");
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "裁剪本机缓存失败");
+    } finally {
+      setNativeCacheLoading(false);
+    }
+  }
+
+  async function handleClearNativeCaches() {
+    if (!isNativeMobileRuntime) {
+      return;
+    }
+
+    setNativeCacheLoading(true);
+    setError(null);
+    try {
+      await Promise.all([
+        clearAllNativeMediaCache(),
+        clearAllNativeResponseCache(),
+      ]);
+      await loadNativeCacheStats();
+      setMessage("本机缓存已清空");
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "清空本机缓存失败");
+    } finally {
+      setNativeCacheLoading(false);
+    }
+  }
+
+  async function handleSaveMediaCacheLimit(nextLimitGb: number) {
+    if (!isNativeMobileRuntime) {
+      return;
+    }
+
+    setNativeCacheLoading(true);
+    setError(null);
+    try {
+      const media = await setNativeMediaCacheMaxGb(nextLimitGb);
+      setNativeCacheStats((current) => ({ ...current, media }));
+      setMediaCacheLimitGb(mediaCacheBytesToGb(media.maxBytes));
+      setMessage("手机媒体缓存空间已更新");
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "更新媒体缓存空间失败");
+    } finally {
+      setNativeCacheLoading(false);
     }
   }
 
@@ -1057,6 +1214,20 @@ export function ProfilePage() {
               </form>
             </article>
 
+            {isNativeMobileRuntime ? (
+              <NativeCacheDebugCard
+                stats={nativeCacheStats}
+                loading={nativeCacheLoading}
+                isMobile={isMobile}
+                mediaLimitGb={mediaCacheLimitGb}
+                onMediaLimitChange={setMediaCacheLimitGb}
+                onSaveMediaLimit={(value) => void handleSaveMediaCacheLimit(value)}
+                onRefresh={() => void handleRefreshNativeCaches()}
+                onTrim={() => void handleTrimNativeCaches()}
+                onClear={() => void handleClearNativeCaches()}
+              />
+            ) : null}
+
             <AppDownloadCard releases={appReleases} loading={appReleasesLoading} isMobile={isMobile} />
           </div>
         </section>
@@ -1263,6 +1434,127 @@ function YouthFootprintCard({ item }: { item: ProfileYouthFootprint }) {
       <div style={footprintNoteStyle}>
         最近付款状态：{paymentStatusLabel(item.latest_payment?.status)}
         {item.address ? ` · 地址 ${item.address}` : ""}
+      </div>
+    </article>
+  );
+}
+
+function NativeCacheDebugCard({
+  stats,
+  loading,
+  isMobile,
+  mediaLimitGb,
+  onMediaLimitChange,
+  onSaveMediaLimit,
+  onRefresh,
+  onTrim,
+  onClear,
+}: {
+  stats: NativeCacheDebugStats;
+  loading: boolean;
+  isMobile: boolean;
+  mediaLimitGb: number;
+  onMediaLimitChange: (value: number) => void;
+  onSaveMediaLimit: (value: number) => void;
+  onRefresh: () => void;
+  onTrim: () => void;
+  onClear: () => void;
+}) {
+  const media = stats.media ?? emptyNativeCacheStats();
+  const response = stats.response ?? emptyNativeCacheStats();
+  const trimmedEntries = Number(media.trimmedEntries || 0) + Number(response.trimmedEntries || 0);
+  const trimmedBytes = Number(media.trimmedBytes || 0) + Number(response.trimmedBytes || 0);
+  const normalizedLimitGb = Math.min(
+    NATIVE_MEDIA_CACHE_MAX_GB,
+    Math.max(NATIVE_MEDIA_CACHE_MIN_GB, Math.round(mediaLimitGb || NATIVE_MEDIA_CACHE_DEFAULT_GB)),
+  );
+
+  return (
+    <article style={featureCardStyle(isMobile)}>
+      <div style={featureCardEyebrowStyle}>Mobile Settings</div>
+      <h3 style={featureCardTitleStyle}>手机设置</h3>
+      <div style={mobileSettingBlockStyle}>
+        <div style={mobileSettingHeaderStyle}>
+          <span style={fieldLabelStyle}>媒体缓存空间</span>
+          <span style={mobileSettingValueStyle}>{normalizedLimitGb} GB</span>
+        </div>
+        <input
+          type="range"
+          min={NATIVE_MEDIA_CACHE_MIN_GB}
+          max={NATIVE_MEDIA_CACHE_MAX_GB}
+          step={1}
+          value={normalizedLimitGb}
+          disabled={loading}
+          onChange={(event) => onMediaLimitChange(Number(event.target.value))}
+          style={rangeInputStyle}
+        />
+        <div style={mobileSettingFooterStyle}>
+          <input
+            type="number"
+            min={NATIVE_MEDIA_CACHE_MIN_GB}
+            max={NATIVE_MEDIA_CACHE_MAX_GB}
+            step={1}
+            value={normalizedLimitGb}
+            disabled={loading}
+            onChange={(event) => onMediaLimitChange(Number(event.target.value))}
+            style={smallNumberInputStyle}
+          />
+          <button
+            type="button"
+            style={actionButtonStateStyle(softPrimaryButtonStyle, loading)}
+            disabled={loading}
+            onClick={() => onSaveMediaLimit(normalizedLimitGb)}
+          >
+            保存
+          </button>
+        </div>
+      </div>
+
+      <h3 style={featureCardTitleStyle}>本机缓存</h3>
+      <div style={featureListStyle}>
+        <InfoRow
+          label="媒体缓存"
+          value={`${media.entryCount ?? 0} 条 · ${formatBytes(media.totalBytes)}`}
+          isMobile={isMobile}
+        />
+        <InfoRow label="媒体上限" value={formatBytes(media.maxBytes)} isMobile={isMobile} />
+        <InfoRow
+          label="响应缓存"
+          value={`${response.entryCount ?? 0} 条 · ${formatBytes(response.totalBytes)}`}
+          isMobile={isMobile}
+        />
+        <InfoRow label="响应上限" value={formatBytes(response.maxBytes)} isMobile={isMobile} />
+      </div>
+      {trimmedEntries > 0 || trimmedBytes > 0 ? (
+        <div style={fieldHintStyle}>
+          上次裁剪：{trimmedEntries} 条 · {formatBytes(trimmedBytes)}
+        </div>
+      ) : null}
+      <div style={nativeCacheActionsStyle(isMobile)}>
+        <button
+          type="button"
+          style={actionButtonStateStyle(ghostButtonStyle, loading)}
+          disabled={loading}
+          onClick={onRefresh}
+        >
+          {loading ? "读取中…" : "刷新"}
+        </button>
+        <button
+          type="button"
+          style={actionButtonStateStyle(softPrimaryButtonStyle, loading)}
+          disabled={loading}
+          onClick={onTrim}
+        >
+          裁剪
+        </button>
+        <button
+          type="button"
+          style={actionButtonStateStyle(dangerButtonStyle, loading)}
+          disabled={loading}
+          onClick={onClear}
+        >
+          清空
+        </button>
       </div>
     </article>
   );
@@ -2098,6 +2390,63 @@ const accountActionListStyle: CSSProperties = {
   display: "grid",
   gap: "12px",
 };
+
+const mobileSettingBlockStyle: CSSProperties = {
+  display: "grid",
+  gap: "12px",
+  padding: "14px",
+  borderRadius: "16px",
+  background: "rgba(15,118,110,0.06)",
+  border: "1px solid rgba(15,118,110,0.12)",
+};
+
+const mobileSettingHeaderStyle: CSSProperties = {
+  display: "flex",
+  alignItems: "center",
+  justifyContent: "space-between",
+  gap: "12px",
+};
+
+const mobileSettingValueStyle: CSSProperties = {
+  fontWeight: 800,
+  color: "var(--x-color-accent-strong)",
+  whiteSpace: "nowrap",
+};
+
+const mobileSettingFooterStyle: CSSProperties = {
+  display: "grid",
+  gridTemplateColumns: "minmax(88px, 120px) minmax(0, 1fr)",
+  gap: "10px",
+  alignItems: "center",
+};
+
+const rangeInputStyle: CSSProperties = {
+  width: "100%",
+  accentColor: "var(--x-color-accent-strong)",
+};
+
+const smallNumberInputStyle: CSSProperties = {
+  ...inputStyle,
+  minHeight: "44px",
+  padding: "10px 12px",
+};
+
+function nativeCacheActionsStyle(isMobile: boolean): CSSProperties {
+  return {
+    display: "grid",
+    gridTemplateColumns: isMobile ? "1fr" : "repeat(3, minmax(0, 1fr))",
+    gap: "10px",
+  };
+}
+
+function actionButtonStateStyle(baseStyle: CSSProperties, disabled: boolean): CSSProperties {
+  return {
+    ...baseStyle,
+    minWidth: 0,
+    opacity: disabled ? 0.62 : 1,
+    cursor: disabled ? "not-allowed" : "pointer",
+  };
+}
 
 const primaryButtonStyle: CSSProperties = {
   padding: "12px 18px",

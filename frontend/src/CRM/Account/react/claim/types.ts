@@ -96,10 +96,13 @@ export type PaymentVoucherPublicPayload = {
 
 export type ReadBillReceiptItem = {
   itemNumber?: string | number;
+  item_number?: string | number;
   description?: string;
   expenseCategory?: string;
+  expense_category?: string;
   quantity?: string | number;
   lineTotal?: string | number;
+  line_total?: string | number;
 };
 
 export type ReadBillData = {
@@ -107,6 +110,7 @@ export type ReadBillData = {
   merchantName?: string | null;
   merchant_name?: string | null;
   receiptNumber?: string | null;
+  receipt_number?: string | null;
   receiptDate?: string | null;
   receipt_date?: string | null;
   receiptDateTime?: string | null;
@@ -118,13 +122,20 @@ export type ReadBillData = {
   purchase_date?: string | null;
   currency?: string | null;
   expenseCategory?: string | null;
+  expense_category?: string | null;
   description?: string | null;
   merchantAddress?: string | null;
   merchant_address?: string | null;
+  merchantPhone?: string | null;
+  merchant_phone?: string | null;
   vendorName?: string | null;
   vendor_name?: string | null;
   vendorAddress?: string | null;
   vendor_address?: string | null;
+  vendorPhone?: string | null;
+  vendor_phone?: string | null;
+  contactNumber?: string | null;
+  contact_number?: string | null;
   vendorData?: unknown;
   vendor_data?: unknown;
   amountBeforeTax?: string | number | null;
@@ -136,8 +147,15 @@ export type ReadBillData = {
 };
 
 export type ReadBillMeta = {
+  bypass?: boolean;
+  byteplusBypass?: boolean;
+  byteplusError?: string | null;
   confidence?: string | number | null;
+  debug?: boolean;
+  duplicate?: boolean;
   needsReview?: boolean;
+  requestedModel?: "auto" | "byteplus" | "local" | string;
+  reviewReasons?: string[];
   sampleId?: string;
   source?: string;
   storedFile?: string;

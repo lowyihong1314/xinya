@@ -34,6 +34,7 @@ READ_BILL_PARSE_TEXT_URL = os.environ.get(
     READ_BILL_UPLOAD_URL.rstrip("/").removesuffix("/upload") + "/parse-text",
 )
 READ_BILL_ALLOWED_MODELS = {"auto", "byteplus", "local"}
+READ_BILL_DEFAULT_MODEL = os.environ.get("READ_BILL_DEFAULT_MODEL", "auto").strip().lower()
 READ_BILL_IMAGE_EXTENSIONS = {".jpg", ".jpeg", ".png", ".webp", ".bmp", ".tif", ".tiff"}
 CLAIM_EDIT_FIELD_LABELS = {
     "applicant_name": "申请人",
@@ -147,10 +148,8 @@ def _is_truthy_form_value(value):
 
 def _build_read_bill_fields(model, debug=None, bypass=None):
     form_fields = {"model": model}
-    if _is_truthy_form_value(debug):
+    if _is_truthy_form_value(debug) or _is_truthy_form_value(bypass):
         form_fields["debug"] = "true"
-    if _is_truthy_form_value(bypass):
-        form_fields["bypass"] = "true"
     return form_fields
 
 
@@ -295,7 +294,7 @@ def read_bill_from_file(uploaded_file, model=None, debug=None, bypass=None):
     if not (uploaded_file and uploaded_file.filename):
         raise ValidationError("请先选择图片或 PDF 附件")
 
-    selected_model = str(model or os.environ.get("READ_BILL_DEFAULT_MODEL") or "byteplus").strip().lower()
+    selected_model = str(model or READ_BILL_DEFAULT_MODEL or "auto").strip().lower()
     if selected_model not in READ_BILL_ALLOWED_MODELS:
         raise ValidationError("AI 识别模型错误")
 

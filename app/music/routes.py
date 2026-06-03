@@ -100,13 +100,13 @@ def delete_music(music_id):
 
 
 @music_bp.route("/add_one_minute/<int:music_id>", methods=["POST"])
+@login_required
 def add_one_minute(music_id):
     return services.add_one_minute(music_id)
 
 
 @music_bp.route("/minute_logs", methods=["GET"])
 @login_required
-@permission_required("music_edit")
 def list_minute_logs():
     return services.list_minute_logs(
         request.args.get("page", 1, type=int),

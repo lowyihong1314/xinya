@@ -13,14 +13,14 @@ dist-ssr
 *.local
 
 # APK build output (Vite → Capacitor)
-apk_dist/
+/apk_dist/
 
 # Final Android release binaries
-apk/
-aab/
+/apk/
+/aab/
 
 # Capacitor local SDK path config
-android/local.properties
+/android/local.properties
 
 # Editor directories and files
 .vscode/*

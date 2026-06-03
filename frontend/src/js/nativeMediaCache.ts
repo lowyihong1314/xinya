@@ -1,32 +1,14 @@
 import { API_BASE, IS_APK } from "./apiBase";
-
-type NativeMediaCacheResult = {
-  fileUri?: string;
-  mimeType?: string;
-  size?: number;
-};
-
-export interface NativeMediaCachePlugin {
-  cacheMedia(options: {
-    url: string;
-    cacheKey: string;
-    force?: boolean;
-    staleWhileRevalidate?: boolean;
-  }): Promise<NativeMediaCacheResult>;
-
-  invalidate(options: {
-    cacheKey?: string;
-    prefix?: string;
-  }): Promise<void>;
-
-  clearAll(): Promise<void>;
-}
-
-type CapacitorLike = {
-  registerPlugin?: <T>(name: string) => T;
-  Plugins?: Record<string, unknown>;
-  convertFileSrc?: (filePath: string) => string;
-};
+import { resolveCapacitor } from "../mobile/native/capacitor";
+import {
+  NativeMediaCachePluginBridge,
+  type NativeMediaCachePlugin,
+} from "../mobile/native/mediaCachePlugin";
+export type {
+  NativeCacheStats as NativeMediaCacheStats,
+  NativeMediaCachePlugin,
+  NativeMediaCacheResult,
+} from "../mobile/native/mediaCachePlugin";
 
 export type NativeCacheOptions = {
   cacheKey?: string;
@@ -41,43 +23,36 @@ type ResolvedCacheEntry = {
   resolvedUrl: string;
 };
 
+export const NATIVE_MEDIA_CACHE_MIN_GB = 1;
+export const NATIVE_MEDIA_CACHE_DEFAULT_GB = 10;
+export const NATIVE_MEDIA_CACHE_MAX_GB = 50;
+const GIGABYTE_BYTES = 1024 * 1024 * 1024;
+
 const resolvedMediaCache = new Map<string, ResolvedCacheEntry>();
 const pendingMediaCache = new Map<string, Promise<string>>();
 const staleRevalidatedCache = new Set<string>();
 
-function resolveCapacitor() {
-  return (globalThis as typeof globalThis & { Capacitor?: CapacitorLike }).Capacitor ?? null;
+export const NativeMediaCache: NativeMediaCachePlugin = NativeMediaCachePluginBridge;
+
+export function mediaCacheGbToBytes(value: number) {
+  const numeric = Number.isFinite(value) ? value : NATIVE_MEDIA_CACHE_DEFAULT_GB;
+  const clampedGb = Math.min(
+    NATIVE_MEDIA_CACHE_MAX_GB,
+    Math.max(NATIVE_MEDIA_CACHE_MIN_GB, Math.round(numeric)),
+  );
+  return clampedGb * GIGABYTE_BYTES;
 }
 
-function createUnavailablePlugin(): NativeMediaCachePlugin {
-  const noop = async () => undefined;
-  return {
-    cacheMedia: async () => {
-      throw new Error("NativeMediaCache plugin is unavailable in this runtime");
-    },
-    invalidate: noop,
-    clearAll: noop,
-  };
-}
-
-function isNativeMediaCachePlugin(value: unknown): value is NativeMediaCachePlugin {
-  return Boolean(
-    value
-      && typeof value === "object"
-      && typeof (value as NativeMediaCachePlugin).cacheMedia === "function"
-      && typeof (value as NativeMediaCachePlugin).invalidate === "function"
-      && typeof (value as NativeMediaCachePlugin).clearAll === "function",
+export function mediaCacheBytesToGb(value?: number | null) {
+  const numeric = Number(value || 0);
+  if (!Number.isFinite(numeric) || numeric <= 0) {
+    return NATIVE_MEDIA_CACHE_DEFAULT_GB;
+  }
+  return Math.min(
+    NATIVE_MEDIA_CACHE_MAX_GB,
+    Math.max(NATIVE_MEDIA_CACHE_MIN_GB, Math.round(numeric / GIGABYTE_BYTES)),
   );
 }
-
-export const NativeMediaCache: NativeMediaCachePlugin = (() => {
-  const capacitor = resolveCapacitor();
-  const fromGlobal = capacitor?.Plugins?.NativeMediaCache;
-  if (isNativeMediaCachePlugin(fromGlobal)) return fromGlobal;
-  const register = capacitor?.registerPlugin;
-  if (typeof register === "function") return register<NativeMediaCachePlugin>("NativeMediaCache");
-  return createUnavailablePlugin();
-})();
 
 export function normalizeMediaSource(
   src?: string | null,
@@ -208,6 +183,69 @@ export async function clearAllNativeMediaCache() {
     await NativeMediaCache.clearAll();
   } catch (error) {
     console.warn("clearAllNativeMediaCache failed:", error);
+  }
+}
+
+export async function getNativeMediaCacheStats() {
+  if (!IS_APK) {
+    return {
+      entryCount: 0,
+      totalBytes: 0,
+      maxBytes: 0,
+      trimmedEntries: 0,
+      trimmedBytes: 0,
+    };
+  }
+
+  try {
+    return await NativeMediaCache.getStats();
+  } catch (error) {
+    console.warn("getNativeMediaCacheStats failed:", error);
+    return {
+      entryCount: 0,
+      totalBytes: 0,
+      maxBytes: 0,
+      trimmedEntries: 0,
+      trimmedBytes: 0,
+    };
+  }
+}
+
+export async function trimNativeMediaCache(maxBytes?: number) {
+  if (!IS_APK) {
+    return {
+      entryCount: 0,
+      totalBytes: 0,
+      maxBytes: 0,
+      trimmedEntries: 0,
+      trimmedBytes: 0,
+    };
+  }
+
+  try {
+    return await NativeMediaCache.trim({ maxBytes });
+  } catch (error) {
+    console.warn("trimNativeMediaCache failed:", error);
+    return await getNativeMediaCacheStats();
+  }
+}
+
+export async function setNativeMediaCacheMaxGb(maxGb: number) {
+  if (!IS_APK) {
+    return {
+      entryCount: 0,
+      totalBytes: 0,
+      maxBytes: mediaCacheGbToBytes(maxGb),
+      trimmedEntries: 0,
+      trimmedBytes: 0,
+    };
+  }
+
+  try {
+    return await NativeMediaCache.setMaxBytes({ maxBytes: mediaCacheGbToBytes(maxGb) });
+  } catch (error) {
+    console.warn("setNativeMediaCacheMaxGb failed:", error);
+    return await trimNativeMediaCache(mediaCacheGbToBytes(maxGb));
   }
 }
 

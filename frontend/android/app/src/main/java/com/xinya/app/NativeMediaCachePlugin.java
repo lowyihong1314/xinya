@@ -1,5 +1,7 @@
 package com.xinya.app;
 
+import android.content.Context;
+import android.content.SharedPreferences;
 import android.net.Uri;
 import android.os.Handler;
 import android.os.Looper;
@@ -25,6 +27,9 @@ import java.net.HttpURLConnection;
 import java.net.URL;
 import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
+import java.util.ArrayList;
+import java.util.Comparator;
+import java.util.List;
 import java.util.Locale;
 import java.util.concurrent.Callable;
 import java.util.concurrent.ExecutorService;
@@ -35,14 +40,23 @@ import java.util.concurrent.FutureTask;
 public class NativeMediaCachePlugin extends Plugin {
 
     private static final String CACHE_DIR_NAME = "native-media-cache";
+    private static final String PREFS_NAME = "xinya_native_media_cache";
+    private static final String PREF_MAX_BYTES = "max_bytes";
+    private static final long GIGABYTE_BYTES = 1024L * 1024L * 1024L;
+    private static final long MIN_CACHE_BYTES = 1L * GIGABYTE_BYTES;
+    private static final long DEFAULT_CACHE_BYTES = 10L * GIGABYTE_BYTES;
+    private static final long MAX_CACHE_BYTES = 50L * GIGABYTE_BYTES;
 
     private final ExecutorService executor = Executors.newFixedThreadPool(2);
     private final Handler mainHandler = new Handler(Looper.getMainLooper());
     private File cacheRoot;
+    private SharedPreferences prefs;
 
     @Override
     public void load() {
-        cacheRoot = new File(getContext().getFilesDir(), CACHE_DIR_NAME);
+        prefs = getContext().getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE);
+        cacheRoot = new File(getContext().getCacheDir(), CACHE_DIR_NAME);
+        migrateLegacyCacheRoot();
         if (!cacheRoot.exists()) {
             //noinspection ResultOfMethodCallIgnored
             cacheRoot.mkdirs();
@@ -113,6 +127,56 @@ public class NativeMediaCachePlugin extends Plugin {
     }
 
     @PluginMethod
+    public void getStats(PluginCall call) {
+        executor.execute(() -> {
+            try {
+                CacheStats stats = buildStats(getConfiguredMaxBytes(), 0, 0L);
+                dispatchToMainThread(() -> call.resolve(stats.toJSObject()));
+            } catch (Exception error) {
+                String message = error.getMessage() != null ? error.getMessage() : "getStats failed";
+                dispatchToMainThread(() -> call.reject(message));
+            }
+        });
+    }
+
+    @PluginMethod
+    public void trim(PluginCall call) {
+        Double maxBytesValue = call.getDouble("maxBytes");
+        long maxBytes = maxBytesValue != null ? clampCacheBytes(Math.round(maxBytesValue)) : getConfiguredMaxBytes();
+
+        executor.execute(() -> {
+            try {
+                CacheStats stats = trimToLimit(maxBytes);
+                dispatchToMainThread(() -> call.resolve(stats.toJSObject()));
+            } catch (Exception error) {
+                String message = error.getMessage() != null ? error.getMessage() : "trim failed";
+                dispatchToMainThread(() -> call.reject(message));
+            }
+        });
+    }
+
+    @PluginMethod
+    public void setMaxBytes(PluginCall call) {
+        Double maxBytesValue = call.getDouble("maxBytes");
+        if (maxBytesValue == null) {
+            call.reject("maxBytes is required");
+            return;
+        }
+
+        long maxBytes = clampCacheBytes(Math.round(maxBytesValue));
+        executor.execute(() -> {
+            try {
+                getPrefs().edit().putLong(PREF_MAX_BYTES, maxBytes).apply();
+                CacheStats stats = trimToLimit(maxBytes);
+                dispatchToMainThread(() -> call.resolve(stats.toJSObject()));
+            } catch (Exception error) {
+                String message = error.getMessage() != null ? error.getMessage() : "setMaxBytes failed";
+                dispatchToMainThread(() -> call.reject(message));
+            }
+        });
+    }
+
+    @PluginMethod
     public void clearAll(PluginCall call) {
         executor.execute(() -> {
             try {
@@ -143,6 +207,9 @@ public class NativeMediaCachePlugin extends Plugin {
         File existingFile = existingMeta == null ? null : resolveDataFile(existingMeta);
 
         if (!force && canReuseExistingEntry(existingMeta, existingFile, sourceUrl)) {
+            existingMeta.put("size", existingFile.length());
+            existingMeta.put("updatedAt", System.currentTimeMillis());
+            writeMeta(metaFile, existingMeta);
             if (staleWhileRevalidate) {
                 refreshEntryInBackground(sourceUrl, cacheKey);
             }
@@ -200,6 +267,7 @@ public class NativeMediaCachePlugin extends Plugin {
         nextMeta.put("size", finalFile.length());
         nextMeta.put("updatedAt", System.currentTimeMillis());
         writeMeta(metaFile, nextMeta);
+        trimToLimit(getConfiguredMaxBytes());
 
         return new CacheEntry(finalFile, download.mimeType, finalFile.length());
     }
@@ -233,7 +301,8 @@ public class NativeMediaCachePlugin extends Plugin {
     private DownloadResult downloadToTempFile(String sourceUrl, String hash) throws Exception {
         File tempFile = File.createTempFile(hash, ".download", cacheRoot);
         HttpURLConnection connection = null;
-        final String cookie = readCookieOnMainThread(sourceUrl);
+        final String authorizationHeader = NativeAuthSessionStore.getAuthorizationHeader(getContext());
+        final String cookie = authorizationHeader == null ? readCookieOnMainThread(sourceUrl) : null;
         final String userAgent = readUserAgentOnMainThread();
 
         try {
@@ -244,7 +313,9 @@ public class NativeMediaCachePlugin extends Plugin {
             connection.setReadTimeout(60000);
             connection.setInstanceFollowRedirects(true);
 
-            if (cookie != null && !cookie.isEmpty()) {
+            if (authorizationHeader != null && !authorizationHeader.isEmpty()) {
+                connection.setRequestProperty("Authorization", authorizationHeader);
+            } else if (cookie != null && !cookie.isEmpty()) {
                 connection.setRequestProperty("Cookie", cookie);
             }
 
@@ -331,14 +402,114 @@ public class NativeMediaCachePlugin extends Plugin {
         return new File(cacheRoot, fileName);
     }
 
+    private CacheStats trimToLimit(long maxBytes) {
+        List<CacheIndexEntry> entries = readCacheIndex();
+        long totalBytes = 0L;
+        for (CacheIndexEntry entry : entries) {
+            totalBytes += entry.size;
+        }
+
+        if (totalBytes <= maxBytes) {
+            return new CacheStats(entries.size(), totalBytes, maxBytes, 0, 0L);
+        }
+
+        entries.sort(Comparator.comparingLong(entry -> entry.updatedAt));
+        int trimmedEntries = 0;
+        long trimmedBytes = 0L;
+
+        for (CacheIndexEntry entry : entries) {
+            if (totalBytes <= maxBytes || entries.size() - trimmedEntries <= 1) {
+                break;
+            }
+
+            long entrySize = entry.size;
+            deleteQuietly(entry.dataFile);
+            deleteQuietly(entry.metaFile);
+            totalBytes -= entrySize;
+            trimmedBytes += entrySize;
+            trimmedEntries += 1;
+        }
+
+        return buildStats(maxBytes, trimmedEntries, trimmedBytes);
+    }
+
+    private CacheStats buildStats(long maxBytes, int trimmedEntries, long trimmedBytes) {
+        List<CacheIndexEntry> entries = readCacheIndex();
+        long totalBytes = 0L;
+        for (CacheIndexEntry entry : entries) {
+            totalBytes += entry.size;
+        }
+        return new CacheStats(entries.size(), totalBytes, maxBytes, trimmedEntries, trimmedBytes);
+    }
+
+    private List<CacheIndexEntry> readCacheIndex() {
+        ensureCacheRoot();
+        List<CacheIndexEntry> entries = new ArrayList<>();
+        File[] files = cacheRoot.listFiles((dir, name) -> name.endsWith(".json"));
+        if (files == null) {
+            return entries;
+        }
+
+        for (File metaFile : files) {
+            JSONObject meta = readMeta(metaFile);
+            if (meta == null) {
+                deleteQuietly(metaFile);
+                continue;
+            }
+
+            File dataFile = resolveDataFile(meta);
+            if (dataFile == null || !dataFile.exists()) {
+                deleteQuietly(metaFile);
+                continue;
+            }
+
+            long size = dataFile.length();
+            long updatedAt = meta.optLong("updatedAt", 0L);
+            entries.add(new CacheIndexEntry(metaFile, dataFile, size, updatedAt));
+        }
+
+        return entries;
+    }
+
     private void ensureCacheRoot() {
         if (cacheRoot == null) {
-            cacheRoot = new File(getContext().getFilesDir(), CACHE_DIR_NAME);
+            cacheRoot = new File(getContext().getCacheDir(), CACHE_DIR_NAME);
         }
         if (!cacheRoot.exists()) {
             //noinspection ResultOfMethodCallIgnored
             cacheRoot.mkdirs();
         }
+    }
+
+    private void migrateLegacyCacheRoot() {
+        File legacyRoot = new File(getContext().getFilesDir(), CACHE_DIR_NAME);
+        if (!legacyRoot.exists() || legacyRoot.equals(cacheRoot)) {
+            return;
+        }
+        if (!cacheRoot.exists()) {
+            //noinspection ResultOfMethodCallIgnored
+            legacyRoot.renameTo(cacheRoot);
+            return;
+        }
+        deleteRecursively(legacyRoot);
+    }
+
+    private SharedPreferences getPrefs() {
+        if (prefs == null) {
+            prefs = getContext().getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE);
+        }
+        return prefs;
+    }
+
+    private long getConfiguredMaxBytes() {
+        return clampCacheBytes(getPrefs().getLong(PREF_MAX_BYTES, DEFAULT_CACHE_BYTES));
+    }
+
+    private long clampCacheBytes(long value) {
+        if (value < MIN_CACHE_BYTES) {
+            return MIN_CACHE_BYTES;
+        }
+        return Math.min(value, MAX_CACHE_BYTES);
     }
 
     private JSONObject readMeta(File file) {
@@ -491,6 +662,46 @@ public class NativeMediaCachePlugin extends Plugin {
             return task.get();
         } catch (Exception error) {
             return fallback;
+        }
+    }
+
+    private static final class CacheStats {
+        final int entryCount;
+        final long totalBytes;
+        final long maxBytes;
+        final int trimmedEntries;
+        final long trimmedBytes;
+
+        CacheStats(int entryCount, long totalBytes, long maxBytes, int trimmedEntries, long trimmedBytes) {
+            this.entryCount = entryCount;
+            this.totalBytes = totalBytes;
+            this.maxBytes = maxBytes;
+            this.trimmedEntries = trimmedEntries;
+            this.trimmedBytes = trimmedBytes;
+        }
+
+        JSObject toJSObject() {
+            JSObject object = new JSObject();
+            object.put("entryCount", entryCount);
+            object.put("totalBytes", totalBytes);
+            object.put("maxBytes", maxBytes);
+            object.put("trimmedEntries", trimmedEntries);
+            object.put("trimmedBytes", trimmedBytes);
+            return object;
+        }
+    }
+
+    private static final class CacheIndexEntry {
+        final File metaFile;
+        final File dataFile;
+        final long size;
+        final long updatedAt;
+
+        CacheIndexEntry(File metaFile, File dataFile, long size, long updatedAt) {
+            this.metaFile = metaFile;
+            this.dataFile = dataFile;
+            this.size = size;
+            this.updatedAt = updatedAt;
         }
     }
 

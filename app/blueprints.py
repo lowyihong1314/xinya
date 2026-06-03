@@ -9,6 +9,7 @@ BLUEPRINT_SPECS = [
     ("app.public_api", "api_bp", "/api", "api"),
     ("app.twilio", "twilio_bp", "/twilio", "api"),
     ("app.user_control", "user_control_bp", "/user_control", "api"),
+    ("app.mobile", "mobile_bp", "/mobile", "api"),
     ("app.media", "media_bp", "/media", "root"),
     ("app.media", "nginx_media_router", "/media_file", "root"),
     ("app.fahui.common.payment_routes", "fahui_payment_bp", "/payment", "api"),

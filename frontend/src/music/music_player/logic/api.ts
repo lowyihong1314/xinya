@@ -173,7 +173,6 @@ export async function addOneMinute(musicId: number) {
   });
   return parseJson<{
     success?: boolean;
-    ignored?: boolean;
     user_id?: number;
     play_minutes?: number;
     played_at?: string;

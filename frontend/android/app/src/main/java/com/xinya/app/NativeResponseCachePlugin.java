@@ -15,7 +15,10 @@ import java.io.InputStream;
 import java.io.OutputStream;
 import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
+import java.util.ArrayList;
+import java.util.Comparator;
 import java.util.Iterator;
+import java.util.List;
 import java.util.Locale;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
@@ -24,6 +27,7 @@ import java.util.concurrent.Executors;
 public class NativeResponseCachePlugin extends Plugin {
 
     private static final String CACHE_DIR_NAME = "native-response-cache";
+    private static final long MAX_CACHE_BYTES = 20L * 1024L * 1024L;
 
     private final ExecutorService executor = Executors.newFixedThreadPool(2);
     private File cacheRoot;
@@ -129,6 +133,35 @@ public class NativeResponseCachePlugin extends Plugin {
     }
 
     @PluginMethod
+    public void getStats(PluginCall call) {
+        executor.execute(() -> {
+            try {
+                CacheStats stats = buildStats(MAX_CACHE_BYTES, 0, 0L);
+                dispatchToMainThread(() -> call.resolve(stats.toJSObject()));
+            } catch (Exception error) {
+                String message = error.getMessage() != null ? error.getMessage() : "getStats failed";
+                dispatchToMainThread(() -> call.reject(message));
+            }
+        });
+    }
+
+    @PluginMethod
+    public void trim(PluginCall call) {
+        Double maxBytesValue = call.getDouble("maxBytes");
+        long maxBytes = maxBytesValue != null ? Math.max(0L, Math.round(maxBytesValue)) : MAX_CACHE_BYTES;
+
+        executor.execute(() -> {
+            try {
+                CacheStats stats = trimToLimit(maxBytes);
+                dispatchToMainThread(() -> call.resolve(stats.toJSObject()));
+            } catch (Exception error) {
+                String message = error.getMessage() != null ? error.getMessage() : "trim failed";
+                dispatchToMainThread(() -> call.reject(message));
+            }
+        });
+    }
+
+    @PluginMethod
     public void clearAll(PluginCall call) {
         executor.execute(() -> {
             try {
@@ -172,10 +205,12 @@ public class NativeResponseCachePlugin extends Plugin {
         meta.put("headers", headers != null ? new JSONObject(headers.toString()) : new JSONObject());
         meta.put("updatedAt", System.currentTimeMillis());
         writeMeta(metaFile, meta);
+        trimToLimit(MAX_CACHE_BYTES);
     }
 
     private CachedEntry readEntry(String cacheKey) {
-        JSONObject meta = readMeta(metaFile(cacheKey));
+        File metaFile = metaFile(cacheKey);
+        JSONObject meta = readMeta(metaFile);
         if (meta == null) {
             return null;
         }
@@ -186,13 +221,21 @@ public class NativeResponseCachePlugin extends Plugin {
             return null;
         }
 
+        long updatedAt = System.currentTimeMillis();
+        try {
+            meta.put("updatedAt", updatedAt);
+            writeMeta(metaFile, meta);
+        } catch (Exception ignored) {
+            updatedAt = meta.optLong("updatedAt", 0L);
+        }
+
         return new CachedEntry(
             meta.optString("url", ""),
             meta.optInt("status", 200),
             meta.optString("statusText", "OK"),
             readHeaders(meta.optJSONObject("headers")),
             readTextFile(bodyFile),
-            meta.optLong("updatedAt", 0L)
+            updatedAt
         );
     }
 
@@ -245,6 +288,75 @@ public class NativeResponseCachePlugin extends Plugin {
             return null;
         }
         return new File(cacheRoot, fileName);
+    }
+
+    private CacheStats trimToLimit(long maxBytes) {
+        List<CacheIndexEntry> entries = readCacheIndex();
+        long totalBytes = 0L;
+        for (CacheIndexEntry entry : entries) {
+            totalBytes += entry.size;
+        }
+
+        if (totalBytes <= maxBytes) {
+            return new CacheStats(entries.size(), totalBytes, maxBytes, 0, 0L);
+        }
+
+        entries.sort(Comparator.comparingLong(entry -> entry.updatedAt));
+        int trimmedEntries = 0;
+        long trimmedBytes = 0L;
+
+        for (CacheIndexEntry entry : entries) {
+            if (totalBytes <= maxBytes || entries.size() - trimmedEntries <= 1) {
+                break;
+            }
+
+            long entrySize = entry.size;
+            deleteQuietly(entry.bodyFile);
+            deleteQuietly(entry.metaFile);
+            totalBytes -= entrySize;
+            trimmedBytes += entrySize;
+            trimmedEntries += 1;
+        }
+
+        return buildStats(maxBytes, trimmedEntries, trimmedBytes);
+    }
+
+    private CacheStats buildStats(long maxBytes, int trimmedEntries, long trimmedBytes) {
+        List<CacheIndexEntry> entries = readCacheIndex();
+        long totalBytes = 0L;
+        for (CacheIndexEntry entry : entries) {
+            totalBytes += entry.size;
+        }
+        return new CacheStats(entries.size(), totalBytes, maxBytes, trimmedEntries, trimmedBytes);
+    }
+
+    private List<CacheIndexEntry> readCacheIndex() {
+        ensureCacheRoot();
+        List<CacheIndexEntry> entries = new ArrayList<>();
+        File[] files = cacheRoot.listFiles((dir, name) -> name.endsWith(".json"));
+        if (files == null) {
+            return entries;
+        }
+
+        for (File metaFile : files) {
+            JSONObject meta = readMeta(metaFile);
+            if (meta == null) {
+                deleteQuietly(metaFile);
+                continue;
+            }
+
+            File bodyFile = resolveBodyFile(meta);
+            if (bodyFile == null || !bodyFile.exists()) {
+                deleteQuietly(metaFile);
+                continue;
+            }
+
+            long size = bodyFile.length() + metaFile.length();
+            long updatedAt = meta.optLong("updatedAt", 0L);
+            entries.add(new CacheIndexEntry(metaFile, bodyFile, size, updatedAt));
+        }
+
+        return entries;
     }
 
     private void ensureCacheRoot() {
@@ -354,6 +466,46 @@ public class NativeResponseCachePlugin extends Plugin {
             return;
         }
         action.run();
+    }
+
+    private static final class CacheStats {
+        final int entryCount;
+        final long totalBytes;
+        final long maxBytes;
+        final int trimmedEntries;
+        final long trimmedBytes;
+
+        CacheStats(int entryCount, long totalBytes, long maxBytes, int trimmedEntries, long trimmedBytes) {
+            this.entryCount = entryCount;
+            this.totalBytes = totalBytes;
+            this.maxBytes = maxBytes;
+            this.trimmedEntries = trimmedEntries;
+            this.trimmedBytes = trimmedBytes;
+        }
+
+        JSObject toJSObject() {
+            JSObject object = new JSObject();
+            object.put("entryCount", entryCount);
+            object.put("totalBytes", totalBytes);
+            object.put("maxBytes", maxBytes);
+            object.put("trimmedEntries", trimmedEntries);
+            object.put("trimmedBytes", trimmedBytes);
+            return object;
+        }
+    }
+
+    private static final class CacheIndexEntry {
+        final File metaFile;
+        final File bodyFile;
+        final long size;
+        final long updatedAt;
+
+        CacheIndexEntry(File metaFile, File bodyFile, long size, long updatedAt) {
+            this.metaFile = metaFile;
+            this.bodyFile = bodyFile;
+            this.size = size;
+            this.updatedAt = updatedAt;
+        }
     }
 
     private static final class CachedEntry {

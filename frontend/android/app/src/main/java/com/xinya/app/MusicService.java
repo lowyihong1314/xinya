@@ -144,10 +144,11 @@ public class MusicService extends MediaBrowserServiceCompat {
             }
             final int musicId = currentTrackId;
             final String targetUrl = NativeMusicRepository.normalizeBaseUrl(baseUrl) + "/api/music/add_one_minute/" + musicId;
-            final String cookie = CookieManager.getInstance().getCookie(targetUrl);
+            final String authorizationHeader = NativeAuthSessionStore.getAuthorizationHeader(MusicService.this);
+            final String cookie = authorizationHeader == null ? CookieManager.getInstance().getCookie(targetUrl) : null;
             playbackMetricExecutor.execute(() -> {
                 try {
-                    NativeMusicRepository.addOneMinute(baseUrl, cookie, musicId);
+                    NativeMusicRepository.addOneMinute(baseUrl, cookie, authorizationHeader, musicId);
                 } catch (Exception e) {
                     Log.w(TAG, "addOneMinute failed: " + e.getMessage());
                 }
@@ -341,14 +342,17 @@ public class MusicService extends MediaBrowserServiceCompat {
             playlist = new ArrayList<>(items);
             ensureForeground();
 
+            String authorizationHeader = NativeAuthSessionStore.getAuthorizationHeader(MusicService.this);
             String cookieHeader = null;
             if (!items.isEmpty()) {
-                cookieHeader = CookieManager.getInstance().getCookie(items.get(0).url);
+                cookieHeader = authorizationHeader == null
+                    ? CookieManager.getInstance().getCookie(items.get(0).url)
+                    : null;
             }
 
             ConcatenatingMediaSource concat = new ConcatenatingMediaSource();
             for (PlaylistItem item : items) {
-                concat.addMediaSource(buildMediaSource(item.url, cookieHeader));
+                concat.addMediaSource(buildMediaSource(item.url, cookieHeader, authorizationHeader));
             }
 
             int safeStart = Math.max(0, Math.min(startIndex, items.size() - 1));
@@ -549,7 +553,7 @@ public class MusicService extends MediaBrowserServiceCompat {
         }
 
         if (MEDIA_ALL.equals(nodeId)) {
-            for (NativeMusicRepository.MusicRecord music : musics) {
+            for (NativeMusicRepository.MusicRecord music : NativeMusicRepository.sortAllSongsByListOrder(musics)) {
                 items.add(buildPlayableMediaItem(music, null));
             }
             return items;
@@ -640,14 +644,16 @@ public class MusicService extends MediaBrowserServiceCompat {
                 ensureCatalogLoaded();
                 String normalizedQuery = query != null ? query.trim().toLowerCase() : "";
                 NativeMusicRepository.MusicRecord match = null;
+                List<NativeMusicRepository.MusicRecord> musics;
                 synchronized (catalogLock) {
-                    for (NativeMusicRepository.MusicRecord music : catalogMusics) {
-                        if (normalizedQuery.isEmpty()
-                            || nonEmpty(music.title, "").toLowerCase().contains(normalizedQuery)
-                            || resolveMusicAlbumName(music).toLowerCase().contains(normalizedQuery)) {
-                            match = music;
-                            break;
-                        }
+                    musics = NativeMusicRepository.sortAllSongsByListOrder(catalogMusics);
+                }
+                for (NativeMusicRepository.MusicRecord music : musics) {
+                    if (normalizedQuery.isEmpty()
+                        || nonEmpty(music.title, "").toLowerCase().contains(normalizedQuery)
+                        || resolveMusicAlbumName(music).toLowerCase().contains(normalizedQuery)) {
+                        match = music;
+                        break;
                     }
                 }
                 if (match != null) {
@@ -671,6 +677,9 @@ public class MusicService extends MediaBrowserServiceCompat {
             if (musics.isEmpty() && !catalogMusics.isEmpty()) {
                 musics.addAll(catalogMusics);
             }
+        }
+        if (selection.albumId == null) {
+            musics = NativeMusicRepository.sortAllSongsByListOrder(musics);
         }
 
         List<PlaylistItem> items = new ArrayList<>();
@@ -709,10 +718,13 @@ public class MusicService extends MediaBrowserServiceCompat {
         }
 
         String normalizedBaseUrl = getEffectiveBaseUrl();
-        String cookie = getCookieOnMainThread(normalizedBaseUrl + "/api/music/albums");
+        String authorizationHeader = NativeAuthSessionStore.getAuthorizationHeader(this);
+        String cookie = authorizationHeader == null
+            ? getCookieOnMainThread(normalizedBaseUrl + "/api/music/albums")
+            : null;
         try {
             NativeMusicRepository.LibraryPayload payload =
-                NativeMusicRepository.loadLibrary(normalizedBaseUrl, cookie, false);
+                NativeMusicRepository.loadLibrary(normalizedBaseUrl, cookie, authorizationHeader, false);
             setCatalog(payload.albums, payload.musics);
         } catch (Exception e) {
             if (hasExistingCatalog) {
@@ -1185,11 +1197,11 @@ public class MusicService extends MediaBrowserServiceCompat {
             return;
         }
 
-        // Read cookie on main thread BEFORE dispatching to background.
-        final String cookie = CookieManager.getInstance().getCookie(coverUrl);
+        final String authorizationHeader = NativeAuthSessionStore.getAuthorizationHeader(this);
+        final String cookie = authorizationHeader == null ? CookieManager.getInstance().getCookie(coverUrl) : null;
 
         coverFetchExecutor.execute(() -> {
-            Bitmap bitmap = downloadAndScaleBitmap(coverUrl, cookie);
+            Bitmap bitmap = downloadAndScaleBitmap(coverUrl, cookie, authorizationHeader);
             mainHandler.post(() -> {
                 if (bitmap != null) {
                     recycleBitmap();
@@ -1210,8 +1222,9 @@ public class MusicService extends MediaBrowserServiceCompat {
     /**
      * @param cookie  Session cookie read on the main thread by the caller.
      *                Must NOT be fetched here — CookieManager is not thread-safe.
+     * @param authorizationHeader Mobile token header, preferred when available.
      */
-    private Bitmap downloadAndScaleBitmap(String coverUrl, String cookie) {
+    private Bitmap downloadAndScaleBitmap(String coverUrl, String cookie, String authorizationHeader) {
         HttpURLConnection conn = null;
         InputStream in = null;
         try {
@@ -1220,7 +1233,9 @@ public class MusicService extends MediaBrowserServiceCompat {
             conn.setConnectTimeout(8_000);
             conn.setReadTimeout(15_000);
             conn.setRequestProperty("Accept", "image/*");
-            if (cookie != null && !cookie.isEmpty()) {
+            if (authorizationHeader != null && !authorizationHeader.isEmpty()) {
+                conn.setRequestProperty("Authorization", authorizationHeader);
+            } else if (cookie != null && !cookie.isEmpty()) {
                 conn.setRequestProperty("Cookie", cookie);
             }
             conn.connect();
@@ -1276,12 +1291,18 @@ public class MusicService extends MediaBrowserServiceCompat {
 
     // ── Internal helpers ─────────────────────────────────────────────────────
 
-    private ProgressiveMediaSource buildMediaSource(String url, String cookieHeader) {
+    private ProgressiveMediaSource buildMediaSource(String url, String cookieHeader, String authorizationHeader) {
         DefaultHttpDataSource.Factory httpFactory = new DefaultHttpDataSource.Factory()
             .setAllowCrossProtocolRedirects(true);
 
-        String cookie = cookieHeader != null ? cookieHeader : CookieManager.getInstance().getCookie(url);
-        if (cookie != null && !cookie.isEmpty()) {
+        String cookie = authorizationHeader == null
+            ? (cookieHeader != null ? cookieHeader : CookieManager.getInstance().getCookie(url))
+            : null;
+        if (authorizationHeader != null && !authorizationHeader.isEmpty()) {
+            Map<String, String> headers = new HashMap<>();
+            headers.put("Authorization", authorizationHeader);
+            httpFactory.setDefaultRequestProperties(headers);
+        } else if (cookie != null && !cookie.isEmpty()) {
             Map<String, String> headers = new HashMap<>();
             headers.put("Cookie", cookie);
             httpFactory.setDefaultRequestProperties(headers);

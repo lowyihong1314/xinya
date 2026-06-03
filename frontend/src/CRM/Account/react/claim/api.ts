@@ -7,6 +7,8 @@ import type {
 } from "./types";
 import { apiFetch } from "../../../../js/apiFetch";
 
+export type ReadBillModel = "auto" | "byteplus" | "local";
+
 async function parseJson<T>(response: Response): Promise<T> {
   const data = (await response.json().catch(() => ({}))) as T & { error?: string; message?: string };
   if (!response.ok) {
@@ -33,17 +35,14 @@ export async function submitClaim(formData: FormData) {
 
 export async function readClaimBill(
   file: File,
-  model = "byteplus",
-  options: { debug?: boolean; bypass?: boolean } = {},
+  model: ReadBillModel = "auto",
+  options: { debug?: boolean } = {},
 ) {
   const formData = new FormData();
   formData.append("file", file);
   formData.append("model", model);
   if (options.debug) {
     formData.append("debug", "true");
-  }
-  if (options.bypass) {
-    formData.append("bypass", "true");
   }
   const response = await apiFetch("/api/account/claim/read_bill", {
     method: "POST",

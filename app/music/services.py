@@ -423,16 +423,7 @@ def add_one_minute(music_id):
     if not music:
         return jsonify({"error": "Music not found"}), 404
 
-    user_id = getattr(current_user, "id", None)
-    if not user_id:
-        return jsonify(
-            {
-                "success": True,
-                "ignored": True,
-                "music_id": music_id,
-                "play_minutes": music.play_minutes,
-            }
-        )
+    user_id = current_user.id
 
     now = malaysia_now_naive()
     user_play_minute = MusicUserPlayMinute.query.filter_by(

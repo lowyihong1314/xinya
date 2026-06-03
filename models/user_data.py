@@ -104,6 +104,23 @@ class MemberRenewal(db.Model):
             'created_at': self.created_at.isoformat() if self.created_at else None,
         }
 
+class MobileSession(db.Model):
+    __tablename__ = "mobile_session"
+
+    id = db.Column(db.Integer, primary_key=True, autoincrement=True)
+    user_id = db.Column(db.Integer, db.ForeignKey("user_data.id", ondelete="CASCADE"), nullable=False, index=True)
+    device_id = db.Column(db.String(120), nullable=True, index=True)
+    refresh_token_hash = db.Column(db.String(64), nullable=False, unique=True)
+    user_agent = db.Column(db.String(255), nullable=True)
+    platform = db.Column(db.String(50), nullable=True)
+    login_version = db.Column(db.Integer, nullable=False, default=0)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow, nullable=False)
+    refreshed_at = db.Column(db.DateTime, default=datetime.utcnow, nullable=False)
+    expires_at = db.Column(db.DateTime, nullable=False, index=True)
+    revoked_at = db.Column(db.DateTime, nullable=True, index=True)
+
+    user = db.relationship("User", backref=db.backref("mobile_sessions", lazy=True, cascade="all, delete-orphan"))
+
 class User(db.Model, UserMixin):
     __tablename__ = 'user_data'
 

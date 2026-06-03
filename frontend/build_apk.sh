@@ -3,7 +3,24 @@ set -e
 
 export JAVA_HOME=~/android-build/jdk/jdk-21.0.3+9
 export ANDROID_HOME=~/android-build/sdk
-export PATH=$JAVA_HOME/bin:$PATH
+
+NODE_BIN_DIR=""
+CURRENT_NODE_MAJOR=$(node -p "Number(process.versions.node.split('.')[0])" 2>/dev/null || echo 0)
+if [ "$CURRENT_NODE_MAJOR" -lt 22 ] && [ -x /usr/bin/node ]; then
+  SYSTEM_NODE_MAJOR=$(/usr/bin/node -p "Number(process.versions.node.split('.')[0])" 2>/dev/null || echo 0)
+  if [ "$SYSTEM_NODE_MAJOR" -ge 22 ]; then
+    NODE_BIN_DIR="/usr/bin"
+  fi
+fi
+
+export PATH="$JAVA_HOME/bin${NODE_BIN_DIR:+:$NODE_BIN_DIR}:$PATH"
+
+NODE_MAJOR=$(node -p "Number(process.versions.node.split('.')[0])" 2>/dev/null || echo 0)
+if [ "$NODE_MAJOR" -lt 22 ]; then
+  echo "ERROR: Capacitor 8 requires Node.js >= 22. Current node: $(node -v 2>/dev/null || echo missing)"
+  echo "       Install/use Node 22 before building the APK."
+  exit 1
+fi
 
 # 切到 frontend/ 目录（无论从哪里调用都能正确运行）
 cd "$(dirname "$0")"
@@ -13,23 +30,23 @@ APK_OUTPUT="apk/UTBA_BETA_${VERSION}.apk"
 AAB_OUTPUT="aab/UTBA_BETA_${VERSION}.aab"
 GRADLE_ARGS=()
 
-if [ -n "${VERSION_CODE:-}" ]; then
-  if ! [[ "$VERSION_CODE" =~ ^[0-9]+$ ]]; then
-    echo "ERROR: VERSION_CODE must be a positive integer"
-    exit 1
-  fi
-  GRADLE_ARGS+=("-PappVersionCode=$VERSION_CODE")
+if [ -z "${VERSION_CODE:-}" ] || [ -z "${VERSION_NAME:-}" ]; then
+  echo "ERROR: VERSION_CODE and VERSION_NAME are required for release builds."
+  echo "       Example: VERSION_CODE=12 VERSION_NAME=1.2.3 ./build_apk.sh"
+  exit 1
 fi
 
-if [ -n "${VERSION_NAME:-}" ]; then
-  GRADLE_ARGS+=("-PappVersionName=$VERSION_NAME")
+if ! [[ "$VERSION_CODE" =~ ^[0-9]+$ ]]; then
+  echo "ERROR: VERSION_CODE must be a positive integer"
+  exit 1
 fi
 
-if [ ${#GRADLE_ARGS[@]} -gt 0 ]; then
-  echo "==> Using Android version settings..."
-  [ -n "${VERSION_CODE:-}" ] && echo "    versionCode=$VERSION_CODE"
-  [ -n "${VERSION_NAME:-}" ] && echo "    versionName=$VERSION_NAME"
-fi
+GRADLE_ARGS+=("-PappVersionCode=$VERSION_CODE")
+GRADLE_ARGS+=("-PappVersionName=$VERSION_NAME")
+
+echo "==> Using Android version settings..."
+echo "    versionCode=$VERSION_CODE"
+echo "    versionName=$VERSION_NAME"
 
 echo "==> [1/4] Building React bundle (APK mode)..."
 npm run build:apk

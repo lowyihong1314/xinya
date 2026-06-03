@@ -45,6 +45,25 @@ def load_user(user_id):
     return User.query.get(int(user_id))
 
 
+@login_manager.request_loader
+def load_user_from_request(flask_request):
+    header = (flask_request.headers.get("Authorization") or "").strip()
+    if not header.lower().startswith("bearer "):
+        return None
+
+    access_token = header[7:].strip()
+    if not access_token:
+        return None
+
+    try:
+        from app.mobile.session_service import load_user_from_access_token
+
+        return load_user_from_access_token(access_token)
+    except Exception as exc:
+        print(f"[移动端登录] Bearer token 验证失败: {exc}")
+        return None
+
+
 def get_current_user_permissions(user):
     permissions = set()
     for dept in getattr(user, "departments", []):

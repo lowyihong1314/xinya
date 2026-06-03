@@ -10,6 +10,13 @@ import type { ReactNode } from "react";
 import { useEnsureDesignTokens } from "../theme/designTokens";
 import { apiFetch } from "../js/apiFetch";
 import { clearAllNativeResponseCache } from "../js/nativeResponseCache";
+import { shouldUseMobileNativeAuth } from "../mobile/native/authHeader";
+import {
+  ensureMobileSessionForAuthenticatedUser,
+  loginWithMobileSession,
+  revokeMobileSession,
+} from "../mobile/native/mobileSession";
+import { clearMobileNativeSessionState } from "../mobile/native/sessionState";
 import { navigateWithRouter } from "../router/navigationBridge";
 
 type UserData = {
@@ -102,11 +109,14 @@ export function UserStateProvider({
 
       if (nextUser.state === "unauthenticated") {
         setUser(null);
-        void clearAllNativeResponseCache();
+        void clearMobileNativeSessionState();
         return null;
       }
 
       setUser(nextUser.user);
+      void ensureMobileSessionForAuthenticatedUser().catch((error) => {
+        console.warn("mobile session sync failed:", error);
+      });
       return nextUser.user;
     } finally {
       setLoadingUser(false);
@@ -114,30 +124,50 @@ export function UserStateProvider({
   }
 
   async function login(username: string, password: string) {
-    const response = await apiFetch("/api/user_control/login", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      credentials: "include",
-      body: JSON.stringify({ username, password }),
-    });
-    const data = await response.json();
-    if (!response.ok) {
-      throw new Error(data.error || "登录失败");
+    const nativeSession = await loginWithMobileSession(username, password);
+    if (!nativeSession) {
+      const response = await apiFetch("/api/user_control/login", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        credentials: "include",
+        body: JSON.stringify({ username, password }),
+      });
+      const data = await response.json();
+      if (!response.ok) {
+        throw new Error(data.error || "登录失败");
+      }
     }
     await clearAllNativeResponseCache();
     await refreshUser();
   }
 
   async function logout() {
-    const response = await apiFetch("/api/user_control/logout", {
-      credentials: "include",
-    });
-    const data = await response.json();
-    if (!response.ok) {
-      throw new Error(data.error || "退出失败");
+    const isNativeMobile = shouldUseMobileNativeAuth();
+    let logoutError: Error | null = null;
+
+    try {
+      const response = await apiFetch("/api/user_control/logout", {
+        credentials: "include",
+      });
+      const data = await response.json();
+      if (!response.ok) {
+        logoutError = new Error(data.error || "退出失败");
+      }
+    } catch (error) {
+      logoutError = error instanceof Error ? error : new Error("退出失败");
     }
-    await clearAllNativeResponseCache();
+
+    await revokeMobileSession();
+    await clearMobileNativeSessionState();
     setUser(null);
+
+    if (logoutError) {
+      if (isNativeMobile) {
+        console.warn("logout endpoint failed:", logoutError);
+      } else {
+        throw logoutError;
+      }
+    }
   }
 
   const value = useMemo<UserStateContextValue>(

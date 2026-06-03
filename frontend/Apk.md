@@ -1,258 +1,637 @@
-# APK Build — Architecture & Implementation
+# APK Architecture
 
-This document explains how the Android APK is built from the React frontend, with focus on the dual-mode architecture and the music player split.
+This document describes the current Android APK architecture for the `frontend/`
+app. It reflects the native music implementation, Android Auto support, APK
+caching, and the current build pipeline.
 
 ---
 
 ## Overview
 
-The same React codebase produces two separate artifacts:
+The same React codebase is built into two different targets:
 
-| Target | Command | Output | API base |
-|--------|---------|--------|----------|
-| Web (Flask) | `npm run build` | `../static/vite/init.js` | relative (`""`) |
+| Target | Command | Output | Runtime API base |
+| --- | --- | --- | --- |
+| Web / Flask | `npm run build` | `../static/vite/` | relative paths |
 | Android APK | `npm run build:apk` | `apk_dist/` | `https://utbabuddha.com` |
 
-The APK is then packaged by Capacitor → Gradle into a signed release APK at `apk/UTBA_YYYYMMDD_HHMM.apk`.
+The APK is a Capacitor Android app:
+
+```text
+React + Vite bundle
+  -> Capacitor WebView
+  -> Capacitor JS bridge
+  -> Android native plugins
+  -> Android services / storage / ExoPlayer
+```
+
+The normal CRM, album, info, lamp, profile, and most music UI screens still run
+inside the WebView. Music playback in the APK is different: the UI is React, but
+the playback engine and Android Auto catalog are native Android code.
 
 ---
 
-## Detecting APK mode at runtime
+## APK Mode Detection
 
-**`src/js/apiBase.ts`**
+`frontend/src/js/apiBase.ts` controls APK mode:
 
 ```ts
 export const API_BASE: string = (import.meta.env.VITE_API_BASE as string) ?? "";
 export const IS_APK = Boolean(API_BASE);
 ```
 
-- `VITE_API_BASE` is set to `https://utbabuddha.com` in `.env.apk` (loaded by `vite build --mode apk`).
-- In web mode it is empty, so all `fetch` calls use relative paths.
-- `IS_APK` is a compile-time constant — Vite tree-shakes the unused branch.
+APK builds load `frontend/.env.apk`, where `VITE_API_BASE` points to the
+production server. Web builds leave `API_BASE` empty and use relative URLs.
 
-**`src/js/apiFetch.ts`** wraps every `fetch()` call across the codebase:
+`frontend/src/js/apiFetch.ts` prefixes relative API calls and, in Android/iOS
+native runtime, attaches the saved mobile Bearer token:
 
 ```ts
-export function apiFetch(input: string | URL | Request, init?: RequestInit) {
+export async function apiFetch(input: string | URL | Request, init?: RequestInit) {
   if (typeof input === "string" && input.startsWith("/")) {
     input = `${API_BASE}${input}`;
   }
+  // Mobile native runtime also adds Authorization when NativeAuth has a token.
   return fetch(input, init);
 }
 ```
 
-All 16 API modules use `apiFetch`. Static asset URLs (`<img src>`, audio `src`, cover images) are prefixed with `${API_BASE}` directly at use sites.
+For APK work, check `IS_APK` before assuming browser-only behavior. A page may
+render in React, but its data or media may be served by a native plugin.
 
 ---
 
-## Build pipeline
+## App Bootstrap
 
-### `vite.config.js`
+Main entry:
 
-```js
-const isApk = mode === "apk";
-
-base: isApk ? "./" : isBuild ? "/static/vite/" : "/",
-build: isApk
-  ? { outDir: "apk_dist", emptyOutDir: true }   // standard index.html output
-  : { outDir: "../static/vite", rollupOptions: { input: "main.tsx", ... } }
+```text
+frontend/main.tsx
 ```
 
-The APK build produces a normal `apk_dist/index.html` + assets. The web build produces a single `init.js` entry file loaded by the Flask HTML template.
+The entry does three important things:
 
-### `capacitor.config.ts`
+1. Loads shared CSS.
+2. Installs `installApkFetchCache()`.
+3. Mounts `<App />`.
 
-```ts
-{
-  appId: "com.xinya.app",
-  appName: "UTBA",
-  webDir: "apk_dist",          // Capacitor reads from here
-  server: {
-    cleartext: false,
-    androidScheme: "https",    // app origin = https://localhost
-  },
-}
+`frontend/src/app/App.tsx` intentionally behaves differently in APK mode:
+
+```tsx
+{IS_APK ? (
+  <RouterProvider router={appRouter} />
+) : (
+  <MusicPlaybackProvider>
+    <RouterProvider router={appRouter} />
+  </MusicPlaybackProvider>
+)}
 ```
 
-`androidScheme: "https"` means the WebView's origin is `https://localhost`, so requests to `https://utbabuddha.com` are cross-origin. This is why the Flask session cookie must be `SameSite=None; Secure` (set in `app/settings.py`).
-
-### One-command build: `build_apk.sh`
-
-```
-npm run build:apk          # Vite → apk_dist/
-node icon-gen (sharp)      # logo.png → mipmap-*/ic_launcher.png
-npx cap sync android       # copy apk_dist → Android assets
-./gradlew assembleRelease  # Kotlin → signed APK
-cp → apk/UTBA_YYYYMMDD_HHMM.apk
-```
+For web, `MusicPlaybackProvider` owns the web playback state. For APK, native
+Android owns playback state, so the React provider is not mounted.
 
 ---
 
-## APK-specific concerns
+## Routing
 
-### Cross-origin session cookies
+App routing is hash-based and starts in:
 
-Capacitor WebView origin (`https://localhost`) differs from the API server (`https://utbabuddha.com`). Without the right cookie flags, the session is never stored after login.
-
-Fix in `app/settings.py`:
-
-```python
-SESSION_COOKIE_SAMESITE = "None"
-SESSION_COOKIE_SECURE = True
+```text
+frontend/src/router/appRouter.tsx
 ```
 
-And `app/factory.py` configures CORS with `supports_credentials=True`.
+Music routes live in:
 
-### App icon
+```text
+frontend/src/music/router/routes.tsx
+```
 
-`build_apk.sh` generates `ic_launcher.png` and `ic_launcher_round.png` from `../static/images/logo/logo.png` using `sharp` into all mipmap density folders.
+Current music route split:
 
-The adaptive icon XMLs (`mipmap-anydpi-v26/ic_launcher.xml`) were deleted so Android 8+ uses the PNG files directly instead of the default vector foreground.
+```tsx
+{ path: "music_player/*", element: IS_APK ? <MusicPageApk /> : <MusicPage /> }
+```
 
-### Signing
+Important APK navbar behavior is in:
 
-Keystore lives at `android/app/utba-release.keystore` (gitignored). Credentials are hardcoded in `android/app/build.gradle` under `signingConfigs.release`. Back up the keystore separately — losing it means you cannot update the app on the same package ID.
+```text
+frontend/src/router/AppLayout.tsx
+```
 
-### Background audio permissions
+The music icon is allowed to show before user data is loaded:
 
-`AndroidManifest.xml` declares:
+```tsx
+(!item.auth || user || (IS_APK && item.key === "music"))
+```
+
+This is why the APK can open the music player without waiting for login state.
+
+---
+
+## Native Music Architecture
+
+APK music is not WebView `<audio>` anymore. The current architecture is:
+
+```text
+MusicPageApk.tsx
+  -> nativeMusicClient.ts
+  -> NativeMusicPlugin.java
+  -> MusicService.java
+  -> ExoPlayer + MediaSession + foreground notification
+```
+
+Main files:
+
+| File | Role |
+| --- | --- |
+| `frontend/src/music/music_player/apk/MusicPageApk.tsx` | APK-only React music UI |
+| `frontend/src/music/music_player/apk/nativeMusicClient.ts` | TypeScript wrapper for the `NativeMusic` Capacitor plugin |
+| `frontend/android/app/src/main/java/com/xinya/app/NativeMusicPlugin.java` | Native bridge and APK music state owner |
+| `frontend/android/app/src/main/java/com/xinya/app/NativeMusicRepository.java` | Native HTTP/data mapper for music API payloads |
+| `frontend/android/app/src/main/java/com/xinya/app/MusicService.java` | Foreground playback service, ExoPlayer, MediaSession, Android Auto browser |
+
+React controls the UI. Android controls playback, queue, progress, notification,
+lock-screen controls, media buttons, and Android Auto visibility.
+
+---
+
+## NativeMusicPlugin
+
+`NativeMusicPlugin.java` is the main bridge between React and Android. It owns:
+
+- `albums`
+- `musics`
+- `musicById`
+- `queueIds`
+- `cachedTrackUrls`
+- `storedCurrentMusicId`
+- `repeatMode`
+- `shuffleEnabled`
+- listening summary state
+
+Main plugin methods used by React:
+
+- `bootstrap({ baseUrl, includeListening })`
+- `refreshLibrary({ includeListening })`
+- `getSnapshot()`
+- `setCachedTrackSources({ items })`
+- `playMusic({ musicId, queueIds })`
+- `togglePlayback()`
+- `appendToQueue({ musicId })`
+- `removeFromQueue({ musicId })`
+- `clearQueue()`
+- `playFromQueue({ musicId })`
+- `playRelative({ step })`
+- `toggleShuffle()`
+- `cycleRepeat()`
+- `seekTo({ positionMs })`
+
+It binds to `MusicService`, pushes catalog data to the service, and emits these
+events back to React:
+
+- `trackChanged`
+- `trackEnded`
+- `playStateChanged`
+
+---
+
+## MusicService
+
+`MusicService.java` is a `MediaBrowserServiceCompat` foreground service.
+
+It handles:
+
+- ExoPlayer playlist playback.
+- Android foreground media notification.
+- Lock-screen and Bluetooth media controls.
+- Media button receiver actions.
+- MediaSession metadata, including title, album, duration, and artwork.
+- Android Auto browse tree.
+- Once-per-minute listening metric reporting.
+
+The service is declared in `AndroidManifest.xml`:
 
 ```xml
+<service
+    android:name=".MusicService"
+    android:exported="true"
+    android:foregroundServiceType="mediaPlayback">
+    <intent-filter>
+        <action android:name="android.media.browse.MediaBrowserService" />
+    </intent-filter>
+</service>
+```
+
+Required permissions:
+
+```xml
+<uses-permission android:name="android.permission.INTERNET" />
 <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
 <uses-permission android:name="android.permission.FOREGROUND_SERVICE_MEDIA_PLAYBACK" />
 <uses-permission android:name="android.permission.WAKE_LOCK" />
 ```
 
-These allow the Media Session API (already wired in `MusicPlayerController`) to register a persistent notification with playback controls, reducing the chance of Android killing the audio.
+---
+
+## Android Auto
+
+Android Auto is enabled by:
+
+```xml
+<meta-data
+    android:name="com.google.android.gms.car.application"
+    android:resource="@xml/automotive_app_desc" />
+```
+
+`frontend/android/app/src/main/res/xml/automotive_app_desc.xml` declares:
+
+```xml
+<automotiveApp>
+    <uses name="media" />
+</automotiveApp>
+```
+
+Android Auto does not read the React UI. It reads the media browser tree from
+`MusicService.onGetRoot()` and `MusicService.onLoadChildren()`.
+
+Current browse tree:
+
+```text
+root
+  -> 全部歌曲
+      -> playable tracks
+  -> 专辑
+      -> album folders
+          -> playable tracks
+```
+
+`全部歌曲` uses the same list order as the React music page: tracks are sorted
+by `play_minutes` descending, with the backend catalog order preserved for ties.
+Album folders keep the backend catalog order for their tracks.
+
+The catalog is loaded natively from the backend and cached in:
+
+```text
+music_catalog.json
+```
+
+inside the Android app files directory. The service keeps this catalog for
+Android Auto and refreshes it when needed. This allows Android Auto to show the
+player and library even if the React music page is not currently open.
 
 ---
 
-## Music player — dual-mode split
+## Album Art
 
-This is the most complex APK-specific piece. **Web and APK share the same playback state context but use completely different UIs.**
+Android Auto and media notifications need artwork that Android can read outside
+the WebView. That is handled by:
 
-### Shared layer: `MusicPlaybackContext`
+```text
+frontend/android/app/src/main/java/com/xinya/app/AlbumArtProvider.java
+```
 
-`src/music/react/MusicPlaybackContext.tsx` is the single source of truth for:
+It exposes registered cover URLs as:
 
-- Current track (`currentMusicId`, `currentMusic`)
-- Queue (`queue`, `queueIds`)
-- Play state (`isPlaying`, `hasPlaybackSession`)
-- Shuffle / repeat mode
-- `autoplayKey` — incrementing integer that triggers autoplay after a track change
+```text
+content://com.xinya.app.albumart/art/<hash>
+```
 
-This context sits **above** the router in `App.tsx`, so playback state survives page navigation.
+The provider downloads the remote image with the WebView cookie when available,
+caches it under the Android cache directory, and serves the cached file to the
+system UI or Android Auto.
 
-### Audio management: `MusicPlayerController`
+React-side cover caching is handled by:
 
-`src/music/react/MusicPlayerController.ts` is a DOM controller (not a React component) that:
+```text
+frontend/src/components/CachedMedia.tsx
+frontend/src/js/nativeMediaCache.ts
+frontend/src/music/music_player/ui/shared/MusicCoverImage.tsx
+```
 
-- Creates a `<audio>` element appended to `document.body`
-- Drives it from `sync(options: SyncOptions)` called in `AppLayout`'s `useEffect`
-- Sets up the **Web Media Session API** (Android notification bar controls, lock-screen controls)
-- Persists playback position to `localStorage` per track
+In APK mode, `MusicCoverImage` uses stale-while-revalidate behavior so old
+cached covers can show immediately while the APK refreshes them in the
+background.
 
-`AppLayout.tsx` calls `musicPlayerController.sync({...})` on every relevant state change.
+---
 
-#### APK mode: hidden flag
+## Native Media Cache
 
-`SyncOptions` has a `hidden?: boolean` field. When `IS_APK` is true, `AppLayout` passes `hidden: true`:
+APK media caching has two native plugins.
+
+### NativeMediaCache
+
+Files:
+
+```text
+frontend/src/js/nativeMediaCache.ts
+frontend/android/app/src/main/java/com/xinya/app/NativeMediaCachePlugin.java
+```
+
+Used for remote media assets such as music covers and prewarmed audio files.
+It stores files in the Android app cache directory:
+
+```text
+native-media-cache/
+```
+
+Event images and videos resolved through `smartImageURL()` / `smartMediaAsset()`
+also use this cache. The default media cache limit is 10 GB, and the mobile
+account settings page can persist a 1-50 GB limit. When the cache exceeds the
+limit, native code removes the least-recently-used entries first.
+
+`NativeApkMusic.syncCachedTrackSources()` prewarms selected music download URLs
+and passes local `file://` URIs back to `NativeMusicPlugin`. If a track is cached,
+`MusicService` can play the local file instead of streaming it again.
+
+### NativeResponseCache
+
+Files:
+
+```text
+frontend/src/js/apkFetchCache.ts
+frontend/src/js/nativeResponseCache.ts
+frontend/android/app/src/main/java/com/xinya/app/NativeResponseCachePlugin.java
+```
+
+`installApkFetchCache()` wraps global `fetch` in APK mode. It:
+
+- rewrites local `/api`, `/media`, and `/media_file` URLs to `API_BASE`;
+- caches safe `GET /api/*` text/json responses up to 4 MB;
+- skips mutation-like routes;
+- returns a cached response when the network request fails.
+
+This is an offline fallback, not a replacement for server data consistency.
+
+---
+
+## Backend Endpoints Used By Native Music
+
+`NativeMusicRepository.java` calls backend endpoints directly:
+
+- `GET /api/music/albums`
+- `GET /api/music/list?per_page=200&page=N`
+- `GET /api/music/download/<music_id>`
+- `GET /api/music/queue`
+- `POST /api/music/queue`
+- `GET /api/music/last_played`
+- `POST /api/music/add_one_minute/<music_id>`
+- `GET /api/music/minute_logs?per_page=240`
+
+APK Listening Activity uses `apiFetch()` from the React APK page to load
+`minute_logs` independently of the native catalog bootstrap, then groups raw
+minute logs into sessions in the shared chart utilities. Both React and native
+parsers accept backend `isoformat()` timestamps with fractional seconds.
+
+Auth behavior:
+
+- Albums, list, download, and cover can work without login.
+- Queue, last-played, `add_one_minute`, and listening logs require login, but not
+  `music_edit`.
+- If the user is not logged in, playback still works, but queue restore and user
+  listening history / minute tracking are unavailable.
+
+Cookies come from Android WebView `CookieManager`, so cross-origin session cookie
+settings still matter.
+
+---
+
+## Build Pipeline
+
+Mobile config:
+
+```text
+frontend/capacitor.config.ts
+frontend/vite.config.js
+frontend/android/app/build.gradle
+frontend/ios/App/App.xcodeproj
+frontend/build_apk.sh
+```
+
+Capacitor config:
 
 ```ts
-musicPlayerController.sync({
-  ...allPlaybackState,
-  hidden: IS_APK,   // hides floating UI; audio + Media Session still work
-});
+{
+  appId: "com.xinya.app",
+  appName: "UTBA",
+  webDir: "apk_dist",
+  server: {
+    cleartext: false,
+    androidScheme: "https",
+  },
+}
 ```
 
-Inside `render()`, when `hidden` is true, `this.root.style.display = "none"` and returns early — the floating draggable panel never appears. The `<audio>` element and Media Session continue working normally.
+Production build:
 
-#### Public control methods (for APK UI)
-
-Since the audio element is private to the controller, these methods were added for `MusicPageApk` to call:
-
-```ts
-musicPlayerController.togglePlay()        // play ↔ pause
-musicPlayerController.seekTo(time)        // set audio.currentTime
-musicPlayerController.getProgress()       // returns audio.currentTime
-musicPlayerController.getDuration()       // returns audio.duration
+```bash
+cd /home/yukang/flaskapp/xinya/frontend
+VERSION_CODE=12 VERSION_NAME=1.2.3 ./build_apk.sh
 ```
 
-### Web music page: `MusicPage`
+The script does:
 
-`src/music/react/MusicPage.tsx` — the full CMS workspace with album management, track upload/edit, and search. Only shown in web mode. The floating draggable player appears globally (not inside this page).
+1. `npm run build:apk`
+2. Generates launcher icons and splash logo from the site logo.
+3. `npx cap sync android`
+4. `./gradlew assembleRelease bundleRelease`
+5. Copies outputs to:
 
-### APK music page: `MusicPageApk`
-
-`src/music/react/MusicPageApk.tsx` — read-only music browser + integrated player. Shown instead of `MusicPage` when `IS_APK` is true.
-
-**Screen flow:**
-
-```
-albums screen  →  (tap album)  →  tracks screen
-                                        ↓ (tap track)
-                             mini player bar (bottom, always visible)
-                                        ↓ (tap bar)
-                             full-screen player overlay
+```text
+frontend/apk/UTBA_BETA_YYYYMMDD_HHMM.apk
+frontend/aab/UTBA_BETA_YYYYMMDD_HHMM.aab
 ```
 
-**Mini player bar** — always visible at the bottom when `hasPlaybackSession` is true. Shows cover, title, Prev/Play/Next buttons. Controlled via `musicPlayerController.togglePlay()` and `playRelative()` from the context.
+For release versioning:
 
-**Full-screen player** — covers the whole screen. Shows large cover, draggable progress bar (`<input type="range">`), transport controls, shuffle/repeat toggles. Progress is polled every 500 ms via `setInterval` calling `musicPlayerController.getProgress()` while playing.
+```bash
+VERSION_CODE=12 VERSION_NAME=1.2.3 ./build_apk.sh
+```
 
-**Route selection in `appRouter.tsx`:**
+`build_apk.sh` requires both `VERSION_CODE` and `VERSION_NAME` for release
+builds. This avoids accidentally publishing another APK with the default
+`versionCode=1` / `versionName=1.0`.
 
-```tsx
-{ path: "music", element: IS_APK ? <MusicPageApk /> : <MusicPage /> }
+Release signing is not hardcoded in `android/app/build.gradle`. Configure it via
+the ignored local file:
+
+```text
+frontend/android/signing.properties
+```
+
+or via environment variables:
+
+```text
+XINYA_RELEASE_STORE_FILE
+XINYA_RELEASE_STORE_PASSWORD
+XINYA_RELEASE_KEY_ALIAS
+XINYA_RELEASE_KEY_PASSWORD
+```
+
+Use `frontend/android/signing.properties.example` as the template for new
+environments.
+
+---
+
+## Emulator Build
+
+For local Android emulator testing against the local Flask server:
+
+```bash
+cd /home/yukang/flaskapp/xinya/frontend
+npm run apk:prepare:emulator
+```
+
+This uses:
+
+```text
+VITE_API_BASE=http://10.0.2.2:5102
+CAP_ANDROID_SCHEME=http
+CAP_CLEARTEXT=true
+```
+
+Do not use this configuration for production builds.
+
+---
+
+## iOS Project
+
+iOS is generated under:
+
+```text
+frontend/ios/
+```
+
+The project uses Swift Package Manager:
+
+```text
+frontend/ios/App/CapApp-SPM/Package.swift
+```
+
+Prepare and sync the iOS bundle:
+
+```bash
+cd /home/yukang/flaskapp/xinya/frontend
+npm run ios:prepare
+```
+
+This runs:
+
+1. `npm run build:mobile`
+2. `npm run ios:assets`
+3. `npm run cap:sync:ios`
+
+`ios:assets` generates the iOS app icon and splash assets from
+`static/images/logo/log222o.png`.
+
+The iOS bundle id and display name are currently:
+
+```text
+PRODUCT_BUNDLE_IDENTIFIER = com.xinya.app
+CFBundleDisplayName = UTBA
+```
+
+Background audio has been enabled in `ios/App/App/Info.plist`:
+
+```xml
+<key>UIBackgroundModes</key>
+<array>
+    <string>audio</string>
+</array>
+```
+
+Building and archiving iOS still requires macOS, Xcode, an Apple Developer team,
+and provisioning profiles. Open the project on macOS with:
+
+```bash
+npm run cap:open:ios
 ```
 
 ---
 
-## Login page
+## File Map
 
-`src/app/LoginPage.tsx` — full-page login that works in both APK and web. Replaces the old modal (`LoginModal` in `UserState.tsx` has been removed).
-
-`openLogin(from?)` in `UserStateProvider` now navigates via `window.location.hash = '/login?from=...'` rather than opening an overlay. This works from outside the router context (e.g., from `window.__xinyaOpenLogin`).
-
-After successful login, `LoginPage` navigates back to the `from` parameter.
-
----
-
-## App download page
-
-`app/app_release/routes.py` serves:
-
-- `GET /api/app/releases` — lists all `.apk` files in `frontend/apk/`, sorted by mtime descending, with filename, size, and download URL
-- `GET /api/app/download/<filename>` — streams the APK with path traversal protection
-
-`src/profile/react/ProfilePage.tsx` shows the download list in the **Account** section under `AppDownloadCard`. Releases are fetched once on first open (guarded by a `useRef` flag to prevent re-fetch on error).
-
----
-
-## File map — APK-related files
-
-```
+```text
 frontend/
-├── .env.apk                          VITE_API_BASE for APK build
-├── capacitor.config.ts               Capacitor config (webDir, androidScheme)
-├── build_apk.sh                      One-command build script
-├── Update_apk.md                     Step-by-step update guide
-├── apk/                              Built APK output (gitignored)
-├── apk_dist/                         Vite APK build output (gitignored)
+├── .env.apk
+├── capacitor.config.ts
+├── vite.config.js
+├── build_apk.sh
+├── Update_apk.md
+├── Apk.md
+├── apk/                         built APK output, ignored
+├── aab/                         built AAB output, ignored
+├── apk_dist/                    Vite APK build output, ignored
+├── main.tsx                     React entry, installs APK fetch cache
+├── scripts/
+│   ├── generate_ios_assets.mjs  iOS app icon and splash generation
+│   └── with_node22.sh           Node 22 wrapper for Capacitor commands
 ├── android/
-│   ├── app/build.gradle              Signing config (utba-release.keystore)
-│   ├── app/src/main/AndroidManifest.xml  Background audio permissions
-│   └── app/src/main/res/mipmap-*/   Logo icons (generated by build_apk.sh)
+│   └── app/
+│       ├── build.gradle
+│       ├── signing.properties.example
+│       └── src/main/
+│           ├── AndroidManifest.xml
+│           ├── java/com/xinya/app/
+│           │   ├── MainActivity.java
+│           │   ├── NativeMusicPlugin.java
+│           │   ├── NativeMusicRepository.java
+│           │   ├── MusicService.java
+│           │   ├── AlbumArtProvider.java
+│           │   ├── NativeMediaCachePlugin.java
+│           │   └── NativeResponseCachePlugin.java
+│           └── res/xml/
+│               ├── automotive_app_desc.xml
+│               └── file_paths.xml
+├── ios/
+│   ├── .gitignore
+│   └── App/
+│       ├── App.xcodeproj
+│       ├── App/
+│       │   ├── AppDelegate.swift
+│       │   ├── Info.plist
+│       │   └── Assets.xcassets/
+│       └── CapApp-SPM/
+│           └── Package.swift
 └── src/
-    ├── js/apiBase.ts                 API_BASE + IS_APK constants
-    ├── js/apiFetch.ts                fetch wrapper that prepends API_BASE
-    ├── app/LoginPage.tsx             Full-page login (APK + web)
-    ├── app/UserState.tsx             Auth context; openLogin() uses hash nav
-    ├── router/appRouter.tsx          Switches MusicPage ↔ MusicPageApk
-    ├── router/AppLayout.tsx          Passes hidden: IS_APK to controller
-    └── music/react/
-        ├── MusicPageApk.tsx          APK-only full-page player
-        ├── MusicPlayerController.ts  Audio engine; hidden mode + public API
-        ├── MusicPlaybackContext.tsx  Shared playback state (above router)
-        └── MusicPage.tsx             Web-only CMS workspace
+    ├── app/App.tsx
+    ├── js/apiBase.ts
+    ├── js/apiFetch.ts
+    ├── js/apkFetchCache.ts
+    ├── js/nativeMediaCache.ts
+    ├── js/nativeResponseCache.ts
+    ├── mobile/native/
+    │   ├── capacitor.ts
+    │   └── musicPlugin.ts
+    ├── router/AppLayout.tsx
+    ├── router/appRouter.tsx
+    └── music/
+        ├── router/routes.tsx
+        └── music_player/
+            ├── apk/
+            │   ├── MusicPageApk.tsx
+            │   ├── nativeMusicClient.ts
+            │   └── types.ts
+            ├── logic/
+            └── ui/
 ```
+
+---
+
+## Maintenance Notes
+
+- `frontend/.gitignore` uses root-scoped `/apk/`, `/aab/`, and `/apk_dist/`
+  patterns so APK source folders are not accidentally ignored.
+- `frontend/.env.apk` should not contain secrets. Keep production secrets outside
+  committed frontend env files.
+- Release signing secrets must stay in `frontend/android/signing.properties`,
+  Gradle properties, or environment variables. Do not put signing passwords back
+  into `frontend/android/app/build.gradle`.
+- `MusicPageApk.tsx` should remain UI/controller code. Queue ownership, playback,
+  Android Auto catalog, and media session behavior belong in native Android code.
+- Android Auto reads `MusicService`, not React. If Android Auto does not show the
+  app, inspect `AndroidManifest.xml`, `automotive_app_desc.xml`, and
+  `MusicService.onLoadChildren()` first.
+- If covers do not show in Android Auto, inspect `AlbumArtProvider` and the cover
+  URLs stored in the native catalog.
+- If playback works in the APK but not in Android Auto, check that the native
+  catalog has tracks and that media IDs parse correctly in `playFromBrowserMediaId`.

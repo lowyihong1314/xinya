@@ -160,8 +160,11 @@ public class AlbumArtProvider extends ContentProvider {
             conn.setConnectTimeout(CONNECT_TIMEOUT_MS);
             conn.setReadTimeout(READ_TIMEOUT_MS);
             conn.setRequestProperty("Accept", "image/*");
-            String cookie = getCookieOnMainThread(remoteUrl);
-            if (cookie != null && !cookie.isEmpty()) {
+            String authorizationHeader = NativeAuthSessionStore.getAuthorizationHeader(context);
+            String cookie = authorizationHeader == null ? getCookieOnMainThread(remoteUrl) : null;
+            if (authorizationHeader != null && !authorizationHeader.isEmpty()) {
+                conn.setRequestProperty("Authorization", authorizationHeader);
+            } else if (cookie != null && !cookie.isEmpty()) {
                 conn.setRequestProperty("Cookie", cookie);
             }
             int status = conn.getResponseCode();

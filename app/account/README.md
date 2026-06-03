@@ -15,9 +15,17 @@ Handles reimbursement claims and payment voucher download.
 
 - `POST /api/account/submit_new_claim`
 - `GET /api/account/get_all_claim`
+- `POST /api/account/claim/read_bill`
 - `POST /api/account/claim_decision/<request_id>`
 - `DELETE /api/account/delete_claim/<request_id>`
 - `GET /api/account/print_payment_voucher/download_payment_voucher/<request_id>`
+
+## Read Bill API
+
+- `/api/account/claim/read_bill` proxies receipt images/PDFs to `https://nginx.yihong1031.com/read_bill_api`.
+- Supported upstream model values are `auto`, `byteplus`, and `local`; this module defaults to `auto` unless `READ_BILL_DEFAULT_MODEL` is set.
+- Upstream duplicate bypass uses `debug=true`. Legacy local `bypass=true` requests are accepted for compatibility but are converted to `debug=true` and not forwarded as `bypass`.
+- PDF uploads first try text extraction through `/parse-text`; if no useful text is found, the first page is rendered to JPEG and sent to `/upload`.
 
 ## Notes
 

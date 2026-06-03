@@ -117,6 +117,7 @@ async function convertHeicUrlToObjectUrl(url: string, cacheTag: string) {
 
   const localUrl = await resolveNativeCachedUrl(url, {
     cacheKey: cacheTag,
+    staleWhileRevalidate: true,
   });
   const response = await fetch(localUrl);
   if (!response.ok) {
@@ -153,7 +154,7 @@ async function resolveMediaUrl(id: number | string, type: string) {
     if (isHeicPath(url)) {
       return convertHeicUrlToObjectUrl(url, `${cacheKey}:heic`);
     }
-    return resolveNativeCachedUrl(url, { cacheKey });
+    return resolveNativeCachedUrl(url, { cacheKey, staleWhileRevalidate: true });
   }
 
   return FALLBACK_IMAGE_URL;
@@ -179,7 +180,7 @@ async function resolveMediaAsset(
     if ((info.kind === "video" || isBaseVideoType(normalizedType) || isVideoPath(url)) && /\.mp4$/i.test(url)) {
       return {
         kind: "video",
-        url: await resolveNativeCachedUrl(url, { cacheKey: `${cacheKey}:video` }),
+        url: await resolveNativeCachedUrl(url, { cacheKey: `${cacheKey}:video`, staleWhileRevalidate: true }),
       };
     }
 
@@ -192,7 +193,7 @@ async function resolveMediaAsset(
       }
       return {
         kind: "image",
-        url: await resolveNativeCachedUrl(url, { cacheKey: `${cacheKey}:image` }),
+        url: await resolveNativeCachedUrl(url, { cacheKey: `${cacheKey}:image`, staleWhileRevalidate: true }),
       };
     }
   }

@@ -273,10 +273,19 @@ public final class NativeMusicRepository {
     }
 
     public static LibraryPayload loadLibrary(String baseUrl, String cookie, boolean includeListening) throws Exception {
+        return loadLibrary(baseUrl, cookie, null, includeListening);
+    }
+
+    public static LibraryPayload loadLibrary(
+        String baseUrl,
+        String cookie,
+        String authorizationHeader,
+        boolean includeListening
+    ) throws Exception {
         String normalizedBaseUrl = normalizeBaseUrl(baseUrl);
         LibraryPayload payload = new LibraryPayload();
 
-        JSONArray albumArray = readArray(normalizedBaseUrl + "/api/music/albums", cookie);
+        JSONArray albumArray = readArray(normalizedBaseUrl + "/api/music/albums", cookie, authorizationHeader);
         Map<Integer, AlbumRecord> albumById = new HashMap<>();
         for (int i = 0; i < albumArray.length(); i++) {
             AlbumRecord album = AlbumRecord.fromJson(normalizedBaseUrl, albumArray.getJSONObject(i));
@@ -286,14 +295,16 @@ public final class NativeMusicRepository {
 
         JSONObject firstPage = readObject(
             normalizedBaseUrl + "/api/music/list?per_page=" + MUSIC_PAGE_SIZE + "&page=1",
-            cookie
+            cookie,
+            authorizationHeader
         );
         appendMusicPage(payload.musics, normalizedBaseUrl, firstPage.optJSONArray("musics"), albumById);
         int totalPages = Math.max(1, firstPage.optInt("total_pages", 1));
         for (int page = 2; page <= totalPages; page += 1) {
             JSONObject nextPage = readObject(
                 normalizedBaseUrl + "/api/music/list?per_page=" + MUSIC_PAGE_SIZE + "&page=" + page,
-                cookie
+                cookie,
+                authorizationHeader
             );
             appendMusicPage(payload.musics, normalizedBaseUrl, nextPage.optJSONArray("musics"), albumById);
         }
@@ -302,7 +313,8 @@ public final class NativeMusicRepository {
             try {
                 JSONObject listeningPayload = readObject(
                     normalizedBaseUrl + "/api/music/minute_logs?per_page=240",
-                    cookie
+                    cookie,
+                    authorizationHeader
                 );
                 payload.listeningTimezone = nullableString(
                     listeningPayload.optString("timezone", DEFAULT_TIMEZONE)
@@ -320,7 +332,27 @@ public final class NativeMusicRepository {
         return payload;
     }
 
+    public static List<MusicRecord> sortAllSongsByListOrder(List<MusicRecord> musics) {
+        List<MusicRecord> sortedMusics = new ArrayList<>(
+            musics != null ? musics : Collections.<MusicRecord>emptyList()
+        );
+        Collections.sort(
+            sortedMusics,
+            (left, right) -> Double.compare(right.playMinutes, left.playMinutes)
+        );
+        return sortedMusics;
+    }
+
     public static QueuePayload loadQueueState(String baseUrl, String cookie, List<MusicRecord> musics) {
+        return loadQueueState(baseUrl, cookie, null, musics);
+    }
+
+    public static QueuePayload loadQueueState(
+        String baseUrl,
+        String cookie,
+        String authorizationHeader,
+        List<MusicRecord> musics
+    ) {
         QueuePayload payload = new QueuePayload();
         Set<Integer> existingIds = new HashSet<>();
         for (MusicRecord music : musics) {
@@ -328,7 +360,11 @@ public final class NativeMusicRepository {
         }
 
         try {
-            JSONObject queueResponse = readObject(normalizeBaseUrl(baseUrl) + "/api/music/queue", cookie);
+            JSONObject queueResponse = readObject(
+                normalizeBaseUrl(baseUrl) + "/api/music/queue",
+                cookie,
+                authorizationHeader
+            );
             JSONObject queue = queueResponse.optJSONObject("queue");
             if (queue != null) {
                 JSONArray queueIds = queue.optJSONArray("queue_ids");
@@ -352,7 +388,11 @@ public final class NativeMusicRepository {
         }
 
         try {
-            JSONObject lastPlayedResponse = readObject(normalizeBaseUrl(baseUrl) + "/api/music/last_played", cookie);
+            JSONObject lastPlayedResponse = readObject(
+                normalizeBaseUrl(baseUrl) + "/api/music/last_played",
+                cookie,
+                authorizationHeader
+            );
             JSONObject lastPlayed = lastPlayedResponse.optJSONObject("last_played");
             Integer musicId = lastPlayed != null ? optNullableInt(lastPlayed, "music_id") : null;
             if (musicId != null && existingIds.contains(musicId)) {
@@ -376,6 +416,16 @@ public final class NativeMusicRepository {
     }
 
     public static void saveQueueState(String baseUrl, String cookie, List<Integer> queueIds, Integer currentMusicId) throws Exception {
+        saveQueueState(baseUrl, cookie, null, queueIds, currentMusicId);
+    }
+
+    public static void saveQueueState(
+        String baseUrl,
+        String cookie,
+        String authorizationHeader,
+        List<Integer> queueIds,
+        Integer currentMusicId
+    ) throws Exception {
         JSONObject body = new JSONObject();
         JSONArray ids = new JSONArray();
         for (Integer queueId : queueIds) {
@@ -387,11 +437,21 @@ public final class NativeMusicRepository {
         } else {
             body.put("current_music_id", JSONObject.NULL);
         }
-        sendJson(normalizeBaseUrl(baseUrl) + "/api/music/queue", cookie, "POST", body);
+        sendJson(normalizeBaseUrl(baseUrl) + "/api/music/queue", cookie, authorizationHeader, "POST", body);
     }
 
     public static void addOneMinute(String baseUrl, String cookie, int musicId) throws Exception {
-        sendJson(normalizeBaseUrl(baseUrl) + "/api/music/add_one_minute/" + musicId, cookie, "POST", null);
+        addOneMinute(baseUrl, cookie, null, musicId);
+    }
+
+    public static void addOneMinute(String baseUrl, String cookie, String authorizationHeader, int musicId) throws Exception {
+        sendJson(
+            normalizeBaseUrl(baseUrl) + "/api/music/add_one_minute/" + musicId,
+            cookie,
+            authorizationHeader,
+            "POST",
+            null
+        );
     }
 
     private static void appendMusicPage(
@@ -497,7 +557,8 @@ public final class NativeMusicRepository {
             String[] dateTime = value.split("T");
             if (dateTime.length != 2) return null;
             String[] date = dateTime[0].split("-");
-            String[] time = dateTime[1].split(":");
+            String timePart = stripIsoTimeZone(dateTime[1]);
+            String[] time = timePart.split(":");
             if (date.length != 3 || time.length < 2) return null;
             ParsedNaiveDate parsed = new ParsedNaiveDate();
             parsed.year = Integer.parseInt(date[0]);
@@ -505,11 +566,27 @@ public final class NativeMusicRepository {
             parsed.day = Integer.parseInt(date[2]);
             parsed.hour = Integer.parseInt(time[0]);
             parsed.minute = Integer.parseInt(time[1]);
-            parsed.second = time.length > 2 ? Integer.parseInt(time[2]) : 0;
+            parsed.second = time.length > 2 ? Integer.parseInt(stripFractionalSecond(time[2])) : 0;
             return parsed;
         } catch (Exception e) {
             return null;
         }
+    }
+
+    private static String stripIsoTimeZone(String value) {
+        int zIndex = value.indexOf('Z');
+        int plusIndex = value.indexOf('+');
+        int minusIndex = value.indexOf('-', 1);
+        int cutoff = -1;
+        if (zIndex >= 0) cutoff = zIndex;
+        if (plusIndex >= 0) cutoff = cutoff < 0 ? plusIndex : Math.min(cutoff, plusIndex);
+        if (minusIndex >= 0) cutoff = cutoff < 0 ? minusIndex : Math.min(cutoff, minusIndex);
+        return cutoff >= 0 ? value.substring(0, cutoff) : value;
+    }
+
+    private static String stripFractionalSecond(String value) {
+        int dotIndex = value.indexOf('.');
+        return dotIndex >= 0 ? value.substring(0, dotIndex) : value;
     }
 
     private static int sumSessionMinutes(List<ListeningSessionRecord> sessions) {
@@ -541,23 +618,35 @@ public final class NativeMusicRepository {
         int second;
     }
 
-    private static JSONArray readArray(String url, String cookie) throws Exception {
-        return new JSONArray(readText(url, cookie, "GET", null));
+    private static JSONArray readArray(String url, String cookie, String authorizationHeader) throws Exception {
+        return new JSONArray(readText(url, cookie, authorizationHeader, "GET", null));
     }
 
-    private static JSONObject readObject(String url, String cookie) throws Exception {
-        return new JSONObject(readText(url, cookie, "GET", null));
+    private static JSONObject readObject(String url, String cookie, String authorizationHeader) throws Exception {
+        return new JSONObject(readText(url, cookie, authorizationHeader, "GET", null));
     }
 
-    private static JSONObject sendJson(String url, String cookie, String method, JSONObject body) throws Exception {
-        String text = readText(url, cookie, method, body != null ? body.toString() : "");
+    private static JSONObject sendJson(
+        String url,
+        String cookie,
+        String authorizationHeader,
+        String method,
+        JSONObject body
+    ) throws Exception {
+        String text = readText(url, cookie, authorizationHeader, method, body != null ? body.toString() : "");
         if (text == null || text.trim().isEmpty()) {
             return new JSONObject();
         }
         return new JSONObject(text);
     }
 
-    private static String readText(String urlString, String cookie, String method, String body) throws Exception {
+    private static String readText(
+        String urlString,
+        String cookie,
+        String authorizationHeader,
+        String method,
+        String body
+    ) throws Exception {
         HttpURLConnection connection = null;
         InputStream input = null;
         try {
@@ -567,7 +656,9 @@ public final class NativeMusicRepository {
             connection.setConnectTimeout(8_000);
             connection.setReadTimeout(20_000);
             connection.setRequestProperty("Accept", "application/json");
-            if (cookie != null && !cookie.isEmpty()) {
+            if (authorizationHeader != null && !authorizationHeader.isEmpty()) {
+                connection.setRequestProperty("Authorization", authorizationHeader);
+            } else if (cookie != null && !cookie.isEmpty()) {
                 connection.setRequestProperty("Cookie", cookie);
             }
             if (body != null && ("POST".equals(method) || "PUT".equals(method))) {

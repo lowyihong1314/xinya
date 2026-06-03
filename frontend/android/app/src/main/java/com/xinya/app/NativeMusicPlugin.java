@@ -562,9 +562,10 @@ public class NativeMusicPlugin extends Plugin {
             throw new IllegalStateException("baseUrl is required before loading native music data");
         }
 
-        String cookie = getCookie(baseUrlSnapshot + "/api/music/albums");
+        String authorizationHeader = NativeAuthSessionStore.getAuthorizationHeader(getContext());
+        String cookie = authorizationHeader == null ? getCookie(baseUrlSnapshot + "/api/music/albums") : null;
         NativeMusicRepository.LibraryPayload payload =
-            NativeMusicRepository.loadLibrary(baseUrlSnapshot, cookie, includeListening);
+            NativeMusicRepository.loadLibrary(baseUrlSnapshot, cookie, authorizationHeader, includeListening);
 
         synchronized (stateLock) {
             albums.clear();
@@ -583,7 +584,7 @@ public class NativeMusicPlugin extends Plugin {
 
             if (restoreQueue) {
                 NativeMusicRepository.QueuePayload queuePayload =
-                    NativeMusicRepository.loadQueueState(baseUrlSnapshot, cookie, payload.musics);
+                    NativeMusicRepository.loadQueueState(baseUrlSnapshot, cookie, authorizationHeader, payload.musics);
                 queueIds.clear();
                 queueIds.addAll(normalizeQueueIds(queuePayload.queueIds));
                 storedCurrentMusicId =
@@ -839,8 +840,15 @@ public class NativeMusicPlugin extends Plugin {
         }
         backgroundExecutor.execute(() -> {
             try {
-                String cookie = getCookie(baseUrlSnapshot + "/api/music/queue");
-                NativeMusicRepository.saveQueueState(baseUrlSnapshot, cookie, queueIdsSnapshot, currentMusicIdSnapshot);
+                String authorizationHeader = NativeAuthSessionStore.getAuthorizationHeader(getContext());
+                String cookie = authorizationHeader == null ? getCookie(baseUrlSnapshot + "/api/music/queue") : null;
+                NativeMusicRepository.saveQueueState(
+                    baseUrlSnapshot,
+                    cookie,
+                    authorizationHeader,
+                    queueIdsSnapshot,
+                    currentMusicIdSnapshot
+                );
             } catch (Exception e) {
                 Log.w(TAG, "saveQueueState failed", e);
             }

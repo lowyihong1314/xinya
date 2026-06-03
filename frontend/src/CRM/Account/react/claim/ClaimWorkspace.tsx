@@ -117,14 +117,14 @@ function normalizeReceiptDate(value: unknown) {
 }
 
 function buildPurposeFromReadBill(data: ReadBillData) {
-  const merchantName = stringValue(data.merchantName);
-  const receiptNumber = stringValue(data.receiptNumber);
-  const expenseCategory = stringValue(data.expenseCategory);
+  const merchantName = stringValue(data.merchantName || data.merchant_name);
+  const receiptNumber = stringValue(data.receiptNumber || data.receipt_number);
+  const expenseCategory = stringValue(data.expenseCategory || data.expense_category);
   const description = stringValue(data.description);
   const itemSummary = (data.receiptItems || data.receipt_items || [])
     .map((item) => {
       const itemDescription = stringValue(item.description);
-      const lineTotal = normalizeMoneyValue(item.lineTotal);
+      const lineTotal = normalizeMoneyValue(item.lineTotal || item.line_total);
       return [itemDescription, lineTotal ? `RM ${lineTotal}` : ""].filter(Boolean).join(" ");
     })
     .filter(Boolean)
@@ -170,11 +170,11 @@ function normalizeReceiptDateTime(value: unknown) {
 function buildReceiptItemsText(data: ReadBillData) {
   return (data.receiptItems || data.receipt_items || [])
     .map((item, index) => {
-      const itemNumber = stringValue(item.itemNumber) || String(index + 1);
+      const itemNumber = stringValue(item.itemNumber || item.item_number) || String(index + 1);
       const description = stringValue(item.description);
       const quantity = stringValue(item.quantity);
-      const category = stringValue(item.expenseCategory);
-      const lineTotal = normalizeMoneyValue(item.lineTotal);
+      const category = stringValue(item.expenseCategory || item.expense_category);
+      const lineTotal = normalizeMoneyValue(item.lineTotal || item.line_total);
       return [
         `${itemNumber}.`,
         description,

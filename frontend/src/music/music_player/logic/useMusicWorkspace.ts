@@ -80,7 +80,7 @@ export function useMusicWorkspace({
   routeState: MusicPlayerRouteState;
   routeActions: MusicWorkspaceRouteActions;
 }) {
-  const { user, isMobile } = useUserState();
+  const { user, isMobile, isAuthenticated } = useUserState();
   const {
     currentMusicId,
     setLibraryMusics: setPlaybackLibraryMusics,
@@ -90,7 +90,7 @@ export function useMusicWorkspace({
     appendToQueue,
   } = useMusicPlayback();
   const canManage = hasUserPermission(user, "music_edit");
-  const canViewListening = canManage;
+  const canViewListening = isAuthenticated;
 
   const coverInputRef = useRef<HTMLInputElement | null>(null);
   const replaceInputRef = useRef<HTMLInputElement | null>(null);

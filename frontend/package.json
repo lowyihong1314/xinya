@@ -3,16 +3,27 @@
   "private": true,
   "version": "0.0.0",
   "type": "module",
+  "engines": {
+    "node": ">=22.0.0"
+  },
   "scripts": {
     "dev": "vite",
     "build": "vite build",
+    "build:mobile": "vite build --mode apk",
     "build:apk": "vite build --mode apk",
     "build:apk:emulator": "VITE_API_BASE=http://10.0.2.2:5102 vite build --mode apk",
     "preview": "vite preview",
-    "cap:sync": "npx cap sync android",
-    "cap:sync:emulator": "CAP_ANDROID_SCHEME=http CAP_CLEARTEXT=true npx cap sync android",
+    "cap:sync": "bash scripts/with_node22.sh npx cap sync android",
+    "cap:sync:android": "bash scripts/with_node22.sh npx cap sync android",
+    "cap:sync:ios": "bash scripts/with_node22.sh npx cap sync ios",
+    "cap:sync:emulator": "CAP_ANDROID_SCHEME=http CAP_CLEARTEXT=true bash scripts/with_node22.sh npx cap sync android",
     "apk:prepare:emulator": "npm run build:apk:emulator && npm run cap:sync:emulator",
-    "cap:open": "npx cap open android"
+    "ios:assets": "node scripts/generate_ios_assets.mjs",
+    "ios:prepare": "npm run build:mobile && npm run ios:assets && npm run cap:sync:ios",
+    "mobile:verify": "bash scripts/verify_mobile_build.sh",
+    "cap:open": "bash scripts/with_node22.sh npx cap open android",
+    "cap:open:android": "bash scripts/with_node22.sh npx cap open android",
+    "cap:open:ios": "bash scripts/with_node22.sh npx cap open ios"
   },
   "devDependencies": {
     "@vitejs/plugin-react": "^6.0.1",
@@ -21,8 +32,9 @@
   },
   "dependencies": {
     "@capacitor/android": "^8.3.0",
-    "@capacitor/cli": "^7.6.1",
+    "@capacitor/cli": "^8.3.0",
     "@capacitor/core": "^8.3.0",
+    "@capacitor/ios": "^8.3.0",
     "@fortawesome/fontawesome-free": "^7.1.0",
     "@types/react": "^19.2.14",
     "@types/react-dom": "^19.2.3",
