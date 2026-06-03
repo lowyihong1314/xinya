@@ -239,16 +239,6 @@ public class NativeCameraCaptureActivity extends AppCompatActivity {
         recordingParams.setMargins(0, dp(54), 0, 0);
         topBar.addView(recordingBadge, recordingParams);
 
-        zoomText = new TextView(this);
-        zoomText.setTextColor(Color.WHITE);
-        zoomText.setTextSize(13);
-        zoomText.setTypeface(Typeface.DEFAULT_BOLD);
-        zoomText.setGravity(Gravity.CENTER);
-        zoomText.setBackground(pillDrawable(Color.argb(74, 0, 0, 0), Color.argb(50, 255, 255, 255), 1));
-        FrameLayout.LayoutParams zoomTextParams = new FrameLayout.LayoutParams(dp(58), dp(34), Gravity.RIGHT | Gravity.BOTTOM);
-        zoomTextParams.setMargins(0, 0, dp(20), dp(168));
-        root.addView(zoomText, zoomTextParams);
-
         zoomStrip = new LinearLayout(this);
         zoomStrip.setOrientation(LinearLayout.HORIZONTAL);
         zoomStrip.setGravity(Gravity.CENTER);
@@ -509,7 +499,9 @@ public class NativeCameraCaptureActivity extends AppCompatActivity {
         }
         currentZoomRatio = zoomState.getZoomRatio();
         maxZoomRatio = Math.max(1f, zoomState.getMaxZoomRatio());
-        zoomText.setText(formatZoom(currentZoomRatio));
+        if (zoomText != null) {
+            zoomText.setText(formatZoom(currentZoomRatio));
+        }
         buildZoomButtons();
     }
 
