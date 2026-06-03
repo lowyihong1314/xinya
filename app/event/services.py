@@ -4,8 +4,9 @@ import secrets
 import unicodedata
 from datetime import date, datetime, timedelta
 
-from flask import jsonify, request
+from flask import current_app, jsonify, request
 from flask_login import current_user
+from itsdangerous import BadSignature, SignatureExpired, URLSafeTimedSerializer
 from sqlalchemy import and_, asc, or_
 from app.media.paths import DATA_PATH, to_short_data_path
 from app.paths import DATA_ROOT
@@ -25,6 +26,9 @@ BROCHURE_EXTENSIONS = {
 }
 BROCHURE_STORAGE_ROOT = DATA_ROOT / "NAS" / "UTBA" / "event_brochure"
 EVENT_FILE_STORAGE_ROOT = DATA_ROOT / "NAS" / "UTBA" / "event_file"
+CHECK_IN_QR_SALT = "xinya-event-check-in-qr-v1"
+CHECK_IN_QR_SECONDS = 5 * 60
+CHECK_IN_QR_PREFIX = "xinya-checkin:"
 
 
 def get_json_payload():
@@ -80,6 +84,45 @@ def parse_date(value):
 
     dt = parse_datetime(parsed)
     return dt.date() if dt else None
+
+
+def _check_in_qr_serializer():
+    return URLSafeTimedSerializer(current_app.config["SECRET_KEY"], salt=CHECK_IN_QR_SALT)
+
+
+def _current_event_check_in_date(event):
+    today = date.today()
+    start_date = event.datetime.date() if event.datetime else today
+    end_date = event.end_datetime.date() if event.end_datetime else start_date
+    if today < start_date:
+        return start_date
+    if today > end_date:
+        return end_date
+    return today
+
+
+def _upsert_event_check_in(event, user, check_in_date, check_in_time, valid_user_id):
+    record = EventCheckIn.query.filter_by(
+        event_id=event.id,
+        user_id=user.id,
+        check_in_date=check_in_date,
+    ).first()
+
+    if record:
+        record.check_in_time = check_in_time
+        record.valid_user_id = valid_user_id
+    else:
+        record = EventCheckIn(
+            event_id=event.id,
+            user_id=user.id,
+            check_in_date=check_in_date,
+            check_in_time=check_in_time,
+            valid_user_id=valid_user_id,
+        )
+        db.session.add(record)
+
+    db.session.commit()
+    return record
 
 
 def month_events_response(year, month):
@@ -247,29 +290,87 @@ def save_event_check_in(data):
         if not validator:
             return jsonify({"status": "error", "message": "valid_user 不存在"}), 404
 
-    record = EventCheckIn.query.filter_by(
+    existing = EventCheckIn.query.filter_by(
         event_id=event_id,
         user_id=user_id,
         check_in_date=check_in_date,
     ).first()
-
-    if record:
-        record.check_in_time = check_in_time
-        record.valid_user_id = valid_user_id
-        message = "Check-in 已更新"
-    else:
-        record = EventCheckIn(
-            event_id=event.id,
-            user_id=user.id,
-            check_in_date=check_in_date,
-            check_in_time=check_in_time,
-            valid_user_id=valid_user_id,
-        )
-        db.session.add(record)
-        message = "Check-in 已创建"
-
-    db.session.commit()
+    record = _upsert_event_check_in(event, user, check_in_date, check_in_time, valid_user_id)
+    message = "Check-in 已更新" if existing else "Check-in 已创建"
     return jsonify({"status": "success", "message": message, "data": record.to_dict()})
+
+
+def create_event_check_in_qr(data):
+    event_id = as_int(data.get("event_id"))
+    if not event_id:
+        return jsonify({"status": "error", "message": "event_id 必填"}), 400
+
+    event = EventData.query.get_or_404(event_id)
+    now = datetime.utcnow()
+    token = _check_in_qr_serializer().dumps(
+        {
+            "event_id": event.id,
+            "user_id": current_user.id,
+            "nonce": secrets.token_urlsafe(8),
+            "iat": int(now.timestamp()),
+        }
+    )
+    expires_at = now + timedelta(seconds=CHECK_IN_QR_SECONDS)
+    return jsonify(
+        {
+            "status": "success",
+            "data": {
+                "token": token,
+                "code": f"{CHECK_IN_QR_PREFIX}{token}",
+                "event_id": event.id,
+                "owner_id": current_user.id,
+                "owner_name": getattr(current_user, "display_name", None) or getattr(current_user, "username", None),
+                "expires_in": CHECK_IN_QR_SECONDS,
+                "expires_at": expires_at.isoformat() + "Z",
+            },
+        }
+    )
+
+
+def scan_event_check_in_qr(data):
+    event_id = as_int(data.get("event_id"))
+    raw_token = str(data.get("token") or data.get("code") or "").strip()
+    if raw_token.startswith(CHECK_IN_QR_PREFIX):
+        raw_token = raw_token[len(CHECK_IN_QR_PREFIX):]
+    if not raw_token:
+        return jsonify({"status": "error", "message": "缺少签到 QR code"}), 400
+
+    try:
+        payload = _check_in_qr_serializer().loads(raw_token, max_age=CHECK_IN_QR_SECONDS)
+    except SignatureExpired:
+        return jsonify({"status": "error", "message": "签到 QR code 已过期，请对方重新生成"}), 400
+    except BadSignature:
+        return jsonify({"status": "error", "message": "无效的签到 QR code"}), 400
+
+    token_event_id = as_int(payload.get("event_id"))
+    owner_id = as_int(payload.get("user_id"))
+    if not token_event_id or not owner_id:
+        return jsonify({"status": "error", "message": "签到 QR code 内容不完整"}), 400
+    if event_id and event_id != token_event_id:
+        return jsonify({"status": "error", "message": "这个 QR code 不属于当前活动"}), 400
+    if owner_id == current_user.id:
+        return jsonify({"status": "error", "message": "不可以扫描自己的签到码"}), 400
+
+    event = EventData.query.get_or_404(token_event_id)
+    owner = User.query.get(owner_id)
+    if not owner:
+        return jsonify({"status": "error", "message": "签到码拥有者不存在"}), 404
+
+    check_in_time = datetime.utcnow()
+    check_in_date = _current_event_check_in_date(event)
+    record = _upsert_event_check_in(event, current_user, check_in_date, check_in_time, owner.id)
+    return jsonify(
+        {
+            "status": "success",
+            "message": "签到成功",
+            "data": record.to_dict(),
+        }
+    )
 
 
 def delete_event_check_in(check_in_id):

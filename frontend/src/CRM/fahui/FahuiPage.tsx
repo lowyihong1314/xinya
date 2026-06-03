@@ -6,7 +6,7 @@ import { useEnsureDesignTokens } from "../../theme/designTokens";
 import { useUserState } from "../../app/UserState";
 import { CachedImage } from "../../components/CachedMedia";
 import { showConfirmDialog } from "../../js/dialogs";
-import { downloadBlob } from "../../js/browserActions";
+import { downloadBlobOrShare, downloadUrlOrShare } from "../../js/browserActions";
 import { show_alert } from "../../js/show_alert";
 import { LAMP_META } from "../../lamp/lampMeta";
 import {
@@ -722,10 +722,30 @@ export function FahuiPage() {
   async function handleDownloadPaiwei(orderId: number) {
     try {
       const result = await downloadYlpPaiwei(orderId);
-      downloadBlob(result.blob, result.filename);
-      setActionMessage("牌位文件已开始下载");
+      await downloadBlobOrShare(result.blob, result.filename, {
+        isMobile,
+        title: result.filename,
+        text: `订单 #${orderId} 牌位文件`,
+      });
+      setActionMessage(isMobile ? "牌位文件已打开系统分享" : "牌位文件已开始下载");
     } catch (downloadError) {
       show_alert("error", downloadError instanceof Error ? downloadError.message : "下载牌位失败");
+    }
+  }
+
+  async function handleDownloadQuotation(orderId: number) {
+    const filename = `ylp-order-${orderId}-quotation.pdf`;
+    try {
+      await downloadUrlOrShare(`/api/payment/orders/${orderId}/quotation`, filename, {
+        isMobile,
+        title: filename,
+        text: `订单 #${orderId} 报价单`,
+        fallbackUrl: `${window.location.origin}/api/payment/orders/${orderId}/quotation`,
+        mimeType: "application/pdf",
+      });
+      setActionMessage(isMobile ? "报价单已打开系统分享" : "报价单已开始下载");
+    } catch (downloadError) {
+      show_alert("error", downloadError instanceof Error ? downloadError.message : "下载报价单失败");
     }
   }
 
@@ -1132,9 +1152,7 @@ export function FahuiPage() {
                 <button
                   type="button"
                   style={styles.secondaryAction}
-                  onClick={() =>
-                    window.open(`/api/payment/orders/${ylpDetail.orderId}/quotation`, "_blank", "noopener")
-                  }
+                  onClick={() => void handleDownloadQuotation(ylpDetail.orderId)}
                 >
                   下载报价单
                 </button>

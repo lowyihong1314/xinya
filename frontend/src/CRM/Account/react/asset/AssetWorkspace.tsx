@@ -4,7 +4,7 @@ import { useSearchParams } from "react-router-dom";
 
 import { useUserState } from "../../../../app/UserState";
 import { openPreviewModal } from "../../../../js/attachment_preview";
-import { downloadBlob } from "../../../../js/browserActions";
+import { downloadBlobOrShare } from "../../../../js/browserActions";
 import { showConfirmDialog } from "../../../../js/dialogs";
 import { designTokens } from "../../../../theme/designTokens";
 import { select_counterparty_modal, select_single_user_modal } from "../../../select_users_modal";
@@ -1323,8 +1323,8 @@ export function AssetWorkspace() {
     }
   }
 
-  function handleExportInventory() {
-    exportCsvFile(
+  async function handleExportInventory() {
+    await exportCsvFile(
       `asset-inventory-${buildTodayStamp()}.csv`,
       ["仓库", "仓库编码", "Item", "Item 编码", "子 Item", "Size", "Color", "可用库存", "保留库存", "最低库存", "更新时间"],
       filteredInventoryRows.map((row) => [
@@ -1340,11 +1340,12 @@ export function AssetWorkspace() {
         row.min_quantity,
         formatDateTime(row.updated_at),
       ]),
+      isMobile,
     );
   }
 
-  function handleExportDocuments() {
-    exportCsvFile(
+  async function handleExportDocuments() {
+    await exportCsvFile(
       `asset-documents-${buildTodayStamp()}.csv`,
       ["单号", "类型", "状态", "来源仓库", "目标仓库", "经手对象", "去向", "往来对象", "Invoice", "备注", "创建时间"],
       filteredDocuments.map((document) => [
@@ -1360,11 +1361,12 @@ export function AssetWorkspace() {
         document.note,
         formatDateTime(document.created_at),
       ]),
+      isMobile,
     );
   }
 
-  function handleExportMovements() {
-    exportCsvFile(
+  async function handleExportMovements() {
+    await exportCsvFile(
       `asset-movements-${buildTodayStamp()}.csv`,
       ["单号", "流水类型", "单据状态", "仓库", "Item", "子 Item", "数量变化", "结余", "经手", "去向", "Invoice", "流水时间"],
       filteredMovementRows.map((movement) => [
@@ -1381,6 +1383,7 @@ export function AssetWorkspace() {
         movement.invoiceNo,
         formatDateTime(movement.createdAt),
       ]),
+      isMobile,
     );
   }
 
@@ -2011,7 +2014,7 @@ export function AssetWorkspace() {
                   <option value="transfer">仓库调拨</option>
                   <option value="adjust">盘点调整</option>
                 </select>
-                <button className={SECONDARY_BUTTON_CLASS_NAME} type="button" style={secondaryButtonStyle} onClick={handleExportDocuments}>
+                <button className={SECONDARY_BUTTON_CLASS_NAME} type="button" style={secondaryButtonStyle} onClick={() => void handleExportDocuments()}>
                   导出单据
                 </button>
               </div>
@@ -2156,7 +2159,7 @@ export function AssetWorkspace() {
                   <span className={`asset-workspace__chip ${filteredLowStockRows.length ? "asset-workspace__chip--warning" : "asset-workspace__chip--neutral"}`} style={chipStyle(filteredLowStockRows.length ? "warning" : "neutral")}>
                     {filteredLowStockRows.length ? `${filteredLowStockRows.length} 条低库存` : "库存正常"}
                   </span>
-                  <button className={SECONDARY_BUTTON_CLASS_NAME} type="button" style={secondaryButtonStyle} onClick={handleExportInventory}>
+                  <button className={SECONDARY_BUTTON_CLASS_NAME} type="button" style={secondaryButtonStyle} onClick={() => void handleExportInventory()}>
                     导出库存
                   </button>
                 </>
@@ -2350,7 +2353,7 @@ export function AssetWorkspace() {
             <div className="asset-workspace__panel-header-actions" style={panelHeaderActionsStyle}>
               {!collapsedSections.movements ? (
                 <>
-                  <button className={SECONDARY_BUTTON_CLASS_NAME} type="button" style={secondaryButtonStyle} onClick={handleExportMovements}>
+                  <button className={SECONDARY_BUTTON_CLASS_NAME} type="button" style={secondaryButtonStyle} onClick={() => void handleExportMovements()}>
                     导出流水
                   </button>
                   <span className="asset-workspace__chip asset-workspace__chip--neutral" style={chipStyle("neutral")}>{filteredMovementRows.length} 条流水</span>
@@ -2615,12 +2618,17 @@ function getMovementTypeLabel(documentType: string, quantityDelta: number, movem
   return getDocumentTypeLabel(documentType);
 }
 
-function exportCsvFile(filename: string, headers: string[], rows: Array<Array<string | number | null | undefined>>) {
+async function exportCsvFile(filename: string, headers: string[], rows: Array<Array<string | number | null | undefined>>, isMobile: boolean) {
   const csvContent = [
     headers.map(escapeCsvCell).join(","),
     ...rows.map((row) => row.map(escapeCsvCell).join(",")),
   ].join("\n");
-  downloadBlob(new Blob([`\uFEFF${csvContent}`], { type: "text/csv;charset=utf-8" }), filename);
+  await downloadBlobOrShare(new Blob([`\uFEFF${csvContent}`], { type: "text/csv;charset=utf-8" }), filename, {
+    isMobile,
+    title: filename,
+    text: filename,
+    mimeType: "text/csv",
+  });
 }
 
 function escapeCsvCell(value: string | number | null | undefined) {

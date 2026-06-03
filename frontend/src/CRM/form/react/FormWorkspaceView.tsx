@@ -3,7 +3,7 @@ import type { CSSProperties, ReactNode } from "react";
 import QRCode from "qrcode";
 
 import { CachedImage } from "../../../components/CachedMedia";
-import { downloadUrl } from "../../../js/browserActions";
+import { downloadBlobOrShare, downloadUrlOrShare } from "../../../js/browserActions";
 import { smartImageURL } from "../../../js/get_img";
 import { ExtraFieldEditor } from "./ExtraFieldEditor";
 import { FeePanel } from "./FeePanel";
@@ -84,7 +84,7 @@ function sanitizeFilenamePart(value: string) {
   return value.trim().replace(/[\\/:*?"<>|]+/g, "_").replace(/\s+/g, "_") || "form";
 }
 
-async function exportMembersToExcel(formTitle: string, members: FormMember[], extraFields: ExtraFieldConfig[]) {
+async function exportMembersToExcel(formTitle: string, members: FormMember[], extraFields: ExtraFieldConfig[], isMobile: boolean) {
   const XLSX = await import("xlsx");
   const rows = members.map((member) => {
     const values = member.extra_fields || member.field_values || [];
@@ -123,7 +123,17 @@ async function exportMembersToExcel(formTitle: string, members: FormMember[], ex
   const workbook = XLSX.utils.book_new();
   const sheet = XLSX.utils.json_to_sheet(rows.length ? rows : [{ 提示: "暂无报名成员" }]);
   XLSX.utils.book_append_sheet(workbook, sheet, "Members");
-  XLSX.writeFile(workbook, `${sanitizeFilenamePart(formTitle)}_members.xlsx`);
+  const filename = `${sanitizeFilenamePart(formTitle)}_members.xlsx`;
+  const workbookArray = XLSX.write(workbook, { bookType: "xlsx", type: "array" }) as ArrayBuffer;
+  await downloadBlobOrShare(
+    new Blob([workbookArray], { type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" }),
+    filename,
+    {
+      isMobile,
+      title: filename,
+      text: `${formTitle} 报名成员 Excel`,
+    },
+  );
 }
 
 function hasCheckedPayment(member: FormMember) {
@@ -526,7 +536,7 @@ export function FormWorkspaceView(props: {
                   <button
                     type="button"
                     style={secondaryButtonStyle}
-                    onClick={() => void exportMembersToExcel(selectedForm.title, selectedForm.members || [], props.extraFields)}
+                    onClick={() => void exportMembersToExcel(selectedForm.title, selectedForm.members || [], props.extraFields, isMobile)}
                   >
                     下载 Excel
                   </button>
@@ -746,13 +756,22 @@ function ShareFormView({
     }
   }
 
-  function handleDownload() {
+  async function handleDownload() {
     if (!qrCodeUrl) {
       setStatus({ type: "error", text: "二维码尚未生成完成" });
       return;
     }
 
-    downloadUrl(qrCodeUrl, downloadName ?? `form-${formId}-qrcode.png`);
+    try {
+      await downloadUrlOrShare(qrCodeUrl, downloadName ?? `form-${formId}-qrcode.png`, {
+        isMobile,
+        title,
+        text: heading,
+      });
+      setStatus({ type: "success", text: isMobile ? "已打开系统分享" : "已开始下载" });
+    } catch (error) {
+      setStatus({ type: "error", text: error instanceof Error ? error.message : "下载失败" });
+    }
   }
 
   return (
@@ -796,9 +815,9 @@ function ShareFormView({
             {qrCodeUrl ? <CachedImage src={qrCodeUrl} alt={`报名表 ${title} 的二维码`} style={qrImageStyle} /> : <div style={inlineNoteStyle}>二维码生成中…</div>}
           </div>
           <div style={footerActionsStyle}>
-            <button type="button" style={secondaryButtonStyle} onClick={handleDownload}>
-              下载 QR Code
-            </button>
+              <button type="button" style={secondaryButtonStyle} onClick={() => void handleDownload()}>
+                下载 QR Code
+              </button>
           </div>
         </div>
       </div>

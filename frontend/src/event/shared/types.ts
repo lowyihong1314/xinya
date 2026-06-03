@@ -15,6 +15,16 @@ export type EventCheckInRecord = {
   valid_user_name?: string;
 };
 
+export type EventCheckInQrRecord = {
+  token: string;
+  code: string;
+  event_id: number;
+  owner_id: number;
+  owner_name?: string;
+  expires_in?: number;
+  expires_at?: string;
+};
+
 export type EventImageRef = {
   id?: number;
   file_type?: string;

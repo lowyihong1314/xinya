@@ -5,7 +5,7 @@ import { useNavigate } from "react-router-dom";
 import { CacheMediaPlayer } from "../../components/CacheMediaPlayer";
 import type { AlbumFile, EventDetailRecord } from "../../event/shared/types";
 import { apiFetch } from "../../js/apiFetch";
-import { downloadBlob } from "../../js/browserActions";
+import { downloadBlobOrShare } from "../../js/browserActions";
 import { showConfirmDialog } from "../../js/dialogs";
 import { show_alert } from "../../js/show_alert";
 import { PhotoGridBatchActions } from "./PhotoGridBatchActions";
@@ -184,8 +184,13 @@ export function PhotoGrid({
         throw new Error(payload.message || "下载失败");
       }
 
+      const filename = `event-${detail.id}-${downloadType}.zip`;
       const blob = await response.blob();
-      downloadBlob(blob, `event-${detail.id}-${downloadType}.zip`);
+      await downloadBlobOrShare(blob, filename, {
+        isMobile,
+        title: filename,
+        text: `活动 ${detail.event_name || detail.id} 相册下载`,
+      });
     } catch (error) {
       show_alert("error", error instanceof Error ? error.message : "下载失败");
     } finally {

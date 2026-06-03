@@ -1,4 +1,5 @@
 import type {
+  EventCheckInQrRecord,
   EventCheckInMutationResponse,
   EventDetailResponse,
   EventFlowListResponse,
@@ -197,6 +198,26 @@ export async function saveEventCheckIn(payload: {
     headers: { "Content-Type": "application/json" },
     credentials: "include",
     body: JSON.stringify(payload),
+  });
+  return parseJson<EventCheckInMutationResponse>(response);
+}
+
+export async function createEventCheckInQr(eventId: number) {
+  const response = await apiFetch("/api/event_data/check_in/qr/create", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    credentials: "include",
+    body: JSON.stringify({ event_id: eventId }),
+  });
+  return parseJson<{ status?: string; data?: EventCheckInQrRecord; message?: string }>(response);
+}
+
+export async function scanEventCheckInQr(eventId: number, token: string) {
+  const response = await apiFetch("/api/event_data/check_in/qr/scan", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    credentials: "include",
+    body: JSON.stringify({ event_id: eventId, token }),
   });
   return parseJson<EventCheckInMutationResponse>(response);
 }

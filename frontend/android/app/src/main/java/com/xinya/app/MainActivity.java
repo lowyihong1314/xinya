@@ -16,6 +16,7 @@ public class MainActivity extends BridgeActivity {
         registerPlugin(NativeMusicPlugin.class);
         registerPlugin(NativeMediaCachePlugin.class);
         registerPlugin(NativeResponseCachePlugin.class);
+        registerPlugin(NativeFileSharePlugin.class);
         super.onCreate(savedInstanceState);
     }
 }

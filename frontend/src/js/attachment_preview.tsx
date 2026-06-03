@@ -4,6 +4,7 @@ import heic2any from "heic2any";
 import { openOverlay } from "../app/OverlayProvider";
 import { CachedImage, CachedVideo } from "../components/CachedMedia";
 import { apiFetch } from "./apiFetch";
+import { downloadUrlOrShare } from "./browserActions";
 
 type AttachmentRecord = {
   file_name?: string;
@@ -198,6 +199,7 @@ function AttachmentPreviewModal({
     extLabel: getExt(fileName, attachment.mime_type || "").toUpperCase() || "FILE",
   });
   const [fitMode, setFitMode] = useState<"contain" | "cover">("contain");
+  const [downloading, setDownloading] = useState(false);
 
   useEffect(() => {
     let active = true;
@@ -243,6 +245,7 @@ function AttachmentPreviewModal({
   }, [attachment, fileName, onClose]);
 
   const canToggleFit = preview.mode === "image" || preview.mode === "video";
+  const canDownload = preview.mode !== "loading" && preview.mode !== "error";
 
   const statusCopy =
     preview.mode === "loading"
@@ -252,6 +255,30 @@ function AttachmentPreviewModal({
         : preview.mode === "unsupported"
           ? "暂不支持在线预览"
           : "在线预览";
+
+  async function handleDownload() {
+    if (!canDownload || downloading) {
+      return;
+    }
+    setDownloading(true);
+    try {
+      await downloadUrlOrShare(preview.objectUrl || fileUrl, fileName, {
+        isMobile,
+        title: fileName,
+        text: fileName,
+        fallbackUrl: fileUrl,
+        mimeType: preview.mimeLabel,
+      });
+    } catch (error) {
+      setPreview((current) => ({
+        ...current,
+        mode: "error",
+        errorMessage: error instanceof Error ? error.message : "下载失败",
+      }));
+    } finally {
+      setDownloading(false);
+    }
+  }
 
   return (
     <div className="attachment-preview" style={overlayStyle(isMobile)} onClick={onClose}>
@@ -283,14 +310,15 @@ function AttachmentPreviewModal({
                   {fitMode === "contain" ? "铺满" : "适应"}
                 </button>
               ) : null}
-              <a
+              <button
                 className="attachment-preview__button attachment-preview__button--download"
-                href={preview.objectUrl || fileUrl}
-                download={fileName}
+                type="button"
+                disabled={!canDownload || downloading}
                 style={{ ...secondaryButtonStyle, ...actionButtonStyle(isMobile) }}
+                onClick={() => void handleDownload()}
               >
-                下载
-              </a>
+                {downloading ? "处理中…" : "下载"}
+              </button>
               <button
                 className="attachment-preview__button attachment-preview__button--close"
                 type="button"

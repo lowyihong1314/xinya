@@ -2,6 +2,8 @@ import { useRef, useState, type CSSProperties, type FormEvent } from "react";
 
 import { CachedImage } from "../../../components/CachedMedia";
 import { openPreviewModal } from "../../../js/attachment_preview";
+import { downloadUrlOrShare } from "../../../js/browserActions";
+import { show_alert } from "../../../js/show_alert";
 import { openBrochurePreviewModal } from "../../../event/shared/brochurePreview";
 import { buildEventTypeChoices } from "../../../event/shared/eventTypes";
 import type { EventCreatePayload, EventMutationPayload, EventRecord } from "./types";
@@ -87,6 +89,22 @@ export function EventTableView(props: {
       setCreateOpen(false);
       setDraft(createDefaultDraft());
       setCreateError(null);
+    }
+  }
+
+  async function handleDownloadEventFile(filePath: string, fileName?: string | null, mimeType?: string | null) {
+    const url = `/media_file/${filePath}`;
+    const filename = fileName || filePath.split("/").pop() || "event-file";
+    try {
+      await downloadUrlOrShare(url, filename, {
+        isMobile,
+        title: filename,
+        text: filename,
+        fallbackUrl: `${window.location.origin}${url}`,
+        mimeType: mimeType || undefined,
+      });
+    } catch (error) {
+      show_alert("error", error instanceof Error ? error.message : "下载失败");
     }
   }
 
@@ -525,7 +543,13 @@ export function EventTableView(props: {
                           <button
                             type="button"
                             style={secondaryButtonStyle}
-                            onClick={() => window.open(`/media_file/${props.selectedEvent.brochure_path}`, "_blank", "noopener,noreferrer")}
+                            onClick={() =>
+                              void handleDownloadEventFile(
+                                props.selectedEvent!.brochure_path || "",
+                                props.selectedEvent!.brochure_name,
+                                props.selectedEvent!.brochure_mime,
+                              )
+                            }
                           >
                             下载
                           </button>
@@ -634,7 +658,7 @@ export function EventTableView(props: {
                               <button
                                 type="button"
                                 style={secondaryButtonStyle}
-                                onClick={() => window.open(`/media_file/${file.file_path}`, "_blank", "noopener,noreferrer")}
+                                onClick={() => void handleDownloadEventFile(file.file_path, file.file_name, file.mime_type)}
                               >
                                 下载
                               </button>

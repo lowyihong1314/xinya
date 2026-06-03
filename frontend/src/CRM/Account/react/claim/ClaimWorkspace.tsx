@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from "react";
 import type { ChangeEvent } from "react";
 
 import { useUserState } from "../../../../app/UserState";
+import { downloadBlobOrShare } from "../../../../js/browserActions";
 import { showConfirmDialog, showPromptDialog } from "../../../../js/dialogs";
 import { showEventPicker } from "../../../shared/showEventPicker";
 import { render_sign_modal } from "../../../../../../static/js/sign_tools.js";
@@ -732,8 +733,8 @@ export function ClaimWorkspace() {
     setError(null);
     setExportingSelected(true);
     try {
-      await exportClaimsToExcel(selectedClaims);
-      setMessage(`已下载 ${selectedClaims.length} 笔报销申请 XLSX`);
+      await exportClaimsToExcel(selectedClaims, isMobile);
+      setMessage(isMobile ? `已分享 ${selectedClaims.length} 笔报销申请 XLSX` : `已下载 ${selectedClaims.length} 笔报销申请 XLSX`);
     } catch (err) {
       setError(err instanceof Error ? err.message : "下载 XLSX 失败");
     } finally {
@@ -755,8 +756,14 @@ export function ClaimWorkspace() {
     setExportingReport(true);
     try {
       const blob = await downloadClaimReport(selectedClaims.map((claim) => claim.id));
-      downloadBlob(blob, `报销申请_Report_${todayFilenameDate()}_${selectedClaims.length}笔.pdf`);
-      setMessage(`已导出 ${selectedClaims.length} 笔报销申请 Report`);
+      const filename = `报销申请_Report_${todayFilenameDate()}_${selectedClaims.length}笔.pdf`;
+      await downloadBlobOrShare(blob, filename, {
+        isMobile,
+        title: filename,
+        text: `${selectedClaims.length} 笔报销申请 Report`,
+        mimeType: "application/pdf",
+      });
+      setMessage(isMobile ? `已分享 ${selectedClaims.length} 笔报销申请 Report` : `已导出 ${selectedClaims.length} 笔报销申请 Report`);
     } catch (err) {
       setError(err instanceof Error ? err.message : "导出 Report 失败");
     } finally {
@@ -940,18 +947,7 @@ function todayFilenameDate() {
   return `${yyyy}${mm}${dd}`;
 }
 
-function downloadBlob(blob: Blob, filename: string) {
-  const url = window.URL.createObjectURL(blob);
-  const link = document.createElement("a");
-  link.href = url;
-  link.download = filename;
-  document.body.appendChild(link);
-  link.click();
-  link.remove();
-  window.URL.revokeObjectURL(url);
-}
-
-async function exportClaimsToExcel(claims: ClaimRecord[]) {
+async function exportClaimsToExcel(claims: ClaimRecord[], isMobile: boolean) {
   const XLSX = await import("xlsx");
   const rows = claims.map((claim) => {
     const claimStatus = getClaimStatusForFilter(claim);
@@ -982,5 +978,15 @@ async function exportClaimsToExcel(claims: ClaimRecord[]) {
   const workbook = XLSX.utils.book_new();
   const sheet = XLSX.utils.json_to_sheet(rows);
   XLSX.utils.book_append_sheet(workbook, sheet, "Claims");
-  XLSX.writeFile(workbook, `报销申请_${todayFilenameDate()}_${claims.length}笔.xlsx`);
+  const filename = `报销申请_${todayFilenameDate()}_${claims.length}笔.xlsx`;
+  const workbookArray = XLSX.write(workbook, { bookType: "xlsx", type: "array" }) as ArrayBuffer;
+  await downloadBlobOrShare(
+    new Blob([workbookArray], { type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" }),
+    filename,
+    {
+      isMobile,
+      title: filename,
+      text: `${claims.length} 笔报销申请 XLSX`,
+    },
+  );
 }

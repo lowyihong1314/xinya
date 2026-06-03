@@ -37,6 +37,18 @@ def check_in_save():
     return services.save_event_check_in(services.get_json_payload())
 
 
+@event_data_bp.route("/check_in/qr/create", methods=["POST"])
+@login_required
+def check_in_qr_create():
+    return services.create_event_check_in_qr(services.get_json_payload())
+
+
+@event_data_bp.route("/check_in/qr/scan", methods=["POST"])
+@login_required
+def check_in_qr_scan():
+    return services.scan_event_check_in_qr(services.get_json_payload())
+
+
 @event_data_bp.route("/check_in/delete/<int:check_in_id>", methods=["POST", "DELETE"])
 @login_required
 @permission_required("event_edit")

@@ -1,6 +1,8 @@
 import { useEffect, useState } from "react";
 import type { CSSProperties } from "react";
 
+import { useUserState } from "../../../../app/UserState";
+import { downloadUrlOrShare } from "../../../../js/browserActions";
 import { showPromptDialog } from "../../../../js/dialogs";
 import { designTokens, useEnsureDesignTokens } from "../../../../theme/designTokens";
 import { fetchPaymentVoucherShare } from "./api";
@@ -14,6 +16,7 @@ export function PaymentVoucherModal({
   onClose: () => void;
 }) {
   useEnsureDesignTokens();
+  const { isMobile } = useUserState();
 
   const [loading, setLoading] = useState(true);
   const [payload, setPayload] = useState<PaymentVoucherSharePayload | null>(null);
@@ -67,6 +70,24 @@ export function PaymentVoucherModal({
         readOnly: true,
         confirmText: "关闭",
       });
+    }
+  }
+
+  async function handleDownloadVoucher() {
+    if (!payload?.is_signed) {
+      return;
+    }
+    const filename = `payment-voucher-${claimId}.pdf`;
+    try {
+      await downloadUrlOrShare(`/api/account/print_payment_voucher/download_payment_voucher/${claimId}`, filename, {
+        isMobile,
+        title: filename,
+        text: `Payment Voucher #${claimId}`,
+        fallbackUrl: `${window.location.origin}/api/account/print_payment_voucher/download_payment_voucher/${claimId}`,
+        mimeType: "application/pdf",
+      });
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "下载失败");
     }
   }
 
@@ -146,9 +167,7 @@ export function PaymentVoucherModal({
                   type="button"
                   style={payload.is_signed ? primaryButtonStyle : disabledButtonStyle}
                   disabled={!payload.is_signed}
-                  onClick={() =>
-                    window.open(`/api/account/print_payment_voucher/download_payment_voucher/${claimId}`, "_blank")
-                  }
+                  onClick={() => void handleDownloadVoucher()}
                 >
                   下载完整 Voucher
                 </button>

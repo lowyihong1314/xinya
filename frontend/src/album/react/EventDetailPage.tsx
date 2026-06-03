@@ -13,6 +13,8 @@ import { EditEventModal } from "./EditEventModal";
 import { EventFlowModal } from "./EventFlowModal";
 import { UploadMediaModal } from "./UploadMediaModal";
 import { useUserState } from "../../app/UserState";
+import { downloadUrlOrShare } from "../../js/browserActions";
+import { show_alert } from "../../js/show_alert";
 import { hasUserPermission } from "../../app/permissions";
 import {
   connectEventMediaRoom,
@@ -27,7 +29,7 @@ export function EventDetailPage() {
   const { eventId } = useParams();
   const navigate = useNavigate();
   const { getEventById, refreshEvents } = useEventData();
-  const { isMobile, user } = useUserState();
+  const { isMobile, isAuthenticated, openLogin, user } = useUserState();
   const [detail, setDetail] = useState<EventDetailRecord | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -40,12 +42,13 @@ export function EventDetailPage() {
   const detailRef = useRef<EventDetailRecord | null>(null);
   const refreshTimerRef = useRef<number | null>(null);
   const canEditEvent = hasUserPermission(user, "event_edit");
+  const canUseCheckIn = canEditEvent || isMobile;
 
   useEffect(() => {
-    if (!canEditEvent && viewMode === "checkin") {
+    if (!canUseCheckIn && viewMode === "checkin") {
       setViewMode("photos");
     }
-  }, [canEditEvent, viewMode]);
+  }, [canUseCheckIn, viewMode]);
 
   useEffect(() => {
     detailRef.current = detail;
@@ -184,6 +187,25 @@ export function EventDetailPage() {
     }
   }
 
+  async function handleDownloadBrochure() {
+    if (!detail?.brochure_path) {
+      return;
+    }
+    const url = `/media_file/${detail.brochure_path}`;
+    const filename = detail.brochure_name || detail.brochure_path.split("/").pop() || "event-brochure";
+    try {
+      await downloadUrlOrShare(url, filename, {
+        isMobile,
+        title: detail.event_name || filename,
+        text: filename,
+        fallbackUrl: `${window.location.origin}${url}`,
+        mimeType: detail.brochure_mime || undefined,
+      });
+    } catch (err) {
+      show_alert("error", err instanceof Error ? err.message : "下载失败");
+    }
+  }
+
   if (!eventId) {
     return <div style={placeholderStyle}>缺少 event_id</div>;
   }
@@ -270,11 +292,17 @@ export function EventDetailPage() {
             >
               照片
             </button>
-            {canEditEvent ? (
+            {canUseCheckIn ? (
               <button
                 type="button"
                 style={viewMode === "checkin" ? primaryButtonStyle : secondaryButtonStyle}
-                onClick={() => setViewMode("checkin")}
+                onClick={() => {
+                  if (isMobile && !isAuthenticated) {
+                    openLogin(window.location.pathname + window.location.search);
+                    return;
+                  }
+                  setViewMode("checkin");
+                }}
               >
                 签到
               </button>
@@ -349,7 +377,7 @@ export function EventDetailPage() {
                 <button
                   type="button"
                   style={primaryButtonStyle}
-                  onClick={() => window.open(`/media_file/${detail.brochure_path}`, "_blank", "noopener,noreferrer")}
+                  onClick={() => void handleDownloadBrochure()}
                 >
                   下载
                 </button>

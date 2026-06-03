@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState, type CSSProperties } from "react";
 
 import { openOverlay } from "../../app/OverlayProvider";
+import { downloadUrlOrShare } from "../../js/browserActions";
 
 type BrochureRecord = {
   file_name?: string;
@@ -41,6 +42,7 @@ function BrochurePreviewModal({
   const iframeUrl = isOfficeEmbed ? buildOfficeEmbedUrl(fileUrl) : fileUrl;
   const frameWrapRef = useRef<HTMLDivElement | null>(null);
   const [isFullscreen, setIsFullscreen] = useState(false);
+  const [downloading, setDownloading] = useState(false);
 
   useEffect(() => {
     const onKeyDown = (event: KeyboardEvent) => {
@@ -74,6 +76,26 @@ function BrochurePreviewModal({
     await frameWrapRef.current.requestFullscreen();
   };
 
+  async function handleDownload() {
+    if (downloading) {
+      return;
+    }
+    setDownloading(true);
+    try {
+      await downloadUrlOrShare(fileUrl, fileName, {
+        isMobile: window.innerWidth <= 900,
+        title: fileName,
+        text: fileName,
+        fallbackUrl: fileUrl,
+        mimeType: brochure.mime_type || undefined,
+      });
+    } catch (error) {
+      console.warn("brochure download failed:", error);
+    } finally {
+      setDownloading(false);
+    }
+  }
+
   return (
     <div style={overlayStyle} onClick={onClose}>
       <div style={shellStyle} onClick={(event) => event.stopPropagation()}>
@@ -91,9 +113,9 @@ function BrochurePreviewModal({
             <a href={fileUrl} target="_blank" rel="noreferrer" style={linkButtonStyle}>
               新标签打开
             </a>
-            <a href={fileUrl} target="_blank" rel="noreferrer" download={fileName} style={linkButtonStyle}>
-              下载
-            </a>
+            <button type="button" disabled={downloading} style={secondaryButtonStyle} onClick={() => void handleDownload()}>
+              {downloading ? "处理中…" : "下载"}
+            </button>
             <button type="button" style={primaryButtonStyle} onClick={onClose}>
               关闭
             </button>

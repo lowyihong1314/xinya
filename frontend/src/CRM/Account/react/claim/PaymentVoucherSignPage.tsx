@@ -2,6 +2,8 @@ import { useEffect, useRef, useState } from "react";
 import type { CSSProperties } from "react";
 import { useParams } from "react-router-dom";
 
+import { useUserState } from "../../../../app/UserState";
+import { downloadUrlOrShare } from "../../../../js/browserActions";
 import { renderSignPreviewSvg, render_sign_modal } from "../../../../../../static/js/sign_tools.js";
 import { fetchPublicPaymentVoucher, submitPublicPaymentVoucherSign } from "./api";
 import type { ClaimRecord, PaymentVoucherPublicPayload } from "./types";
@@ -11,6 +13,7 @@ type SignShape = { strokes?: Array<{ points?: Array<{ x: number; y: number; t?: 
 
 export function PaymentVoucherSignPage() {
   useEnsureDesignTokens();
+  const { isMobile } = useUserState();
 
   const { token = "" } = useParams();
   const previewRef = useRef<HTMLDivElement | null>(null);
@@ -98,6 +101,24 @@ export function PaymentVoucherSignPage() {
     }
   }
 
+  async function handleDownloadVoucher() {
+    if (!downloadUrl || !payload?.is_signed) {
+      return;
+    }
+    const filename = `payment-voucher-${token.slice(0, 8) || "signed"}.pdf`;
+    try {
+      await downloadUrlOrShare(downloadUrl, filename, {
+        isMobile,
+        title: filename,
+        text: "Payment Voucher",
+        fallbackUrl: `${window.location.origin}${downloadUrl}`,
+        mimeType: "application/pdf",
+      });
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "下载失败");
+    }
+  }
+
   const claim = payload?.claim;
   const downloadUrl = token ? `/api/account/print_payment_voucher/public/${token}/download` : "";
 
@@ -181,7 +202,7 @@ export function PaymentVoucherSignPage() {
                   type="button"
                   style={payload?.is_signed ? secondaryButtonStyle : disabledButtonStyle}
                   disabled={!payload?.is_signed}
-                  onClick={() => window.open(downloadUrl, "_blank")}
+                  onClick={() => void handleDownloadVoucher()}
                 >
                   下载完整 Voucher
                 </button>

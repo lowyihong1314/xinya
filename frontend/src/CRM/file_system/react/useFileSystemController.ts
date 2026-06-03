@@ -1,8 +1,10 @@
 import { startTransition, useEffect, useMemo, useRef, useState } from "react";
 
+import { useUserState } from "../../../app/UserState";
 import { fetchAllUsers, fetchDepartments } from "../../user_control/react/api";
 import type { DepartmentRecord, UserRecord } from "../../user_control/react/types";
 import { showConfirmDialog, showPromptDialog } from "../../../js/dialogs";
+import { downloadUrlOrShare } from "../../../js/browserActions";
 import { useEnsureDesignTokens } from "../../../theme/designTokens";
 import * as api from "./api";
 import type { DirectoryResult, FileDetail, PermissionRow, SelectableItem, Toast, TrashRow, TreeResponse } from "./types";
@@ -10,6 +12,7 @@ import { errorMessage, itemsPerPage, joinPath, triggerDownload } from "./utils";
 
 export function useFileSystemController() {
   useEnsureDesignTokens();
+  const { isMobile } = useUserState();
 
   const [tree, setTree] = useState<TreeResponse>({ directories: [], files: [] });
   const [directory, setDirectory] = useState<DirectoryResult | null>(null);
@@ -181,7 +184,12 @@ export function useFileSystemController() {
       await openDirectory(item.path);
       return;
     }
-    window.open(`/api/files/items/${item.file_id}/content`, "_blank");
+    await downloadUrlOrShare(`/api/files/items/${item.file_id}/content`, item.name, {
+      isMobile,
+      title: item.name,
+      text: item.name,
+      fallbackUrl: `${window.location.origin}/api/files/items/${item.file_id}/content`,
+    });
   }
 
   async function refreshCurrent() {
@@ -319,7 +327,7 @@ export function useFileSystemController() {
             .map((item) => item.file_id);
           if (!ids.length) return;
           const blob = await api.downloadArchive(ids);
-          triggerDownload(blob, "files.zip");
+          await triggerDownload(blob, "files.zip", isMobile);
         }),
       onShare: () =>
         void (async () => {

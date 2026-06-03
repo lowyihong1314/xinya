@@ -1,4 +1,4 @@
-import { downloadBlob } from "../../../js/browserActions";
+import { downloadBlobOrShare } from "../../../js/browserActions";
 
 export const itemsPerPage = 40;
 
@@ -23,6 +23,10 @@ export function errorMessage(error: unknown) {
   return error instanceof Error ? error.message : "Unknown error";
 }
 
-export function triggerDownload(blob: Blob, filename: string) {
-  downloadBlob(blob, filename);
+export function triggerDownload(blob: Blob, filename: string, isMobile = false) {
+  return downloadBlobOrShare(blob, filename, {
+    isMobile,
+    title: filename,
+    text: filename,
+  });
 }

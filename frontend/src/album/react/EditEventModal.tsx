@@ -1,12 +1,14 @@
 import { useEffect, useRef, useState } from "react";
 import type { CSSProperties } from "react";
 
+import { useUserState } from "../../app/UserState";
 import { CacheMediaPlayer } from "../../components/CacheMediaPlayer";
 import { useEnsureDesignTokens } from "../../theme/designTokens";
 import { saveEvent, setEventPoster, uploadEventBrochure } from "../../event/shared/api";
 import type { AlbumFile, EventDetailRecord } from "../../event/shared/types";
 import { openBrochurePreviewModal } from "../../event/shared/brochurePreview";
 import { FIXED_EVENT_TYPES } from "../../event/shared/eventTypes";
+import { downloadUrlOrShare } from "../../js/browserActions";
 
 type Props = {
   detail: EventDetailRecord;
@@ -22,6 +24,7 @@ type PosterThumbProps = {
 
 export function EditEventModal({ detail, onClose, onSaved }: Props) {
   useEnsureDesignTokens();
+  const { isMobile } = useUserState();
   const posterFiles = detail.album_files || [];
   const posterPageSize = 15;
 
@@ -135,6 +138,26 @@ export function EditEventModal({ detail, onClose, onSaved }: Props) {
       setError(err instanceof Error ? err.message : "简章移除失败");
     } finally {
       setUploadingBrochure(false);
+    }
+  }
+
+  async function handleBrochureDownload() {
+    if (!detail.brochure_path) {
+      return;
+    }
+    setError(null);
+    const url = `/media_file/${detail.brochure_path}`;
+    const filename = detail.brochure_name || detail.brochure_path.split("/").pop() || "event-brochure";
+    try {
+      await downloadUrlOrShare(url, filename, {
+        isMobile,
+        title: detail.event_name || filename,
+        text: filename,
+        fallbackUrl: `${window.location.origin}${url}`,
+        mimeType: detail.brochure_mime || undefined,
+      });
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "下载失败");
     }
   }
 
@@ -255,7 +278,7 @@ export function EditEventModal({ detail, onClose, onSaved }: Props) {
                   <button
                     type="button"
                     style={secondaryButtonStyle}
-                    onClick={() => window.open(`/media_file/${detail.brochure_path}`, "_blank", "noopener,noreferrer")}
+                    onClick={() => void handleBrochureDownload()}
                   >
                     下载
                   </button>

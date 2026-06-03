@@ -7,6 +7,7 @@ import { hasUserPermission } from "../../app/permissions";
 import { CacheMediaPlayer } from "../../components/CacheMediaPlayer";
 import { API_BASE } from "../../js/apiBase";
 import { apiFetch } from "../../js/apiFetch";
+import { downloadUrlOrShare } from "../../js/browserActions";
 import { useEnsureDesignTokens } from "../../theme/designTokens";
 
 type FileRecord = {
@@ -152,8 +153,31 @@ export function ImageDetailPage({ isMobile, user }: { isMobile: boolean; user?: 
   const canOpenOriginal = Boolean(mediaSource && mediaSource.kind !== "unsupported" && mediaSource.originalUrl);
   const canShareImage = Boolean(isMobile && mediaSource?.kind === "image" && mediaSource.originalUrl);
 
-  function openOriginal() {
+  async function openOriginal() {
     if (!mediaSource || mediaSource.kind === "unsupported" || !mediaSource.originalUrl) {
+      return;
+    }
+    if (isMobile && file) {
+      setSharing(true);
+      setActionError(null);
+      setActionNotice(null);
+      try {
+        const filename = shareFileName(file);
+        const result = await downloadUrlOrShare(mediaSource.originalUrl, filename, {
+          isMobile,
+          title: event?.event_name || filename,
+          text: filename,
+          fallbackUrl: mediaSource.originalUrl,
+          mimeType: fileMimeType(file.file_type),
+        });
+        if (result === "downloaded") {
+          setActionNotice("文件已开始下载。");
+        }
+      } catch (err) {
+        setActionError(err instanceof Error ? err.message : "打开原文件失败");
+      } finally {
+        setSharing(false);
+      }
       return;
     }
     window.open(mediaSource.originalUrl, "_blank", "noopener,noreferrer");
@@ -302,8 +326,8 @@ export function ImageDetailPage({ isMobile, user }: { isMobile: boolean; user?: 
                   {sharing ? "分享中…" : "分享图片"}
                 </button>
               ) : null}
-              <button type="button" style={primaryButtonStyle(isMobile)} onClick={openOriginal} disabled={!canOpenOriginal}>
-                {openOriginalLabel}
+              <button type="button" style={primaryButtonStyle(isMobile)} onClick={() => void openOriginal()} disabled={!canOpenOriginal || sharing}>
+                {sharing && isMobile ? "处理中…" : openOriginalLabel}
               </button>
             </div>
           </header>
@@ -761,6 +785,17 @@ function imageMimeType(fileType?: string) {
   if (normalized === "heic") return "image/heic";
   if (normalized === "heif") return "image/heif";
   return normalized ? `image/${normalized}` : "image/jpeg";
+}
+
+function fileMimeType(fileType?: string) {
+  const normalized = String(fileType || "").toLowerCase();
+  if (IMAGE_EXTENSIONS.has(normalized) || HEIC_EXTENSIONS.has(normalized)) {
+    return imageMimeType(normalized);
+  }
+  if (normalized === "mp4") return "video/mp4";
+  if (normalized === "mov") return "video/quicktime";
+  if (normalized === "webm") return "video/webm";
+  return "application/octet-stream";
 }
 
 function isShareAbort(error: unknown) {
