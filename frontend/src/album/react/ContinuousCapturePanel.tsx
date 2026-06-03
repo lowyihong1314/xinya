@@ -134,13 +134,14 @@ export function ContinuousCapturePanel({
         streamRef.current = stream;
         setZoomSettings(readZoomSettings(stream));
         if (videoRef.current) {
-          videoRef.current.srcObject = stream;
-          await videoRef.current.play().catch(() => undefined);
+          preparePreviewVideo(videoRef.current, stream);
+          await videoRef.current.play();
           updateCaptureOrientation();
         }
         setCameraReady(true);
       } catch (error) {
         if (!canceled) {
+          setCameraReady(false);
           setCameraError(cameraErrorMessage(error));
         }
       }
@@ -434,6 +435,13 @@ export function ContinuousCapturePanel({
     setCaptureOrientation(detectCaptureOrientation(video));
   }
 
+  function handlePreviewFrameReady() {
+    updateCaptureOrientation();
+    if (streamRef.current) {
+      setCameraReady(true);
+    }
+  }
+
   function handleZoomInput(value: string) {
     const parsed = Number(value);
     if (!Number.isFinite(parsed) || !zoomSettings?.supported) {
@@ -484,7 +492,9 @@ export function ContinuousCapturePanel({
           playsInline
           autoPlay
           style={videoStyle(facingMode, cameraReady)}
-          onLoadedMetadata={updateCaptureOrientation}
+          onLoadedMetadata={handlePreviewFrameReady}
+          onLoadedData={handlePreviewFrameReady}
+          onCanPlay={handlePreviewFrameReady}
           onResize={updateCaptureOrientation}
         />
         <div style={cameraTopOverlayStyle}>
@@ -676,6 +686,15 @@ async function requestCameraStream(facingMode: FacingMode) {
   };
 
   return navigator.mediaDevices.getUserMedia({ video, audio: false });
+}
+
+function preparePreviewVideo(video: HTMLVideoElement, stream: MediaStream) {
+  video.muted = true;
+  video.autoplay = true;
+  video.playsInline = true;
+  video.setAttribute("playsinline", "true");
+  video.setAttribute("webkit-playsinline", "true");
+  video.srcObject = stream;
 }
 
 function stopTracks(stream: MediaStream) {
@@ -946,9 +965,13 @@ function gridHorizontalLineStyle(top: string): CSSProperties {
 
 function videoStyle(facingMode: FacingMode, ready: boolean): CSSProperties {
   return {
+    position: "absolute",
+    inset: 0,
+    display: "block",
     width: "100%",
     height: "100%",
     objectFit: "cover",
+    zIndex: 1,
     transform: facingMode === "user" ? "scaleX(-1)" : undefined,
     opacity: ready ? 1 : 0,
   };
