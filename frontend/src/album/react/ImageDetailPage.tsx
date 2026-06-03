@@ -7,7 +7,7 @@ import { hasUserPermission } from "../../app/permissions";
 import { CacheMediaPlayer } from "../../components/CacheMediaPlayer";
 import { API_BASE } from "../../js/apiBase";
 import { apiFetch } from "../../js/apiFetch";
-import { downloadUrlOrShare } from "../../js/browserActions";
+import { downloadUrlOrShare, shareUrlOrCopy } from "../../js/browserActions";
 import { useEnsureDesignTokens } from "../../theme/designTokens";
 
 type FileRecord = {
@@ -151,7 +151,7 @@ export function ImageDetailPage({ isMobile, user }: { isMobile: boolean; user?: 
   }
 
   const canOpenOriginal = Boolean(mediaSource && mediaSource.kind !== "unsupported" && mediaSource.originalUrl);
-  const canShareImage = Boolean(isMobile && mediaSource?.kind === "image" && mediaSource.originalUrl);
+  const canShareMedia = Boolean(file && (mediaSource?.kind === "image" || mediaSource?.kind === "video"));
 
   async function openOriginal() {
     if (!mediaSource || mediaSource.kind === "unsupported" || !mediaSource.originalUrl) {
@@ -208,8 +208,8 @@ export function ImageDetailPage({ isMobile, user }: { isMobile: boolean; user?: 
     }
   }
 
-  async function shareImage() {
-    if (!file || mediaSource?.kind !== "image" || !mediaSource.originalUrl || sharing) {
+  async function shareMedia() {
+    if (!file || !canShareMedia || sharing) {
       return;
     }
 
@@ -217,28 +217,15 @@ export function ImageDetailPage({ isMobile, user }: { isMobile: boolean; user?: 
     setActionError(null);
     setActionNotice(null);
 
-    const title = event?.event_name || file.file_name || `图片 #${file.id}`;
+    const title = event?.event_name || file.file_name || `媒体 #${file.id}`;
     const text = file.file_name || title;
-    const url = mediaSource.originalUrl;
+    const url = buildImageShareUrl(file.id);
 
     try {
-      if (typeof navigator.share !== "function") {
-        await navigator.clipboard?.writeText(url);
-        setActionNotice("这个设备不支持系统分享，已复制图片链接。");
-        return;
+      const result = await shareUrlOrCopy(url, title, text);
+      if (result === "copied") {
+        setActionNotice("系统分享不可用，已复制分享链接。");
       }
-
-      const shareFile = await buildShareFile(url, file);
-      if (shareFile && canNavigatorShareFiles([shareFile])) {
-        await navigator.share({
-          title,
-          text,
-          files: [shareFile],
-        });
-        return;
-      }
-
-      await navigator.share({ title, text, url });
     } catch (err) {
       if (!isShareAbort(err)) {
         setActionError(err instanceof Error ? err.message : "分享失败");
@@ -321,9 +308,9 @@ export function ImageDetailPage({ isMobile, user }: { isMobile: boolean; user?: 
                   {viewerActionLabel}
                 </button>
               ) : null}
-              {isMobile && mediaSource?.kind === "image" ? (
-                <button type="button" style={ghostButtonStyle(isMobile)} onClick={() => void shareImage()} disabled={!canShareImage || sharing}>
-                  {sharing ? "分享中…" : "分享图片"}
+              {canShareMedia ? (
+                <button type="button" style={ghostButtonStyle(isMobile)} onClick={() => void shareMedia()} disabled={!canShareMedia || sharing}>
+                  {sharing ? "分享中…" : "分享"}
                 </button>
               ) : null}
               <button type="button" style={primaryButtonStyle(isMobile)} onClick={() => void openOriginal()} disabled={!canOpenOriginal || sharing}>
@@ -718,6 +705,11 @@ function resolveMediaFileUrl(path?: string) {
     return `${API_BASE}${normalized}`;
   }
   return `${API_BASE}/media_file/${normalized.replace(/^\/+/, "")}`;
+}
+
+function buildImageShareUrl(fileId: number) {
+  const base = API_BASE || window.location.origin;
+  return new URL(`/image/${fileId}`, base).toString();
 }
 
 function isVideoFile(fileType?: string) {

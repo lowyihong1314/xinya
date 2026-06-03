@@ -1,0 +1,46 @@
+<!doctype html>
+<html lang="zh-Hans">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>{{ title }}</title>
+  <meta name="description" content="{{ description }}">
+  <link rel="canonical" href="{{ canonical_url }}">
+  <link rel="icon" href="{{ icon_url }}">
+  <link rel="apple-touch-icon" href="{{ icon_url }}">
+
+  <meta property="og:type" content="article">
+  <meta property="og:site_name" content="UTBA">
+  <meta property="og:title" content="{{ title }}">
+  <meta property="og:description" content="{{ description }}">
+  <meta property="og:url" content="{{ canonical_url }}">
+  <meta property="og:image" content="{{ image_url }}">
+  <meta property="og:image:secure_url" content="{{ image_url }}">
+  <meta property="og:image:alt" content="{{ title }}">
+  <meta property="og:locale" content="zh_CN">
+
+  <meta name="twitter:card" content="summary_large_image">
+  <meta name="twitter:title" content="{{ title }}">
+  <meta name="twitter:description" content="{{ description }}">
+  <meta name="twitter:image" content="{{ image_url }}">
+
+  <style>
+    html,
+    body {
+      margin: 0;
+      width: 100%;
+      min-height: 100%;
+      background: #05070d;
+    }
+
+    img {
+      display: block;
+      width: 100vw;
+      min-height: 100vh;
+      object-fit: contain;
+      background: #05070d;
+    }
+  </style>
+</head>
+<body><img src="{{ image_url }}" alt="{{ title }}"></body>
+</html>

@@ -13,7 +13,8 @@ import { EditEventModal } from "./EditEventModal";
 import { EventFlowModal } from "./EventFlowModal";
 import { UploadMediaModal } from "./UploadMediaModal";
 import { useUserState } from "../../app/UserState";
-import { downloadUrlOrShare } from "../../js/browserActions";
+import { API_BASE } from "../../js/apiBase";
+import { downloadUrlOrShare, shareUrlOrCopy } from "../../js/browserActions";
 import { smartImageURL } from "../../js/get_img";
 import { show_alert } from "../../js/show_alert";
 import { hasUserPermission } from "../../app/permissions";
@@ -43,6 +44,7 @@ export function EventDetailPage() {
   const [showUpload, setShowUpload] = useState(false);
   const [viewMode, setViewMode] = useState<"photos" | "checkin">("photos");
   const [mediaNotification, setMediaNotification] = useState<MediaNotification | null>(null);
+  const [sharing, setSharing] = useState(false);
   const detailRef = useRef<EventDetailRecord | null>(null);
   const refreshTimerRef = useRef<number | null>(null);
   const canEditEvent = hasUserPermission(user, "event_edit");
@@ -259,6 +261,25 @@ export function EventDetailPage() {
     }
   }
 
+  async function handleShareEvent() {
+    if (!detail || sharing) {
+      return;
+    }
+
+    setSharing(true);
+    try {
+      const title = detail.event_name || `活动 #${detail.id}`;
+      const result = await shareUrlOrCopy(buildEventShareUrl(detail.id), title, buildEventDocumentDescription(detail));
+      if (result === "copied") {
+        show_alert("success", "系统分享不可用，已复制活动分享链接。");
+      }
+    } catch (err) {
+      show_alert("error", err instanceof Error ? err.message : "分享失败");
+    } finally {
+      setSharing(false);
+    }
+  }
+
   if (!eventId) {
     return <div style={placeholderStyle}>缺少 event_id</div>;
   }
@@ -337,6 +358,9 @@ export function EventDetailPage() {
           </button>
         </div>
         <div style={toolbarGroupStyle}>
+          <button type="button" style={secondaryButtonStyle} onClick={() => void handleShareEvent()} disabled={sharing}>
+            {sharing ? "分享中…" : "分享活动"}
+          </button>
           <>
             <button
               type="button"
@@ -498,6 +522,11 @@ function buildEventDocumentDescription(detail: EventDetailRecord) {
     .filter(Boolean)
     .join(" · ")
     .slice(0, 220) || "UTBA 活动详情";
+}
+
+function buildEventShareUrl(eventId: number) {
+  const base = API_BASE || window.location.origin;
+  return new URL(`/event/${eventId}`, base).toString();
 }
 
 function findDocumentMeta(attribute: "name" | "property", key: string) {

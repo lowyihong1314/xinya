@@ -1,16 +1,21 @@
 import os
 import re
+import subprocess
 from datetime import date, datetime
 
 from flask import make_response, redirect, render_template, request, send_from_directory
+from werkzeug.utils import secure_filename
 
-from app.media.constants import IMAGE_EXTS
+from app.media.constants import IMAGE_EXTS, VIDEO_EXTS
+from app.media.paths import event_photo_base_dir, event_photo_cache_dir, to_short_data_path
 from app.media.services import get_event_image_payload, resolve_media_path
 from app.paths import STATIC_ROOT
 from models.event_data import AlbumFiles, EventData
 
 EVENT_SHARE_CACHE_SECONDS = 300
 EVENT_SHARE_IMAGE_EXTS = IMAGE_EXTS | {".heic", ".heif"}
+IMAGE_SHARE_CACHE_SECONDS = 300
+VIDEO_SHARE_POSTER_SUFFIX = "_share_poster.jpeg"
 
 
 def _absolute_url(path):
@@ -124,6 +129,101 @@ def _event_share_image_url(event):
     return _fallback_share_image_url()
 
 
+def _run_video_poster_ffmpeg(source_path, output_path, seek_seconds):
+    tmp_path = f"{output_path}.tmp.{os.getpid()}.jpeg"
+    try:
+        command = [
+            "ffmpeg",
+            "-hide_banner",
+            "-y",
+            "-ss",
+            str(seek_seconds),
+            "-i",
+            source_path,
+            "-frames:v",
+            "1",
+            "-vf",
+            "scale=w='min(1280,iw)':h='min(1280,ih)':force_original_aspect_ratio=decrease:force_divisible_by=2,setsar=1",
+            "-q:v",
+            "3",
+            tmp_path,
+        ]
+        result = subprocess.run(command, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True, timeout=25)
+        if result.returncode != 0 or not os.path.exists(tmp_path) or os.path.getsize(tmp_path) <= 0:
+            return False
+        os.replace(tmp_path, output_path)
+        return True
+    except Exception as exc:
+        print(f"[WEB] Failed to extract video poster for {source_path}: {exc}")
+        return False
+    finally:
+        if os.path.exists(tmp_path):
+            os.remove(tmp_path)
+
+
+def _video_share_poster_path(album_file):
+    event = getattr(album_file, "event", None)
+    event_code = getattr(event, "event_code", None)
+    if not event_code:
+        return ""
+
+    filename = secure_filename(getattr(album_file, "file_name", "") or "")
+    if not filename:
+        return ""
+
+    source_path = os.path.join(event_photo_base_dir(event_code), filename)
+    if not os.path.exists(source_path):
+        return ""
+
+    stem, _ = os.path.splitext(filename)
+    output_path = os.path.join(event_photo_cache_dir(event_code), f"{stem}{VIDEO_SHARE_POSTER_SUFFIX}")
+    try:
+        if os.path.exists(output_path) and os.path.getmtime(output_path) >= os.path.getmtime(source_path):
+            return output_path
+    except OSError:
+        pass
+
+    os.makedirs(os.path.dirname(output_path), exist_ok=True)
+    if _run_video_poster_ffmpeg(source_path, output_path, 1) or _run_video_poster_ffmpeg(source_path, output_path, 0):
+        return output_path
+    return ""
+
+
+def _image_file_share_url(album_file):
+    ext = _album_file_ext(album_file)
+    if ext in EVENT_SHARE_IMAGE_EXTS:
+        try:
+            payload = get_event_image_payload(album_file.id, "cache")
+            if isinstance(payload, tuple):
+                payload = payload[0]
+            if payload.get("ready") and payload.get("path"):
+                path = payload["path"]
+                version = _version_for_public_path(path, album_file.id)
+                return _media_file_url(path, version)
+        except Exception as exc:
+            print(f"[WEB] Failed to prepare image share cache for file {album_file.id}: {exc}")
+        return _fallback_share_image_url()
+
+    if ext in VIDEO_EXTS:
+        poster_path = _video_share_poster_path(album_file)
+        if poster_path:
+            path = to_short_data_path(poster_path)
+            version = _version_for_public_path(path, album_file.id)
+            return _media_file_url(path, version)
+        return _fallback_share_image_url()
+
+    return _fallback_share_image_url()
+
+
+def _image_share_description(album_file, event):
+    parts = [
+        getattr(album_file, "file_name", None),
+        _format_event_datetime(getattr(album_file, "created_at", None)),
+        getattr(event, "location", None),
+    ]
+    return _compact_text(" · ".join(str(part).strip() for part in parts if part), "UTBA 活动媒体")
+
+
 def _event_share_description(event):
     parts = [
         _format_event_datetime(event.datetime),
@@ -160,6 +260,26 @@ def register_web_routes(app):
             )
         )
         response.headers["Cache-Control"] = f"public, max-age={EVENT_SHARE_CACHE_SECONDS}"
+        return response
+
+    @app.route("/image/<int:file_id>")
+    def image_share(file_id):
+        album_file = AlbumFiles.query.get_or_404(file_id)
+        event = EventData.query.get(album_file.event_id) if album_file.event_id else None
+        title = _compact_text(getattr(event, "event_name", None), f"媒体 #{album_file.id}", 90)
+        image_url = _image_file_share_url(album_file)
+        canonical_url = _absolute_url(f"/image/{album_file.id}")
+        response = make_response(
+            render_template(
+                "image_share.html",
+                title=title,
+                description=_image_share_description(album_file, event),
+                image_url=image_url,
+                icon_url=image_url,
+                canonical_url=canonical_url,
+            )
+        )
+        response.headers["Cache-Control"] = f"public, max-age={IMAGE_SHARE_CACHE_SECONDS}"
         return response
 
     @app.route("/favicon.ico")

@@ -13,13 +13,39 @@ type DownloadShareOptions = {
 };
 
 type ShareBlobResult = "shared" | "cancelled" | "unsupported";
+type ShareUrlResult = ShareBlobResult | "copied";
 
 export async function copyTextToClipboard(text: string) {
-  if (!navigator.clipboard?.writeText) {
-    throw new Error("Clipboard API unavailable");
+  if (navigator.clipboard?.writeText) {
+    await navigator.clipboard.writeText(text);
+    return;
   }
 
-  await navigator.clipboard.writeText(text);
+  legacyCopyTextToClipboard(text);
+}
+
+export async function shareUrlOrCopy(url: string, title: string, text = title): Promise<ShareUrlResult> {
+  const normalizedUrl = normalizeShareUrl(url);
+
+  if (typeof navigator.share === "function") {
+    try {
+      await navigator.share({ title, text, url: normalizedUrl });
+      return "shared";
+    } catch (error) {
+      if (isShareAbort(error) && !isNotAllowedShareError(error)) {
+        return "cancelled";
+      }
+      console.warn("Browser URL share failed, falling back to native plugin or copy", error);
+    }
+  }
+
+  const nativeShared = await shareUrlWithCapacitorPlugin(normalizedUrl, title, text);
+  if (nativeShared === "shared" || nativeShared === "cancelled") {
+    return nativeShared;
+  }
+
+  await copyTextToClipboard(normalizedUrl);
+  return "copied";
 }
 
 export function downloadUrl(url: string, filename?: string) {
@@ -33,6 +59,23 @@ export function downloadUrl(url: string, filename?: string) {
   document.body.appendChild(anchor);
   anchor.click();
   window.setTimeout(() => anchor.remove(), 0);
+}
+
+function legacyCopyTextToClipboard(text: string) {
+  const textarea = document.createElement("textarea");
+  textarea.value = text;
+  textarea.setAttribute("readonly", "true");
+  textarea.style.position = "fixed";
+  textarea.style.left = "-9999px";
+  textarea.style.top = "0";
+  document.body.appendChild(textarea);
+  textarea.select();
+  textarea.setSelectionRange(0, textarea.value.length);
+  const copied = document.execCommand("copy");
+  textarea.remove();
+  if (!copied) {
+    throw new Error("Clipboard API unavailable");
+  }
 }
 
 export function downloadBlob(blob: Blob, filename: string) {
@@ -227,6 +270,10 @@ function isShareAbort(error: unknown) {
       (error.name === "AbortError" || error.name === "NotAllowedError")) ||
     (error instanceof Error && /cancel/i.test(error.message))
   );
+}
+
+function isNotAllowedShareError(error: unknown) {
+  return error instanceof DOMException && error.name === "NotAllowedError";
 }
 
 function blobToBase64(blob: Blob) {
