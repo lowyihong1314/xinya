@@ -29,6 +29,7 @@ import android.widget.Toast;
 
 import androidx.annotation.NonNull;
 import androidx.appcompat.app.AppCompatActivity;
+import androidx.camera.core.AspectRatio;
 import androidx.camera.core.CameraSelector;
 import androidx.camera.core.FocusMeteringAction;
 import androidx.camera.core.ImageCapture;
@@ -65,9 +66,30 @@ public class NativeCameraCaptureActivity extends AppCompatActivity {
     private static final int REQUEST_CAMERA_PERMISSION = 3104;
     private static final int LONG_PRESS_MS = 520;
     private static final float[] QUICK_ZOOMS = new float[] { 1f, 2f, 3f, 5f, 10f };
+    private static final AspectMode[] ASPECT_MODES = new AspectMode[] {
+        new AspectMode("Full", 0, 0, null),
+        new AspectMode("19:10", 10, 19, null),
+        new AspectMode("16:9", 9, 16, AspectRatio.RATIO_16_9),
+        new AspectMode("4:3", 3, 4, AspectRatio.RATIO_4_3)
+    };
+
+    private static final class AspectMode {
+        final String label;
+        final int portraitWidth;
+        final int portraitHeight;
+        final Integer cameraXAspectRatio;
+
+        AspectMode(String label, int portraitWidth, int portraitHeight, Integer cameraXAspectRatio) {
+            this.label = label;
+            this.portraitWidth = portraitWidth;
+            this.portraitHeight = portraitHeight;
+            this.cameraXAspectRatio = cameraXAspectRatio;
+        }
+    }
 
     private final Handler handler = new Handler(Looper.getMainLooper());
 
+    private FrameLayout rootLayout;
     private LifecycleCameraController cameraController;
     private PreviewView previewView;
     private TextView statusText;
@@ -80,6 +102,7 @@ public class NativeCameraCaptureActivity extends AppCompatActivity {
     private TextView flipButton;
     private TextView torchButton;
     private LinearLayout zoomStrip;
+    private LinearLayout aspectStrip;
     private ScaleGestureDetector scaleGestureDetector;
 
     private int eventId;
@@ -96,6 +119,7 @@ public class NativeCameraCaptureActivity extends AppCompatActivity {
     private float pinchStartZoomRatio = 1f;
     private boolean previewHadMultiTouch = false;
     private CameraSelector cameraSelector = CameraSelector.DEFAULT_BACK_CAMERA;
+    private AspectMode selectedAspectMode = ASPECT_MODES[0];
 
     private final Runnable startRecordingRunnable = () -> {
         longPressStartedRecording = true;
@@ -150,6 +174,7 @@ public class NativeCameraCaptureActivity extends AppCompatActivity {
         enableFullscreenLayout();
 
         FrameLayout root = new FrameLayout(this);
+        rootLayout = root;
         root.setBackgroundColor(Color.BLACK);
 
         previewView = new PreviewView(this);
@@ -157,28 +182,6 @@ public class NativeCameraCaptureActivity extends AppCompatActivity {
         root.addView(previewView, new FrameLayout.LayoutParams(
             ViewGroup.LayoutParams.MATCH_PARENT,
             ViewGroup.LayoutParams.MATCH_PARENT
-        ));
-
-        View topScrim = new View(this);
-        topScrim.setBackground(new GradientDrawable(
-            GradientDrawable.Orientation.TOP_BOTTOM,
-            new int[] { Color.argb(185, 0, 0, 0), Color.TRANSPARENT }
-        ));
-        root.addView(topScrim, new FrameLayout.LayoutParams(
-            ViewGroup.LayoutParams.MATCH_PARENT,
-            dp(148),
-            Gravity.TOP
-        ));
-
-        View bottomScrim = new View(this);
-        bottomScrim.setBackground(new GradientDrawable(
-            GradientDrawable.Orientation.BOTTOM_TOP,
-            new int[] { Color.argb(230, 0, 0, 0), Color.TRANSPARENT }
-        ));
-        root.addView(bottomScrim, new FrameLayout.LayoutParams(
-            ViewGroup.LayoutParams.MATCH_PARENT,
-            dp(292),
-            Gravity.BOTTOM
         ));
 
         focusRing = new TextView(this);
@@ -191,7 +194,7 @@ public class NativeCameraCaptureActivity extends AppCompatActivity {
         topBar.setPadding(dp(18), dp(34), dp(18), 0);
         root.addView(topBar, new FrameLayout.LayoutParams(
             ViewGroup.LayoutParams.MATCH_PARENT,
-            dp(126),
+            dp(142),
             Gravity.TOP
         ));
 
@@ -207,6 +210,7 @@ public class NativeCameraCaptureActivity extends AppCompatActivity {
         statusText.setSingleLine(true);
         statusText.setEllipsize(TextUtils.TruncateAt.END);
         statusText.setGravity(Gravity.CENTER);
+        statusText.setBackground(pillDrawable(Color.argb(64, 0, 0, 0), Color.TRANSPARENT, 0));
         statusText.setText(eventName != null && !eventName.trim().isEmpty() ? eventName : "相机");
         FrameLayout.LayoutParams statusParams = new FrameLayout.LayoutParams(
             ViewGroup.LayoutParams.MATCH_PARENT,
@@ -238,6 +242,19 @@ public class NativeCameraCaptureActivity extends AppCompatActivity {
         FrameLayout.LayoutParams recordingParams = new FrameLayout.LayoutParams(dp(62), dp(30), Gravity.TOP | Gravity.CENTER_HORIZONTAL);
         recordingParams.setMargins(0, dp(54), 0, 0);
         topBar.addView(recordingBadge, recordingParams);
+
+        aspectStrip = new LinearLayout(this);
+        aspectStrip.setOrientation(LinearLayout.HORIZONTAL);
+        aspectStrip.setGravity(Gravity.CENTER);
+        aspectStrip.setPadding(0, 0, 0, 0);
+        FrameLayout.LayoutParams aspectParams = new FrameLayout.LayoutParams(
+            ViewGroup.LayoutParams.WRAP_CONTENT,
+            dp(34),
+            Gravity.TOP | Gravity.CENTER_HORIZONTAL
+        );
+        aspectParams.setMargins(0, dp(86), 0, 0);
+        topBar.addView(aspectStrip, aspectParams);
+        buildAspectButtons();
 
         zoomStrip = new LinearLayout(this);
         zoomStrip.setOrientation(LinearLayout.HORIZONTAL);
@@ -281,6 +298,7 @@ public class NativeCameraCaptureActivity extends AppCompatActivity {
         bottomBar.addView(flipButton, flipParams);
 
         setContentView(root);
+        root.post(this::applyAspectModeLayout);
     }
 
     private void startCamera() {
@@ -290,6 +308,7 @@ public class NativeCameraCaptureActivity extends AppCompatActivity {
             cameraController.setCameraSelector(cameraSelector);
             cameraController.setPinchToZoomEnabled(true);
             cameraController.setTapToFocusEnabled(true);
+            applyCameraTargetAspect();
             cameraController.bindToLifecycle(this);
             previewView.setController(cameraController);
             scaleGestureDetector = new ScaleGestureDetector(this, new ScaleGestureDetector.SimpleOnScaleGestureListener() {
@@ -532,6 +551,94 @@ public class NativeCameraCaptureActivity extends AppCompatActivity {
         button.setBackground(pillDrawable(active ? Color.WHITE : Color.TRANSPARENT, Color.argb(active ? 0 : 70, 255, 255, 255), 1));
         button.setOnClickListener((view) -> setNativeZoomRatio(zoom));
         return button;
+    }
+
+    private void buildAspectButtons() {
+        if (aspectStrip == null) {
+            return;
+        }
+        aspectStrip.removeAllViews();
+        for (AspectMode mode : ASPECT_MODES) {
+            TextView button = aspectButton(mode);
+            LinearLayout.LayoutParams params = new LinearLayout.LayoutParams(dp(mode == selectedAspectMode ? 64 : 58), dp(34));
+            params.setMargins(dp(4), 0, dp(4), 0);
+            aspectStrip.addView(button, params);
+        }
+    }
+
+    private TextView aspectButton(AspectMode mode) {
+        boolean active = mode == selectedAspectMode;
+        TextView button = new TextView(this);
+        button.setText(mode.label);
+        button.setTextSize(active ? 12 : 11);
+        button.setIncludeFontPadding(false);
+        button.setTypeface(Typeface.DEFAULT_BOLD);
+        button.setTextColor(active ? Color.BLACK : Color.WHITE);
+        button.setGravity(Gravity.CENTER);
+        button.setPadding(0, 0, 0, 0);
+        button.setBackground(pillDrawable(active ? Color.WHITE : Color.argb(72, 0, 0, 0), Color.argb(active ? 0 : 64, 255, 255, 255), 1));
+        button.setOnClickListener((view) -> switchAspectMode(mode));
+        return button;
+    }
+
+    private void switchAspectMode(AspectMode mode) {
+        if (mode == null || mode == selectedAspectMode) {
+            return;
+        }
+        if (activeRecording != null) {
+            setStatus("录像中不能切换比例");
+            return;
+        }
+        selectedAspectMode = mode;
+        buildAspectButtons();
+        applyAspectModeLayout();
+        applyCameraTargetAspect();
+    }
+
+    private void applyAspectModeLayout() {
+        if (rootLayout == null || previewView == null) {
+            return;
+        }
+        int rootWidth = rootLayout.getWidth();
+        int rootHeight = rootLayout.getHeight();
+        if (rootWidth <= 0 || rootHeight <= 0) {
+            rootLayout.post(this::applyAspectModeLayout);
+            return;
+        }
+
+        FrameLayout.LayoutParams params;
+        if (selectedAspectMode.portraitWidth <= 0 || selectedAspectMode.portraitHeight <= 0) {
+            params = new FrameLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT,
+                ViewGroup.LayoutParams.MATCH_PARENT,
+                Gravity.CENTER
+            );
+        } else {
+            int targetWidth = rootWidth;
+            int targetHeight = Math.round(targetWidth * (selectedAspectMode.portraitHeight / (float) selectedAspectMode.portraitWidth));
+            if (targetHeight > rootHeight) {
+                targetHeight = rootHeight;
+                targetWidth = Math.round(targetHeight * (selectedAspectMode.portraitWidth / (float) selectedAspectMode.portraitHeight));
+            }
+            params = new FrameLayout.LayoutParams(targetWidth, targetHeight, Gravity.CENTER);
+        }
+        previewView.setLayoutParams(params);
+    }
+
+    private void applyCameraTargetAspect() {
+        if (cameraController == null) {
+            return;
+        }
+        int targetAspectRatio = selectedAspectMode.cameraXAspectRatio != null
+            ? selectedAspectMode.cameraXAspectRatio
+            : AspectRatio.RATIO_16_9;
+        try {
+            CameraController.OutputSize outputSize = new CameraController.OutputSize(targetAspectRatio);
+            cameraController.setPreviewTargetSize(outputSize);
+            cameraController.setImageCaptureTargetSize(outputSize);
+        } catch (Exception error) {
+            setStatus("当前比例不可用");
+        }
     }
 
     private boolean isActiveZoom(float zoom) {
