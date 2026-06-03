@@ -188,10 +188,10 @@ public class NativeCameraCaptureActivity extends AppCompatActivity {
         root.addView(focusRing, new FrameLayout.LayoutParams(dp(78), dp(78), Gravity.TOP | Gravity.START));
 
         FrameLayout topBar = new FrameLayout(this);
-        topBar.setPadding(dp(18), dp(18), dp(18), 0);
+        topBar.setPadding(dp(18), dp(34), dp(18), 0);
         root.addView(topBar, new FrameLayout.LayoutParams(
             ViewGroup.LayoutParams.MATCH_PARENT,
-            dp(112),
+            dp(126),
             Gravity.TOP
         ));
 
@@ -711,11 +711,7 @@ public class NativeCameraCaptureActivity extends AppCompatActivity {
         window.setStatusBarColor(Color.TRANSPARENT);
         window.setNavigationBarColor(Color.BLACK);
         window.getDecorView().setSystemUiVisibility(
-            View.SYSTEM_UI_FLAG_IMMERSIVE_STICKY
-                | View.SYSTEM_UI_FLAG_FULLSCREEN
-                | View.SYSTEM_UI_FLAG_HIDE_NAVIGATION
-                | View.SYSTEM_UI_FLAG_LAYOUT_FULLSCREEN
-                | View.SYSTEM_UI_FLAG_LAYOUT_HIDE_NAVIGATION
+            View.SYSTEM_UI_FLAG_LAYOUT_FULLSCREEN
                 | View.SYSTEM_UI_FLAG_LAYOUT_STABLE
         );
     }
