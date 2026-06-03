@@ -6,7 +6,7 @@ import { useUserState } from "../../app/UserState";
 import { CachedImage } from "../../components/CachedMedia";
 import { useEnsureDesignTokens } from "../../theme/designTokens";
 import { API_BASE, IS_APK } from "../../js/apiBase";
-import { downloadUrlOrShare } from "../../js/browserActions";
+import { downloadUrl } from "../../js/browserActions";
 import {
   clearAllNativeMediaCache,
   getNativeMediaCacheStats,
@@ -1570,15 +1570,9 @@ function AppDownloadCard({
   loading: boolean;
   isMobile: boolean;
 }) {
-  async function handleDownload(release: AppRelease) {
+  function handleDownload(release: AppRelease) {
     try {
-      await downloadUrlOrShare(release.download_url, release.filename, {
-        isMobile,
-        title: release.filename,
-        text: "UTBA Android APK",
-        fallbackUrl: `${window.location.origin}${release.download_url}`,
-        mimeType: "application/vnd.android.package-archive",
-      });
+      downloadUrl(release.download_url, release.filename);
     } catch (error) {
       console.warn("APK download failed:", error);
     }
@@ -1600,7 +1594,7 @@ function AppDownloadCard({
                 <span style={apkNameStyle}>{r.filename}</span>
                 <span style={apkSizeStyle}>{r.size_label}</span>
               </div>
-              <button type="button" style={apkDownloadButtonStyle(isMobile)} onClick={() => void handleDownload(r)}>
+              <button type="button" style={apkDownloadButtonStyle(isMobile)} onClick={() => handleDownload(r)}>
                 下载
               </button>
             </div>

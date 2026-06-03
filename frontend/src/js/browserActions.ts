@@ -29,7 +29,10 @@ export function downloadUrl(url: string, filename?: string) {
     anchor.download = filename;
   }
   anchor.rel = "noopener";
+  anchor.style.display = "none";
+  document.body.appendChild(anchor);
   anchor.click();
+  window.setTimeout(() => anchor.remove(), 0);
 }
 
 export function downloadBlob(blob: Blob, filename: string) {
