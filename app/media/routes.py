@@ -20,8 +20,7 @@ media_bp = Blueprint("media", __name__)
 nginx_media_router = Blueprint("media_file", __name__)
 
 
-@nginx_media_router.route("/<path:filepath>")
-def send_file_py_path(filepath):
+def _send_resolved_media_file(filepath):
     real_path = resolve_media_path(filepath)
     import os
 
@@ -38,6 +37,16 @@ def send_file_py_path(filepath):
         etag=True,
         last_modified=os.path.getmtime(real_path),
     )
+
+
+@nginx_media_router.route("/<path:filepath>")
+def send_file_py_path(filepath):
+    return _send_resolved_media_file(filepath)
+
+
+@media_bp.get("/file/<path:filepath>")
+def send_media_file(filepath):
+    return _send_resolved_media_file(filepath)
 
 
 @media_bp.get("/get_event_type/<int:id>")

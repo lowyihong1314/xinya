@@ -24,6 +24,9 @@ type PreviewState = {
   extLabel: string;
 };
 
+const MEDIA_FILE_PREFIX = "/media_file/";
+const MEDIA_API_FILE_PREFIX = "/media/file/";
+
 function getExt(name = "", mime = "") {
   const normalizedName = name.toLowerCase();
   const normalizedMime = mime.toLowerCase();
@@ -62,7 +65,7 @@ function isText(ext: string, mime: string) {
 function getFileUrl(attachment: AttachmentRecord) {
   const rawPath = String(attachment.file_path || "").trim();
   if (!rawPath) {
-    return "/media_file/";
+    return MEDIA_FILE_PREFIX;
   }
 
   if (/^https?:\/\//i.test(rawPath)) {
@@ -70,7 +73,7 @@ function getFileUrl(attachment: AttachmentRecord) {
   }
 
   const normalizedPath = rawPath.replace(/\\/g, "/");
-  if (normalizedPath.startsWith("/media_file/")) {
+  if (normalizedPath.startsWith(MEDIA_FILE_PREFIX)) {
     return normalizedPath;
   }
   if (normalizedPath.startsWith("media_file/")) {
@@ -80,11 +83,35 @@ function getFileUrl(attachment: AttachmentRecord) {
   return `/media_file/${normalizedPath.replace(/^\/+/, "")}`;
 }
 
-function resolveFileFetchUrl(fileUrl: string) {
-  if (fileUrl.startsWith("/") && API_BASE) {
-    return `${API_BASE}${fileUrl}`;
+function toMediaApiFileUrl(fileUrl: string) {
+  if (/^https?:\/\//i.test(fileUrl)) {
+    try {
+      const parsed = new URL(fileUrl);
+      if (parsed.pathname.startsWith(MEDIA_FILE_PREFIX)) {
+        return `${MEDIA_API_FILE_PREFIX}${parsed.pathname.slice(MEDIA_FILE_PREFIX.length)}${parsed.search}`;
+      }
+    } catch {
+      return fileUrl;
+    }
+    return fileUrl;
   }
+
+  if (fileUrl.startsWith(MEDIA_FILE_PREFIX)) {
+    return `${MEDIA_API_FILE_PREFIX}${fileUrl.slice(MEDIA_FILE_PREFIX.length)}`;
+  }
+  if (fileUrl.startsWith("media_file/")) {
+    return `${MEDIA_API_FILE_PREFIX}${fileUrl.slice("media_file/".length)}`;
+  }
+
   return fileUrl;
+}
+
+function resolveFileFetchUrl(fileUrl: string) {
+  const fetchUrl = toMediaApiFileUrl(fileUrl);
+  if (fetchUrl.startsWith("/") && API_BASE) {
+    return `${API_BASE}${fetchUrl}`;
+  }
+  return fetchUrl;
 }
 
 function formatBytes(size: number) {
