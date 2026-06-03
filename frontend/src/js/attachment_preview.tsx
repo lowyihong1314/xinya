@@ -3,7 +3,7 @@ import heic2any from "heic2any";
 
 import { openOverlay } from "../app/OverlayProvider";
 import { CachedImage, CachedVideo } from "../components/CachedMedia";
-import { apiFetch } from "./apiFetch";
+import { API_BASE } from "./apiBase";
 import { downloadUrlOrShare } from "./browserActions";
 
 type AttachmentRecord = {
@@ -60,7 +60,31 @@ function isText(ext: string, mime: string) {
 }
 
 function getFileUrl(attachment: AttachmentRecord) {
-  return `/media_file/${attachment.file_path}`;
+  const rawPath = String(attachment.file_path || "").trim();
+  if (!rawPath) {
+    return "/media_file/";
+  }
+
+  if (/^https?:\/\//i.test(rawPath)) {
+    return rawPath;
+  }
+
+  const normalizedPath = rawPath.replace(/\\/g, "/");
+  if (normalizedPath.startsWith("/media_file/")) {
+    return normalizedPath;
+  }
+  if (normalizedPath.startsWith("media_file/")) {
+    return `/${normalizedPath}`;
+  }
+
+  return `/media_file/${normalizedPath.replace(/^\/+/, "")}`;
+}
+
+function resolveFileFetchUrl(fileUrl: string) {
+  if (fileUrl.startsWith("/") && API_BASE) {
+    return `${API_BASE}${fileUrl}`;
+  }
+  return fileUrl;
 }
 
 function formatBytes(size: number) {
@@ -83,7 +107,13 @@ async function loadPreview(attachment: AttachmentRecord) {
   const fileName = attachment.file_name || attachment.file_path || "附件预览";
   const mime = attachment.mime_type || "";
   const ext = getExt(fileName, mime);
-  const response = await apiFetch(getFileUrl(attachment), { credentials: "include" });
+  const fileUrl = getFileUrl(attachment);
+  let response: Response;
+  try {
+    response = await fetch(resolveFileFetchUrl(fileUrl), { credentials: "omit" });
+  } catch (error) {
+    throw new Error(error instanceof Error ? `附件读取失败：${error.message}` : "附件读取失败");
+  }
 
   if (!response.ok) {
     throw new Error(`附件读取失败 (${response.status})`);
@@ -159,7 +189,7 @@ async function loadPreview(attachment: AttachmentRecord) {
   if (isText(ext, mimeLabel)) {
     return {
       mode: "text" as const,
-      objectUrl: "",
+      objectUrl: URL.createObjectURL(blob),
       textContent: await blob.text(),
       errorMessage: "",
       sizeLabel,
