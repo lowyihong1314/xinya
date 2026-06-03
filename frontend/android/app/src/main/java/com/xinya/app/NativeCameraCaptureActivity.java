@@ -207,7 +207,7 @@ public class NativeCameraCaptureActivity extends AppCompatActivity {
         statusText.setSingleLine(true);
         statusText.setEllipsize(TextUtils.TruncateAt.END);
         statusText.setGravity(Gravity.CENTER);
-        statusText.setText(eventName != null && !eventName.trim().isEmpty() ? eventName : "原生相机");
+        statusText.setText(eventName != null && !eventName.trim().isEmpty() ? eventName : "相机");
         FrameLayout.LayoutParams statusParams = new FrameLayout.LayoutParams(
             ViewGroup.LayoutParams.MATCH_PARENT,
             dp(46),
@@ -307,7 +307,6 @@ public class NativeCameraCaptureActivity extends AppCompatActivity {
             });
             previewView.setOnTouchListener((view, event) -> handlePreviewTouch(event));
             cameraController.getZoomState().observe(this, this::updateZoomState);
-            setStatus("相机已开启");
         } catch (Exception error) {
             setStatus(error.getMessage() != null ? error.getMessage() : "无法打开原生相机");
         }
@@ -634,7 +633,7 @@ public class NativeCameraCaptureActivity extends AppCompatActivity {
 
     private void setStatus(String text) {
         if (statusText != null) {
-            statusText.setText(text != null && !text.trim().isEmpty() ? text : "原生相机");
+            statusText.setText(text != null && !text.trim().isEmpty() ? text : "相机");
         }
         if (text != null && text.length() > 0) {
             Toast.makeText(this, text, Toast.LENGTH_SHORT).show();
