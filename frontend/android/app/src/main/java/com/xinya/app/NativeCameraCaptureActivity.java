@@ -123,6 +123,8 @@ public class NativeCameraCaptureActivity extends AppCompatActivity {
     private float currentZoomRatio = 1f;
     private float pinchStartZoomRatio = 1f;
     private boolean previewHadMultiTouch = false;
+    private boolean globalPinchInProgress = false;
+    private int zoomButtonMask = -1;
     private CameraSelector cameraSelector = CameraSelector.DEFAULT_BACK_CAMERA;
     private AspectMode selectedAspectMode = ASPECT_MODES[0];
     private int controlsRotationDegrees = 0;
@@ -184,6 +186,26 @@ public class NativeCameraCaptureActivity extends AppCompatActivity {
         if (hasFocus) {
             enableFullscreenLayout();
         }
+    }
+
+    @Override
+    public boolean dispatchTouchEvent(MotionEvent event) {
+        if (scaleGestureDetector != null) {
+            scaleGestureDetector.onTouchEvent(event);
+        }
+        if (event.getPointerCount() > 1) {
+            globalPinchInProgress = true;
+            previewHadMultiTouch = true;
+            return true;
+        }
+        if (globalPinchInProgress) {
+            if (event.getAction() == MotionEvent.ACTION_UP || event.getAction() == MotionEvent.ACTION_CANCEL) {
+                globalPinchInProgress = false;
+                previewHadMultiTouch = false;
+            }
+            return true;
+        }
+        return super.dispatchTouchEvent(event);
     }
 
     @Override
@@ -306,7 +328,6 @@ public class NativeCameraCaptureActivity extends AppCompatActivity {
         statusText.setGravity(Gravity.CENTER);
         statusText.setBackground(pillDrawable(Color.argb(64, 0, 0, 0), Color.TRANSPARENT, 0));
         statusText.setText(eventName != null && !eventName.trim().isEmpty() ? eventName : "相机");
-        registerRotatingTextView(statusText);
         FrameLayout.LayoutParams statusParams = new FrameLayout.LayoutParams(
             ViewGroup.LayoutParams.MATCH_PARENT,
             dp(46),
@@ -411,7 +432,7 @@ public class NativeCameraCaptureActivity extends AppCompatActivity {
             cameraController = new LifecycleCameraController(this);
             cameraController.setEnabledUseCases(CameraController.IMAGE_CAPTURE | CameraController.VIDEO_CAPTURE);
             cameraController.setCameraSelector(cameraSelector);
-            cameraController.setPinchToZoomEnabled(true);
+            cameraController.setPinchToZoomEnabled(false);
             cameraController.setTapToFocusEnabled(true);
             applyCameraTargetAspect();
             cameraController.bindToLifecycle(this);
@@ -425,7 +446,9 @@ public class NativeCameraCaptureActivity extends AppCompatActivity {
 
                 @Override
                 public boolean onScale(ScaleGestureDetector detector) {
-                    setNativeZoomRatio(pinchStartZoomRatio * detector.getScaleFactor());
+                    float nextZoom = Math.max(1f, Math.min(maxZoomRatio, pinchStartZoomRatio * detector.getScaleFactor()));
+                    pinchStartZoomRatio = nextZoom;
+                    setNativeZoomRatio(nextZoom);
                     return true;
                 }
             });
@@ -437,9 +460,6 @@ public class NativeCameraCaptureActivity extends AppCompatActivity {
     }
 
     private boolean handlePreviewTouch(MotionEvent event) {
-        if (scaleGestureDetector != null) {
-            scaleGestureDetector.onTouchEvent(event);
-        }
         if (event.getPointerCount() > 1) {
             previewHadMultiTouch = true;
         }
@@ -639,39 +659,80 @@ public class NativeCameraCaptureActivity extends AppCompatActivity {
         if (zoomText != null) {
             zoomText.setText(formatZoom(currentZoomRatio));
         }
-        buildZoomButtons();
+        updateZoomButtons();
     }
 
     private void buildZoomButtons() {
         if (zoomStrip == null) {
             return;
         }
+        zoomButtonMask = -1;
+        updateZoomButtons();
+    }
+
+    private void updateZoomButtons() {
+        if (zoomStrip == null) {
+            return;
+        }
+        int nextMask = supportedZoomButtonMask();
+        if (nextMask != zoomButtonMask) {
+            rebuildZoomButtons(nextMask);
+            return;
+        }
+        for (int index = 0; index < zoomStrip.getChildCount(); index += 1) {
+            View child = zoomStrip.getChildAt(index);
+            Object tag = child.getTag();
+            if (child instanceof TextView && tag instanceof Float) {
+                styleZoomButton((TextView) child, (Float) tag);
+            }
+        }
+    }
+
+    private int supportedZoomButtonMask() {
+        int mask = 0;
+        for (int index = 0; index < QUICK_ZOOMS.length; index += 1) {
+            float zoom = QUICK_ZOOMS[index];
+            if (zoom <= maxZoomRatio + 0.05f || zoom <= 1f) {
+                mask |= (1 << index);
+            }
+        }
+        return mask;
+    }
+
+    private void rebuildZoomButtons(int nextMask) {
         unregisterRotatingChildren(zoomStrip);
         zoomStrip.removeAllViews();
-        for (float zoom : QUICK_ZOOMS) {
-            if (zoom > maxZoomRatio + 0.05f && zoom > 1f) {
+        zoomButtonMask = nextMask;
+        for (int index = 0; index < QUICK_ZOOMS.length; index += 1) {
+            if ((nextMask & (1 << index)) == 0) {
                 continue;
             }
+            float zoom = QUICK_ZOOMS[index];
             TextView button = zoomButton(zoom);
-            LinearLayout.LayoutParams params = new LinearLayout.LayoutParams(dp(isActiveZoom(zoom) ? 48 : 42), dp(34));
+            LinearLayout.LayoutParams params = new LinearLayout.LayoutParams(dp(48), dp(34));
             params.setMargins(dp(3), 0, dp(3), 0);
             zoomStrip.addView(button, params);
         }
     }
 
     private TextView zoomButton(float zoom) {
-        boolean active = isActiveZoom(zoom);
         TextView button = new TextView(this);
+        button.setTag(zoom);
         button.setText(formatZoom(zoom));
-        button.setTextSize(active ? 12 : 11);
         button.setTypeface(Typeface.DEFAULT_BOLD);
-        button.setTextColor(active ? Color.BLACK : Color.WHITE);
         button.setGravity(Gravity.CENTER);
         button.setPadding(0, 0, 0, 0);
-        button.setBackground(pillDrawable(active ? Color.WHITE : Color.TRANSPARENT, Color.argb(active ? 0 : 70, 255, 255, 255), 1));
         button.setOnClickListener((view) -> setNativeZoomRatio(zoom));
         registerRotatingTextView(button);
+        styleZoomButton(button, zoom);
         return button;
+    }
+
+    private void styleZoomButton(TextView button, float zoom) {
+        boolean active = isActiveZoom(zoom);
+        button.setTextSize(active ? 12 : 11);
+        button.setTextColor(active ? Color.BLACK : Color.WHITE);
+        button.setBackground(pillDrawable(active ? Color.WHITE : Color.TRANSPARENT, Color.argb(active ? 0 : 70, 255, 255, 255), 1));
     }
 
     private void buildAspectButtons() {
@@ -774,6 +835,8 @@ public class NativeCameraCaptureActivity extends AppCompatActivity {
         }
         float nextZoom = Math.max(1f, Math.min(maxZoomRatio, requestedZoom));
         try {
+            currentZoomRatio = nextZoom;
+            updateZoomButtons();
             cameraController.setZoomRatio(nextZoom);
         } catch (Exception error) {
             setStatus("当前倍率不可用");
