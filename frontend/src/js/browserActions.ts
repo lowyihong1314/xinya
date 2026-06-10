@@ -135,20 +135,24 @@ async function fetchDownloadUrl(url: string) {
   return response;
 }
 
-function shouldUseShare(isMobile?: boolean) {
+function shouldUseShare(_isMobile?: boolean) {
   if (typeof window === "undefined") {
     return false;
   }
-  if (typeof isMobile === "boolean") {
-    return isMobile;
-  }
-  return isMobileNativeRuntime() || window.matchMedia?.("(max-width: 900px)").matches;
+  return isMobileNativeRuntime();
 }
 
 async function shareBlob(blob: Blob, filename: string, options: DownloadShareOptions): Promise<ShareBlobResult> {
   const shareTitle = options.title || filename;
   const shareText = options.text || filename;
   const mimeType = blob.type || options.mimeType || "application/octet-stream";
+
+  if (isAndroidNativeRuntime()) {
+    const shared = await shareBlobWithNativePlugin(blob, filename, { ...options, mimeType });
+    if (shared === "shared" || shared === "cancelled") {
+      return shared;
+    }
+  }
 
   if (typeof navigator.share === "function" && typeof File !== "undefined") {
     const file = new File([blob], filename, { type: mimeType });
@@ -157,18 +161,11 @@ async function shareBlob(blob: Blob, filename: string, options: DownloadShareOpt
         await navigator.share({ title: shareTitle, text: shareText, files: [file] });
         return "shared";
       } catch (error) {
-        if (isShareAbort(error)) {
+        if (isUserShareCancel(error)) {
           return "cancelled";
         }
-        throw error;
+        console.warn("Browser file share failed, falling back to native plugin or download", error);
       }
-    }
-  }
-
-  if (isAndroidNativeRuntime()) {
-    const shared = await shareBlobWithNativePlugin(blob, filename, { ...options, mimeType });
-    if (shared === "shared" || shared === "cancelled") {
-      return shared;
     }
   }
 
@@ -178,10 +175,10 @@ async function shareBlob(blob: Blob, filename: string, options: DownloadShareOpt
       await navigator.share({ title: shareTitle, text: shareText, url: fallbackUrl });
       return "shared";
     } catch (error) {
-      if (isShareAbort(error)) {
+      if (isUserShareCancel(error)) {
         return "cancelled";
       }
-      throw error;
+      console.warn("Browser URL share failed, falling back to native plugin or download", error);
     }
   }
 
@@ -244,7 +241,7 @@ async function shareUrlWithCapacitorPlugin(
     });
     return "shared";
   } catch (error) {
-    if (isShareAbort(error)) {
+    if (isUserShareCancel(error)) {
       return "cancelled";
     }
     console.warn("Native URL share failed, falling back to browser download", error);
@@ -270,6 +267,10 @@ function isShareAbort(error: unknown) {
       (error.name === "AbortError" || error.name === "NotAllowedError")) ||
     (error instanceof Error && /cancel/i.test(error.message))
   );
+}
+
+function isUserShareCancel(error: unknown) {
+  return isShareAbort(error) && !isNotAllowedShareError(error);
 }
 
 function isNotAllowedShareError(error: unknown) {

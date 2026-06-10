@@ -4,10 +4,12 @@ import { useNavigate } from "react-router-dom";
 
 import { CacheMediaPlayer } from "../../components/CacheMediaPlayer";
 import type { AlbumFile, EventDetailRecord } from "../../event/shared/types";
+import { API_BASE } from "../../js/apiBase";
 import { apiFetch } from "../../js/apiFetch";
 import { downloadBlobOrShare } from "../../js/browserActions";
 import { showConfirmDialog } from "../../js/dialogs";
 import { show_alert } from "../../js/show_alert";
+import { isMobileNativeRuntime } from "../../mobile/native/capacitor";
 import { PhotoGridBatchActions } from "./PhotoGridBatchActions";
 import type { MediaNotification } from "./mediaRealtime";
 
@@ -169,6 +171,12 @@ export function PhotoGrid({
       return;
     }
 
+    if (isMobile && !isMobileNativeRuntime()) {
+      submitAlbumDownloadForm(selectedIds, downloadType);
+      show_alert("success", "ZIP 已开始下载。");
+      return;
+    }
+
     setBusy(true);
     try {
       const formData = new FormData();
@@ -186,11 +194,15 @@ export function PhotoGrid({
 
       const filename = `event-${detail.id}-${downloadType}.zip`;
       const blob = await response.blob();
-      await downloadBlobOrShare(blob, filename, {
+      const result = await downloadBlobOrShare(blob, filename, {
         isMobile,
         title: filename,
         text: `活动 ${detail.event_name || detail.id} 相册下载`,
+        mimeType: "application/zip",
       });
+      if (isMobile && result === "downloaded") {
+        show_alert("success", "ZIP 已开始下载。");
+      }
     } catch (error) {
       show_alert("error", error instanceof Error ? error.message : "下载失败");
     } finally {
@@ -310,6 +322,30 @@ export function PhotoGrid({
       ) : null}
     </section>
   );
+}
+
+function submitAlbumDownloadForm(fileIds: number[], downloadType: "original" | "jpeg") {
+  const form = document.createElement("form");
+  form.method = "POST";
+  form.action = `${API_BASE.replace(/\/+$/, "")}/media/download_files`;
+  form.target = "_blank";
+  form.style.display = "none";
+
+  const fileIdsInput = document.createElement("input");
+  fileIdsInput.type = "hidden";
+  fileIdsInput.name = "file_ids";
+  fileIdsInput.value = JSON.stringify(fileIds);
+  form.appendChild(fileIdsInput);
+
+  const typeInput = document.createElement("input");
+  typeInput.type = "hidden";
+  typeInput.name = "download_type";
+  typeInput.value = downloadType;
+  form.appendChild(typeInput);
+
+  document.body.appendChild(form);
+  form.submit();
+  window.setTimeout(() => form.remove(), 1000);
 }
 
 function PhotoCard({
