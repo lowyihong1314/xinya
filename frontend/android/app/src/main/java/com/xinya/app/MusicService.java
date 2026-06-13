@@ -143,12 +143,15 @@ public class MusicService extends MediaBrowserServiceCompat {
                 return;
             }
             final int musicId = currentTrackId;
-            final String targetUrl = NativeMusicRepository.normalizeBaseUrl(baseUrl) + "/api/music/add_one_minute/" + musicId;
-            final String authorizationHeader = NativeAuthSessionStore.getAuthorizationHeader(MusicService.this);
-            final String cookie = authorizationHeader == null ? CookieManager.getInstance().getCookie(targetUrl) : null;
+            final String baseUrlSnapshot = getEffectiveBaseUrl();
+            final String targetUrl = baseUrlSnapshot + "/api/music/add_one_minute/" + musicId;
+            final String cookie = CookieManager.getInstance().getCookie(targetUrl);
             playbackMetricExecutor.execute(() -> {
                 try {
-                    NativeMusicRepository.addOneMinute(baseUrl, cookie, authorizationHeader, musicId);
+                    String authorizationHeader = NativeAuthSessionStore.getAuthorizationHeader(MusicService.this, baseUrlSnapshot);
+                    String effectiveCookie = authorizationHeader == null ? cookie : null;
+                    NativeMusicRepository.addOneMinute(baseUrlSnapshot, effectiveCookie, authorizationHeader, musicId);
+                    Log.d(TAG, "addOneMinute reported for musicId=" + musicId);
                 } catch (Exception e) {
                     Log.w(TAG, "addOneMinute failed: " + e.getMessage());
                 }
@@ -718,7 +721,7 @@ public class MusicService extends MediaBrowserServiceCompat {
         }
 
         String normalizedBaseUrl = getEffectiveBaseUrl();
-        String authorizationHeader = NativeAuthSessionStore.getAuthorizationHeader(this);
+        String authorizationHeader = NativeAuthSessionStore.getAuthorizationHeader(this, normalizedBaseUrl);
         String cookie = authorizationHeader == null
             ? getCookieOnMainThread(normalizedBaseUrl + "/api/music/albums")
             : null;

@@ -679,6 +679,27 @@ VERSION_CODE=12 VERSION_NAME=1.2.3 /home/yukang/flaskapp/xinya/frontend/build_ap
 - `build_apk.sh` 已强制要求同时传入 `VERSION_CODE` 和 `VERSION_NAME`。
 - APK/AAB 文件名仍然使用时间戳，不会自动带上 `VERSION_NAME`。
 
+### Android + iOS 一起构建的版本记录
+
+`build_apk_ios.sh` 默认读取 `frontend/mobile_version.env`：
+
+```bash
+MOBILE_DEFAULT_VERSION_NAME=1.5.1
+MOBILE_DEFAULT_BUILD_NUMBER=10
+```
+
+每次发新版前先递增这两个值，再直接运行：
+
+```bash
+./build_apk_ios.sh
+```
+
+也可以临时覆盖：
+
+```bash
+VERSION_NAME=1.5.2 BUILD_NUMBER=11 ./build_apk_ios.sh
+```
+
 ---
 
 ## 文件说明

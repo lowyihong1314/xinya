@@ -6,6 +6,12 @@ cd "$ROOT_DIR"
 
 export JAVA_HOME="${JAVA_HOME:-$HOME/android-build/jdk/jdk-21.0.3+9}"
 export ANDROID_HOME="${ANDROID_HOME:-$HOME/android-build/sdk}"
+VERSION_FILE="${MOBILE_VERSION_FILE:-$ROOT_DIR/mobile_version.env}"
+
+if [ -f "$VERSION_FILE" ]; then
+  # shellcheck disable=SC1090
+  source "$VERSION_FILE"
+fi
 
 NODE_BIN_DIR=""
 CURRENT_NODE_MAJOR=$(node -p "Number(process.versions.node.split('.')[0])" 2>/dev/null || echo 0)
@@ -35,13 +41,13 @@ if [ ! -d "$ANDROID_HOME" ]; then
 fi
 
 VERSION="$(date +%Y%m%d_%H%M)"
-BUILD_NUMBER="${BUILD_NUMBER:-9}"
+BUILD_NUMBER="${BUILD_NUMBER:-${MOBILE_DEFAULT_BUILD_NUMBER:-10}}"
 if ! [[ "$BUILD_NUMBER" =~ ^[0-9]+$ ]]; then
   echo "ERROR: BUILD_NUMBER must be a positive integer"
   exit 1
 fi
 ANDROID_BUILD_SUFFIX=$(printf "%02d" "$((10#$BUILD_NUMBER))")
-VERSION_NAME="${VERSION_NAME:-1.5.0}"
+VERSION_NAME="${VERSION_NAME:-${MOBILE_DEFAULT_VERSION_NAME:-1.5.1}}"
 VERSION_CODE="${VERSION_CODE:-$(date +%Y%m%d)${ANDROID_BUILD_SUFFIX}}"
 IOS_BUILD_NUMBER="${IOS_BUILD_NUMBER:-$BUILD_NUMBER}"
 VERSION_NAME_SAFE="$(printf '%s' "$VERSION_NAME" | tr -c 'A-Za-z0-9._-' '_')"
@@ -67,6 +73,7 @@ GRADLE_ARGS+=("-PappVersionName=$VERSION_NAME")
 export VERSION_NAME VERSION_CODE IOS_BUILD_NUMBER
 
 echo "==> Using mobile version settings..."
+echo "    Defaults file=$VERSION_FILE"
 echo "    Android versionCode=$VERSION_CODE"
 echo "    Android versionName=$VERSION_NAME"
 echo "    iOS MARKETING_VERSION=$VERSION_NAME"
@@ -204,7 +211,7 @@ node <<'NODE'
 const fs = require('fs');
 const path = require('path');
 
-const versionName = process.env.VERSION_NAME || '1.5.0';
+const versionName = process.env.VERSION_NAME || '1.5.1';
 const iosBuildNumber = process.env.IOS_BUILD_NUMBER || process.env.VERSION_CODE || '1';
 const projectFile = path.resolve('ios/App/App.xcodeproj/project.pbxproj');
 
@@ -283,4 +290,4 @@ ls -lht aab/*.aab 2>/dev/null | head -10
 echo ""
 echo "Done."
 echo "Example:"
-echo "  VERSION_NAME=1.5.0 BUILD_NUMBER=9 ./frontend/build_apk_ios.sh"
+echo "  VERSION_NAME=1.5.1 BUILD_NUMBER=10 ./frontend/build_apk_ios.sh"

@@ -24,6 +24,7 @@ from models.membership_registration import (
     MembershipRegistration,
 )
 from models.user_data import MemberRenewal, User
+from models.youth_class_registration import YouthClassRegistration
 
 
 def _clean_text(value):
@@ -175,7 +176,8 @@ def _membership_payment_snapshot(registration):
         or "会员付款"
     )
     phone = (
-        getattr(user, "phone", None)
+        getattr(registration, "phone", None)
+        or getattr(user, "phone", None)
         or getattr(registration, "emergency_contact_phone", None)
         or ""
     )
@@ -259,8 +261,56 @@ def _serialize_public_user(user):
         "display_name": user.display_name,
         "email": user.email,
         "phone": user.phone,
+        "gender": user.gender,
         "is_member": bool(user.is_member),
         "has_password": bool(user.password_hash),
+    }
+
+
+def _first_clean_text(*values):
+    for value in values:
+        normalized = _clean_text(value)
+        if normalized:
+            return normalized
+    return None
+
+
+def _latest_youth_profile_registration(member):
+    if not member:
+        return None
+    return (
+        YouthClassRegistration.query.filter_by(nric_asset_id=member.id)
+        .order_by(YouthClassRegistration.submitted_at.desc(), YouthClassRegistration.id.desc())
+        .first()
+    )
+
+
+def _profile_prefill_defaults(user, member, latest_registration=None):
+    latest_member_data = member.latest_data() if member else None
+    latest_youth = _latest_youth_profile_registration(member)
+    return {
+        "english_name": _first_clean_text(
+            getattr(latest_registration, "english_name", None),
+            getattr(latest_member_data, "name", None),
+            getattr(latest_youth, "english_name", None),
+        ),
+        "phone": _first_clean_text(
+            getattr(latest_registration, "phone", None),
+            getattr(latest_member_data, "phone", None),
+            getattr(latest_youth, "phone", None),
+            getattr(user, "phone", None),
+        ),
+        "gender": _first_clean_text(
+            getattr(latest_registration, "gender", None),
+            getattr(latest_member_data, "gender", None),
+            getattr(latest_youth, "gender", None),
+            getattr(user, "gender", None),
+        ),
+        "address": _first_clean_text(
+            getattr(latest_registration, "nric_address", None),
+            getattr(latest_member_data, "address", None),
+            getattr(latest_youth, "address", None),
+        ),
     }
 
 
@@ -424,6 +474,9 @@ def _submit_membership_upgrade_internal(payload, *, actor_user=None):
         return jsonify({"status": "error", "message": str(exc)}), 400
 
     facebook_profile_url = _clean_text(payload.get("facebook_profile_url"))
+    english_name = _clean_text(payload.get("english_name"))
+    phone = _clean_phone(payload.get("phone"))
+    gender = _clean_text(payload.get("gender"))
     nric_address = _clean_text(payload.get("nric_address"))
     ancestral_home = _clean_text(payload.get("ancestral_home"))
     occupation = _clean_text(payload.get("occupation"))
@@ -437,8 +490,10 @@ def _submit_membership_upgrade_internal(payload, *, actor_user=None):
 
     if not facebook_profile_url:
         return jsonify({"status": "error", "message": "请填写 Facebook 个人主页链接"}), 400
+    if gender and gender not in {"男", "女"}:
+        return jsonify({"status": "error", "message": "性别无效"}), 400
     if not nric_address:
-        return jsonify({"status": "error", "message": "请填写 NRIC_address"}), 400
+        return jsonify({"status": "error", "message": "请填写 NRIC_address / 住家地址"}), 400
     if not ancestral_home:
         return jsonify({"status": "error", "message": "请填写籍贯"}), 400
     if not occupation:
@@ -520,6 +575,9 @@ def _submit_membership_upgrade_internal(payload, *, actor_user=None):
         registration.nric_asset_id = member.id
         registration.requested_username = requested_username
         registration.facebook_profile_url = facebook_profile_url
+        registration.english_name = english_name
+        registration.phone = phone
+        registration.gender = gender
         registration.nric_address = nric_address
         registration.ancestral_home = ancestral_home
         registration.occupation = occupation
@@ -588,6 +646,7 @@ def get_membership_context():
                     "display_name": current_user.display_name,
                     "email": current_user.email,
                     "phone": current_user.phone,
+                    "gender": current_user.gender,
                     "is_member": bool(current_user.is_member),
                 },
                 "member": (
@@ -606,6 +665,7 @@ def get_membership_context():
                 "role_options": list(MEMBERSHIP_ROLE_OPTIONS),
                 "recommenders": _membership_recommender_options(),
                 "settings": _membership_settings_payload(age=age),
+                "profile_defaults": _profile_prefill_defaults(current_user, member, latest_upgrade),
                 "latest_upgrade": _serialize_membership_registration(latest_upgrade),
                 "latest_renewal": _serialize_membership_registration(latest_renewal),
             },
@@ -650,6 +710,7 @@ def get_public_membership_context():
                 "missing_nric": not bool(member and _clean_text(member.nric)),
                 "role_options": list(MEMBERSHIP_ROLE_OPTIONS),
                 "recommenders": _membership_recommender_options(),
+                "profile_defaults": _profile_prefill_defaults(actor_user, member, latest_upgrade),
                 "latest_upgrade": _serialize_membership_registration(latest_upgrade),
                 "latest_renewal": _serialize_membership_registration(latest_renewal),
             },

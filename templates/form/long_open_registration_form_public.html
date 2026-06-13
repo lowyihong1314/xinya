@@ -68,6 +68,19 @@
         <label>姓名 *
           <input name="display_name" required placeholder="例如：张三 / Chen San" />
         </label>
+        <label>英文名 *
+          <input name="english_name" required />
+        </label>
+        <label>性别 *
+          <select name="gender" required>
+            <option value="">请选择</option>
+            <option value="男">男</option>
+            <option value="女">女</option>
+          </select>
+        </label>
+        <label>手机号码 *
+          <input name="phone" required />
+        </label>
         <label>加入身份 *
           <select name="membership_role" required>
             <option value="">请选择</option>
@@ -96,7 +109,7 @@
         </label>
       </div>
 
-      <label>NRIC_address *
+      <label>NRIC_address / 住家地址 *
         <textarea name="nric_address" required></textarea>
       </label>
 
@@ -268,6 +281,15 @@
     function fillMembershipFormFromRegistration(registration) {
       if (!registration) return;
       membershipForm.elements.facebook_profile_url.value = registration.facebook_profile_url || "";
+      if (registration.english_name) {
+        membershipForm.elements.english_name.value = registration.english_name;
+      }
+      if (registration.gender) {
+        membershipForm.elements.gender.value = registration.gender;
+      }
+      if (registration.phone) {
+        membershipForm.elements.phone.value = registration.phone;
+      }
       membershipForm.elements.nric_address.value = registration.nric_address || "";
       membershipForm.elements.ancestral_home.value = registration.ancestral_home || "";
       membershipForm.elements.occupation.value = registration.occupation || "";
@@ -291,8 +313,21 @@
     function fillMembershipFormFromContext(context) {
       const user = context?.user || {};
       const member = context?.member || {};
+      const defaults = context?.profile_defaults || {};
       if (!displayNameInput.value) {
         displayNameInput.value = member.name_nric || user.display_name || user.username || "";
+      }
+      if (!membershipForm.elements.english_name.value) {
+        membershipForm.elements.english_name.value = defaults.english_name || "";
+      }
+      if (!membershipForm.elements.gender.value) {
+        membershipForm.elements.gender.value = defaults.gender || user.gender || "";
+      }
+      if (!membershipForm.elements.phone.value) {
+        membershipForm.elements.phone.value = defaults.phone || user.phone || "";
+      }
+      if (!membershipForm.elements.nric_address.value) {
+        membershipForm.elements.nric_address.value = defaults.address || "";
       }
       if (!usernameInput.value) {
         usernameInput.value = user.username || "";
@@ -309,8 +344,21 @@
     function fillYouthFormFromContext(context) {
       const user = context?.user || {};
       const member = context?.member || {};
+      const defaults = context?.profile_defaults || {};
       if (!youthForm.elements.chinese_name.value) {
         youthForm.elements.chinese_name.value = user.display_name || member.name_nric || "";
+      }
+      if (!youthForm.elements.english_name.value) {
+        youthForm.elements.english_name.value = defaults.english_name || "";
+      }
+      if (!youthForm.elements.gender.value) {
+        youthForm.elements.gender.value = defaults.gender || user.gender || "";
+      }
+      if (!youthForm.elements.phone.value) {
+        youthForm.elements.phone.value = defaults.phone || user.phone || "";
+      }
+      if (!youthForm.elements.address.value) {
+        youthForm.elements.address.value = defaults.address || "";
       }
       if (!nricInput.value && member.nric) {
         nricInput.value = member.nric;
@@ -496,6 +544,9 @@
         display_name: membershipForm.elements.display_name.value,
         nric: nricInput.value,
         facebook_profile_url: membershipForm.elements.facebook_profile_url.value,
+        english_name: membershipForm.elements.english_name.value,
+        gender: membershipForm.elements.gender.value,
+        phone: membershipForm.elements.phone.value,
         nric_address: membershipForm.elements.nric_address.value,
         ancestral_home: membershipForm.elements.ancestral_home.value,
         occupation: membershipForm.elements.occupation.value,

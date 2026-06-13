@@ -562,7 +562,7 @@ public class NativeMusicPlugin extends Plugin {
             throw new IllegalStateException("baseUrl is required before loading native music data");
         }
 
-        String authorizationHeader = NativeAuthSessionStore.getAuthorizationHeader(getContext());
+        String authorizationHeader = NativeAuthSessionStore.getAuthorizationHeader(getContext(), baseUrlSnapshot);
         String cookie = authorizationHeader == null ? getCookie(baseUrlSnapshot + "/api/music/albums") : null;
         NativeMusicRepository.LibraryPayload payload =
             NativeMusicRepository.loadLibrary(baseUrlSnapshot, cookie, authorizationHeader, includeListening);
@@ -840,7 +840,7 @@ public class NativeMusicPlugin extends Plugin {
         }
         backgroundExecutor.execute(() -> {
             try {
-                String authorizationHeader = NativeAuthSessionStore.getAuthorizationHeader(getContext());
+                String authorizationHeader = NativeAuthSessionStore.getAuthorizationHeader(getContext(), baseUrlSnapshot);
                 String cookie = authorizationHeader == null ? getCookie(baseUrlSnapshot + "/api/music/queue") : null;
                 NativeMusicRepository.saveQueueState(
                     baseUrlSnapshot,

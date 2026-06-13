@@ -51,6 +51,9 @@ type Entry = {
   status?: "process" | "paid" | "reject" | string;
   target_expiry_date?: string | null;
   facebook_profile_url?: string | null;
+  english_name?: string | null;
+  phone?: string | null;
+  gender?: string | null;
   nric_address?: string | null;
   ancestral_home?: string | null;
   occupation?: string | null;
@@ -401,6 +404,9 @@ export function MembershipRegistrationPage() {
                 <div style={entryInfoGridStyle(isMobile)}>
                   <Fact label="NRIC" value={entry.nric || "-"} />
                   <Fact label="Username" value={entry.username || entry.requested_username || "-"} />
+                  <Fact label="英文名" value={entry.english_name || "-"} />
+                  <Fact label="手机号码" value={entry.phone || "-"} />
+                  <Fact label="性别" value={entry.gender || "-"} />
                   <Fact label="加入身份" value={entry.membership_role || "-"} />
                   <Fact label="下一次到期日" value={entry.target_expiry_date || "-"} />
                   <Fact label="适用费用" value={entry.selected_fee ? summarizeFee(entry.selected_fee) : "未匹配费率"} />
@@ -423,7 +429,7 @@ export function MembershipRegistrationPage() {
                     )}
                   </div>
                   <div style={addressStyle}>
-                    <strong>NRIC_address：</strong>
+                    <strong>NRIC_address / 住家地址：</strong>
                     {entry.nric_address || "-"}
                   </div>
                 </div>

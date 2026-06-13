@@ -47,6 +47,9 @@ class MembershipRegistration(db.Model):
     target_expiry_date = db.Column(db.Date, nullable=True)
 
     facebook_profile_url = db.Column(db.String(500), nullable=True)
+    english_name = db.Column(db.String(255), nullable=True)
+    phone = db.Column(db.String(32), nullable=True)
+    gender = db.Column(db.String(10), nullable=True)
     nric_address = db.Column(db.Text, nullable=True)
     ancestral_home = db.Column(db.String(255), nullable=True)
     occupation = db.Column(db.String(255), nullable=True)
@@ -131,6 +134,9 @@ class MembershipRegistration(db.Model):
             "payment_token": self.payment_token,
             "target_expiry_date": self.target_expiry_date.isoformat() if self.target_expiry_date else None,
             "facebook_profile_url": self.facebook_profile_url,
+            "english_name": self.english_name,
+            "phone": self.phone,
+            "gender": self.gender,
             "nric_address": self.nric_address,
             "ancestral_home": self.ancestral_home,
             "occupation": self.occupation,
