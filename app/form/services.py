@@ -14,7 +14,7 @@ from app.timezone import malaysia_now
 from app.paths import DATA_ROOT, PROJECT_ROOT, STATIC_ROOT
 from app.redis_client import redis_client
 from .pdf import merge_html_files_to_pdf
-from .realtime import emit_form_event
+from .realtime import emit_form_event, emit_youth_class_event
 from models.form import (
     NRIC_Asset,
     RegistrationFee,
@@ -2109,12 +2109,25 @@ def submit_youth_class_payment(token, data, proof_image):
         entry.regis_payment_id = payment.id
         entry.status = "process"
         db.session.commit()
+        payment_data = payment.to_dict()
+        entry_data = _serialize_youth_entry(entry)
+        emit_youth_class_event(
+            "youth_class_payment_submitted",
+            {
+                "entry_id": entry.id,
+                "payment_id": payment.id,
+                "entry": entry_data,
+                "payment": payment_data,
+                "message": f"{entry.chinese_name or entry.english_name or '学员'} 已提交青少年佛学班付款截图",
+            },
+        )
         return jsonify(
             {
                 "status": "success",
                 "message": "付款资料已提交，请等待审核",
-                "payment": payment.to_dict(),
-                "entry": _serialize_youth_entry(entry),
+                "payment": payment_data,
+                "entry": entry_data,
+                "redirect_url": "/",
             }
         )
     except ValueError as exc:

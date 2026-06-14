@@ -223,8 +223,10 @@
         }
 
         proofInput.value = "";
-        showNotice(payload.message || "付款资料已提交，请等待审核。", "ok");
-        await loadContext();
+        showNotice(payload.message ? `${payload.message}，正在返回首页…` : "付款资料已提交，请等待审核，正在返回首页…", "ok");
+        setTimeout(() => {
+          window.location.href = payload.redirect_url || "/";
+        }, 1200);
       } catch (error) {
         showNotice(error instanceof Error ? error.message : "提交失败", "bad");
       } finally {

@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import type { CSSProperties } from "react";
 import QRCode from "qrcode";
+import { io, type Socket } from "socket.io-client";
 
 import { useUserState } from "../../../app/UserState";
 import { getUserPermissionNames } from "../../../app/permissions";
@@ -17,6 +18,9 @@ import {
 } from "../../form/react/FeePanel";
 
 const PUBLIC_URL = `${window.location.origin}/template/long-open-registration-form`;
+const SOCKET_ORIGIN = "https://utbabuddha.com";
+const YOUTH_CLASS_REGISTRATION_ROOM = "youth_class_registration";
+const YOUTH_CLASS_UPDATE_EVENT = "youth_class_registration_update";
 
 type PaymentRecord = {
   id: number;
@@ -74,6 +78,11 @@ type Settings = {
 type Notice = {
   tone: "success" | "error";
   text: string;
+};
+
+type YouthClassRealtimePayload = {
+  event?: string;
+  message?: string;
 };
 
 async function parseJson<T>(response: Response): Promise<T> {
@@ -198,6 +207,36 @@ export function YouthClassRegistrationPage() {
       return;
     }
     void loadData();
+  }, [canReadYouthClass]);
+
+  useEffect(() => {
+    if (!canReadYouthClass) return;
+
+    const socket: Socket = io(SOCKET_ORIGIN, {
+      withCredentials: true,
+      transports: ["websocket", "polling"],
+    });
+    const joinRoom = () => {
+      socket.emit("join_room", { room: YOUTH_CLASS_REGISTRATION_ROOM });
+    };
+    const handleUpdate = (payload: YouthClassRealtimePayload) => {
+      if (payload?.event === "youth_class_payment_submitted") {
+        setNotice({ tone: "success", text: payload.message || "收到新的青少年佛学班付款截图。" });
+      }
+      void loadData();
+    };
+
+    socket.on("connect", joinRoom);
+    socket.on(YOUTH_CLASS_UPDATE_EVENT, handleUpdate);
+    if (socket.connected) {
+      joinRoom();
+    }
+
+    return () => {
+      socket.off("connect", joinRoom);
+      socket.off(YOUTH_CLASS_UPDATE_EVENT, handleUpdate);
+      socket.disconnect();
+    };
   }, [canReadYouthClass]);
 
   useEffect(() => {
