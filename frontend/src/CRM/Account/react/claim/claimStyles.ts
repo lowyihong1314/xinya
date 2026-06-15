@@ -387,6 +387,7 @@ export const purposeBoxStyle: CSSProperties = {
 export const sectionStyle: CSSProperties = {
   display: "grid",
   gap: "6px",
+  minWidth: 0,
 };
 
 export const sectionTitleStyle: CSSProperties = {
@@ -436,11 +437,15 @@ export const approverMeStyle: CSSProperties = {
 
 export const attachmentGridStyle: CSSProperties = {
   display: "grid",
-  gridTemplateColumns: "repeat(auto-fit, minmax(180px, 1fr))",
+  gridTemplateColumns: "repeat(auto-fit, minmax(min(180px, 100%), 1fr))",
   gap: "6px",
+  width: "100%",
+  minWidth: 0,
 };
 
 export const attachmentCardStyle: CSSProperties = {
+  minWidth: 0,
+  boxSizing: "border-box",
   border: "1px solid var(--x-color-line-soft)",
   borderRadius: "6px",
   padding: "8px 10px",
@@ -452,13 +457,18 @@ export const attachmentCardStyle: CSSProperties = {
 };
 
 export const attachmentNameStyle: CSSProperties = {
+  minWidth: 0,
   fontSize: "13px",
   fontWeight: 700,
   color: "var(--x-color-ink)",
   wordBreak: "break-word",
+  overflowWrap: "anywhere",
 };
 
 export const attachmentMetaStyle: CSSProperties = {
+  minWidth: 0,
   fontSize: "12px",
   color: "var(--x-color-ink-muted)",
+  wordBreak: "break-word",
+  overflowWrap: "anywhere",
 };

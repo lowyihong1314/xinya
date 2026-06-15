@@ -531,16 +531,22 @@ function overlayStyle(isMobile: boolean): CSSProperties {
 
 const shellStyle: CSSProperties = {
   width: "100%",
+  maxWidth: "100%",
   height: "100%",
   maxHeight: "100%",
+  minWidth: 0,
   minHeight: 0,
+  boxSizing: "border-box",
 };
 
 function panelStyle(isMobile: boolean): CSSProperties {
   return {
     width: "100%",
+    maxWidth: "100%",
     height: "100%",
     maxHeight: isMobile ? "calc(100vh - 20px)" : "calc(100vh - 48px)",
+    minWidth: 0,
+    boxSizing: "border-box",
     display: "grid",
     gridTemplateRows: "auto minmax(0, 1fr)",
     borderRadius: isMobile ? "18px" : "24px",
@@ -559,6 +565,8 @@ function headerStyle(isMobile: boolean): CSSProperties {
     gap: isMobile ? "12px" : "14px",
     flexWrap: "wrap",
     flexDirection: isMobile ? "column" : "row",
+    minWidth: 0,
+    boxSizing: "border-box",
     padding: isMobile ? "14px" : "18px 22px",
     background: "linear-gradient(180deg, rgba(255,255,255,0.06), rgba(255,255,255,0.02))",
     borderBottom: "1px solid rgba(255,255,255,0.08)",
@@ -570,7 +578,9 @@ function headerCopyStyle(isMobile: boolean): CSSProperties {
     display: "flex",
     gap: isMobile ? "10px" : "12px",
     alignItems: isMobile ? "flex-start" : "center",
+    width: isMobile ? "100%" : undefined,
     minWidth: 0,
+    maxWidth: "100%",
   };
 }
 
@@ -578,6 +588,7 @@ function badgeStyle(isMobile: boolean): CSSProperties {
   return {
     display: "grid",
     placeItems: "center",
+    flexShrink: 0,
     minWidth: isMobile ? "52px" : "58px",
     height: isMobile ? "36px" : "40px",
     padding: "0 12px",
@@ -592,8 +603,10 @@ function badgeStyle(isMobile: boolean): CSSProperties {
 
 const titleWrapStyle: CSSProperties = {
   display: "grid",
+  flex: "1 1 0",
   gap: "4px",
   minWidth: 0,
+  maxWidth: "100%",
 };
 
 function titleStyle(isMobile: boolean): CSSProperties {
@@ -605,12 +618,16 @@ function titleStyle(isMobile: boolean): CSSProperties {
     textOverflow: "ellipsis",
     whiteSpace: isMobile ? "normal" : "nowrap",
     wordBreak: "break-word",
+    overflowWrap: "anywhere",
   };
 }
 
 const subtitleStyle: CSSProperties = {
+  minWidth: 0,
   fontSize: "12px",
   color: "rgba(255,255,255,0.68)",
+  wordBreak: "break-word",
+  overflowWrap: "anywhere",
 };
 
 function actionRowStyle(isMobile: boolean): CSSProperties {
@@ -620,6 +637,8 @@ function actionRowStyle(isMobile: boolean): CSSProperties {
     gridTemplateColumns: isMobile ? "repeat(2, minmax(0, 1fr))" : "repeat(3, max-content)",
     alignItems: "center",
     width: isMobile ? "100%" : "auto",
+    minWidth: 0,
+    maxWidth: "100%",
   };
 }
 
@@ -649,6 +668,7 @@ function bodyStyle(isMobile: boolean): CSSProperties {
   return {
     display: "grid",
     gridTemplateRows: "minmax(0, 1fr) auto",
+    minWidth: 0,
     minHeight: 0,
     maxHeight: "100%",
     overflow: "hidden",
@@ -657,9 +677,11 @@ function bodyStyle(isMobile: boolean): CSSProperties {
 
 function viewerStyle(isMobile: boolean): CSSProperties {
   return {
+    width: "100%",
     minWidth: 0,
     minHeight: 0,
     maxHeight: "100%",
+    boxSizing: "border-box",
     padding: isMobile ? "12px" : "20px",
     display: "grid",
     placeItems: "center",
