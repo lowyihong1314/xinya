@@ -212,13 +212,6 @@ async function loadMonthEventImages(monthEvents: SharedEventRecord[]) {
     }
   });
 
-  const availableUrls = Object.values(nextUrls);
-  monthEvents.forEach((event) => {
-    if (!nextUrls[event.id] && availableUrls.length) {
-      nextUrls[event.id] = pickStableFallbackUrl(availableUrls, event.id);
-    }
-  });
-
   return nextUrls;
 }
 
@@ -251,10 +244,6 @@ function isVideoFileType(fileType?: string | null) {
   return ["mp4", "mov", "mod", "m4v", "avi", "mkv", "webm", "flv", "mts", "m2ts", "3gp", "wmv"].includes(
     String(fileType || "").trim().toLowerCase(),
   );
-}
-
-function pickStableFallbackUrl(urls: string[], seed: number) {
-  return urls[Math.abs(seed) % urls.length];
 }
 
 function renderCalendarCells(
