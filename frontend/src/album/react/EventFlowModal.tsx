@@ -342,11 +342,12 @@ function formatClock(date: Date) {
 const overlayStyle: CSSProperties = {
   position: "fixed",
   inset: 0,
-  background: "rgba(9, 16, 29, 0.64)",
+  background: "rgba(214,242,255,0.66)",
   display: "grid",
   placeItems: "center",
   zIndex: 5000,
   padding: "24px",
+  backdropFilter: "blur(10px)",
 };
 
 const modalStyle: CSSProperties = {
@@ -354,10 +355,12 @@ const modalStyle: CSSProperties = {
   maxHeight: "90vh",
   overflow: "auto",
   padding: "22px",
-  borderRadius: "var(--x-radius-lg)",
-  background: "var(--x-color-panel-strongest)",
-  border: "1px solid var(--x-color-line-soft)",
-  boxShadow: "0 24px 54px var(--x-color-shadow-strong)",
+  borderRadius: 0,
+  background: "linear-gradient(180deg, rgba(255,255,255,0.72), rgba(232,247,255,0.6))",
+  border: "1px solid rgba(255,255,255,0.14)",
+  boxShadow: "0 30px 90px rgba(14,116,144,0.18), inset 0 1px 0 rgba(255,255,255,0.12)",
+  color: "rgba(31,78,121,0.92)",
+  backdropFilter: "blur(24px) saturate(140%)",
   display: "grid",
   gap: "16px",
 };
@@ -374,19 +377,19 @@ const eyebrowStyle: CSSProperties = {
   fontSize: "12px",
   letterSpacing: "0.16em",
   textTransform: "uppercase",
-  color: "var(--x-color-ink-muted)",
+  color: "rgba(14,165,233,0.82)",
 };
 
 const titleStyle: CSSProperties = {
   margin: "8px 0 0",
   fontSize: "28px",
-  color: "var(--x-color-ink)",
+  color: "rgba(12,74,110,0.98)",
 };
 
 const subTitleStyle: CSSProperties = {
   marginTop: "6px",
   fontSize: "13px",
-  color: "var(--x-color-ink-muted)",
+  color: "rgba(70,120,158,0.86)",
 };
 
 const headerActionsStyle: CSSProperties = {
@@ -398,21 +401,25 @@ const headerActionsStyle: CSSProperties = {
 const primaryButtonStyle: CSSProperties = {
   padding: "12px 18px",
   borderRadius: "999px",
-  border: "none",
-  background: "linear-gradient(135deg, var(--x-color-accent), var(--x-color-info))",
-  color: "white",
+  border: "1px solid rgba(56,189,248,0.28)",
+  background: "linear-gradient(135deg, rgba(14,165,233,0.78), rgba(125,211,252,0.62))",
+  color: "rgba(3,105,161,0.98)",
   fontWeight: 700,
   cursor: "pointer",
+  boxShadow: "0 14px 32px rgba(56,189,248,0.22)",
+  backdropFilter: "blur(14px)",
 };
 
 const secondaryButtonStyle: CSSProperties = {
   padding: "12px 18px",
   borderRadius: "999px",
-  border: "1px solid var(--x-color-line-soft)",
-  background: "var(--x-color-panel)",
-  color: "var(--x-color-ink)",
+  border: "1px solid rgba(255,255,255,0.14)",
+  background: "rgba(255,255,255,0.6)",
+  color: "rgba(31,78,121,0.9)",
   fontWeight: 700,
   cursor: "pointer",
+  boxShadow: "0 12px 28px rgba(14,116,144,0.12)",
+  backdropFilter: "blur(14px)",
 };
 
 const closeButtonStyle: CSSProperties = {
@@ -422,26 +429,30 @@ const closeButtonStyle: CSSProperties = {
 
 const hintStyle: CSSProperties = {
   padding: "12px 14px",
-  borderRadius: "var(--x-radius-sm)",
-  background: "var(--x-color-info-tint)",
-  border: "1px solid var(--x-color-accent-border)",
-  color: "var(--x-color-ink)",
+  borderRadius: 0,
+  background: "rgba(255,255,255,0.46)",
+  border: "1px solid rgba(56,189,248,0.18)",
+  color: "rgba(31,78,121,0.9)",
   fontSize: "13px",
+  backdropFilter: "blur(12px)",
 };
 
 const errorStyle: CSSProperties = {
   padding: "12px 14px",
-  borderRadius: "var(--x-radius-sm)",
-  background: "var(--x-color-danger-soft)",
-  color: "var(--x-color-danger)",
+  borderRadius: 0,
+  border: "1px solid rgba(244,63,94,0.24)",
+  background: "rgba(255,241,242,0.86)",
+  color: "rgba(159,18,57,0.86)",
+  backdropFilter: "blur(12px)",
 };
 
 const placeholderStyle: CSSProperties = {
   padding: "24px",
-  borderRadius: "var(--x-radius-md)",
-  background: "var(--x-color-panel)",
-  border: "1px solid var(--x-color-line-soft)",
-  color: "var(--x-color-ink-muted)",
+  borderRadius: 0,
+  background: "rgba(255,255,255,0.46)",
+  border: "1px solid rgba(255,255,255,0.1)",
+  color: "rgba(70,120,158,0.86)",
+  backdropFilter: "blur(12px)",
 };
 
 const listStyle: CSSProperties = {
@@ -455,24 +466,27 @@ const rowStyle: CSSProperties = {
   gap: "12px",
   alignItems: "center",
   padding: "12px",
-  borderRadius: "var(--x-radius-md)",
-  border: "1px solid var(--x-color-line-soft)",
-  background: "var(--x-color-panel-strong)",
+  borderRadius: 0,
+  border: "1px solid rgba(255,255,255,0.12)",
+  background: "rgba(255,255,255,0.48)",
+  boxShadow: "inset 0 1px 0 rgba(255,255,255,0.06)",
+  backdropFilter: "blur(12px)",
 };
 
 const dragHandleStyle: CSSProperties = {
   display: "grid",
   placeItems: "center",
-  color: "var(--x-color-ink-muted)",
+  color: "rgba(70,120,158,0.82)",
   cursor: "grab",
 };
 
 const timeBoxStyle: CSSProperties = {
   border: "none",
-  borderRadius: "12px",
+  borderRadius: 0,
   padding: "10px 12px",
-  background: "linear-gradient(135deg, var(--x-color-accent), var(--x-color-info))",
-  color: "white",
+  background: "linear-gradient(135deg, rgba(14,165,233,0.78), rgba(125,211,252,0.62))",
+  border: "1px solid rgba(56,189,248,0.22)",
+  color: "rgba(3,105,161,0.98)",
   display: "grid",
   gap: "2px",
   textAlign: "left",
@@ -498,12 +512,12 @@ const contentStyle: CSSProperties = {
 const contentTitleStyle: CSSProperties = {
   fontSize: "15px",
   fontWeight: 800,
-  color: "var(--x-color-ink)",
+  color: "rgba(12,74,110,0.96)",
 };
 
 const contentBodyStyle: CSSProperties = {
   fontSize: "13px",
-  color: "var(--x-color-ink-muted)",
+  color: "rgba(70,120,158,0.86)",
   lineHeight: 1.6,
 };
 
@@ -516,9 +530,9 @@ const rowActionsStyle: CSSProperties = {
 const secondaryPillStyle: CSSProperties = {
   padding: "8px 10px",
   borderRadius: "999px",
-  border: "1px solid var(--x-color-accent-border)",
-  background: "var(--x-color-accent-tint-strong)",
-  color: "var(--x-color-accent-strong)",
+  border: "1px solid rgba(56,189,248,0.24)",
+  background: "rgba(255,255,255,0.58)",
+  color: "rgba(14,165,233,0.96)",
   cursor: "pointer",
   fontWeight: 700,
 };
@@ -526,9 +540,9 @@ const secondaryPillStyle: CSSProperties = {
 const dangerPillStyle: CSSProperties = {
   padding: "8px 10px",
   borderRadius: "999px",
-  border: "1px solid var(--x-color-danger-border)",
-  background: "var(--x-color-danger-soft)",
-  color: "var(--x-color-danger)",
+  border: "1px solid rgba(244,63,94,0.24)",
+  background: "rgba(255,241,242,0.82)",
+  color: "rgba(159,18,57,0.86)",
   cursor: "pointer",
   fontWeight: 700,
 };
@@ -536,7 +550,7 @@ const dangerPillStyle: CSSProperties = {
 const editorOverlayStyle: CSSProperties = {
   position: "fixed",
   inset: 0,
-  background: "rgba(0,0,0,0.24)",
+  background: "rgba(214,242,255,0.52)",
   display: "grid",
   placeItems: "center",
   zIndex: 5100,
@@ -546,10 +560,11 @@ const editorOverlayStyle: CSSProperties = {
 const editorCardStyle: CSSProperties = {
   width: "min(520px, 100%)",
   padding: "22px",
-  borderRadius: "var(--x-radius-lg)",
-  background: "var(--x-color-panel-strongest)",
-  border: "1px solid var(--x-color-line-soft)",
-  boxShadow: "0 24px 54px var(--x-color-shadow-strong)",
+  borderRadius: 0,
+  background: "linear-gradient(180deg, rgba(255,255,255,0.72), rgba(232,247,255,0.62))",
+  border: "1px solid rgba(255,255,255,0.14)",
+  boxShadow: "0 30px 90px rgba(14,116,144,0.18), inset 0 1px 0 rgba(255,255,255,0.12)",
+  backdropFilter: "blur(24px) saturate(140%)",
   display: "grid",
   gap: "14px",
 };
@@ -564,7 +579,7 @@ const editorHeaderStyle: CSSProperties = {
 const editorTitleStyle: CSSProperties = {
   fontSize: "22px",
   fontWeight: 800,
-  color: "var(--x-color-ink)",
+  color: "rgba(12,74,110,0.98)",
 };
 
 const fieldStyle: CSSProperties = {
@@ -575,18 +590,20 @@ const fieldStyle: CSSProperties = {
 const fieldLabelStyle: CSSProperties = {
   fontSize: "13px",
   fontWeight: 700,
-  color: "var(--x-color-ink-muted)",
+  color: "rgba(70,120,158,0.9)",
 };
 
 const inputStyle: CSSProperties = {
   width: "100%",
   minHeight: "46px",
   padding: "12px 14px",
-  borderRadius: "var(--x-radius-sm)",
-  border: "1px solid var(--x-color-line-soft)",
-  background: "var(--x-color-panel)",
-  color: "var(--x-color-ink)",
+  borderRadius: 0,
+  border: "1px solid rgba(255,255,255,0.12)",
+  background: "rgba(232,247,255,0.44)",
+  color: "rgba(12,74,110,0.94)",
   boxSizing: "border-box",
+  outlineColor: "rgba(56,189,248,0.72)",
+  backdropFilter: "blur(12px)",
 };
 
 const textareaStyle: CSSProperties = {

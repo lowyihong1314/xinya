@@ -390,11 +390,12 @@ function toLocalInputValue(value?: string | null) {
 const overlayStyle: CSSProperties = {
   position: "fixed",
   inset: 0,
-  background: "rgba(9, 16, 29, 0.64)",
+  background: "rgba(214,242,255,0.66)",
   display: "grid",
   placeItems: "center",
   zIndex: 5000,
   padding: "24px",
+  backdropFilter: "blur(10px)",
 };
 
 const modalStyle: CSSProperties = {
@@ -402,10 +403,12 @@ const modalStyle: CSSProperties = {
   maxHeight: "90vh",
   overflow: "auto",
   padding: "24px",
-  borderRadius: "var(--x-radius-lg)",
-  background: "linear-gradient(180deg, var(--x-color-panel-strongest), var(--x-color-panel-strong))",
-  border: "1px solid var(--x-color-line-soft)",
-  boxShadow: "0 24px 54px var(--x-color-shadow-strong)",
+  borderRadius: 0,
+  background: "linear-gradient(180deg, rgba(255,255,255,0.72), rgba(232,247,255,0.6))",
+  border: "1px solid rgba(255,255,255,0.14)",
+  boxShadow: "0 30px 90px rgba(14,116,144,0.18), inset 0 1px 0 rgba(255,255,255,0.12)",
+  backdropFilter: "blur(24px) saturate(140%)",
+  color: "rgba(31,78,121,0.92)",
   display: "grid",
   gap: "18px",
 };
@@ -422,33 +425,41 @@ const eyebrowStyle: CSSProperties = {
   fontSize: "12px",
   letterSpacing: "0.16em",
   textTransform: "uppercase",
-  color: "var(--x-color-ink-muted)",
+  color: "rgba(14,165,233,0.82)",
 };
 
 const titleStyle: CSSProperties = {
   margin: "8px 0 0",
   fontSize: "28px",
-  color: "var(--x-color-ink)",
+  color: "rgba(12,74,110,0.98)",
 };
 
 const closeButtonStyle: CSSProperties = {
   padding: "10px 14px",
   borderRadius: "999px",
-  border: "1px solid var(--x-color-line-soft)",
-  background: "var(--x-color-panel)",
-  color: "var(--x-color-ink)",
+  border: "1px solid rgba(255,255,255,0.14)",
+  background: "rgba(255,255,255,0.6)",
+  color: "rgba(31,78,121,0.9)",
   cursor: "pointer",
+  boxShadow: "0 12px 28px rgba(14,116,144,0.12)",
+  backdropFilter: "blur(14px)",
 };
 
 const sectionStyle: CSSProperties = {
   display: "grid",
   gap: "12px",
+  padding: "16px",
+  borderRadius: 0,
+  background: "rgba(255,255,255,0.46)",
+  border: "1px solid rgba(255,255,255,0.1)",
+  boxShadow: "inset 0 1px 0 rgba(255,255,255,0.06)",
+  backdropFilter: "blur(14px)",
 };
 
 const sectionTitleStyle: CSSProperties = {
   fontSize: "15px",
   fontWeight: 700,
-  color: "var(--x-color-ink)",
+  color: "rgba(12,74,110,0.94)",
 };
 
 const posterHeaderStyle: CSSProperties = {
@@ -461,11 +472,11 @@ const posterHeaderStyle: CSSProperties = {
 
 const posterPagerMetaStyle: CSSProperties = {
   fontSize: "13px",
-  color: "var(--x-color-ink-muted)",
+  color: "rgba(70,120,158,0.86)",
 };
 
 const hintStyle: CSSProperties = {
-  color: "var(--x-color-ink-muted)",
+  color: "rgba(70,120,158,0.86)",
   fontSize: "13px",
 };
 
@@ -485,20 +496,21 @@ const posterPagerStyle: CSSProperties = {
 const posterPagerButtonStyle: CSSProperties = {
   padding: "10px 14px",
   borderRadius: "999px",
-  border: "1px solid var(--x-color-line-soft)",
-  background: "var(--x-color-panel)",
-  color: "var(--x-color-ink)",
+  border: "1px solid rgba(255,255,255,0.14)",
+  background: "rgba(255,255,255,0.6)",
+  color: "rgba(31,78,121,0.9)",
   cursor: "pointer",
   fontWeight: 700,
+  backdropFilter: "blur(14px)",
 };
 
 const posterButtonStyle = (selected: boolean): CSSProperties => ({
   padding: "0",
-  borderRadius: "14px",
+  borderRadius: 0,
   overflow: "hidden",
-  border: selected ? "2px solid var(--x-color-accent)" : "1px solid var(--x-color-line-soft)",
-  background: "var(--x-color-panel)",
-  boxShadow: selected ? "0 0 0 4px var(--x-color-accent-tint-strong)" : "none",
+  border: selected ? "2px solid rgba(56,189,248,0.9)" : "1px solid rgba(255,255,255,0.12)",
+  background: "rgba(232,247,255,0.5)",
+  boxShadow: selected ? "0 0 0 3px rgba(56,189,248,0.18), 0 14px 30px rgba(14,116,144,0.14)" : "none",
   cursor: "pointer",
 });
 
@@ -507,6 +519,7 @@ const posterImageStyle: CSSProperties = {
   aspectRatio: "1 / 1",
   objectFit: "cover",
   display: "block",
+  background: "#eef9ff",
 };
 
 const formGridStyle: CSSProperties = {
@@ -528,18 +541,20 @@ const wideFieldStyle: CSSProperties = {
 const labelStyle: CSSProperties = {
   fontSize: "13px",
   fontWeight: 700,
-  color: "var(--x-color-ink-muted)",
+  color: "rgba(70,120,158,0.9)",
 };
 
 const inputStyle: CSSProperties = {
   width: "100%",
   minHeight: "46px",
   padding: "12px 14px",
-  borderRadius: "var(--x-radius-sm)",
-  border: "1px solid var(--x-color-line-soft)",
-  background: "var(--x-color-panel)",
-  color: "var(--x-color-ink)",
+  borderRadius: 0,
+  border: "1px solid rgba(255,255,255,0.12)",
+  background: "rgba(232,247,255,0.44)",
+  color: "rgba(12,74,110,0.94)",
   boxSizing: "border-box",
+  outlineColor: "rgba(56,189,248,0.72)",
+  backdropFilter: "blur(12px)",
 };
 
 const textareaStyle: CSSProperties = {
@@ -555,9 +570,11 @@ const brochureCardStyle: CSSProperties = {
   alignItems: "center",
   flexWrap: "wrap",
   padding: "14px 16px",
-  borderRadius: "16px",
-  border: "1px solid var(--x-color-line-soft)",
-  background: "linear-gradient(180deg, var(--x-color-panel-alt), var(--x-color-panel))",
+  borderRadius: 0,
+  border: "1px solid rgba(56,189,248,0.2)",
+  background: "linear-gradient(135deg, rgba(56,189,248,0.16), rgba(255,255,255,0.48))",
+  boxShadow: "inset 0 1px 0 rgba(255,255,255,0.06)",
+  backdropFilter: "blur(14px)",
 };
 
 const brochureMetaStyle: CSSProperties = {
@@ -568,13 +585,13 @@ const brochureMetaStyle: CSSProperties = {
 const brochureNameStyle: CSSProperties = {
   fontSize: "14px",
   fontWeight: 700,
-  color: "var(--x-color-ink)",
+  color: "rgba(12,74,110,0.96)",
   wordBreak: "break-word",
 };
 
 const brochureHintStyle: CSSProperties = {
   fontSize: "13px",
-  color: "var(--x-color-ink-muted)",
+  color: "rgba(70,120,158,0.86)",
 };
 
 const brochureActionStyle: CSSProperties = {
@@ -594,26 +611,32 @@ const footerStyle: CSSProperties = {
 const secondaryButtonStyle: CSSProperties = {
   padding: "12px 18px",
   borderRadius: "999px",
-  border: "1px solid var(--x-color-line-soft)",
-  background: "var(--x-color-panel)",
-  color: "var(--x-color-ink)",
+  border: "1px solid rgba(255,255,255,0.14)",
+  background: "rgba(255,255,255,0.6)",
+  color: "rgba(31,78,121,0.9)",
   fontWeight: 700,
   cursor: "pointer",
+  boxShadow: "0 12px 28px rgba(14,116,144,0.12)",
+  backdropFilter: "blur(14px)",
 };
 
 const primaryButtonStyle: CSSProperties = {
   padding: "12px 18px",
   borderRadius: "999px",
-  border: "none",
-  background: "linear-gradient(135deg, var(--x-color-accent), var(--x-color-info))",
-  color: "white",
+  border: "1px solid rgba(56,189,248,0.28)",
+  background: "linear-gradient(135deg, rgba(14,165,233,0.78), rgba(125,211,252,0.62))",
+  color: "rgba(3,105,161,0.98)",
   fontWeight: 700,
   cursor: "pointer",
+  boxShadow: "0 14px 32px rgba(56,189,248,0.22)",
+  backdropFilter: "blur(14px)",
 };
 
 const errorStyle: CSSProperties = {
   padding: "12px 14px",
-  borderRadius: "var(--x-radius-sm)",
-  background: "var(--x-color-danger-soft)",
-  color: "var(--x-color-danger)",
+  borderRadius: 0,
+  border: "1px solid rgba(244,63,94,0.24)",
+  background: "rgba(255,241,242,0.86)",
+  color: "rgba(159,18,57,0.86)",
+  backdropFilter: "blur(12px)",
 };

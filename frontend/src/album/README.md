@@ -6,18 +6,17 @@ Album is now React-first.
 
 - `/` -> `react/HomeAlbumPage.tsx`
 - `/event/:eventId` -> `react/EventDetailPage.tsx`
-- `/image/:imageId` -> `react/ImageDetailPage.tsx`
+- `/image/:imageId` -> compatibility redirect to `/event/:eventId?img_id=:imageId`
 
 ## Active implementation
 
 - `react/HomeAlbumPage.tsx`: monthly event calendar, hero, and daily event preview cards
 - `react/EventDetailPage.tsx`: event hero, toolbar, photo/check-in tabs, edit modal, event flow modal, and upload modal
-- `react/PhotoGrid.tsx`: paginated media wall with batch actions
+- `react/PhotoGrid.tsx`: infinite media wall with batch actions and popup preview
 - `react/EventCheckInPanel.tsx`: same-day member check-in UI
 - `react/EditEventModal.tsx`: event metadata, poster selection, and brochure management
 - `react/UploadMediaModal.tsx`: batch media upload queue
 - `react/EventFlowModal.tsx`: event flow CRUD and drag-reorder
-- `react/ImageDetailPage.tsx`: dedicated image/video viewer route with rotate actions and detached fullscreen viewer
 - `react/mediaRealtime.ts`: socket room helper for live media updates
 
 ## Shared dependencies

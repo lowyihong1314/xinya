@@ -18,6 +18,10 @@ export type SmartMediaAsset = {
 
 export type SmartMediaVariant = "auto" | "cache" | "base";
 
+type SmartMediaLoadOptions = {
+  signal?: AbortSignal;
+};
+
 type ConvertedHeicEntry = {
   objectUrl: string;
   cacheTag: string;
@@ -29,7 +33,7 @@ const smartMediaCache = new Map<string, Promise<SmartMediaAsset>>();
 const convertedHeicUrls = new Map<string, ConvertedHeicEntry>();
 const MEDIA_INFO_STORAGE_PREFIX = "xinya:media-info:v3:";
 
-async function fetchImageInfo(id: number | string, variant: string): Promise<ImageLookupResponse | null> {
+async function fetchImageInfo(id: number | string, variant: string, signal?: AbortSignal): Promise<ImageLookupResponse | null> {
   const storageKey = `${MEDIA_INFO_STORAGE_PREFIX}${id}:${variant}`;
   const cached = readStoredMediaInfo(storageKey);
   if (cached) {
@@ -38,6 +42,7 @@ async function fetchImageInfo(id: number | string, variant: string): Promise<Ima
 
   const response = await apiFetch(`/media/get_event_image/${id}/${variant}`, {
     credentials: "include",
+    signal,
   });
 
   if (!response.ok) {
@@ -109,7 +114,7 @@ function clearConvertedHeicUrls(prefix?: string) {
   }
 }
 
-async function convertHeicUrlToObjectUrl(url: string, cacheTag: string) {
+async function convertHeicUrlToObjectUrl(url: string, cacheTag: string, signal?: AbortSignal) {
   const cached = convertedHeicUrls.get(cacheTag);
   if (cached) {
     return cached.objectUrl;
@@ -119,7 +124,8 @@ async function convertHeicUrlToObjectUrl(url: string, cacheTag: string) {
     cacheKey: cacheTag,
     staleWhileRevalidate: true,
   });
-  const response = await fetch(localUrl);
+  throwIfAborted(signal);
+  const response = await fetch(localUrl, { signal });
   if (!response.ok) {
     throw new Error("HEIC 文件读取失败");
   }
@@ -164,12 +170,21 @@ async function resolveMediaAsset(
   id: number | string,
   fileType?: string | null,
   variant: SmartMediaVariant = "auto",
+  signal?: AbortSignal,
 ): Promise<SmartMediaAsset> {
   const normalizedType = normalizeFileType(fileType);
   const variants = variant === "base" ? ["base", "cache"] : variant === "cache" ? ["cache", "base"] : ["cache", "base"];
 
   for (const candidate of variants) {
-    const info = await fetchImageInfo(id, candidate).catch(() => null);
+    let info: ImageLookupResponse | null = null;
+    try {
+      info = await fetchImageInfo(id, candidate, signal);
+    } catch (error) {
+      if (isAbortError(error)) {
+        throw error;
+      }
+      info = null;
+    }
     if (!info?.status || info.status !== "success" || !info.ready || !info.path) {
       continue;
     }
@@ -188,7 +203,7 @@ async function resolveMediaAsset(
       if (isHeicPath(url)) {
         return {
           kind: "image",
-          url: await convertHeicUrlToObjectUrl(url, `${cacheKey}:heic`),
+          url: await convertHeicUrlToObjectUrl(url, `${cacheKey}:heic`, signal),
         };
       }
       return {
@@ -221,8 +236,14 @@ export async function smartMediaAsset(
   id: number | string,
   fileType?: string | null,
   variant: SmartMediaVariant = "auto",
+  options: SmartMediaLoadOptions = {},
 ) {
   const cacheKey = `${id}:media:${normalizeFileType(fileType)}:${variant}`;
+  if (options.signal) {
+    throwIfAborted(options.signal);
+    return resolveMediaAsset(id, fileType, variant, options.signal);
+  }
+
   const cached = smartMediaCache.get(cacheKey);
   if (cached) {
     return cached;
@@ -243,6 +264,25 @@ export async function smartMediaAsset(
 
   smartMediaCache.set(cacheKey, task);
   return task;
+}
+
+function throwIfAborted(signal?: AbortSignal) {
+  if (signal?.aborted) {
+    throw createAbortError();
+  }
+}
+
+function isAbortError(error: unknown) {
+  return error instanceof Error && error.name === "AbortError";
+}
+
+function createAbortError() {
+  if (typeof DOMException !== "undefined") {
+    return new DOMException("Aborted", "AbortError");
+  }
+  const error = new Error("Aborted");
+  error.name = "AbortError";
+  return error;
 }
 
 export function clearSmartImageCache(id?: number | string) {

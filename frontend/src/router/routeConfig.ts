@@ -9,8 +9,7 @@ export type RouteKey =
   | "music"
   | "login"
   | "lamp_registration"
-  | "event_detail"
-  | "image_detail";
+  | "event_detail";
 
 export type NavItem = {
   key: RouteKey;
@@ -66,7 +65,6 @@ export function pageKeyFromPath(pathname: string) {
   if (pathname.startsWith(MUSIC_ROOT_PATH)) return "music";
   if (pathname.startsWith("/lamp-registration")) return "lamp_registration";
   if (pathname.startsWith("/event/")) return "event_detail";
-  if (pathname.startsWith("/image/")) return "image_detail";
   if (pathname.startsWith("/login")) return "login";
   return null;
 }

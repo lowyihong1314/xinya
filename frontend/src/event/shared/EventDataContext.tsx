@@ -9,6 +9,7 @@ import {
 import type { ReactNode } from "react";
 
 import { fetchAllEventsSorted } from "./api";
+import { calendarDateFromParts, parseCalendarDateParts } from "./eventDate";
 import type { SharedEventRecord } from "./types";
 
 type EventDataContextValue = {
@@ -94,12 +95,15 @@ export function useEventData() {
 }
 
 function overlapsMonth(event: SharedEventRecord, year: number, month: number) {
-  if (!event.datetime) {
+  const startParts = parseCalendarDateParts(event.datetime);
+  if (!startParts) {
     return false;
   }
 
-  const start = new Date(event.datetime);
-  const end = event.end_datetime ? new Date(event.end_datetime) : new Date(event.datetime);
+  const endParts = parseCalendarDateParts(event.end_datetime) || startParts;
+  const start = calendarDateFromParts(startParts);
+  const parsedEnd = calendarDateFromParts(endParts);
+  const end = parsedEnd < start ? start : parsedEnd;
   const monthStart = new Date(year, month - 1, 1, 0, 0, 0, 0);
   const monthEnd = new Date(year, month, 0, 23, 59, 59, 999);
 

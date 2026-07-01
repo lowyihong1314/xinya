@@ -21,7 +21,7 @@ Inside the app shell:
 - `/changyou/:entryId`
 - `/lamp-registration`
 - `/event/:eventId`
-- `/image/:imageId`
+- `/image/:imageId` compatibility redirect
 - `/login`
 - `/not-found`
 

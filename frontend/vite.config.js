@@ -9,6 +9,14 @@ export default defineConfig(({ command, mode }) => {
   return {
     plugins: [react()],
     base: isApk ? "./" : isBuild ? "/static/vite/" : "/",
+    resolve: {
+      alias: {
+        sweetalert2: path.resolve(
+          __dirname,
+          "./node_modules/sweetalert2/dist/sweetalert2.esm.all.js",
+        ),
+      },
+    },
 
     server: {
       port: 5173,
@@ -52,13 +60,19 @@ export default defineConfig(({ command, mode }) => {
             input: {
               app: path.resolve(__dirname, "./main.tsx"),
               changyouRoom: path.resolve(__dirname, "./changyouRoomMain.tsx"),
+              formPayment: path.resolve(__dirname, "./formPaymentMain.js"),
+              formPublic: path.resolve(__dirname, "./formPublicMain.js"),
               musicPortal: path.resolve(__dirname, "./musicPortalMain.tsx"),
+              parentalSign: path.resolve(__dirname, "./parentalSignMain.js"),
             },
             output: {
               entryFileNames: (chunkInfo) => {
                 if (chunkInfo.name === "app") return "init.js";
                 if (chunkInfo.name === "changyouRoom") return "changyou-room.js";
+                if (chunkInfo.name === "formPayment") return "form-payment.js";
+                if (chunkInfo.name === "formPublic") return "form-public.js";
                 if (chunkInfo.name === "musicPortal") return "music-portal.js";
+                if (chunkInfo.name === "parentalSign") return "parental-sign.js";
                 return "assets/[name]-[hash].js";
               },
               chunkFileNames: "assets/[name]-[hash].js",

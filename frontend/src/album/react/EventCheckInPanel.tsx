@@ -169,8 +169,8 @@ function DesktopEventCheckInPanel({
   }
 
   return (
-    <section className="event-checkin" style={wrapStyle(isMobile)}>
-      <div className="event-checkin__toolbar" style={toolbarStyle(isMobile)}>
+    <section id="event-detail-checkin-panel" className="event-checkin" style={wrapStyle(isMobile)}>
+      <div id="event-detail-checkin-toolbar" className="event-checkin__toolbar" style={toolbarStyle(isMobile)}>
         <input
           className="event-checkin__search"
           value={query}
@@ -189,11 +189,11 @@ function DesktopEventCheckInPanel({
         />
       </div>
 
-      {error ? <div className="event-checkin__error" style={errorStyle}>{error}</div> : null}
+      {error ? <div id="event-detail-checkin-error" className="event-checkin__error" style={errorStyle}>{error}</div> : null}
 
-      <div className="event-checkin__content" style={contentStyle(isMobile)}>
-        <div className="event-checkin__grid" style={gridStyle}>
-          {loadingUsers ? <div style={placeholderStyle}>读取成员中…</div> : null}
+      <div id="event-detail-checkin-content" className="event-checkin__content" style={contentStyle(isMobile)}>
+        <div id="event-detail-checkin-user-grid" className="event-checkin__grid" style={gridStyle}>
+          {loadingUsers ? <div id="event-detail-checkin-loading-users" style={placeholderStyle}>读取成员中…</div> : null}
           {!loadingUsers &&
             filteredUsers.map((user) => {
               const checkIn = checkInMap.get(user.id) || null;
@@ -214,17 +214,17 @@ function DesktopEventCheckInPanel({
                     alt=""
                     style={avatarStyle(checked)}
                   />
-                  <div style={userNameStyle}>{user.display_name || user.username || `用户 ${user.id}`}</div>
-                  <div style={userMetaStyle}>{checked ? checkInHelperLabel(checkIn) : "未签到"}</div>
+                  <div id={`event-detail-checkin-user-${user.id}-name`} style={userNameStyle}>{user.display_name || user.username || `用户 ${user.id}`}</div>
+                  <div id={`event-detail-checkin-user-${user.id}-meta`} style={userMetaStyle}>{checked ? checkInHelperLabel(checkIn) : "未签到"}</div>
                 </button>
               );
             })}
         </div>
 
-        <div className="event-checkin__side" style={sideStyle}>
+        <div id="event-detail-checkin-side-panel" className="event-checkin__side" style={sideStyle}>
           {selectedUser ? (
             <>
-              <div style={sideHeaderStyle}>
+              <div id="event-detail-checkin-selected-header" style={sideHeaderStyle}>
                 <CachedImage
                   src={`/api/user_control/get_profile_image/${selectedUser.id}`}
                   cacheKey={`event-checkin-selected-user:${selectedUser.id}`}
@@ -232,9 +232,9 @@ function DesktopEventCheckInPanel({
                   alt=""
                   style={sideAvatarStyle(Boolean(selectedCheckIn))}
                 />
-                <div>
-                  <div style={sideTitleStyle}>{selectedUser.display_name || selectedUser.username || `用户 ${selectedUser.id}`}</div>
-                  <div style={sideMetaStyle}>
+                <div id="event-detail-checkin-selected-text">
+                  <div id="event-detail-checkin-selected-title" style={sideTitleStyle}>{selectedUser.display_name || selectedUser.username || `用户 ${selectedUser.id}`}</div>
+                  <div id="event-detail-checkin-selected-meta" style={sideMetaStyle}>
                     {selectedCheckIn
                       ? `已于 ${formatDateTime(selectedCheckIn.check_in_time)} 签到 · ${checkInHelperLabel(selectedCheckIn)}`
                       : `${selectedDate} 尚未签到`}
@@ -242,24 +242,24 @@ function DesktopEventCheckInPanel({
                 </div>
               </div>
 
-              <div style={infoCardStyle}>
-                <div style={infoRowStyle}>
+              <div id="event-detail-checkin-info-card" style={infoCardStyle}>
+                <div id="event-detail-checkin-info-date-row" style={infoRowStyle}>
                   <span style={infoLabelStyle}>签到日期</span>
                   <span style={infoValueStyle}>{selectedDate}</span>
                 </div>
-                <div style={infoRowStyle}>
+                <div id="event-detail-checkin-info-status-row" style={infoRowStyle}>
                   <span style={infoLabelStyle}>状态</span>
                   <span style={infoValueStyle}>{selectedCheckIn ? "已签到" : "未签到"}</span>
                 </div>
                 {selectedCheckIn ? (
-                  <div style={infoRowStyle}>
+                  <div id="event-detail-checkin-info-helper-row" style={infoRowStyle}>
                     <span style={infoLabelStyle}>帮签人</span>
                     <span style={infoValueStyle}>{selectedCheckIn.valid_user_name || "-"}</span>
                   </div>
                 ) : null}
               </div>
 
-              <div style={actionStyle}>
+              <div id="event-detail-checkin-actions" style={actionStyle}>
                 {!selectedCheckIn ? (
                   <button type="button" style={primaryButtonStyle} onClick={() => void handleCheckIn()} disabled={saving}>
                     {saving ? "签到中…" : "帮他签到"}
@@ -272,7 +272,7 @@ function DesktopEventCheckInPanel({
               </div>
             </>
           ) : (
-            <div style={placeholderStyle}>请选择一个成员</div>
+            <div id="event-detail-checkin-empty-selection" style={placeholderStyle}>请选择一个成员</div>
           )}
         </div>
       </div>
@@ -436,9 +436,9 @@ function MobileEventCheckInPanel({
 
   if (!isAuthenticated) {
     return (
-      <section style={mobileWrapStyle}>
-        <div style={mobileTitleStyle}>活动签到</div>
-        <div style={mobileHintStyle}>请先登录，再使用手机扫码签到。</div>
+      <section id="event-detail-mobile-checkin-login-panel" style={mobileWrapStyle}>
+        <div id="event-detail-mobile-checkin-login-title" style={mobileTitleStyle}>活动签到</div>
+        <div id="event-detail-mobile-checkin-login-hint" style={mobileHintStyle}>请先登录，再使用手机扫码签到。</div>
         <button type="button" style={primaryButtonStyle} onClick={() => openLogin(window.location.pathname + window.location.search)}>
           登录后签到
         </button>
@@ -452,16 +452,16 @@ function MobileEventCheckInPanel({
     : null;
 
   return (
-    <section style={mobileWrapStyle}>
-      <div style={mobileHeaderStyle}>
-        <div>
-          <div style={mobileEyebrowStyle}>Check-in</div>
-          <div style={mobileTitleStyle}>活动签到</div>
+    <section id="event-detail-mobile-checkin-panel" style={mobileWrapStyle}>
+      <div id="event-detail-mobile-checkin-header" style={mobileHeaderStyle}>
+        <div id="event-detail-mobile-checkin-title-block">
+          <div id="event-detail-mobile-checkin-eyebrow" style={mobileEyebrowStyle}>Check-in</div>
+          <div id="event-detail-mobile-checkin-title" style={mobileTitleStyle}>活动签到</div>
         </div>
-        <div style={mobileUserPillStyle}>{currentUserName}</div>
+        <div id="event-detail-mobile-checkin-user" style={mobileUserPillStyle}>{currentUserName}</div>
       </div>
 
-      <div style={mobileTabStyle}>
+      <div id="event-detail-mobile-checkin-tabs" style={mobileTabStyle}>
         <button type="button" style={mobileTabButtonStyle(activeTab === "scan")} onClick={() => setActiveTab("scan")}>
           我要签到
         </button>
@@ -470,18 +470,18 @@ function MobileEventCheckInPanel({
         </button>
       </div>
 
-      {error ? <div style={errorStyle}>{error}</div> : null}
-      {message ? <div style={mobileSuccessStyle}>{message}</div> : null}
+      {error ? <div id="event-detail-mobile-checkin-error" style={errorStyle}>{error}</div> : null}
+      {message ? <div id="event-detail-mobile-checkin-message" style={mobileSuccessStyle}>{message}</div> : null}
 
       {activeTab === "scan" ? (
-        <div style={scannerPanelStyle}>
-          <div style={scannerFrameStyle}>
+        <div id="event-detail-mobile-checkin-scanner-panel" style={scannerPanelStyle}>
+          <div id="event-detail-mobile-checkin-scanner-frame" style={scannerFrameStyle}>
             <video ref={videoRef} muted playsInline style={scannerVideoStyle} />
-            <div style={scannerOverlayStyle} />
+            <div id="event-detail-mobile-checkin-scanner-overlay" style={scannerOverlayStyle} />
             <canvas ref={canvasRef} style={{ display: "none" }} />
           </div>
-          <div style={mobileHintStyle}>{busy ? "处理中…" : statusText}</div>
-          <div style={manualScanStyle}>
+          <div id="event-detail-mobile-checkin-scanner-status" style={mobileHintStyle}>{busy ? "处理中…" : statusText}</div>
+          <div id="event-detail-mobile-checkin-manual-scan" style={manualScanStyle}>
             <input
               value={manualCode}
               onChange={(event) => setManualCode(event.target.value)}
@@ -494,11 +494,11 @@ function MobileEventCheckInPanel({
           </div>
         </div>
       ) : (
-        <div style={codePanelStyle}>
-          <div style={qrBoxStyle}>
-            {qrDataUrl ? <CachedImage src={qrDataUrl} alt="临时签到 QR" style={qrImageStyle} /> : <div style={placeholderStyle}>生成 QR 中…</div>}
+        <div id="event-detail-mobile-checkin-code-panel" style={codePanelStyle}>
+          <div id="event-detail-mobile-checkin-qr-box" style={qrBoxStyle}>
+            {qrDataUrl ? <CachedImage src={qrDataUrl} alt="临时签到 QR" style={qrImageStyle} /> : <div id="event-detail-mobile-checkin-qr-loading" style={placeholderStyle}>生成 QR 中…</div>}
           </div>
-          <div style={mobileHintStyle}>
+          <div id="event-detail-mobile-checkin-qr-hint" style={mobileHintStyle}>
             让对方扫描这个 QR，对方会由你帮忙完成签到。
             {qrSecondsLeft != null ? ` 剩余 ${qrSecondsLeft} 秒。` : ""}
           </div>
@@ -544,15 +544,37 @@ function checkInHelperLabel(checkIn?: EventCheckInRecord | null) {
   return checkIn.valid_user_name ? `由 ${checkIn.valid_user_name} 帮签` : "已签到";
 }
 
+const glassContainerStyle: CSSProperties = {
+  boxSizing: "border-box",
+  borderRadius: 0,
+  background: "linear-gradient(180deg, rgba(255,255,255,0.64), rgba(232,247,255,0.5))",
+  border: "1px solid rgba(255,255,255,0.14)",
+  boxShadow: "0 24px 60px rgba(14,116,144,0.12), inset 0 1px 0 rgba(255,255,255,0.1)",
+  backdropFilter: "blur(22px) saturate(140%)",
+  color: "rgba(31,78,121,0.92)",
+};
+
+const glassInsetStyle: CSSProperties = {
+  boxSizing: "border-box",
+  background: "rgba(255,255,255,0.48)",
+  border: "1px solid rgba(255,255,255,0.11)",
+  boxShadow: "inset 0 1px 0 rgba(255,255,255,0.06), 0 12px 28px rgba(14,116,144,0.08)",
+  backdropFilter: "blur(14px) saturate(130%)",
+};
+
+const glassButtonStyle: CSSProperties = {
+  border: "1px solid rgba(255,255,255,0.14)",
+  background: "rgba(255,255,255,0.6)",
+  boxShadow: "0 12px 28px rgba(14,116,144,0.12)",
+  backdropFilter: "blur(14px) saturate(130%)",
+};
+
 function wrapStyle(isMobile: boolean): CSSProperties {
   return {
     display: "grid",
     gap: "16px",
     padding: isMobile ? "18px" : "20px",
-    borderRadius: "var(--x-radius-lg)",
-    background: "var(--x-color-panel-strong)",
-    border: "1px solid var(--x-color-line-soft)",
-    boxShadow: "0 16px 34px var(--x-color-shadow-soft)",
+    ...glassContainerStyle,
     minHeight: "680px",
   };
 }
@@ -570,19 +592,17 @@ const searchStyle: CSSProperties = {
   flex: 1,
   minWidth: 0,
   padding: "12px 14px",
-  borderRadius: "14px",
-  border: "1px solid var(--x-color-line-soft)",
-  background: "var(--x-color-panel)",
-  color: "var(--x-color-ink)",
+  borderRadius: 0,
+  ...glassButtonStyle,
+  color: "rgba(12,74,110,0.94)",
   boxSizing: "border-box",
 };
 
 const dateStyle: CSSProperties = {
   padding: "12px 14px",
-  borderRadius: "14px",
-  border: "1px solid var(--x-color-line-soft)",
-  background: "var(--x-color-panel)",
-  color: "var(--x-color-ink)",
+  borderRadius: 0,
+  ...glassButtonStyle,
+  color: "rgba(12,74,110,0.94)",
   boxSizing: "border-box",
 };
 
@@ -608,9 +628,11 @@ function userCardStyle(active: boolean): CSSProperties {
     gap: "8px",
     justifyItems: "center",
     padding: "12px 10px",
-    borderRadius: "18px",
-    border: active ? "1px solid var(--x-color-accent-border)" : "1px solid var(--x-color-line-soft)",
-    background: active ? "var(--x-color-accent-tint)" : "var(--x-color-panel)",
+    borderRadius: 0,
+    border: active ? "1px solid rgba(56,189,248,0.34)" : "1px solid rgba(255,255,255,0.1)",
+    background: active ? "rgba(56,189,248,0.18)" : "rgba(255,255,255,0.46)",
+    boxShadow: active ? "0 14px 30px rgba(56,189,248,0.16), inset 0 1px 0 rgba(255,255,255,0.08)" : "inset 0 1px 0 rgba(255,255,255,0.05)",
+    backdropFilter: "blur(14px)",
     cursor: "pointer",
   };
 }
@@ -623,21 +645,21 @@ function avatarStyle(checked: boolean): CSSProperties {
     objectFit: "cover",
     filter: checked ? "none" : "grayscale(1) brightness(0.88)",
     opacity: checked ? 1 : 0.75,
-    border: checked ? "2px solid var(--x-color-success)" : "2px solid var(--x-color-line-soft)",
+    border: checked ? "2px solid rgba(5,150,105,0.72)" : "2px solid rgba(125,211,252,0.3)",
   };
 }
 
 const userNameStyle: CSSProperties = {
   fontSize: "13px",
   fontWeight: 700,
-  color: "var(--x-color-ink)",
+  color: "rgba(12,74,110,0.94)",
   textAlign: "center",
   lineHeight: 1.4,
 };
 
 const userMetaStyle: CSSProperties = {
   fontSize: "11px",
-  color: "var(--x-color-ink-muted)",
+  color: "rgba(70,120,158,0.86)",
 };
 
 const sideStyle: CSSProperties = {
@@ -645,9 +667,8 @@ const sideStyle: CSSProperties = {
   gap: "14px",
   alignContent: "start",
   padding: "16px",
-  borderRadius: "18px",
-  background: "var(--x-color-panel)",
-  border: "1px solid var(--x-color-line-soft)",
+  borderRadius: 0,
+  ...glassInsetStyle,
 };
 
 const sideHeaderStyle: CSSProperties = {
@@ -662,30 +683,29 @@ function sideAvatarStyle(checked: boolean): CSSProperties {
     height: "74px",
     borderRadius: "50%",
     objectFit: "cover",
-    border: checked ? "2px solid var(--x-color-success)" : "2px solid var(--x-color-line-soft)",
+    border: checked ? "2px solid rgba(5,150,105,0.72)" : "2px solid rgba(125,211,252,0.3)",
   };
 }
 
 const sideTitleStyle: CSSProperties = {
   fontSize: "18px",
   fontWeight: 800,
-  color: "var(--x-color-ink)",
+  color: "rgba(12,74,110,0.96)",
 };
 
 const sideMetaStyle: CSSProperties = {
   marginTop: "4px",
   fontSize: "12px",
   lineHeight: 1.6,
-  color: "var(--x-color-ink-muted)",
+  color: "rgba(70,120,158,0.86)",
 };
 
 const infoCardStyle: CSSProperties = {
   display: "grid",
   gap: "10px",
   padding: "14px",
-  borderRadius: "16px",
-  background: "var(--x-color-panel-strong)",
-  border: "1px solid var(--x-color-line-soft)",
+  borderRadius: 0,
+  ...glassInsetStyle,
 };
 
 const infoRowStyle: CSSProperties = {
@@ -697,12 +717,12 @@ const infoRowStyle: CSSProperties = {
 const infoLabelStyle: CSSProperties = {
   fontSize: "12px",
   fontWeight: 700,
-  color: "var(--x-color-ink-muted)",
+  color: "rgba(70,120,158,0.86)",
 };
 
 const infoValueStyle: CSSProperties = {
   fontSize: "13px",
-  color: "var(--x-color-ink)",
+  color: "rgba(12,74,110,0.94)",
 };
 
 const actionStyle: CSSProperties = {
@@ -713,44 +733,49 @@ const actionStyle: CSSProperties = {
 const primaryButtonStyle: CSSProperties = {
   padding: "12px 18px",
   borderRadius: "999px",
-  border: "none",
-  background: "linear-gradient(135deg, var(--x-color-accent), var(--x-color-info))",
-  color: "white",
+  border: "1px solid rgba(56,189,248,0.28)",
+  background: "linear-gradient(135deg, rgba(14,165,233,0.78), rgba(125,211,252,0.62))",
+  color: "rgba(3,105,161,0.98)",
   fontWeight: 700,
   cursor: "pointer",
+  boxShadow: "0 14px 32px rgba(56,189,248,0.22)",
+  backdropFilter: "blur(14px)",
 };
 
 const dangerButtonStyle: CSSProperties = {
   padding: "12px 18px",
   borderRadius: "999px",
-  border: "1px solid var(--x-color-danger-border)",
-  background: "var(--x-color-danger-tint)",
-  color: "var(--x-color-danger)",
+  border: "1px solid rgba(244,63,94,0.24)",
+  background: "rgba(255,241,242,0.82)",
+  color: "rgba(159,18,57,0.86)",
   fontWeight: 700,
   cursor: "pointer",
+  boxShadow: "0 12px 28px rgba(14,116,144,0.12)",
+  backdropFilter: "blur(14px)",
 };
 
 const placeholderStyle: CSSProperties = {
   minHeight: "140px",
   display: "grid",
   placeItems: "center",
-  color: "var(--x-color-ink-muted)",
+  color: "rgba(70,120,158,0.86)",
 };
 
 const errorStyle: CSSProperties = {
   padding: "12px 14px",
-  borderRadius: "14px",
-  border: "1px solid var(--x-color-danger-border)",
-  background: "var(--x-color-danger-tint)",
-  color: "var(--x-color-danger)",
+  borderRadius: 0,
+  border: "1px solid rgba(244,63,94,0.24)",
+  background: "rgba(255,241,242,0.86)",
+  color: "rgba(159,18,57,0.86)",
+  boxShadow: "0 12px 28px rgba(14,116,144,0.08)",
+  backdropFilter: "blur(14px)",
 };
 
 const secondaryButtonStyle: CSSProperties = {
   padding: "12px 18px",
   borderRadius: "999px",
-  border: "1px solid var(--x-color-line)",
-  background: "var(--x-color-panel)",
-  color: "var(--x-color-ink)",
+  ...glassButtonStyle,
+  color: "rgba(31,78,121,0.9)",
   fontWeight: 700,
   cursor: "pointer",
 };
@@ -759,10 +784,7 @@ const mobileWrapStyle: CSSProperties = {
   display: "grid",
   gap: "14px",
   padding: "14px",
-  borderRadius: "18px",
-  background: "var(--x-color-panel-strong)",
-  border: "1px solid var(--x-color-line-soft)",
-  boxShadow: "0 14px 30px var(--x-color-shadow-soft)",
+  ...glassContainerStyle,
 };
 
 const mobileHeaderStyle: CSSProperties = {
@@ -775,7 +797,7 @@ const mobileHeaderStyle: CSSProperties = {
 const mobileEyebrowStyle: CSSProperties = {
   fontSize: "11px",
   fontWeight: 800,
-  color: "var(--x-color-accent)",
+  color: "rgba(14,165,233,0.9)",
   textTransform: "uppercase",
   letterSpacing: 0,
 };
@@ -784,13 +806,13 @@ const mobileTitleStyle: CSSProperties = {
   fontSize: "20px",
   lineHeight: 1.25,
   fontWeight: 850,
-  color: "var(--x-color-ink)",
+  color: "rgba(12,74,110,0.96)",
 };
 
 const mobileHintStyle: CSSProperties = {
   fontSize: "13px",
   lineHeight: 1.6,
-  color: "var(--x-color-ink-muted)",
+  color: "rgba(70,120,158,0.86)",
 };
 
 const mobileUserPillStyle: CSSProperties = {
@@ -798,9 +820,8 @@ const mobileUserPillStyle: CSSProperties = {
   minHeight: "34px",
   padding: "7px 12px",
   borderRadius: "999px",
-  border: "1px solid var(--x-color-line-soft)",
-  background: "var(--x-color-panel)",
-  color: "var(--x-color-ink)",
+  ...glassButtonStyle,
+  color: "rgba(31,78,121,0.9)",
   fontSize: "12px",
   fontWeight: 750,
   overflow: "hidden",
@@ -814,18 +835,17 @@ const mobileTabStyle: CSSProperties = {
   gridTemplateColumns: "1fr 1fr",
   gap: "6px",
   padding: "4px",
-  borderRadius: "14px",
-  background: "var(--x-color-panel)",
-  border: "1px solid var(--x-color-line-soft)",
+  borderRadius: 0,
+  ...glassInsetStyle,
 };
 
 function mobileTabButtonStyle(active: boolean): CSSProperties {
   return {
     minHeight: "40px",
-    borderRadius: "10px",
-    border: active ? "1px solid var(--x-color-accent-border)" : "1px solid transparent",
-    background: active ? "var(--x-color-accent-tint)" : "transparent",
-    color: active ? "var(--x-color-accent)" : "var(--x-color-ink-muted)",
+    borderRadius: 0,
+    border: active ? "1px solid rgba(56,189,248,0.3)" : "1px solid transparent",
+    background: active ? "rgba(56,189,248,0.18)" : "transparent",
+    color: active ? "rgba(14,165,233,0.96)" : "rgba(70,120,158,0.86)",
     fontSize: "14px",
     fontWeight: 800,
     cursor: "pointer",
@@ -834,10 +854,10 @@ function mobileTabButtonStyle(active: boolean): CSSProperties {
 
 const mobileSuccessStyle: CSSProperties = {
   padding: "12px 14px",
-  borderRadius: "14px",
-  border: "1px solid var(--x-color-success-border)",
-  background: "var(--x-color-success-tint)",
-  color: "var(--x-color-success)",
+  borderRadius: 0,
+  border: "1px solid rgba(52,211,153,0.26)",
+  background: "rgba(219,245,235,0.7)",
+  color: "rgba(6,95,70,0.88)",
   fontSize: "13px",
   fontWeight: 750,
 };
@@ -852,9 +872,10 @@ const scannerFrameStyle: CSSProperties = {
   width: "100%",
   aspectRatio: "1 / 1",
   overflow: "hidden",
-  borderRadius: "18px",
-  background: "#111827",
-  border: "1px solid var(--x-color-line-soft)",
+  borderRadius: 0,
+  background: "#e0f5ff",
+  border: "1px solid rgba(255,255,255,0.14)",
+  boxShadow: "0 14px 32px rgba(14,116,144,0.14)",
 };
 
 const scannerVideoStyle: CSSProperties = {
@@ -867,9 +888,9 @@ const scannerVideoStyle: CSSProperties = {
 const scannerOverlayStyle: CSSProperties = {
   position: "absolute",
   inset: "14%",
-  border: "2px solid rgba(255, 255, 255, 0.88)",
-  borderRadius: "16px",
-  boxShadow: "0 0 0 999px rgba(0, 0, 0, 0.28)",
+  border: "2px solid rgba(255,255,255,0.92)",
+  borderRadius: 0,
+  boxShadow: "0 0 0 999px rgba(3,105,161,0.18)",
   pointerEvents: "none",
 };
 
@@ -883,10 +904,9 @@ const manualScanStyle: CSSProperties = {
 const manualInputStyle: CSSProperties = {
   minWidth: 0,
   padding: "12px 14px",
-  borderRadius: "14px",
-  border: "1px solid var(--x-color-line-soft)",
-  background: "var(--x-color-panel)",
-  color: "var(--x-color-ink)",
+  borderRadius: 0,
+  ...glassButtonStyle,
+  color: "rgba(12,74,110,0.94)",
   boxSizing: "border-box",
 };
 
@@ -903,9 +923,11 @@ const qrBoxStyle: CSSProperties = {
   display: "grid",
   placeItems: "center",
   padding: "12px",
-  borderRadius: "18px",
-  background: "#ffffff",
-  border: "1px solid var(--x-color-line-soft)",
+  borderRadius: 0,
+  background: "rgba(255,255,255,0.9)",
+  border: "1px solid rgba(255,255,255,0.18)",
+  boxShadow: "0 14px 32px rgba(14,116,144,0.12)",
+  backdropFilter: "blur(14px)",
   boxSizing: "border-box",
 };
 

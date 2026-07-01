@@ -622,19 +622,20 @@ function overlayStyle(isMobile: boolean): CSSProperties {
   return {
     position: "fixed",
     inset: 0,
-    zIndex: 1200,
-    background: "rgba(7, 12, 20, 0.6)",
+    zIndex: 5000,
+    background: "rgba(214,242,255,0.66)",
     display: "grid",
     placeItems: "center",
     padding: isMobile ? "10px" : "24px",
+    backdropFilter: "blur(10px)",
   };
 }
 
 const captureFullscreenStyle: CSSProperties = {
   position: "fixed",
   inset: 0,
-  zIndex: 1300,
-  background: "#080b10",
+  zIndex: 5100,
+  background: "#eef9ff",
   overflow: "hidden",
 };
 
@@ -643,10 +644,12 @@ function modalStyle(isMobile: boolean): CSSProperties {
     width: "min(920px, 100%)",
     maxHeight: isMobile ? "94vh" : "90vh",
     overflow: "hidden",
-    borderRadius: "var(--x-radius-lg)",
-    background: "var(--x-color-panel-strongest)",
-    border: "1px solid var(--x-color-line-soft)",
-    boxShadow: "0 24px 64px var(--x-color-shadow-strong)",
+    borderRadius: 0,
+    background: "linear-gradient(180deg, rgba(255,255,255,0.72), rgba(232,247,255,0.6))",
+    border: "1px solid rgba(255,255,255,0.14)",
+    boxShadow: "0 30px 90px rgba(14,116,144,0.18), inset 0 1px 0 rgba(255,255,255,0.12)",
+    color: "rgba(31,78,121,0.92)",
+    backdropFilter: "blur(24px) saturate(140%)",
     display: "grid",
     gridTemplateRows: "auto minmax(0, 1fr) auto",
   };
@@ -660,7 +663,7 @@ function headerStyle(isMobile: boolean): CSSProperties {
     gap: "16px",
     alignItems: "start",
     flexDirection: isMobile ? "column" : "row",
-    borderBottom: "1px solid var(--x-color-line-soft)",
+    borderBottom: "1px solid rgba(255,255,255,0.1)",
   };
 }
 
@@ -668,20 +671,20 @@ const eyebrowStyle: CSSProperties = {
   fontSize: "12px",
   letterSpacing: "0.16em",
   textTransform: "uppercase",
-  color: "var(--x-color-ink-muted)",
+  color: "rgba(14,165,233,0.82)",
 };
 
 function titleStyle(isMobile: boolean): CSSProperties {
   return {
     margin: "8px 0 4px",
     fontSize: isMobile ? "22px" : "28px",
-    color: "var(--x-color-ink)",
+    color: "rgba(12,74,110,0.98)",
   };
 }
 
 const copyStyle: CSSProperties = {
   margin: 0,
-  color: "var(--x-color-ink-muted)",
+  color: "rgba(70,120,158,0.86)",
 };
 
 function bodyStyle(isMobile: boolean): CSSProperties {
@@ -699,10 +702,12 @@ function dropzoneStyle(isMobile: boolean): CSSProperties {
     gridColumn: isMobile ? "1 / -1" : undefined,
     gap: "8px",
     padding: isMobile ? "16px" : "20px",
-    borderRadius: "var(--x-radius-md)",
-    border: "1px dashed var(--x-color-accent-border)",
-    background: "var(--x-color-accent-tint)",
+    borderRadius: 0,
+    border: "1px dashed rgba(56,189,248,0.36)",
+    background: "linear-gradient(135deg, rgba(56,189,248,0.18), rgba(255,255,255,0.48))",
     cursor: "pointer",
+    boxShadow: "inset 0 1px 0 rgba(255,255,255,0.08)",
+    backdropFilter: "blur(14px)",
   };
 }
 
@@ -731,10 +736,10 @@ function captureButtonStyle(isMobile: boolean, disabled: boolean): CSSProperties
   return {
     padding: isMobile ? "12px" : "0 18px",
     minHeight: isMobile ? "48px" : undefined,
-    borderRadius: "var(--x-radius-md)",
-    border: "1px solid var(--x-color-line-soft)",
-    background: "var(--x-color-panel)",
-    color: "var(--x-color-ink)",
+    borderRadius: 0,
+    border: "1px solid rgba(255,255,255,0.14)",
+    background: "rgba(255,255,255,0.6)",
+    color: "rgba(31,78,121,0.9)",
     font: "inherit",
     fontWeight: 800,
     cursor: disabled ? "not-allowed" : "pointer",
@@ -746,27 +751,29 @@ function dropTitleStyle(isMobile: boolean): CSSProperties {
   return {
     fontSize: isMobile ? "16px" : "18px",
     fontWeight: 700,
-    color: "var(--x-color-accent-strong)",
+    color: "rgba(14,165,233,0.94)",
   };
 }
 
 const dropCopyStyle: CSSProperties = {
-  color: "var(--x-color-ink-muted)",
+  color: "rgba(70,120,158,0.86)",
   lineHeight: 1.6,
 };
 
 const toastStyle: CSSProperties = {
   padding: "12px 14px",
-  borderRadius: "var(--x-radius-sm)",
-  background: "var(--x-color-warning-soft)",
-  color: "var(--x-color-warning)",
+  borderRadius: 0,
+  border: "1px solid rgba(250,204,21,0.26)",
+  background: "rgba(113,63,18,0.24)",
+  color: "rgba(254,240,138,0.96)",
+  backdropFilter: "blur(12px)",
 };
 
 const queueHeaderStyle: CSSProperties = {
   display: "flex",
   justifyContent: "space-between",
   gap: "12px",
-  color: "var(--x-color-ink-muted)",
+  color: "rgba(70,120,158,0.86)",
   fontSize: "13px",
   flexWrap: "wrap",
 };
@@ -779,25 +786,27 @@ const queueStyle: CSSProperties = {
 function queueItemStyle(status: UploadQueueItem["status"], isMobile: boolean): CSSProperties {
   const background =
     status === "error"
-      ? "var(--x-color-danger-soft)"
+      ? "rgba(255,241,242,0.86)"
       : status === "success"
-        ? "var(--x-color-success-soft)"
-        : "var(--x-color-panel)";
+        ? "rgba(219,245,235,0.74)"
+        : "rgba(255,255,255,0.5)";
   const border =
     status === "error"
-      ? "1px solid var(--x-color-danger-border)"
+      ? "1px solid rgba(244,63,94,0.24)"
       : status === "success"
-        ? "1px solid var(--x-color-accent-border)"
-        : "1px solid var(--x-color-line-soft)";
+        ? "1px solid rgba(56,189,248,0.28)"
+        : "1px solid rgba(255,255,255,0.12)";
   return {
     display: "grid",
     gridTemplateColumns: isMobile ? "56px minmax(0, 1fr)" : "72px minmax(0, 1fr) auto",
     gap: isMobile ? "10px" : "14px",
     alignItems: isMobile ? "start" : "center",
     padding: isMobile ? "10px" : "12px",
-    borderRadius: "var(--x-radius-md)",
+    borderRadius: 0,
     background,
     border,
+    boxShadow: "inset 0 1px 0 rgba(255,255,255,0.06)",
+    backdropFilter: "blur(12px)",
   };
 }
 
@@ -806,8 +815,8 @@ function previewImageStyle(isMobile: boolean): CSSProperties {
     width: isMobile ? "56px" : "72px",
     height: isMobile ? "56px" : "72px",
     objectFit: "cover",
-    borderRadius: "12px",
-    background: "var(--x-color-panel-alt)",
+    borderRadius: 0,
+    background: "#eef9ff",
   };
 }
 
@@ -815,9 +824,9 @@ function videoTileStyle(isMobile: boolean): CSSProperties {
   return {
     width: isMobile ? "56px" : "72px",
     height: isMobile ? "56px" : "72px",
-    borderRadius: "12px",
-    background: "linear-gradient(135deg, var(--x-color-nav-start), var(--x-color-nav-end))",
-    color: "#fff",
+    borderRadius: 0,
+    background: "linear-gradient(135deg, rgba(56,189,248,0.72), rgba(125,211,252,0.56))",
+    color: "rgba(3,105,161,0.98)",
     display: "grid",
     placeItems: "center",
     fontSize: "12px",
@@ -846,7 +855,7 @@ function fileNameStyle(isMobile: boolean): CSSProperties {
   return {
     fontSize: isMobile ? "14px" : "15px",
     fontWeight: 700,
-    color: "var(--x-color-ink)",
+    color: "rgba(12,74,110,0.96)",
     whiteSpace: isMobile ? "normal" : "nowrap",
     overflow: "hidden",
     textOverflow: "ellipsis",
@@ -856,19 +865,19 @@ function fileNameStyle(isMobile: boolean): CSSProperties {
 
 const fileSubStyle: CSSProperties = {
   fontSize: "13px",
-  color: "var(--x-color-ink-muted)",
+  color: "rgba(70,120,158,0.86)",
   wordBreak: "break-word",
 };
 
 function statusStyle(status: UploadQueueItem["status"]): CSSProperties {
   const color =
     status === "success"
-      ? "var(--x-color-success)"
+      ? "rgba(5,150,105,0.92)"
       : status === "error"
-        ? "var(--x-color-danger)"
+        ? "rgba(190,18,60,0.86)"
         : status === "uploading"
-          ? "var(--x-color-accent-strong)"
-          : "var(--x-color-ink-muted)";
+          ? "rgba(14,165,233,0.96)"
+          : "rgba(70,120,158,0.86)";
   return {
     display: "inline-flex",
     alignItems: "center",
@@ -902,7 +911,8 @@ const progressTrackStyle: CSSProperties = {
   height: "8px",
   borderRadius: "999px",
   overflow: "hidden",
-  background: "rgba(148, 163, 184, 0.18)",
+  background: "rgba(125,211,252,0.22)",
+  boxShadow: "inset 0 1px 2px rgba(14,116,144,0.12)",
 };
 
 function progressFillStyle(progress: number, status: UploadQueueItem["status"]): CSSProperties {
@@ -912,10 +922,10 @@ function progressFillStyle(progress: number, status: UploadQueueItem["status"]):
     borderRadius: "999px",
     background:
       status === "success"
-        ? "linear-gradient(90deg, var(--x-color-success), #34d399)"
+        ? "linear-gradient(90deg, rgba(16,185,129,0.9), #34d399)"
         : status === "error"
-          ? "linear-gradient(90deg, var(--x-color-danger), #fb7185)"
-          : "linear-gradient(90deg, var(--x-color-accent), var(--x-color-info))",
+          ? "linear-gradient(90deg, rgba(244,63,94,0.76), #fb7185)"
+          : "linear-gradient(90deg, rgba(14,165,233,0.9), rgba(14,165,233,0.82))",
     transition: "width 180ms ease",
   };
 }
@@ -928,12 +938,12 @@ function progressTextStyle(status: UploadQueueItem["status"]): CSSProperties {
     textAlign: "right",
     color:
       status === "success"
-        ? "var(--x-color-success)"
+        ? "rgba(5,150,105,0.92)"
         : status === "error"
-          ? "var(--x-color-danger)"
+          ? "rgba(190,18,60,0.86)"
           : status === "uploading"
-            ? "var(--x-color-accent-strong)"
-            : "var(--x-color-ink-muted)",
+            ? "rgba(14,165,233,0.96)"
+            : "rgba(70,120,158,0.86)",
   };
 }
 
@@ -941,9 +951,9 @@ function removeButtonStyle(isMobile: boolean): CSSProperties {
   return {
     padding: "10px 12px",
     borderRadius: "999px",
-    border: "1px solid var(--x-color-danger-border)",
-    background: "var(--x-color-panel)",
-    color: "var(--x-color-danger)",
+    border: "1px solid rgba(244,63,94,0.24)",
+    background: "rgba(255,255,255,0.6)",
+    color: "rgba(159,18,57,0.86)",
     fontWeight: 700,
     cursor: "pointer",
     gridColumn: isMobile ? "1 / -1" : undefined,
@@ -953,19 +963,22 @@ function removeButtonStyle(isMobile: boolean): CSSProperties {
 
 const placeholderStyle: CSSProperties = {
   padding: "18px",
-  borderRadius: "var(--x-radius-md)",
-  background: "var(--x-color-panel-alt)",
-  border: "1px solid var(--x-color-line-soft)",
-  color: "var(--x-color-ink-muted)",
+  borderRadius: 0,
+  background: "rgba(255,255,255,0.46)",
+  border: "1px solid rgba(255,255,255,0.1)",
+  color: "rgba(70,120,158,0.86)",
+  backdropFilter: "blur(12px)",
 };
 
 const nativePanelStyle: CSSProperties = {
   display: "grid",
   gap: "14px",
   padding: "14px",
-  borderRadius: "var(--x-radius-md)",
-  background: "var(--x-color-panel)",
-  border: "1px solid var(--x-color-line-soft)",
+  borderRadius: 0,
+  background: "rgba(255,255,255,0.48)",
+  border: "1px solid rgba(255,255,255,0.12)",
+  boxShadow: "inset 0 1px 0 rgba(255,255,255,0.06)",
+  backdropFilter: "blur(14px)",
 };
 
 function nativeHeaderStyle(isMobile: boolean): CSSProperties {
@@ -981,7 +994,7 @@ function nativeHeaderStyle(isMobile: boolean): CSSProperties {
 const nativeTitleStyle: CSSProperties = {
   fontSize: "16px",
   fontWeight: 800,
-  color: "var(--x-color-ink)",
+  color: "rgba(12,74,110,0.96)",
 };
 
 function nativeMetaGridStyle(isMobile: boolean): CSSProperties {
@@ -1000,12 +1013,12 @@ const nativeMetaItemStyle: CSSProperties = {
 
 const nativeMetaLabelStyle: CSSProperties = {
   fontSize: "12px",
-  color: "var(--x-color-ink-muted)",
+  color: "rgba(70,120,158,0.86)",
 };
 
 const nativeErrorStyle: CSSProperties = {
   fontSize: "13px",
-  color: "var(--x-color-danger)",
+  color: "rgba(190,18,60,0.86)",
   wordBreak: "break-word",
 };
 
@@ -1016,7 +1029,7 @@ function footerStyle(isMobile: boolean): CSSProperties {
     justifyContent: "flex-end",
     gap: "12px",
     flexDirection: isMobile ? "column-reverse" : "row",
-    borderTop: "1px solid var(--x-color-line-soft)",
+    borderTop: "1px solid rgba(255,255,255,0.1)",
   };
 }
 
@@ -1024,12 +1037,14 @@ function secondaryButtonStyle(isMobile: boolean): CSSProperties {
   return {
     padding: "12px 18px",
     borderRadius: "999px",
-    border: "1px solid var(--x-color-line-soft)",
-    background: "var(--x-color-panel)",
-    color: "var(--x-color-ink)",
+    border: "1px solid rgba(255,255,255,0.14)",
+    background: "rgba(255,255,255,0.6)",
+    color: "rgba(31,78,121,0.9)",
     fontWeight: 700,
     cursor: "pointer",
     width: isMobile ? "100%" : undefined,
+    boxShadow: "0 12px 28px rgba(14,116,144,0.12)",
+    backdropFilter: "blur(14px)",
   };
 }
 
@@ -1037,12 +1052,14 @@ function primaryButtonStyle(isMobile: boolean): CSSProperties {
   return {
     padding: "12px 18px",
     borderRadius: "999px",
-    border: "none",
-    background: "linear-gradient(135deg, var(--x-color-accent), var(--x-color-info))",
-    color: "#fff",
+    border: "1px solid rgba(56,189,248,0.28)",
+    background: "linear-gradient(135deg, rgba(14,165,233,0.78), rgba(125,211,252,0.62))",
+    color: "rgba(3,105,161,0.98)",
     fontWeight: 700,
     cursor: "pointer",
     width: isMobile ? "100%" : undefined,
+    boxShadow: "0 14px 32px rgba(56,189,248,0.22)",
+    backdropFilter: "blur(14px)",
   };
 }
 
@@ -1050,12 +1067,14 @@ function dangerFooterButtonStyle(isMobile: boolean): CSSProperties {
   return {
     padding: "12px 18px",
     borderRadius: "999px",
-    border: "1px solid var(--x-color-danger-border)",
-    background: "var(--x-color-panel)",
-    color: "var(--x-color-danger)",
+    border: "1px solid rgba(244,63,94,0.24)",
+    background: "rgba(255,255,255,0.6)",
+    color: "rgba(159,18,57,0.86)",
     fontWeight: 700,
     cursor: "pointer",
     width: isMobile ? "100%" : undefined,
+    boxShadow: "0 12px 28px rgba(14,116,144,0.12)",
+    backdropFilter: "blur(14px)",
   };
 }
 

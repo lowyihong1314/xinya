@@ -12,9 +12,9 @@ function AlertModal({
   onClose: () => void;
 }) {
   const colors = {
-    success: "#2e7d32",
-    error: "#d32f2f",
-    loading: "#1976d2",
+    success: "rgba(5,150,105,0.92)",
+    error: "rgba(190,18,60,0.86)",
+    loading: "rgba(14,165,233,0.96)",
   } as const;
 
   return (
@@ -26,7 +26,7 @@ function AlertModal({
         }
       `}</style>
       <div style={overlayStyle}>
-        <div style={{ ...boxStyle, borderLeft: `6px solid ${colors[status]}` }}>
+        <div style={{ ...boxStyle, borderColor: status === "error" ? "rgba(244,63,94,0.24)" : "rgba(56,189,248,0.24)" }}>
           <div style={iconWrapStyle}>
             {status === "loading" ? <div style={{ ...spinnerStyle, borderTopColor: colors.loading }} /> : null}
             {status === "success" ? <div style={{ ...emojiStyle, color: colors.success }}>✓</div> : null}
@@ -36,7 +36,7 @@ function AlertModal({
           <div style={messageStyle}>{message}</div>
 
           {status !== "loading" ? (
-            <button type="button" style={{ ...buttonStyle, background: colors[status] }} onClick={onClose}>
+            <button type="button" style={{ ...buttonStyle, borderColor: colors[status], color: colors[status] }} onClick={onClose}>
               OK
             </button>
           ) : null}
@@ -80,10 +80,12 @@ const boxStyle = {
   minWidth: "280px",
   maxWidth: "min(92vw, 420px)",
   padding: "20px",
-  borderRadius: "10px",
-  background: "#fff",
-  color: "#333",
-  boxShadow: "0 0 15px rgba(0,0,0,0.2)",
+  borderRadius: 0,
+  background: "linear-gradient(180deg, rgba(255,255,255,0.7), rgba(232,247,255,0.62))",
+  color: "rgba(12,74,110,0.96)",
+  border: "1px solid rgba(255,255,255,0.14)",
+  boxShadow: "0 24px 64px rgba(214,242,255,0.52), inset 0 1px 0 rgba(255,255,255,0.1)",
+  backdropFilter: "blur(22px) saturate(140%)",
   textAlign: "center" as const,
   fontFamily: "sans-serif",
   pointerEvents: "auto" as const,
@@ -112,14 +114,17 @@ const emojiStyle = {
 const messageStyle = {
   margin: "10px 0",
   fontSize: "16px",
+  lineHeight: 1.5,
 };
 
 const buttonStyle = {
   padding: "6px 16px",
-  color: "#fff",
-  border: "none",
-  borderRadius: "4px",
+  background: "rgba(255,255,255,0.6)",
+  border: "1px solid rgba(255,255,255,0.14)",
+  borderRadius: "999px",
   cursor: "pointer",
   fontSize: "14px",
   marginTop: "5px",
+  fontWeight: 800,
+  backdropFilter: "blur(14px)",
 };

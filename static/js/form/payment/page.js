@@ -1,6 +1,7 @@
 import { createPayment, fetchPaymentQuote } from "./api.js";
 import { calcAgeFromNric } from "./age.js";
 import { createButton, createCard, createField } from "./ui.js";
+import Swal from "sweetalert2";
 
 function sortFeesNewestFirst(fees) {
   return [...(Array.isArray(fees) ? fees : [])].sort((a, b) => {
@@ -176,14 +177,12 @@ function createPaymentStep(form, nric, fee, onSubmitted) {
       submitHint.textContent = result.message || "付款资料已提交";
       submitHint.style.color = "#166534";
       onSubmitted?.(result);
-      if (window.Swal?.fire) {
-        await window.Swal.fire({
-          icon: "success",
-          title: "上传成功",
-          text: result.message || "付款资料已提交",
-          confirmButtonText: "确定",
-        });
-      }
+      await Swal.fire({
+        icon: "success",
+        title: "上传成功",
+        text: result.message || "付款资料已提交",
+        confirmButtonText: "确定",
+      });
       window.location.assign("/");
     } catch (error) {
       submitHint.textContent = error instanceof Error ? error.message : "提交失败";

@@ -1,3 +1,4 @@
+import { useEffect, useState } from "react";
 import { createHashRouter, Navigate, useParams } from "react-router-dom";
 
 import { LongOpenRegistrationFormPage } from "../CRM/long_open_registration_form/react/LongOpenRegistrationFormPage";
@@ -7,7 +8,6 @@ import { LONG_OPEN_REGISTRATION_FORM_PATH } from "../CRM/react/crmModules";
 import { FahuiIntakePage } from "../CRM/fahui/FahuiIntakePage";
 import { HomeAlbumPage } from "../album/react/HomeAlbumPage";
 import { EventDetailPage } from "../album/react/EventDetailPage";
-import { ImageDetailPageRoute } from "../album/react/ImageDetailPage";
 import { InfoPage } from "../info/react/InfoPage";
 import { LampPage } from "../lamp/react/LampPage";
 import {
@@ -20,7 +20,22 @@ import { musicRoute } from "../music/router/routes";
 import { ProfilePage } from "../profile/react/ProfilePage";
 import { PaymentVoucherSignPage } from "../CRM/Account/react/claim/PaymentVoucherSignPage";
 import { LoginPage } from "../app/LoginPage";
+import { apiFetch } from "../js/apiFetch";
 import { AppLayout } from "./AppLayout";
+
+type LegacyImagePayload = {
+  status?: string;
+  message?: string;
+  data?: {
+    file?: {
+      id?: number;
+      event_id?: number | null;
+    };
+    event?: {
+      id?: number;
+    } | null;
+  };
+};
 
 function ErrorPage({ message }: { message: string }) {
   return (
@@ -38,6 +53,65 @@ function LegacyChangyouDetailRedirect() {
 function LegacyChangyouRoomRedirect() {
   const { roomId } = useParams();
   return <Navigate to={roomId ? getChangyouRoomPath(roomId) : CHANGYOU_ROOM_PATH} replace />;
+}
+
+function LegacyImageRedirect() {
+  const { imageId } = useParams();
+  const [target, setTarget] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (!imageId) {
+      setError("缺少图片 ID");
+      return;
+    }
+
+    let active = true;
+    setError(null);
+    setTarget(null);
+
+    void (async () => {
+      try {
+        const response = await apiFetch(`/api/api/get_file_data/${imageId}`, { credentials: "include" });
+        const payload = (await response.json().catch(() => ({}))) as LegacyImagePayload;
+        if (!response.ok || payload.status !== "success") {
+          throw new Error(payload.message || "读取媒体失败");
+        }
+        const eventId = payload.data?.event?.id ?? payload.data?.file?.event_id;
+        if (!eventId) {
+          throw new Error("找不到图片所属活动");
+        }
+        if (active) {
+          setTarget(`/event/${eventId}?img_id=${imageId}`);
+        }
+      } catch (err) {
+        if (active) {
+          setError(err instanceof Error ? err.message : "读取媒体失败");
+        }
+      }
+    })();
+
+    return () => {
+      active = false;
+    };
+  }, [imageId]);
+
+  if (target) {
+    return <Navigate to={target} replace />;
+  }
+
+  return (
+    <div
+      id="legacy-image-redirect"
+      style={{
+        minHeight: "calc(100vh - 60px)",
+        padding: "24px",
+        color: error ? "#b42318" : "var(--x-color-ink)",
+      }}
+    >
+      {error || "媒体跳转中…"}
+    </div>
+  );
 }
 
 export const appRouter = createHashRouter([
@@ -60,7 +134,7 @@ export const appRouter = createHashRouter([
       { path: "ylp-registration", element: <FahuiIntakePage /> },
       { path: "lamp-registration", element: <LampPage /> },
       { path: "event/:eventId", element: <EventDetailPage /> },
-      { path: "image/:imageId", element: <ImageDetailPageRoute /> },
+      { path: "image/:imageId", element: <LegacyImageRedirect /> },
       { path: "login", element: <LoginPage /> },
       { path: "not-found", element: <ErrorPage message="页面不存在" /> },
       { path: "*", element: <ErrorPage message="页面不存在" /> },

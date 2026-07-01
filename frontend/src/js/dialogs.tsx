@@ -27,14 +27,14 @@ type PromptOptions = {
 function dialogAccent(tone: DialogTone) {
   return tone === "danger"
     ? {
-        background: "linear-gradient(135deg, #c2410c, #dc2626)",
-        soft: "rgba(194,65,12,0.08)",
-        border: "rgba(194,65,12,0.18)",
+        background: "linear-gradient(135deg, rgba(194,65,12,0.76), rgba(220,38,38,0.7))",
+        soft: "rgba(255,241,242,0.8)",
+        border: "rgba(244,63,94,0.24)",
       }
     : {
-        background: "linear-gradient(135deg, #0f766e, #1d4ed8)",
-        soft: "rgba(15,118,110,0.08)",
-        border: "rgba(15,118,110,0.18)",
+        background: "linear-gradient(135deg, rgba(14,165,233,0.78), rgba(125,211,252,0.62))",
+        soft: "rgba(56,189,248,0.16)",
+        border: "rgba(56,189,248,0.24)",
       };
 }
 
@@ -190,8 +190,8 @@ const overlayStyle: CSSProperties = {
   display: "grid",
   placeItems: "center",
   padding: "20px",
-  background: "rgba(15, 23, 42, 0.52)",
-  backdropFilter: "blur(8px)",
+  background: "rgba(214,242,255,0.66)",
+  backdropFilter: "blur(10px)",
 };
 
 const panelStyle: CSSProperties = {
@@ -199,10 +199,12 @@ const panelStyle: CSSProperties = {
   display: "grid",
   gap: "16px",
   padding: "22px",
-  borderRadius: "24px",
-  background: "linear-gradient(180deg, rgba(255,255,255,0.98), rgba(248,250,252,0.98))",
-  border: "1px solid rgba(148,163,184,0.2)",
-  boxShadow: "0 28px 64px rgba(15,23,42,0.2)",
+  borderRadius: 0,
+  background: "linear-gradient(180deg, rgba(255,255,255,0.7), rgba(232,247,255,0.62))",
+  border: "1px solid rgba(255,255,255,0.14)",
+  boxShadow: "0 30px 90px rgba(14,116,144,0.18), inset 0 1px 0 rgba(255,255,255,0.1)",
+  color: "rgba(31,78,121,0.92)",
+  backdropFilter: "blur(24px) saturate(140%)",
 };
 
 const accentBarStyle: CSSProperties = {
@@ -221,28 +223,29 @@ const eyebrowStyle: CSSProperties = {
   fontWeight: 800,
   letterSpacing: "0.14em",
   textTransform: "uppercase",
-  color: "rgba(71,85,105,0.84)",
+  color: "rgba(14,165,233,0.82)",
 };
 
 const titleStyle: CSSProperties = {
   margin: 0,
   fontSize: "24px",
   lineHeight: 1.1,
-  color: "var(--x-color-ink, #0f172a)",
+  color: "rgba(12,74,110,0.98)",
 };
 
 const messageStyle: CSSProperties = {
   margin: 0,
   fontSize: "14px",
   lineHeight: 1.7,
-  color: "var(--x-color-ink-muted, #475569)",
+  color: "rgba(57,100,137,0.88)",
   whiteSpace: "pre-wrap",
 };
 
 const bodyStyle: CSSProperties = {
   padding: "14px",
-  borderRadius: "18px",
-  border: "1px solid rgba(148,163,184,0.12)",
+  borderRadius: 0,
+  border: "1px solid rgba(255,255,255,0.1)",
+  backdropFilter: "blur(12px)",
 };
 
 const actionsStyle: CSSProperties = {
@@ -253,22 +256,24 @@ const actionsStyle: CSSProperties = {
 };
 
 const secondaryButtonStyle: CSSProperties = {
-  border: "1px solid rgba(148,163,184,0.26)",
+  border: "1px solid rgba(255,255,255,0.14)",
   borderRadius: "999px",
   padding: "10px 16px",
-  background: "rgba(255,255,255,0.9)",
-  color: "var(--x-color-ink, #0f172a)",
+  background: "rgba(255,255,255,0.6)",
+  color: "rgba(31,78,121,0.9)",
   fontWeight: 700,
   cursor: "pointer",
+  boxShadow: "0 12px 28px rgba(14,116,144,0.12)",
+  backdropFilter: "blur(14px)",
 };
 
 function primaryButtonStyle(tone: DialogTone): CSSProperties {
   return {
-    border: "none",
+    border: `1px solid ${dialogAccent(tone).border}`,
     borderRadius: "999px",
     padding: "10px 16px",
     background: dialogAccent(tone).background,
-    color: "#fff",
+    color: "rgba(3,105,161,0.98)",
     fontWeight: 700,
     cursor: "pointer",
   };
@@ -276,12 +281,15 @@ function primaryButtonStyle(tone: DialogTone): CSSProperties {
 
 const inputStyle: CSSProperties = {
   width: "100%",
-  borderRadius: "14px",
-  border: "1px solid rgba(148,163,184,0.26)",
+  borderRadius: 0,
+  border: "1px solid rgba(255,255,255,0.12)",
   padding: "12px 14px",
   boxSizing: "border-box",
   fontSize: "14px",
-  background: "rgba(255,255,255,0.96)",
+  background: "rgba(232,247,255,0.44)",
+  color: "rgba(12,74,110,0.94)",
+  outlineColor: "rgba(56,189,248,0.72)",
+  backdropFilter: "blur(12px)",
 };
 
 const textAreaStyle: CSSProperties = {

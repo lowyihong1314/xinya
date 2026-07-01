@@ -2,41 +2,104 @@ import { useEffect, useMemo, useState } from "react";
 import type { CSSProperties } from "react";
 import { useNavigate } from "react-router-dom";
 
-import { CacheMediaPlayer } from "../../components/CacheMediaPlayer";
-import { CachedImage } from "../../components/CachedMedia";
 import { PageHero } from "../../components/PageHero";
-import { smartImageURL } from "../../js/get_img";
 import { useEventData } from "../../event/shared/EventDataContext";
 import { fetchEventDetail } from "../../event/shared/api";
+import { calendarDateFromParts, calendarDateKey, parseCalendarDateParts } from "../../event/shared/eventDate";
 import type { AlbumFile, SharedEventRecord } from "../../event/shared/types";
+import { smartImageURL } from "../../js/get_img";
 import { useEnsureDesignTokens } from "../../theme/designTokens";
 import { useUserState } from "../../app/UserState";
-
-const VIDEO_EXTENSIONS = new Set(["mp4", "mov", "mod", "m4v", "avi", "mkv", "webm", "flv", "mts", "m2ts", "3gp", "wmv"]);
-
-function formatDateKey(date: Date) {
-  return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}-${String(date.getDate()).padStart(2, "0")}`;
-}
 
 export function HomeAlbumPage() {
   useEnsureDesignTokens();
 
-  const { events, getEventsForMonth, loading, error, refreshEvents } = useEventData();
+  const { events, getEventsForMonth, loading, error } = useEventData();
   const { isMobile } = useUserState();
+  const navigate = useNavigate();
   const now = new Date();
   const currentYear = now.getFullYear();
   const [year, setYear] = useState(currentYear);
   const [month, setMonth] = useState(now.getMonth() + 1);
+  const [viewportWidth, setViewportWidth] = useState(() =>
+    typeof window !== "undefined" ? window.innerWidth : 0,
+  );
+  const [eventImageUrls, setEventImageUrls] = useState<Record<number, string>>({});
+  const [slideTick, setSlideTick] = useState(0);
   const yearOptions = useMemo(() => buildYearOptions(events, currentYear), [events, currentYear]);
   const monthEvents = useMemo(() => getEventsForMonth(year, month), [getEventsForMonth, year, month]);
   const eventMap = useMemo(() => buildEventMap(monthEvents, year, month), [monthEvents, year, month]);
   const calendar_data = useMemo(() => buildCalendarData(year, month, eventMap), [year, month, eventMap]);
   const [selectedDate, setSelectedDate] = useState<string | null>(null);
+  const layoutScale = useMemo(() => buildLayoutScale(viewportWidth, isMobile), [isMobile, viewportWidth]);
 
   useEffect(() => {
     const initial = pickInitialDate(eventMap, year, month);
     setSelectedDate(initial);
   }, [eventMap, year, month]);
+
+  useEffect(() => {
+    if (typeof document === "undefined") {
+      return undefined;
+    }
+
+    const previousBodyBackground = document.body.style.background;
+    const previousHtmlBackground = document.documentElement.style.background;
+    document.body.style.background = SKY_PAGE_BACKGROUND;
+    document.documentElement.style.background = SKY_PAGE_BACKGROUND;
+
+    return () => {
+      document.body.style.background = previousBodyBackground;
+      document.documentElement.style.background = previousHtmlBackground;
+    };
+  }, []);
+
+  useEffect(() => {
+    if (typeof window === "undefined") {
+      return undefined;
+    }
+
+    const handleResize = () => {
+      setViewportWidth(window.innerWidth);
+    };
+
+    handleResize();
+    window.addEventListener("resize", handleResize);
+    return () => window.removeEventListener("resize", handleResize);
+  }, []);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    if (!monthEvents.length) {
+      setEventImageUrls({});
+      return () => {
+        cancelled = true;
+      };
+    }
+
+    void loadMonthEventImages(monthEvents).then((nextUrls) => {
+      if (!cancelled) {
+        setEventImageUrls(nextUrls);
+      }
+    });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [monthEvents]);
+
+  useEffect(() => {
+    if (typeof window === "undefined") {
+      return undefined;
+    }
+
+    const timer = window.setInterval(() => {
+      setSlideTick((value) => value + 1);
+    }, 4600);
+
+    return () => window.clearInterval(timer);
+  }, []);
 
   const selectedEvents = selectedDate ? eventMap[selectedDate] || [] : [];
   function changeMonth(delta: number) {
@@ -46,16 +109,18 @@ export function HomeAlbumPage() {
   }
 
   return (
-    <div style={pageStyle}>
-      <PageHero title="地南佛学会" subtitle="Album Calendar" />
+    <div id="home-album-page" style={pageStyle}>
+      <style id="home-album-calendar-event-button-style">{calendarEventButtonCss}</style>
+      <PageHero idPrefix="home-hero" tone="sky" title="地南佛学会" subtitle="Album Calendar" />
 
-      <section style={toolbarStyle(isMobile)}>
-        <div style={monthNavStyle}>
-          <button type="button" style={monthButtonStyle} onClick={() => changeMonth(-1)}>
+      <section id="home-album-toolbar" style={toolbarStyle(isMobile)}>
+        <div id="home-album-month-nav" style={monthNavStyle}>
+          <button id="home-album-month-prev" type="button" style={monthButtonStyle} onClick={() => changeMonth(-1)}>
             ◀
           </button>
-          <div style={monthLabelStyle}>
+          <div id="home-album-month-label" style={monthLabelStyle}>
             <select
+              id="home-album-year-select"
               value={year}
               onChange={(event) => setYear(Number(event.target.value))}
               style={yearSelectStyle}
@@ -67,169 +132,64 @@ export function HomeAlbumPage() {
                 </option>
               ))}
             </select>
-            <span>/ {String(month).padStart(2, "0")}</span>
+            <span id="home-album-month-text">/ {String(month).padStart(2, "0")}</span>
           </div>
-          <button type="button" style={monthButtonStyle} onClick={() => changeMonth(1)}>
+          <button id="home-album-month-next" type="button" style={monthButtonStyle} onClick={() => changeMonth(1)}>
             ▶
           </button>
         </div>
 
       </section>
 
-      {error ? <div style={errorBannerStyle}>{error}</div> : null}
-      {loading ? <div style={placeholderStyle}>读取活动中…</div> : null}
+      {error ? <div id="home-album-error-banner" style={errorBannerStyle}>{error}</div> : null}
+      {loading ? <div id="home-album-loading" style={placeholderStyle}>读取活动中…</div> : null}
 
-      <div style={mobileSummaryStyle(isMobile)}>
-        <div style={mobileSummaryValueStyle}>{monthEvents.length}</div>
-        <div style={mobileSummaryLabelStyle}>本月活动</div>
-        <div style={mobileSummaryDividerStyle} />
-        <div style={mobileSummaryValueStyle}>{selectedEvents.length}</div>
-        <div style={mobileSummaryLabelStyle}>当天活动</div>
+      <div id="home-album-mobile-summary" style={mobileSummaryStyle(isMobile)}>
+        <div id="home-album-mobile-month-count" style={mobileSummaryValueStyle}>{monthEvents.length}</div>
+        <div id="home-album-mobile-month-label" style={mobileSummaryLabelStyle}>本月活动</div>
+        <div id="home-album-mobile-summary-divider" style={mobileSummaryDividerStyle} />
+        <div id="home-album-mobile-day-count" style={mobileSummaryValueStyle}>{selectedEvents.length}</div>
+        <div id="home-album-mobile-day-label" style={mobileSummaryLabelStyle}>当天活动</div>
       </div>
 
-      <div style={layoutStyle(isMobile)}>
-        <section style={calendarStyle(isMobile)}>
+      <div id="home-album-layout" style={layoutStyle(isMobile)}>
+        <section id="home-album-calendar-section" style={calendarStyle(isMobile, layoutScale)}>
           {isMobile
-            ? renderMobileCalendarCards(calendar_data, selectedDate, setSelectedDate)
+            ? renderMobileCalendarCards(calendar_data, selectedDate, setSelectedDate, navigate, layoutScale, eventImageUrls, slideTick)
             : (
               <>
-                {["日", "一", "二", "三", "四", "五", "六"].map((name) => (
-                  <div key={name} style={weekHeaderStyle}>
+                {["日", "一", "二", "三", "四", "五", "六"].map((name, index) => (
+                  <div key={name} id={`home-calendar-week-header-${index}`} style={weekHeaderStyle(layoutScale)}>
                     {name}
                   </div>
                 ))}
-                {renderCalendarCells(calendar_data, selectedDate, setSelectedDate, isMobile)}
+                {renderCalendarCells(
+                  calendar_data,
+                  selectedDate,
+                  setSelectedDate,
+                  isMobile,
+                  navigate,
+                  layoutScale,
+                  eventImageUrls,
+                  slideTick,
+                )}
               </>
             )}
         </section>
-
-        <aside style={detailPanelStyle(isMobile)}>
-          <div style={detailHeaderStyle}>
-            <div>
-              <div style={detailEyebrowStyle}>Selected Date</div>
-              <h2 style={detailTitleStyle}>{selectedDate || "未选择日期"}</h2>
-            </div>
-          </div>
-          {!selectedEvents.length ? <div style={placeholderStyle}>这个日期没有活动</div> : null}
-          {selectedEvents.length ? (
-            <div style={eventListStyle}>
-              {selectedEvents.map((event) => (
-                <EventPreviewCard key={event.id} event={event} isMobile={isMobile} />
-              ))}
-            </div>
-          ) : null}
-        </aside>
       </div>
     </div>
   );
 }
 
-function EventPreviewCard({ event, isMobile }: { event: SharedEventRecord; isMobile: boolean }) {
-  const navigate = useNavigate();
-  const [coverMedia, setCoverMedia] = useState<{ id: number; fileType?: string | null } | null>(null);
-  const [previewUrls, setPreviewUrls] = useState<string[]>([]);
-
-  useEffect(() => {
-    let cancelled = false;
-
-    async function loadCardImages() {
-      let nextCover: { id: number; fileType?: string | null } | null = null;
-
-      if (event.event_image?.id) {
-        nextCover = {
-          id: event.event_image.id,
-          fileType: event.event_image.file_type,
-        };
-      }
-
-      const payload = await fetchEventDetail(event.id).catch(() => null);
-      const files = Array.isArray(payload?.data?.album_files) ? (payload.data.album_files as AlbumFile[]) : [];
-      const previewFiles = files
-        .filter((file) => typeof file.id === "number" && file.id !== event.event_image?.id)
-        .sort(
-          (left, right) =>
-            new Date(right.created_at || 0).getTime() - new Date(left.created_at || 0).getTime(),
-        )
-        .slice(0, 3);
-
-      if (!nextCover && previewFiles[0]?.id) {
-        nextCover = {
-          id: previewFiles[0].id,
-          fileType: previewFiles[0].file_type,
-        };
-      }
-
-      const nextPreviewUrls = (
-        await Promise.all(
-          previewFiles.map(async (file) => {
-            if (VIDEO_EXTENSIONS.has(String(file.file_type || "").toLowerCase())) {
-              return null;
-            }
-            const url = await smartImageURL(file.id, "cache").catch(() => null);
-            return url && url !== "/static/images/file_icon/broken-image.png" ? url : null;
-          }),
-        )
-      ).filter((url): url is string => Boolean(url));
-
-      if (!cancelled) {
-        setCoverMedia(nextCover);
-        setPreviewUrls(nextPreviewUrls);
-      }
-    }
-
-    void loadCardImages();
-
-    return () => {
-      cancelled = true;
-    };
-  }, [event.id, event.event_image?.id]);
-
-  return (
-    <button
-      type="button"
-      style={eventCardStyle(isMobile)}
-      onClick={() => navigate(`/event/${event.id}`)}
-    >
-      <div style={eventCardMediaWrapStyle(isMobile)}>
-        <div style={eventCardHeroStyle}>
-          {coverMedia ? (
-            <CacheMediaPlayer
-              fileId={coverMedia.id}
-              fileType={coverMedia.fileType}
-              style={eventCardHeroImageStyle}
-              containerStyle={eventCardHeroContainerStyle}
-              retryAttempts={6}
-              retryDelayMs={1500}
-            />
-          ) : null}
-          {!coverMedia ? <div style={eventCardImageFallbackStyle}>MAIN</div> : null}
-        </div>
-        <div style={eventCardPreviewGridStyle}>
-          {[0, 1, 2].map((index) => {
-            const src = previewUrls[index];
-            return src ? (
-              <CachedImage key={`${event.id}-${index}`} src={src} alt="" style={eventCardPreviewImageStyle} />
-            ) : (
-              <div key={`${event.id}-${index}`} style={eventCardPreviewFallbackStyle} />
-            );
-          })}
-        </div>
-      </div>
-      <div style={eventCardTitleStyle}>{event.event_name || `活动 #${event.id}`}</div>
-      <div style={eventCardMetaStyle}>
-        {event.datetime || "-"} · {event.location || "-"}
-      </div>
-      <div style={eventCardMetaStyle}>
-        {event.type || "-"} · {event.target || "-"}
-      </div>
-    </button>
-  );
-}
-
 function getDaysLeft(dateStr: string) {
   const today = new Date();
-  const target = new Date(dateStr + "T00:00:00"); // 👈 避免时区坑
+  const targetParts = parseCalendarDateParts(dateStr);
 
+  if (!targetParts) {
+    return 0;
+  }
+
+  const target = calendarDateFromParts(targetParts);
   today.setHours(0, 0, 0, 0);
 
   const diff = target.getTime() - today.getTime();
@@ -237,36 +197,102 @@ function getDaysLeft(dateStr: string) {
   return Math.ceil(diff / (1000 * 60 * 60 * 24));
 }
 
+async function loadMonthEventImages(monthEvents: SharedEventRecord[]) {
+  const entries = await Promise.all(
+    monthEvents.map(async (event) => {
+      const primaryUrl = await resolveEventPrimaryImage(event);
+      return primaryUrl ? ([event.id, primaryUrl] as const) : null;
+    }),
+  );
+  const nextUrls: Record<number, string> = {};
+
+  entries.forEach((entry) => {
+    if (entry) {
+      nextUrls[entry[0]] = entry[1];
+    }
+  });
+
+  const availableUrls = Object.values(nextUrls);
+  monthEvents.forEach((event) => {
+    if (!nextUrls[event.id] && availableUrls.length) {
+      nextUrls[event.id] = pickStableFallbackUrl(availableUrls, event.id);
+    }
+  });
+
+  return nextUrls;
+}
+
+async function resolveEventPrimaryImage(event: SharedEventRecord) {
+  if (typeof event.event_image?.id === "number") {
+    const posterUrl = await resolveImageUrl(event.event_image.id);
+    if (posterUrl) {
+      return posterUrl;
+    }
+  }
+
+  const payload = await fetchEventDetail(event.id).catch(() => null);
+  const files = Array.isArray(payload?.data?.album_files) ? (payload.data.album_files as AlbumFile[]) : [];
+  const imageFile = files
+    .filter((file) => typeof file.id === "number" && !isVideoFileType(file.file_type))
+    .sort(
+      (left, right) =>
+        new Date(right.created_at || 0).getTime() - new Date(left.created_at || 0).getTime(),
+    )[0];
+
+  return imageFile ? resolveImageUrl(imageFile.id) : null;
+}
+
+async function resolveImageUrl(fileId: number) {
+  const url = await smartImageURL(fileId, "cache").catch(() => null);
+  return url && url !== "/static/images/file_icon/broken-image.png" ? url : null;
+}
+
+function isVideoFileType(fileType?: string | null) {
+  return ["mp4", "mov", "mod", "m4v", "avi", "mkv", "webm", "flv", "mts", "m2ts", "3gp", "wmv"].includes(
+    String(fileType || "").trim().toLowerCase(),
+  );
+}
+
+function pickStableFallbackUrl(urls: string[], seed: number) {
+  return urls[Math.abs(seed) % urls.length];
+}
+
 function renderCalendarCells(
   calendar_data: CalendarCellData[],
   selectedDate: string | null,
   setSelectedDate: (value: string) => void,
   isMobile: boolean,
+  navigate: (path: string) => void,
+  layoutScale: number,
+  eventImageUrls: Record<number, string>,
+  slideTick: number,
 ) {
   return calendar_data.map((cell, index) => {
     if (!cell.dateKey) {
-      return <div key={index} style={emptyDayStyle} />;
+      return <div key={index} id={`home-calendar-empty-cell-${index}`} style={emptyDayStyle(layoutScale)} />;
     }
 
     const active = selectedDate === cell.dateKey;
     const hasEvent = cell.items.length > 0;
+    const imageUrls = getCellImageUrls(cell.items, eventImageUrls);
 
     // 👇 只有有 event 才算
     const daysLeft = hasEvent ? getDaysLeft(cell.dateKey) : null;
 
     return (
-      <button
+      <div
         key={index}
-        type="button"
-        style={dayCardStyle(active, hasEvent, isMobile)}
+        id={`home-calendar-day-${cell.dateKey}`}
+        style={dayCardStyle(active, hasEvent, isMobile, layoutScale)}
         onClick={() => setSelectedDate(cell.dateKey)}
       >
-        <div style={dayNumberStyle}>
+        {renderCalendarBackgroundLayers(`home-calendar-day-bg-${cell.dateKey}`, imageUrls, slideTick)}
+        <div id={`home-calendar-day-number-${cell.dateKey}`} style={dayNumberStyle(layoutScale, Boolean(imageUrls.length))}>
           {cell.dayLabel}
 
           {/* 👇 只有有 event 才显示 */}
           {hasEvent && daysLeft !== null && (
-            <span style={{ marginLeft: 6, fontSize: 12 }}>
+            <span id={`home-calendar-days-left-${cell.dateKey}`} style={{ marginLeft: 6 * layoutScale, fontSize: 12 * layoutScale }}>
               {daysLeft > 0
                 ? `${daysLeft}d`
                 : daysLeft === 0
@@ -276,16 +302,22 @@ function renderCalendarCells(
           )}
         </div>
 
-        {cell.items.slice(0, 3).map((event) => (
-          <div key={event.id} style={dayEventStyle}>
-            {event.event_name}
-          </div>
+        {cell.items.map((activity) => (
+          <button
+            key={activity.id}
+            id={`home-calendar-day-event-${cell.dateKey}-${activity.id}`}
+            className="home-calendar-event-button"
+            type="button"
+            style={dayEventButtonStyle(layoutScale, Boolean(imageUrls.length))}
+            onClick={(event) => {
+              event.stopPropagation();
+              navigate(`/event/${activity.id}`);
+            }}
+          >
+            {activity.event_name || `活动 #${activity.id}`}
+          </button>
         ))}
-
-        {cell.items.length > 3 ? (
-          <div style={dayMoreStyle}>+{cell.items.length - 3}</div>
-        ) : null}
-      </button>
+      </div>
     );
   });
 }
@@ -294,30 +326,78 @@ function renderMobileCalendarCards(
   calendar_data: CalendarCellData[],
   selectedDate: string | null,
   setSelectedDate: (value: string) => void,
+  navigate: (path: string) => void,
+  layoutScale: number,
+  eventImageUrls: Record<number, string>,
+  slideTick: number,
 ) {
   return calendar_data
     .filter((cell) => cell.dateKey && cell.items.length > 0)
-    .map((cell, index) => (
-      <button
-        key={index}
-        type="button"
-        style={mobileDayCardStyle(selectedDate === cell.dateKey)}
-        onClick={() => setSelectedDate(cell.dateKey!)}
-      >
-        <div style={mobileDayHeaderStyle}>
-          <div style={mobileDayDateStyle}>{cell.dateKey}</div>
-          <div style={mobileDayCountStyle}>{cell.items.length} 个活动</div>
-        </div>
-        <div style={mobileDayEventListStyle}>
-          {cell.items.slice(0, 3).map((event) => (
-            <div key={event.id} style={dayEventStyle}>
-              {event.event_name}
+    .map((cell, index) => {
+      const imageUrls = getCellImageUrls(cell.items, eventImageUrls);
+
+      return (
+        <div
+          key={index}
+          id={`home-mobile-day-card-${cell.dateKey}`}
+          style={mobileDayCardStyle(selectedDate === cell.dateKey, layoutScale)}
+          onClick={() => setSelectedDate(cell.dateKey!)}
+        >
+          {renderCalendarBackgroundLayers(`home-mobile-day-bg-${cell.dateKey}`, imageUrls, slideTick)}
+          <div id={`home-mobile-day-header-${cell.dateKey}`} style={mobileDayHeaderStyle(layoutScale)}>
+            <div id={`home-mobile-day-date-${cell.dateKey}`} style={mobileDayDateStyle(layoutScale, Boolean(imageUrls.length))}>
+              {cell.dateKey}
             </div>
-          ))}
-          {cell.items.length > 3 ? <div style={dayMoreStyle}>+{cell.items.length - 3}</div> : null}
+            <div id={`home-mobile-day-count-${cell.dateKey}`} style={mobileDayCountStyle(layoutScale, Boolean(imageUrls.length))}>
+              {cell.items.length} 个活动
+            </div>
+          </div>
+          <div id={`home-mobile-day-event-list-${cell.dateKey}`} style={mobileDayEventListStyle(layoutScale)}>
+            {cell.items.map((activity) => (
+              <button
+                key={activity.id}
+                id={`home-mobile-day-event-${cell.dateKey}-${activity.id}`}
+                className="home-calendar-event-button"
+                type="button"
+                style={dayEventButtonStyle(layoutScale * 0.88, Boolean(imageUrls.length))}
+                onClick={(event) => {
+                  event.stopPropagation();
+                  navigate(`/event/${activity.id}`);
+                }}
+              >
+                {activity.event_name || `活动 #${activity.id}`}
+              </button>
+            ))}
+          </div>
         </div>
-      </button>
-    ));
+      );
+    });
+}
+
+function getCellImageUrls(items: SharedEventRecord[], eventImageUrls: Record<number, string>) {
+  return Array.from(
+    new Set(
+      items
+        .map((event) => eventImageUrls[event.id])
+        .filter((url): url is string => Boolean(url)),
+    ),
+  );
+}
+
+function renderCalendarBackgroundLayers(idPrefix: string, imageUrls: string[], slideTick: number) {
+  if (!imageUrls.length) {
+    return null;
+  }
+
+  const activeIndex = slideTick % imageUrls.length;
+
+  return imageUrls.map((url, index) => (
+    <div
+      key={`${url}-${index}`}
+      id={`${idPrefix}-${index}`}
+      style={calendarBackgroundLayerStyle(url, index === activeIndex)}
+    />
+  ));
 }
 
 type CalendarCellData = {
@@ -356,17 +436,23 @@ function buildEventMap(events: ReturnType<typeof useEventData>["events"], year: 
   const map: Record<string, ReturnType<typeof useEventData>["events"]> = {};
 
   events.forEach((event) => {
-    if (!event.datetime) {
+    const startParts = parseCalendarDateParts(event.datetime);
+    if (!startParts) {
       return;
     }
 
-    const start = new Date(event.datetime);
-    const end = event.end_datetime ? new Date(event.end_datetime) : new Date(event.datetime);
+    const endParts = parseCalendarDateParts(event.end_datetime) || startParts;
+    const start = calendarDateFromParts(startParts);
+    const end = calendarDateFromParts(endParts) < start ? start : calendarDateFromParts(endParts);
     const cursor = new Date(start);
 
     while (cursor <= end) {
       if (cursor.getFullYear() === year && cursor.getMonth() + 1 === month) {
-        const key = formatDateKey(cursor);
+        const key = calendarDateKey({
+          year: cursor.getFullYear(),
+          month: cursor.getMonth() + 1,
+          day: cursor.getDate(),
+        });
         map[key] ||= [];
         map[key].push(event);
       }
@@ -401,64 +487,114 @@ function buildYearOptions(events: SharedEventRecord[], currentYear: number) {
 
   events.forEach((event) => {
     [event.datetime, event.end_datetime].forEach((value) => {
-      if (!value) {
+      const parts = parseCalendarDateParts(value);
+      if (!parts) {
         return;
       }
-      const date = new Date(value);
-      if (!Number.isNaN(date.getTime())) {
-        years.add(date.getFullYear());
-      }
+      years.add(parts.year);
     });
   });
 
   return Array.from(years).sort((left, right) => right - left);
 }
 
+function buildLayoutScale(width: number, isMobile: boolean) {
+  if (isMobile || width < 1200) {
+    return 1;
+  }
+
+  const tier = Math.floor((width - 1200) / 200) + 1;
+  return Math.min(1.34, 1 + tier * 0.08);
+}
+
+const SKY_PAGE_BACKGROUND = "#eef9ff";
+const SKY_TEXT = "rgba(12, 74, 110, 0.98)";
+const SKY_TEXT_SOFT = "rgba(31, 78, 121, 0.9)";
+const SKY_TEXT_MUTED = "rgba(70, 120, 158, 0.86)";
+const SKY_GLASS =
+  "linear-gradient(180deg, rgba(255,255,255,0.72), rgba(232,247,255,0.6))";
+const SKY_GLASS_SOFT = "rgba(255, 255, 255, 0.48)";
+const SKY_BORDER = "1px solid rgba(255, 255, 255, 0.74)";
+const SKY_ACCENT_BORDER = "1px solid rgba(56, 189, 248, 0.34)";
+const SKY_SHADOW = "0 24px 60px rgba(14, 116, 144, 0.12)";
+const SKY_SHADOW_SOFT = "0 14px 34px rgba(14, 116, 144, 0.1)";
+const calendarEventButtonCss = `
+  .home-calendar-event-button:hover,
+  .home-calendar-event-button:focus-visible {
+    background: rgba(255,255,255,0.62) !important;
+    border-color: rgba(255,255,255,0.56) !important;
+    box-shadow: 0 8px 18px rgba(14, 116, 144, 0.08) !important;
+    backdrop-filter: blur(12px);
+  }
+
+  @media (hover: none) {
+    .home-calendar-event-button:active {
+      background: rgba(255,255,255,0.58) !important;
+      border-color: rgba(255,255,255,0.52) !important;
+    }
+  }
+`;
+
 const pageStyle: CSSProperties = {
   minHeight: "calc(100vh - 60px)",
   paddingBottom: "32px",
+  overflowX: "hidden",
   background:
-    "radial-gradient(circle at top left, var(--x-color-warning-tint), transparent 22%), radial-gradient(circle at top right, var(--x-color-info-tint-strong), transparent 28%), linear-gradient(180deg, var(--x-color-canvas), var(--x-color-canvas-alt))",
+    "radial-gradient(circle at top left, rgba(125,211,252,0.42), transparent 28%), radial-gradient(circle at top right, rgba(186,230,253,0.58), transparent 32%), linear-gradient(180deg, #eef9ff, #f8fcff)",
 };
 
 function toolbarStyle(isMobile: boolean): CSSProperties {
   return {
+    position: "relative",
+    zIndex: 4,
     display: "flex",
     justifyContent: "space-between",
     gap: "14px",
     alignItems: isMobile ? "stretch" : "center",
     flexWrap: "wrap",
     flexDirection: isMobile ? "column" : "row",
-    maxWidth: "1400px",
-    margin: "24px auto 0",
-    padding: isMobile ? "0 14px" : "0 20px",
+    width: "100%",
+    margin: isMobile ? "-58px auto 0" : "-68px auto 0",
+    padding: isMobile ? "12px 14px" : "14px 20px",
+    boxSizing: "border-box",
+    borderRadius: "0",
+    background: "transparent",
+    border: "none",
+    boxShadow: "none",
+    backdropFilter: "none",
   };
 }
 
 const monthNavStyle: CSSProperties = {
   display: "flex",
   alignItems: "center",
-  gap: "14px",
-  padding: "14px 20px",
-  borderRadius: "18px",
-  background: "linear-gradient(135deg, var(--x-color-warning), var(--x-color-danger))",
-  boxShadow: "0 14px 30px var(--x-color-shadow-medium)",
+  gap: "12px",
+  padding: "8px",
+  borderRadius: "999px",
+  background: "rgba(255, 255, 255, 0.58)",
+  border: SKY_ACCENT_BORDER,
+  boxShadow: "0 12px 28px rgba(14, 116, 144, 0.1)",
+  backdropFilter: "blur(14px)",
 };
 
 const monthButtonStyle: CSSProperties = {
-  padding: "8px 14px",
-  borderRadius: "12px",
-  border: "none",
-  background: "var(--x-color-panel)",
-  color: "var(--x-color-danger)",
+  width: "42px",
+  height: "42px",
+  padding: 0,
+  borderRadius: "999px",
+  border: "1px solid rgba(255,255,255,0.72)",
+  background: "rgba(255,255,255,0.68)",
+  color: "rgba(14, 116, 144, 0.92)",
   cursor: "pointer",
-  fontWeight: 700,
+  fontWeight: 800,
+  boxShadow: "0 10px 24px rgba(14, 116, 144, 0.1)",
+  transition: "transform 140ms ease, background 140ms ease, box-shadow 140ms ease",
 };
 
 const monthLabelStyle: CSSProperties = {
-  minWidth: "110px",
-  color: "white",
-  fontWeight: 700,
+  minWidth: "126px",
+  color: SKY_TEXT,
+  fontWeight: 800,
   display: "inline-flex",
   alignItems: "center",
   justifyContent: "center",
@@ -466,23 +602,14 @@ const monthLabelStyle: CSSProperties = {
 };
 
 const yearSelectStyle: CSSProperties = {
-  border: "1px solid rgba(255,255,255,0.5)",
-  borderRadius: "10px",
-  padding: "7px 8px",
-  background: "var(--x-color-panel)",
-  color: "var(--x-color-danger)",
+  border: SKY_ACCENT_BORDER,
+  borderRadius: "999px",
+  padding: "8px 10px",
+  background: "rgba(255,255,255,0.74)",
+  color: SKY_TEXT,
   fontWeight: 800,
   outline: "none",
-};
-
-const secondaryButtonStyle: CSSProperties = {
-  padding: "12px 18px",
-  borderRadius: "999px",
-  border: "1px solid var(--x-color-line-soft)",
-  background: "var(--x-color-panel)",
-  color: "var(--x-color-ink)",
-  cursor: "pointer",
-  fontWeight: 700,
+  boxShadow: "0 8px 20px rgba(14, 116, 144, 0.08)",
 };
 
 const errorBannerStyle: CSSProperties = {
@@ -490,8 +617,10 @@ const errorBannerStyle: CSSProperties = {
   margin: "16px auto 0",
   padding: "14px 16px",
   borderRadius: "var(--x-radius-md)",
-  background: "var(--x-color-danger-soft)",
-  color: "var(--x-color-danger)",
+  background: "rgba(255, 241, 242, 0.86)",
+  border: "1px solid rgba(244, 63, 94, 0.24)",
+  color: "rgba(159, 18, 57, 0.86)",
+  boxShadow: "0 14px 34px rgba(159, 18, 57, 0.08)",
 };
 
 function mobileSummaryStyle(isMobile: boolean): CSSProperties {
@@ -504,271 +633,230 @@ function mobileSummaryStyle(isMobile: boolean): CSSProperties {
     margin: "16px auto 0",
     padding: "14px 18px",
     borderRadius: "20px",
-    background: "var(--x-color-panel-strong)",
-    border: "1px solid var(--x-color-line-soft)",
-    boxShadow: "0 14px 30px var(--x-color-shadow-soft)",
+    background: SKY_GLASS,
+    border: SKY_BORDER,
+    boxShadow: SKY_SHADOW_SOFT,
+    backdropFilter: "blur(18px)",
   };
 }
 
 function layoutStyle(isMobile: boolean): CSSProperties {
   return {
     display: "grid",
-    gridTemplateColumns: isMobile ? "1fr" : "minmax(0, 1.5fr) minmax(340px, 0.8fr)",
-    gap: "20px",
-    maxWidth: "1400px",
-    margin: "20px auto 0",
-    padding: isMobile ? "0 14px" : "0 20px",
+    gridTemplateColumns: "minmax(0, 1fr)",
+    gap: 0,
+    width: "100%",
+    maxWidth: "none",
+    margin: isMobile ? "12px 0 0" : "16px 0 0",
+    padding: 0,
     alignItems: "start",
+    boxSizing: "border-box",
   };
 }
 
-function calendarStyle(isMobile: boolean): CSSProperties {
+function calendarStyle(isMobile: boolean, scale: number): CSSProperties {
   return {
     display: "grid",
-    gridTemplateColumns: isMobile ? "minmax(0, 1fr)" : "repeat(7, minmax(0, 1fr))",
-    gap: isMobile ? "6px" : "10px",
+    gridTemplateColumns: isMobile ? "repeat(2, minmax(0, 1fr))" : "repeat(7, minmax(0, 1fr))",
+    gap: `${(isMobile ? 7 : 10) * scale}px`,
+    padding: `${(isMobile ? 8 : 16) * scale}px`,
+    borderRadius: "0",
+    background: SKY_GLASS,
+    border: SKY_BORDER,
+    boxShadow: SKY_SHADOW,
+    backdropFilter: "blur(18px)",
   };
 }
 
-const weekHeaderStyle: CSSProperties = {
-  textAlign: "center",
-  fontWeight: 700,
-  color: "var(--x-color-ink-muted)",
-  padding: "8px 0",
-};
-
-const emptyDayStyle: CSSProperties = {
-  minHeight: "82px",
-  borderRadius: "12px",
-  background: "var(--x-color-panel-alt)",
-};
-
-function dayCardStyle(active: boolean, hasEvent: boolean, isMobile: boolean): CSSProperties {
+function weekHeaderStyle(scale: number): CSSProperties {
   return {
-    minHeight: isMobile ? "78px" : "92px",
-    padding: isMobile ? "8px" : "10px",
-    borderRadius: "14px",
-    border: active ? "1px solid var(--x-color-accent-border)" : "1px solid transparent",
+    textAlign: "center",
+    fontSize: `${14 * scale}px`,
+    fontWeight: 800,
+    color: SKY_TEXT_MUTED,
+    padding: `${8 * scale}px 0`,
+  };
+}
+
+function emptyDayStyle(scale: number): CSSProperties {
+  return {
+    minHeight: `${132 * scale}px`,
+    borderRadius: `${12 * scale}px`,
+    background: "rgba(232, 247, 255, 0.34)",
+    border: "1px solid rgba(255,255,255,0.42)",
+  };
+}
+
+function dayCardStyle(active: boolean, hasEvent: boolean, isMobile: boolean, scale: number): CSSProperties {
+  return {
+    position: "relative",
+    minHeight: `${(isMobile ? 122 : 144) * scale}px`,
+    padding: `${(isMobile ? 8 : 10) * scale}px`,
+    borderRadius: `${14 * scale}px`,
+    border: active ? SKY_ACCENT_BORDER : "1px solid rgba(255,255,255,0.52)",
     background: hasEvent
-      ? "linear-gradient(135deg, var(--x-color-warning-tint), var(--x-color-info-soft))"
-      : "var(--x-color-panel-alt)",
-    boxShadow: hasEvent ? "0 8px 20px var(--x-color-shadow-soft)" : "none",
+      ? active
+        ? "linear-gradient(135deg, rgba(186,230,253,0.82), rgba(240,249,255,0.78))"
+        : "linear-gradient(135deg, rgba(240,249,255,0.68), rgba(224,247,255,0.5))"
+      : "rgba(255,255,255,0.36)",
+    boxShadow: hasEvent ? "0 12px 26px rgba(14, 116, 144, 0.1)" : "none",
     textAlign: "left",
     cursor: "pointer",
+    display: "grid",
+    gridTemplateRows: "auto minmax(0, 1fr)",
+    alignContent: "start",
+    gap: `${6 * scale}px`,
+    overflow: "hidden",
+    transition: "transform 140ms ease, border-color 140ms ease, box-shadow 140ms ease",
   };
 }
 
-const dayNumberStyle: CSSProperties = {
-  fontWeight: 700,
-  color: "var(--x-color-ink)",
-};
+function dayNumberStyle(scale: number, hasImage: boolean): CSSProperties {
+  return {
+    position: "relative",
+    zIndex: 2,
+    width: "max-content",
+    padding: hasImage ? `${4 * scale}px ${7 * scale}px` : 0,
+    borderRadius: `${10 * scale}px`,
+    background: hasImage ? "rgba(255,255,255,0.62)" : "transparent",
+    backdropFilter: hasImage ? "blur(12px)" : undefined,
+    fontSize: `${14 * scale}px`,
+    fontWeight: 800,
+    color: SKY_TEXT,
+  };
+}
 
 const mobileSummaryValueStyle: CSSProperties = {
   fontSize: "26px",
   fontWeight: 800,
-  color: "var(--x-color-ink)",
+  color: SKY_TEXT,
   textAlign: "center",
 };
 
 const mobileSummaryLabelStyle: CSSProperties = {
   fontSize: "12px",
-  color: "var(--x-color-ink-muted)",
+  color: SKY_TEXT_MUTED,
   textAlign: "center",
 };
 
 const mobileSummaryDividerStyle: CSSProperties = {
   width: "1px",
   height: "100%",
-  background: "var(--x-color-line-soft)",
+  background: "rgba(56, 189, 248, 0.22)",
 };
 
-const dayEventStyle: CSSProperties = {
-  marginTop: "6px",
-  fontSize: "12px",
-  lineHeight: 1.35,
-  color: "var(--x-color-ink)",
-};
-
-const dayMoreStyle: CSSProperties = {
-  marginTop: "6px",
-  fontSize: "11px",
-  color: "var(--x-color-ink-muted)",
-  fontWeight: 700,
-};
-
-function mobileDayCardStyle(active: boolean): CSSProperties {
+function calendarBackgroundLayerStyle(url: string, active: boolean): CSSProperties {
   return {
-    padding: "12px 14px",
-    borderRadius: "16px",
-    border: active ? "1px solid var(--x-color-accent-border)" : "1px solid var(--x-color-line-soft)",
+    position: "absolute",
+    inset: 0,
+    zIndex: 0,
+    opacity: active ? 1 : 0,
+    backgroundImage:
+      `linear-gradient(180deg, rgba(238,249,255,0.2), rgba(238,249,255,0.72)), url("${url}")`,
+    backgroundPosition: "center",
+    backgroundSize: "cover",
+    transition: "opacity 1100ms ease, transform 4600ms ease",
+    transform: active ? "scale(1.03)" : "scale(1)",
+    pointerEvents: "none",
+  };
+}
+
+function dayEventButtonStyle(scale: number, hasImage: boolean): CSSProperties {
+  return {
+    position: "relative",
+    zIndex: 2,
+    width: "100%",
+    margin: 0,
+    padding: `${3 * scale}px ${5 * scale}px`,
+    borderRadius: `${8 * scale}px`,
+    border: "1px solid transparent",
+    background: "transparent",
+    fontSize: `${12 * scale}px`,
+    lineHeight: 1.22,
+    color: hasImage ? SKY_TEXT : SKY_TEXT_SOFT,
+    fontWeight: 800,
+    textAlign: "left",
+    cursor: "pointer",
+    boxShadow: "none",
+    backdropFilter: "none",
+    transition: "background 140ms ease, border-color 140ms ease, box-shadow 140ms ease",
+  };
+}
+
+function mobileDayCardStyle(active: boolean, scale: number): CSSProperties {
+  return {
+    position: "relative",
+    aspectRatio: "1 / 1",
+    minHeight: "auto",
+    padding: `${9 * scale}px`,
+    borderRadius: `${14 * scale}px`,
+    border: active ? SKY_ACCENT_BORDER : "1px solid rgba(255,255,255,0.58)",
     background: active
-      ? "linear-gradient(135deg, var(--x-color-warning-tint), var(--x-color-info-soft))"
-      : "var(--x-color-panel)",
-    boxShadow: "0 10px 24px var(--x-color-shadow-soft)",
+      ? "linear-gradient(135deg, rgba(186,230,253,0.86), rgba(240,249,255,0.76))"
+      : "rgba(255,255,255,0.5)",
+    boxShadow: "0 10px 24px rgba(14, 116, 144, 0.1)",
     textAlign: "left",
     cursor: "pointer",
     display: "grid",
-    gap: "8px",
+    alignContent: "start",
+    gap: `${6 * scale}px`,
+    overflow: "hidden",
   };
 }
 
-const mobileDayHeaderStyle: CSSProperties = {
-  display: "flex",
-  justifyContent: "space-between",
-  gap: "12px",
-  alignItems: "center",
-};
-
-const mobileDayDateStyle: CSSProperties = {
-  fontSize: "14px",
-  fontWeight: 800,
-  color: "var(--x-color-ink)",
-};
-
-const mobileDayCountStyle: CSSProperties = {
-  fontSize: "12px",
-  color: "var(--x-color-ink-muted)",
-  fontWeight: 700,
-};
-
-const mobileDayEventListStyle: CSSProperties = {
-  display: "grid",
-  gap: "2px",
-};
-
-function detailPanelStyle(isMobile: boolean): CSSProperties {
+function mobileDayHeaderStyle(scale: number): CSSProperties {
   return {
-    padding: isMobile ? "18px" : "20px",
-    borderRadius: "var(--x-radius-lg)",
-    background: "var(--x-color-panel-strong)",
-    border: "1px solid var(--x-color-line-soft)",
-    boxShadow: "0 16px 34px var(--x-color-shadow-soft)",
-    position: isMobile ? "static" : "sticky",
-    top: isMobile ? undefined : "76px",
+    position: "relative",
+    zIndex: 2,
+    display: "flex",
+    justifyContent: "flex-start",
+    flexDirection: "column",
+    gap: `${4 * scale}px`,
+    alignItems: "flex-start",
   };
 }
 
-const detailHeaderStyle: CSSProperties = {
-  paddingBottom: "14px",
-  marginBottom: "16px",
-  borderBottom: "1px solid var(--x-color-line-soft)",
-};
+function mobileDayDateStyle(scale: number, hasImage: boolean): CSSProperties {
+  return {
+    padding: hasImage ? `${3 * scale}px ${6 * scale}px` : 0,
+    borderRadius: `${10 * scale}px`,
+    background: hasImage ? "rgba(255,255,255,0.62)" : "transparent",
+    backdropFilter: hasImage ? "blur(12px)" : undefined,
+    fontSize: `${12.5 * scale}px`,
+    fontWeight: 800,
+    color: SKY_TEXT,
+  };
+}
 
-const detailEyebrowStyle: CSSProperties = {
-  fontSize: "12px",
-  letterSpacing: "0.14em",
-  textTransform: "uppercase",
-  color: "var(--x-color-ink-muted)",
-};
+function mobileDayCountStyle(scale: number, hasImage: boolean): CSSProperties {
+  return {
+    padding: hasImage ? `${3 * scale}px ${6 * scale}px` : 0,
+    borderRadius: `${999 * scale}px`,
+    background: hasImage ? "rgba(255,255,255,0.58)" : "transparent",
+    backdropFilter: hasImage ? "blur(12px)" : undefined,
+    fontSize: `${11 * scale}px`,
+    color: SKY_TEXT_MUTED,
+    fontWeight: 800,
+  };
+}
 
-const detailTitleStyle: CSSProperties = {
-  margin: "8px 0 0",
-  fontSize: "24px",
-  color: "var(--x-color-ink)",
-};
+function mobileDayEventListStyle(scale: number): CSSProperties {
+  return {
+    position: "relative",
+    zIndex: 2,
+    display: "grid",
+    gap: `${2 * scale}px`,
+    overflowY: "auto",
+    minHeight: 0,
+  };
+}
 
 const placeholderStyle: CSSProperties = {
   padding: "18px",
   borderRadius: "var(--x-radius-md)",
-  background: "var(--x-color-panel)",
-  border: "1px solid var(--x-color-line-soft)",
-  color: "var(--x-color-ink-muted)",
-};
-
-const eventListStyle: CSSProperties = {
-  display: "grid",
-  gap: "12px",
-};
-
-function eventCardStyle(isMobile: boolean): CSSProperties {
-  return {
-    padding: isMobile ? "12px" : "14px",
-    borderRadius: "var(--x-radius-md)",
-    border: "1px solid var(--x-color-line-soft)",
-    background: "var(--x-color-panel)",
-    textAlign: "left",
-    cursor: "pointer",
-    display: "grid",
-    gap: "12px",
-  };
-}
-
-function eventCardMediaWrapStyle(isMobile: boolean): CSSProperties {
-  return {
-    display: "grid",
-    gridTemplateColumns: isMobile ? "minmax(0, 1fr)" : "minmax(0, 1fr) 96px",
-    gap: "10px",
-    alignItems: "stretch",
-  };
-}
-
-const eventCardHeroContainerStyle: CSSProperties = {
-  position: "absolute",
-  inset: 0,
-};
-
-const eventCardHeroStyle: CSSProperties = {
-  position: "relative",
-  aspectRatio: "1 / 1",
-  borderRadius: "16px",
-  overflow: "hidden",
-  background: "linear-gradient(135deg, var(--x-color-nav-start), var(--x-color-nav-end))",
-};
-
-const eventCardHeroImageStyle: CSSProperties = {
-  width: "100%",
-  height: "100%",
-  objectFit: "cover",
-  display: "block",
-};
-
-const eventCardHeroVideoStyle: CSSProperties = {
-  position: "absolute",
-  inset: 0,
-  pointerEvents: "none",
-};
-
-const eventCardPreviewGridStyle: CSSProperties = {
-  display: "grid",
-  gridTemplateRows: "repeat(3, minmax(0, 1fr))",
-  gap: "10px",
-};
-
-const eventCardPreviewImageStyle: CSSProperties = {
-  width: "100%",
-  height: "100%",
-  minHeight: "45px",
-  objectFit: "cover",
-  display: "block",
-  borderRadius: "12px",
-  background: "var(--x-color-panel-alt)",
-};
-
-const eventCardImageFallbackStyle: CSSProperties = {
-  width: "100%",
-  height: "100%",
-  display: "grid",
-  placeItems: "center",
-  color: "white",
-  fontSize: "13px",
-  fontWeight: 800,
-  letterSpacing: "0.2em",
-};
-
-const eventCardPreviewFallbackStyle: CSSProperties = {
-  minHeight: "45px",
-  borderRadius: "12px",
-  background: "var(--x-color-panel-alt)",
-  border: "1px dashed var(--x-color-line-soft)",
-};
-
-const eventCardTitleStyle: CSSProperties = {
-  fontWeight: 700,
-  color: "var(--x-color-ink)",
-};
-
-const eventCardMetaStyle: CSSProperties = {
-  marginTop: "6px",
-  fontSize: "13px",
-  color: "var(--x-color-ink-muted)",
+  background: SKY_GLASS_SOFT,
+  border: "1px solid rgba(255,255,255,0.58)",
+  color: SKY_TEXT_MUTED,
+  boxShadow: "0 10px 24px rgba(14, 116, 144, 0.08)",
+  backdropFilter: "blur(14px)",
 };

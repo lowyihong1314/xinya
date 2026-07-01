@@ -1,4 +1,11 @@
-import { useEffect, useRef, useState, type CSSProperties } from "react";
+import {
+  useEffect,
+  useRef,
+  useState,
+  type CSSProperties,
+  type MouseEventHandler,
+  type SyntheticEvent,
+} from "react";
 
 import { API_BASE } from "../js/apiBase";
 import { clearSmartImageCache, smartMediaAsset, type SmartMediaAsset, type SmartMediaVariant } from "../js/get_img";
@@ -16,6 +23,8 @@ export type CacheMediaPlayerProgress = {
 };
 
 type CacheMediaPlayerProps = {
+  id?: string;
+  statusId?: string;
   fileId?: number | string | null;
   fileType?: string | null;
   alt?: string;
@@ -30,10 +39,14 @@ type CacheMediaPlayerProps = {
   videoProgress?: CacheMediaPlayerProgress | null;
   retryAttempts?: number;
   retryDelayMs?: number;
+  deferLoad?: boolean;
   videoAutoPlay?: boolean;
   videoMuted?: boolean;
   videoLoop?: boolean;
   videoControls?: boolean;
+  imageLoading?: "lazy" | "eager";
+  onMediaClick?: MouseEventHandler<HTMLImageElement | HTMLVideoElement>;
+  onMediaLoad?: (element: HTMLImageElement | HTMLVideoElement) => void;
   onVideoEnded?: () => void;
   onAssetChange?: (asset: SmartMediaAsset | null) => void;
 };
@@ -41,6 +54,8 @@ type CacheMediaPlayerProps = {
 const FALLBACK_IMAGE_URL = `${API_BASE}/static/img/placeholder.png`;
 
 export function CacheMediaPlayer({
+  id,
+  statusId,
   fileId,
   fileType,
   alt,
@@ -55,10 +70,14 @@ export function CacheMediaPlayer({
   videoProgress,
   retryAttempts = 1,
   retryDelayMs = 1500,
+  deferLoad = false,
   videoAutoPlay = true,
   videoMuted = true,
   videoLoop = true,
   videoControls = false,
+  imageLoading = "lazy",
+  onMediaClick,
+  onMediaLoad,
   onVideoEnded,
   onAssetChange,
 }: CacheMediaPlayerProps) {
@@ -69,9 +88,20 @@ export function CacheMediaPlayer({
     fileId?: number | string | null;
     reloadKey?: string | number;
   } | null>(null);
+  const handleImageLoad = (event: SyntheticEvent<HTMLImageElement>) => {
+    if (asset?.kind === "image") {
+      onMediaLoad?.(event.currentTarget);
+    }
+  };
+  const handleVideoLoad = (event: SyntheticEvent<HTMLVideoElement>) => {
+    if (asset?.kind === "video") {
+      onMediaLoad?.(event.currentTarget);
+    }
+  };
 
   useEffect(() => {
     let cancelled = false;
+    const controller = typeof AbortController !== "undefined" ? new AbortController() : null;
     const previousLoad = lastLoadRef.current;
     const shouldRefreshCurrentFile =
       previousLoad?.fileId != null
@@ -84,6 +114,11 @@ export function CacheMediaPlayer({
     };
 
     async function loadAsset() {
+      if (deferLoad) {
+        setAsset(null);
+        return;
+      }
+
       if (fileId == null) {
         setAsset(null);
         onAssetChange?.(null);
@@ -96,7 +131,9 @@ export function CacheMediaPlayer({
 
       for (let attempt = 0; attempt < retryAttempts; attempt += 1) {
         try {
-          const nextAsset = await smartMediaAsset(fileId, fileType, variant);
+          const nextAsset = await smartMediaAsset(fileId, fileType, variant, {
+            signal: controller?.signal,
+          });
           if (!cancelled) {
             const normalized = nextAsset.kind === "unsupported" ? null : nextAsset;
             setAsset(normalized);
@@ -105,14 +142,23 @@ export function CacheMediaPlayer({
           if (nextAsset.kind !== "unsupported") {
             return;
           }
-        } catch {
+        } catch (error) {
+          if (isAbortError(error)) {
+            return;
+          }
           // continue retry flow below
         }
 
         if (!isVideoType(fileType) || attempt === retryAttempts - 1) {
           break;
         }
-        await new Promise((resolve) => window.setTimeout(resolve, retryDelayMs));
+        try {
+          await abortableDelay(retryDelayMs, controller?.signal);
+        } catch (error) {
+          if (isAbortError(error)) {
+            return;
+          }
+        }
       }
 
       if (!cancelled) {
@@ -125,32 +171,40 @@ export function CacheMediaPlayer({
 
     return () => {
       cancelled = true;
+      controller?.abort();
     };
-  }, [fileId, fileType, reloadKey, onAssetChange, retryAttempts, retryDelayMs, variant]);
+  }, [deferLoad, fileId, fileType, reloadKey, onAssetChange, retryAttempts, retryDelayMs, variant]);
 
   useEffect(() => {
-    if (fileId == null || !resolvedVideoProgress || resolvedVideoProgress.status !== "done") {
+    if (deferLoad || fileId == null || !resolvedVideoProgress || resolvedVideoProgress.status !== "done") {
       return;
     }
 
     let cancelled = false;
+    const controller = typeof AbortController !== "undefined" ? new AbortController() : null;
     const reloadReadyAsset = async () => {
       clearSmartImageCache(fileId);
       try {
-        const nextAsset = await smartMediaAsset(fileId, fileType, variant);
+        const nextAsset = await smartMediaAsset(fileId, fileType, variant, {
+          signal: controller?.signal,
+        });
         if (!cancelled && nextAsset.kind !== "unsupported") {
           setAsset(nextAsset);
           onAssetChange?.(nextAsset);
         }
-      } catch {
+      } catch (error) {
+        if (isAbortError(error)) {
+          return;
+        }
         // keep current rendered asset
       }
     };
     void reloadReadyAsset();
     return () => {
       cancelled = true;
+      controller?.abort();
     };
-  }, [fileId, fileType, onAssetChange, resolvedVideoProgress, variant]);
+  }, [deferLoad, fileId, fileType, onAssetChange, resolvedVideoProgress, variant]);
 
   useEffect(() => {
     if (!fileId || !mediaNotification) {
@@ -246,8 +300,12 @@ export function CacheMediaPlayer({
     };
   }, [eventCode, fileId, listenProgress, mediaNotification]);
 
+  if (deferLoad) {
+    return <div id={id} style={{ ...rootStyle, ...containerStyle }} />;
+  }
+
   return (
-    <div style={{ ...rootStyle, ...containerStyle }}>
+    <div id={id} style={{ ...rootStyle, ...containerStyle }}>
       {asset?.kind === "video" ? (
         <CachedVideo
           src={asset.url}
@@ -258,12 +316,23 @@ export function CacheMediaPlayer({
           controls={videoControls}
           playsInline
           preload="metadata"
+          onClick={onMediaClick as MouseEventHandler<HTMLVideoElement> | undefined}
+          onLoadedMetadata={handleVideoLoad}
+          onCanPlay={handleVideoLoad}
           onEnded={onVideoEnded}
         />
       ) : (
-        <CachedImage src={asset?.url || fallbackSrc} alt={alt || ""} style={style} loading="lazy" decoding="async" />
+        <CachedImage
+          src={asset?.url || fallbackSrc}
+          alt={alt || ""}
+          style={style}
+          loading={imageLoading}
+          decoding="async"
+          onClick={onMediaClick as MouseEventHandler<HTMLImageElement> | undefined}
+          onLoad={handleImageLoad}
+        />
       )}
-      {resolvedVideoProgress ? <div style={videoStatusStyle(resolvedVideoProgress)}>{formatVideoStatus(resolvedVideoProgress)}</div> : null}
+      {resolvedVideoProgress ? <div id={statusId} style={videoStatusStyle(resolvedVideoProgress)}>{formatVideoStatus(resolvedVideoProgress)}</div> : null}
     </div>
   );
 }
@@ -272,6 +341,42 @@ function isVideoType(fileType?: string | null) {
   return ["mp4", "mov", "m4v", "avi", "mkv", "webm", "flv", "mts", "m2ts", "3gp", "wmv"].includes(
     String(fileType || "").trim().toLowerCase(),
   );
+}
+
+function abortableDelay(ms: number, signal?: AbortSignal) {
+  if (!signal) {
+    return new Promise((resolve) => window.setTimeout(resolve, ms));
+  }
+  if (signal.aborted) {
+    return Promise.reject(createAbortError());
+  }
+
+  return new Promise<void>((resolve, reject) => {
+    const timer = window.setTimeout(() => {
+      signal.removeEventListener("abort", handleAbort);
+      resolve();
+    }, ms);
+
+    function handleAbort() {
+      window.clearTimeout(timer);
+      reject(createAbortError());
+    }
+
+    signal.addEventListener("abort", handleAbort, { once: true });
+  });
+}
+
+function isAbortError(error: unknown) {
+  return error instanceof Error && error.name === "AbortError";
+}
+
+function createAbortError() {
+  if (typeof DOMException !== "undefined") {
+    return new DOMException("Aborted", "AbortError");
+  }
+  const error = new Error("Aborted");
+  error.name = "AbortError";
+  return error;
 }
 
 const rootStyle: CSSProperties = {
