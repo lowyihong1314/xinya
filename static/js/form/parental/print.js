@@ -1,5 +1,5 @@
 import { getMaxZIndex } from "../../get_Max_zindex.js";
-import Swal from "https://cdn.jsdelivr.net/npm/sweetalert2@11/+esm";
+import Swal from "../../../vendor/sweetalert2/sweetalert2.esm.all.min.js";
 
 export function freezeModalToPrintable(modalEl) {
   const inputs = modalEl.querySelectorAll("input, textarea, select");
