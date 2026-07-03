@@ -3,6 +3,7 @@ from flask_login import current_user
 from flask_socketio import emit, join_room
 
 from app.extensions import socketio
+from app.quiz import services as quiz_services
 from app.redis_client import redis_client
 
 REDIS_ONLINE_KEY = "online_users"
@@ -75,3 +76,140 @@ def handle_changyou_push_song(data):
     if not room_id:
         return
     emit("changyou_room_update", payload, to=f"changyou:{room_id}", skip_sid=request.sid)
+
+
+def _emit_quiz_error(message, reason="invalid_request", status_code=400):
+    emit(
+        "quiz:error",
+        {"status": "error", "message": message, "reason": reason, "status_code": status_code},
+        to=request.sid,
+    )
+
+
+def _handle_quiz_error(error):
+    if isinstance(error, quiz_services.QuizError):
+        _emit_quiz_error(str(error), error.reason, error.status_code)
+        return
+    print("⚠️ Quiz socket error:", error)
+    _emit_quiz_error("抢答服务错误", "server_error", 500)
+
+
+def _emit_quiz_snapshot(token, sid=None):
+    snapshot = quiz_services.build_snapshot(token)
+    emit("quiz:snapshot", snapshot, to=sid or request.sid)
+    return snapshot
+
+
+def _require_socket_user():
+    if not getattr(current_user, "is_authenticated", False):
+        raise quiz_services.QuizError("请先登录", 401, "unauthorized")
+
+
+@socketio.on("quiz:time:ping")
+def handle_quiz_time_ping(data):
+    emit(
+        "quiz:time:pong",
+        {
+            "client_sent_at_ms": (data or {}).get("client_sent_at_ms"),
+            "server_now_ms": quiz_services.now_ms(),
+        },
+        to=request.sid,
+    )
+
+
+@socketio.on("quiz:host:join")
+def handle_quiz_host_join(data):
+    try:
+        token = (data or {}).get("room_token") or (data or {}).get("token")
+        token = quiz_services.normalize_token(token)
+        join_room(quiz_services.socket_room(token))
+        _emit_quiz_snapshot(token)
+    except Exception as exc:
+        _handle_quiz_error(exc)
+
+
+@socketio.on("quiz:guest:join")
+def handle_quiz_guest_join(data):
+    try:
+        data = data or {}
+        token = quiz_services.normalize_token(data.get("room_token") or data.get("token"))
+        guest_name = str(data.get("guest_name") or "").strip()
+        if not guest_name:
+            raise quiz_services.QuizError("请先输入名称", 400, "missing_guest_name")
+        join_room(quiz_services.socket_room(token))
+        _emit_quiz_snapshot(token)
+    except Exception as exc:
+        _handle_quiz_error(exc)
+
+
+@socketio.on("quiz:host:save_config")
+def handle_quiz_host_save_config(data):
+    try:
+        _require_socket_user()
+        data = data or {}
+        token = data.get("room_token") or data.get("token")
+        session = quiz_services.save_config(token, data.get("config") or {})
+        snapshot = quiz_services.build_snapshot(session)
+        emit("quiz:config_updated", snapshot, to=quiz_services.socket_room(session["room_token"]))
+    except Exception as exc:
+        _handle_quiz_error(exc)
+
+
+@socketio.on("quiz:host:publish")
+def handle_quiz_host_publish(data):
+    try:
+        _require_socket_user()
+        token = (data or {}).get("room_token") or (data or {}).get("token")
+        session = quiz_services.publish_session(token)
+        snapshot = quiz_services.build_snapshot(session)
+        emit("quiz:config_updated", snapshot, to=quiz_services.socket_room(session["room_token"]))
+    except Exception as exc:
+        _handle_quiz_error(exc)
+
+
+@socketio.on("quiz:host:reset")
+def handle_quiz_host_reset(data):
+    try:
+        _require_socket_user()
+        token = (data or {}).get("room_token") or (data or {}).get("token")
+        session = quiz_services.reset_session(token)
+        snapshot = quiz_services.build_snapshot(session)
+        emit("quiz:config_updated", snapshot, to=quiz_services.socket_room(session["room_token"]))
+    except Exception as exc:
+        _handle_quiz_error(exc)
+
+
+@socketio.on("quiz:host:close")
+def handle_quiz_host_close(data):
+    try:
+        _require_socket_user()
+        token = (data or {}).get("room_token") or (data or {}).get("token")
+        session = quiz_services.close_session(token)
+        snapshot = quiz_services.build_snapshot(session)
+        emit("quiz:config_updated", snapshot, to=quiz_services.socket_room(session["room_token"]))
+    except Exception as exc:
+        _handle_quiz_error(exc)
+
+
+@socketio.on("quiz:guest:answer")
+def handle_quiz_guest_answer(data):
+    try:
+        data = data or {}
+        token = data.get("room_token") or data.get("token")
+        snapshot = quiz_services.record_answer(
+            token,
+            data.get("guest_id"),
+            data.get("guest_name"),
+            data.get("answer_index"),
+            data.get("client_clicked_at_ms"),
+        )
+        emit("quiz:winner", snapshot, to=quiz_services.socket_room(snapshot["room_token"]))
+    except Exception as exc:
+        if isinstance(exc, quiz_services.QuizError):
+            emit(
+                "quiz:answer_rejected",
+                {"reason": exc.reason, "message": str(exc)},
+                to=request.sid,
+            )
+            return
+        _handle_quiz_error(exc)

@@ -1,6 +1,6 @@
-import { CHANGYOU_PATH, MUSIC_PLAYER_PATH } from "../../router/paths";
+import { CHANGYOU_PATH, MUSIC_PLAYER_PATH, TURNTABLE_PATH } from "../../router/paths";
 
-export type PortalNavKey = "music_player" | "changyou";
+export type PortalNavKey = "music_player" | "changyou" | "turntable";
 
 export type PortalNavItem = {
   key: PortalNavKey;
@@ -21,5 +21,11 @@ export const PORTAL_ITEMS: PortalNavItem[] = [
     title: "唱游",
     icon: "fas fa-microphone-lines",
     path: CHANGYOU_PATH,
+  },
+  {
+    key: "turntable",
+    title: "转盘",
+    icon: "fas fa-record-vinyl",
+    path: TURNTABLE_PATH,
   },
 ];

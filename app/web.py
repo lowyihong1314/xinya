@@ -393,6 +393,14 @@ def register_web_routes(app):
     def music_portal():
         return render_template("music_portal.html")
 
+    @app.route("/quiz")
+    def quiz_public_entry():
+        token = request.args.get("token") or ""
+        target = "/#/music/turntable/quiz"
+        if token:
+            target = f"{target}?token={token}"
+        return redirect(target)
+
     @app.route("/privacy")
     def privacy_policy_short():
         return redirect("/privacy-policy")

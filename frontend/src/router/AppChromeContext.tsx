@@ -41,14 +41,28 @@ export function useBaseNavbarVisibility(visible: boolean) {
   const chrome = useOptionalAppChrome();
 
   useLayoutEffect(() => {
-    if (!chrome) {
+    if (chrome) {
+      chrome.setNavbarVisible(visible);
+
+      return () => {
+        chrome.setNavbarVisible(true);
+      };
+    }
+
+    if (typeof document === "undefined") {
       return;
     }
 
-    chrome.setNavbarVisible(visible);
+    const navbar = document.getElementById("base_navbar");
+    if (!navbar) {
+      return;
+    }
+
+    const previousDisplay = navbar.style.display;
+    navbar.style.display = visible ? previousDisplay : "none";
 
     return () => {
-      chrome.setNavbarVisible(true);
+      navbar.style.display = previousDisplay;
     };
   }, [chrome, visible]);
 }

@@ -4,7 +4,7 @@ import { Outlet, useLocation, useNavigate } from "react-router-dom";
 
 import { useUserState } from "../app/UserState";
 import { IS_APK } from "../js/apiBase";
-import { CHANGYOU_PATH, MUSIC_PLAYER_PATH, MUSIC_ROOT_PATH } from "../music/router/paths";
+import { CHANGYOU_PATH, MUSIC_PLAYER_PATH, MUSIC_ROOT_PATH, TURNTABLE_PATH } from "../music/router/paths";
 import { useEnsureDesignTokens } from "../theme/designTokens";
 import { AppChromeProvider } from "./AppChromeContext";
 import { useRegisterRouterNavigation } from "./navigationBridge";
@@ -22,6 +22,12 @@ const MUSIC_NAV_ITEMS = [
     title: "唱游",
     icon: "fas fa-microphone-lines",
     path: CHANGYOU_PATH,
+  },
+  {
+    key: "turntable",
+    title: "转盘",
+    icon: "fas fa-record-vinyl",
+    path: TURNTABLE_PATH,
   },
 ] as const;
 
@@ -104,10 +110,7 @@ export function AppLayout() {
         <nav id="base_navbar" ref={navbarRef} style={navbarStyle(navbarVisible)}>
           {isInsideMusicRouter
             ? MUSIC_NAV_ITEMS.map((item) => {
-                const isActive =
-                  item.key === "changyou"
-                    ? location.pathname.startsWith(CHANGYOU_PATH)
-                    : location.pathname.startsWith(MUSIC_PLAYER_PATH);
+                const isActive = location.pathname.startsWith(item.path);
 
                 return (
                   <button
