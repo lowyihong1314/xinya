@@ -15,27 +15,36 @@ export function QuizGuestPage() {
   useBaseNavbarVisibility(false);
 
   const location = useLocation();
-  const token = useMemo(() => new URLSearchParams(location.search).get("token")?.trim().toLowerCase() || "", [location.search]);
+  const token = useMemo(
+    () => new URLSearchParams(location.search).get("token")?.trim().toLowerCase() || "",
+    [location.search],
+  );
   const [guestId] = useState(() => getOrCreateGuestId());
   const [guestName, setGuestName] = useState(() => window.localStorage.getItem(GUEST_NAME_STORAGE_KEY) || "");
   const [joined, setJoined] = useState(false);
   const [snapshot, setSnapshot] = useState<QuizSessionSnapshot | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
   const [loading, setLoading] = useState(Boolean(token));
-  const [submitted, setSubmitted] = useState(false);
+  const [pendingTap, setPendingTap] = useState(false);
   const [connected, setConnected] = useState(false);
   const [serverOffsetMs, setServerOffsetMs] = useState(0);
   const [tick, setTick] = useState(Date.now());
   const socketRef = useRef<Socket | null>(null);
 
-  const derivedStatus = snapshot ? deriveStatus(snapshot, tick + serverOffsetMs) : "draft";
-  const winner = snapshot?.winner;
-  const isWinner = Boolean(winner && winner.guest_id === guestId);
-  const canAnswer = joined && !submitted && !winner && derivedStatus === "open";
-  const remainingMs = snapshot?.config.start_at_ms ? Math.max(0, snapshot.config.start_at_ms - (tick + serverOffsetMs)) : 0;
+  const estimatedNow = tick + serverOffsetMs;
+  const status = snapshot?.status || "draft";
+  const cutoff = snapshot?.cutoff_at_ms || 0;
+  const remainingMs = cutoff ? cutoff - estimatedNow : Number.POSITIVE_INFINITY;
+  const reachedCutoff = Boolean(cutoff) && remainingMs <= 0;
+  const isOpen = status === "open" || (status === "waiting" && reachedCutoff);
+
+  const leaderboard = snapshot?.leaderboard || [];
+  const myEntry = useMemo(() => leaderboard.find((row) => row.guest_id === guestId) || null, [leaderboard, guestId]);
+  const hasTapped = Boolean(myEntry) || pendingTap;
+  const canTap = joined && isOpen && !hasTapped;
 
   useEffect(() => {
-    const timer = window.setInterval(() => setTick(Date.now()), 200);
+    const timer = window.setInterval(() => setTick(Date.now()), 60);
     return () => window.clearInterval(timer);
   }, []);
 
@@ -45,12 +54,11 @@ export function QuizGuestPage() {
       setLoading(false);
       return;
     }
-
     let active = true;
     setLoading(true);
     void getQuizSession(token)
-      .then((nextSnapshot) => {
-        if (active) setSnapshot(nextSnapshot);
+      .then((next) => {
+        if (active) setSnapshot(next);
       })
       .catch((error) => {
         if (active) setNotice(error instanceof Error ? error.message : "读取抢答活动失败");
@@ -58,7 +66,6 @@ export function QuizGuestPage() {
       .finally(() => {
         if (active) setLoading(false);
       });
-
     return () => {
       active = false;
     };
@@ -74,43 +81,43 @@ export function QuizGuestPage() {
       socket?.emit("quiz:time:ping", { client_sent_at_ms: Date.now() });
       setConnected(true);
     };
-    const applySnapshot = (nextSnapshot: QuizSessionSnapshot) => {
-      if (!nextSnapshot?.room_token) return;
-      setSnapshot(nextSnapshot);
-      if (!nextSnapshot.winner) {
-        setSubmitted(false);
+    const applySnapshot = (next: QuizSessionSnapshot) => {
+      if (!next?.room_token) return;
+      setSnapshot(next);
+      // New round (host re-published or returned to publish page) → allow tapping again.
+      if (next.status === "draft" || next.status === "waiting") {
+        setPendingTap(false);
       }
     };
     const handlePong = (payload: { client_sent_at_ms?: number; server_now_ms?: number }) => {
       if (!payload?.client_sent_at_ms || !payload.server_now_ms) return;
       const receivedAt = Date.now();
       const roundTrip = receivedAt - payload.client_sent_at_ms;
-      const estimatedServerNow = payload.server_now_ms + roundTrip / 2;
-      setServerOffsetMs(estimatedServerNow - receivedAt);
+      setServerOffsetMs(payload.server_now_ms + roundTrip / 2 - receivedAt);
     };
-    const handleError = (payload: { message?: string }) => {
-      setNotice(payload?.message || "抢答连接失败");
-    };
-    const handleRejected = (payload: { message?: string }) => {
-      setNotice(payload?.message || "抢答失败");
-      setSubmitted(false);
-    };
-    const handleDisconnect = () => {
-      setConnected(false);
+    const handleRejected = (payload: { reason?: string; message?: string }) => {
+      // Too-early / duplicate — surface briefly and re-enable if it was a mis-timed tap.
+      if (payload?.reason === "too_early" || payload?.reason === "not_published") {
+        setPendingTap(false);
+        setNotice("还没开放，别急！");
+      } else if (payload?.reason === "already_tapped") {
+        setNotice(null);
+      } else {
+        setPendingTap(false);
+        setNotice(payload?.message || "抢答失败");
+      }
     };
 
     socket.on("connect", join);
-    socket.on("disconnect", handleDisconnect);
+    socket.on("disconnect", () => setConnected(false));
     socket.on("quiz:snapshot", applySnapshot);
     socket.on("quiz:config_updated", applySnapshot);
-    socket.on("quiz:winner", applySnapshot);
+    socket.on("quiz:leaderboard", applySnapshot);
     socket.on("quiz:time:pong", handlePong);
-    socket.on("quiz:error", handleError);
-    socket.on("quiz:answer_rejected", handleRejected);
+    socket.on("quiz:error", (p: { message?: string }) => setNotice(p?.message || "抢答连接失败"));
+    socket.on("quiz:tap_rejected", handleRejected);
     if (socket.connected) join();
-    const pingTimer = window.setInterval(() => {
-      socket?.emit("quiz:time:ping", { client_sent_at_ms: Date.now() });
-    }, 5000);
+    const pingTimer = window.setInterval(() => socket?.emit("quiz:time:ping", { client_sent_at_ms: Date.now() }), 4000);
 
     return () => {
       window.clearInterval(pingTimer);
@@ -132,14 +139,14 @@ export function QuizGuestPage() {
     setJoined(true);
   }
 
-  function handleAnswer(answerIndex: number) {
-    if (!canAnswer) return;
-    setSubmitted(true);
-    socketRef.current?.emit("quiz:guest:answer", {
+  function handleTap() {
+    if (!canTap) return;
+    setPendingTap(true);
+    setNotice(null);
+    socketRef.current?.emit("quiz:guest:tap", {
       room_token: token,
       guest_id: guestId,
       guest_name: guestName.trim(),
-      answer_index: answerIndex,
       client_clicked_at_ms: Date.now(),
     });
   }
@@ -152,10 +159,20 @@ export function QuizGuestPage() {
     );
   }
 
+  // 3-2-1-点 countdown value for the last seconds before cutoff.
+  const secondsLeft = Number.isFinite(remainingMs) ? Math.ceil(remainingMs / 1000) : null;
+  let countChip: string | null = null;
+  if (status === "waiting" && secondsLeft !== null) {
+    if (secondsLeft <= 0) countChip = "点!";
+    else if (secondsLeft === 1) countChip = "1";
+    else if (secondsLeft === 2) countChip = "2";
+    else if (secondsLeft === 3) countChip = "3";
+    else if (secondsLeft === 4) countChip = "准备";
+  }
+
   return (
     <main style={pageStyle}>
       <div style={shellStyle}>
-        {/* ── header ── */}
         <header style={headerStyle}>
           <span style={kickerStyle}>Quiz</span>
           <h1 style={h1Style}>抢答</h1>
@@ -184,82 +201,60 @@ export function QuizGuestPage() {
             </button>
           </section>
         ) : (
-          /* ── quiz view ── */
-          <section style={quizStyle}>
-            {/* connection + status */}
+          /* ── buzzer view ── */
+          <section style={buzzerStyle}>
             <div style={statusBarStyle}>
               <span style={connDotStyle(connected)} />
-              <span style={statusChipStyle(derivedStatus)}>
-                {statusText(snapshot, derivedStatus, remainingMs)}
+              <span style={statusChipStyle(status, isOpen)}>{guestStatusText(status, isOpen, hasTapped)}</span>
+            </div>
+
+            {/* my result */}
+            {myEntry ? (
+              <div style={myResultStyle}>
+                <span style={myRankLabelStyle}>你的名次</span>
+                <span style={myRankNumStyle}>第 {myEntry.rank} 名</span>
+                <span style={myDeltaStyle}>+{myEntry.delta_from_cutoff_ms}ms</span>
+              </div>
+            ) : null}
+
+            {/* the big button */}
+            <button
+              type="button"
+              disabled={!canTap}
+              onClick={handleTap}
+              style={buzzerBtnStyle(isOpen, canTap, hasTapped)}
+            >
+              {countChip ? <span style={countChipStyle}>{countChip}</span> : null}
+              <span style={buzzerLabelStyle}>
+                {hasTapped ? "已抢!" : isOpen ? "点!" : status === "closed" ? "已结束" : status === "draft" ? "等待发布" : "准备…"}
               </span>
-            </div>
+            </button>
 
-            {/* countdown */}
-            {derivedStatus === "waiting" && snapshot?.config.start_at_ms ? (
-              <div style={countdownStyle}>{formatDuration(remainingMs)}</div>
-            ) : null}
-
-            {/* question */}
-            <div style={questionCardStyle}>
-              <h2 style={questionTextStyle}>{snapshot?.config.question || "等待主持人配置题目"}</h2>
-            </div>
-
-            {/* winner banner */}
-            {winner ? (
-              <div style={winnerBannerStyle(isWinner, winner.is_correct)}>
-                <div style={winnerRowStyle}>
-                  <i className="fas fa-trophy" aria-hidden="true" style={trophyStyle} />
-                  <span style={winnerNameStyle}>
-                    {isWinner ? "你抢到了！" : winner.guest_name}
-                  </span>
-                  <span style={winnerBadgeStyle(winner.is_correct)}>
-                    {winner.is_correct ? "答对" : "答错"}
-                  </span>
+            {/* leaderboard */}
+            {leaderboard.length > 0 ? (
+              <div style={boardCardStyle}>
+                <div style={boardHeaderStyle}>
+                  <i className="fas fa-ranking-star" aria-hidden="true" style={{ color: "var(--x-color-accent)" }} />
+                  <span style={boardTitleStyle}>排行榜</span>
+                  <span style={boardCountStyle}>{leaderboard.length} 人</span>
                 </div>
-                <div style={winnerInfoStyle}>
-                  <span>选择: {winner.answer_index}. {winner.answer_text}</span>
-                  {!winner.is_correct ? (
-                    <span style={correctHintStyle}>
-                      正确答案: {winner.correct_answer_index}. {winner.correct_answer_text}
-                    </span>
-                  ) : null}
-                  <span style={deltaStyle}>+{winner.delta_from_start_ms}ms</span>
-                </div>
+                <ol style={boardListStyle}>
+                  {leaderboard.slice(0, 20).map((row) => {
+                    const mine = row.guest_id === guestId;
+                    return (
+                      <li key={row.guest_id} style={boardRowStyle(row.rank, mine)}>
+                        <span style={rankBadgeStyle(row.rank)}>{row.rank}</span>
+                        <span style={rowNameStyle}>
+                          {row.guest_name}
+                          {mine ? " (你)" : ""}
+                        </span>
+                        <span style={rowDeltaStyle}>+{row.delta_from_cutoff_ms}ms</span>
+                      </li>
+                    );
+                  })}
+                </ol>
               </div>
             ) : null}
-
-            {/* submitted hint */}
-            {submitted && !winner ? (
-              <div style={submittedHintStyle}>
-                <i className="fas fa-spinner fa-spin" aria-hidden="true" />
-                <span>已提交，等待结果...</span>
-              </div>
-            ) : null}
-
-            {/* answer grid */}
-            <div style={answerGridStyle}>
-              {(snapshot?.config.answers || [])
-                .filter((a) => a.enabled)
-                .map((answer) => {
-                  const isCorrectAnswer = winner ? answer.index === winner.correct_answer_index : false;
-                  const isWinnerPick = winner ? answer.index === winner.answer_index : false;
-                  return (
-                    <button
-                      key={answer.index}
-                      type="button"
-                      disabled={!canAnswer}
-                      onClick={() => handleAnswer(answer.index)}
-                      style={answerBtnStyle(canAnswer, isCorrectAnswer, isWinnerPick)}
-                    >
-                      <span style={answerNumStyle(isCorrectAnswer)}>{answer.index}</span>
-                      <span style={answerTxtStyle}>{answer.text}</span>
-                      {isCorrectAnswer ? (
-                        <i className="fas fa-check" aria-hidden="true" style={answerCheckStyle} />
-                      ) : null}
-                    </button>
-                  );
-                })}
-            </div>
           </section>
         )}
       </div>
@@ -277,32 +272,12 @@ function getOrCreateGuestId() {
   return next;
 }
 
-function deriveStatus(snapshot: QuizSessionSnapshot, estimatedServerNowMs: number) {
-  if (snapshot.winner) return "answered";
-  if (snapshot.status === "closed") return "closed";
-  if (!snapshot.config.start_at_ms || !snapshot.config.question) return "draft";
-  return estimatedServerNowMs >= snapshot.config.start_at_ms ? "open" : "waiting";
-}
-
-function statusText(snapshot: QuizSessionSnapshot | null, status: string, remainingMs: number) {
-  if (!snapshot) return "未连接";
-  if (status === "answered") return "已抢答";
-  if (status === "closed") return "已关闭";
-  if (status === "open") return "可以抢答！";
-  if (status === "waiting") return `倒计时 ${formatDuration(remainingMs)}`;
-  return "等待配置";
-}
-
-function pad(value: number, length = 2) {
-  return String(value).padStart(length, "0");
-}
-
-function formatDuration(ms: number) {
-  const total = Math.max(0, ms);
-  const minutes = Math.floor(total / 60000);
-  const seconds = Math.floor((total % 60000) / 1000);
-  const milliseconds = Math.floor(total % 1000);
-  return `${pad(minutes)}:${pad(seconds)}.${pad(milliseconds, 3)}`;
+function guestStatusText(status: string, isOpen: boolean, hasTapped: boolean) {
+  if (status === "closed") return "已结束";
+  if (hasTapped) return "已抢答";
+  if (isOpen) return "快点！";
+  if (status === "waiting") return "准备…";
+  return "等待主持人发布";
 }
 
 /* ═══════════════ styles ═══════════════ */
@@ -314,15 +289,12 @@ const pageStyle: CSSProperties = {
 };
 
 const shellStyle: CSSProperties = {
-  width: "min(680px, calc(100% - 28px))",
+  width: "min(560px, calc(100% - 24px))",
   margin: "0 auto",
-  padding: "22px 0 40px",
+  padding: "20px 0 40px",
 };
 
-const headerStyle: CSSProperties = {
-  textAlign: "center",
-  marginBottom: "20px",
-};
+const headerStyle: CSSProperties = { textAlign: "center", marginBottom: "16px" };
 
 const kickerStyle: CSSProperties = {
   display: "block",
@@ -332,11 +304,7 @@ const kickerStyle: CSSProperties = {
   textTransform: "uppercase",
 };
 
-const h1Style: CSSProperties = {
-  margin: 0,
-  fontSize: "32px",
-  lineHeight: 1.1,
-};
+const h1Style: CSSProperties = { margin: 0, fontSize: "30px", lineHeight: 1.1 };
 
 const noticeStyle: CSSProperties = {
   marginBottom: "14px",
@@ -345,6 +313,7 @@ const noticeStyle: CSSProperties = {
   background: "var(--x-color-warning-soft)",
   color: "var(--x-color-danger)",
   fontWeight: 800,
+  textAlign: "center",
 };
 
 const centerMsgStyle: CSSProperties = {
@@ -369,18 +338,11 @@ const joinCardStyle: CSSProperties = {
   gap: "18px",
 };
 
-const joinTitleStyle: CSSProperties = {
-  textAlign: "center",
-  fontSize: "18px",
-  fontWeight: 900,
-};
+const joinTitleStyle: CSSProperties = { textAlign: "center", fontSize: "18px", fontWeight: 900 };
 
 const fieldStyle: CSSProperties = { display: "grid", gap: "8px" };
 
-const labelStyle: CSSProperties = {
-  color: "var(--x-color-ink-muted)",
-  fontWeight: 800,
-};
+const labelStyle: CSSProperties = { color: "var(--x-color-ink-muted)", fontWeight: 800 };
 
 const joinInputStyle: CSSProperties = {
   minHeight: "52px",
@@ -392,7 +354,7 @@ const joinInputStyle: CSSProperties = {
 
 const joinBtnStyle: CSSProperties = {
   minHeight: "52px",
-  border: "1px solid var(--x-color-accent)",
+  border: "none",
   borderRadius: "8px",
   background: "var(--x-color-accent)",
   color: "white",
@@ -401,19 +363,11 @@ const joinBtnStyle: CSSProperties = {
   cursor: "pointer",
 };
 
-/* ── quiz view ── */
+/* ── buzzer ── */
 
-const quizStyle: CSSProperties = {
-  display: "grid",
-  gap: "18px",
-};
+const buzzerStyle: CSSProperties = { display: "grid", gap: "18px", justifyItems: "center" };
 
-const statusBarStyle: CSSProperties = {
-  display: "flex",
-  alignItems: "center",
-  justifyContent: "center",
-  gap: "10px",
-};
+const statusBarStyle: CSSProperties = { display: "flex", alignItems: "center", justifyContent: "center", gap: "10px" };
 
 const connDotStyle = (connected: boolean): CSSProperties => ({
   width: "10px",
@@ -423,190 +377,129 @@ const connDotStyle = (connected: boolean): CSSProperties => ({
   flex: "0 0 auto",
 });
 
-const statusChipStyle = (status: string): CSSProperties => ({
+const statusChipStyle = (status: string, isOpen: boolean): CSSProperties => ({
   padding: "8px 18px",
   borderRadius: "999px",
   fontWeight: 900,
   fontSize: "15px",
-  fontFamily: status === "waiting" ? "var(--x-font-mono)" : undefined,
-  ...(status === "open"
+  ...(isOpen
     ? { background: "var(--x-color-success-soft)", color: "var(--x-color-success)" }
-    : status === "answered"
-      ? { background: "var(--x-color-warning-soft)", color: "var(--x-color-warning)" }
-      : status === "closed"
-        ? { background: "var(--x-color-danger-soft)", color: "var(--x-color-danger)" }
-        : { background: "var(--x-color-accent-soft)", color: "var(--x-color-accent-strong)" }),
+    : status === "closed"
+      ? { background: "var(--x-color-danger-soft)", color: "var(--x-color-danger)" }
+      : { background: "var(--x-color-accent-soft)", color: "var(--x-color-accent-strong)" }),
 });
 
-const countdownStyle: CSSProperties = {
-  textAlign: "center",
-  fontFamily: "var(--x-font-mono)",
-  fontSize: "52px",
-  fontWeight: 900,
-  color: "var(--x-color-accent)",
-};
-
-const questionCardStyle: CSSProperties = {
-  padding: "26px 22px",
-  borderRadius: "12px",
-  background: "linear-gradient(135deg, var(--x-color-panel), var(--x-color-panel-alt))",
-  border: "1px solid var(--x-color-line)",
-  boxShadow: "0 6px 18px var(--x-color-shadow-soft)",
-};
-
-const questionTextStyle: CSSProperties = {
-  margin: 0,
-  fontSize: "28px",
-  lineHeight: 1.2,
-  textAlign: "center",
-  overflowWrap: "anywhere",
-};
-
-/* ── winner banner ── */
-
-const winnerBannerStyle = (isMine: boolean, correct: boolean): CSSProperties => ({
-  padding: "20px 22px",
-  borderRadius: "12px",
-  border: `2px solid ${correct ? "rgba(21,128,61,0.3)" : "rgba(194,65,12,0.3)"}`,
-  background: isMine
-    ? correct
-      ? "linear-gradient(135deg, var(--x-color-success-soft), rgba(21,128,61,0.06))"
-      : "linear-gradient(135deg, var(--x-color-danger-soft), rgba(194,65,12,0.06))"
-    : "var(--x-color-panel)",
-  boxShadow: "0 6px 20px var(--x-color-shadow-soft)",
-  display: "grid",
-  gap: "10px",
-});
-
-const winnerRowStyle: CSSProperties = {
-  display: "flex",
-  alignItems: "center",
-  gap: "12px",
-  flexWrap: "wrap",
-};
-
-const trophyStyle: CSSProperties = {
-  fontSize: "24px",
-  color: "#d97706",
-};
-
-const winnerNameStyle: CSSProperties = {
-  fontSize: "24px",
-  fontWeight: 900,
-};
-
-const winnerBadgeStyle = (correct: boolean): CSSProperties => ({
-  padding: "3px 10px",
-  borderRadius: "999px",
-  fontWeight: 900,
-  fontSize: "13px",
-  background: correct ? "var(--x-color-success)" : "var(--x-color-danger)",
-  color: "white",
-});
-
-const winnerInfoStyle: CSSProperties = {
-  display: "flex",
-  alignItems: "center",
-  gap: "14px",
-  flexWrap: "wrap",
-  fontWeight: 800,
-  color: "var(--x-color-ink-muted)",
-};
-
-const correctHintStyle: CSSProperties = {
-  color: "var(--x-color-success)",
-  fontWeight: 900,
-};
-
-const deltaStyle: CSSProperties = {
-  fontFamily: "var(--x-font-mono)",
-  fontWeight: 900,
-  color: "var(--x-color-accent)",
-};
-
-const submittedHintStyle: CSSProperties = {
+const myResultStyle: CSSProperties = {
+  width: "100%",
   display: "flex",
   alignItems: "center",
   justifyContent: "center",
-  gap: "10px",
-  padding: "14px",
-  borderRadius: "8px",
+  gap: "16px",
+  padding: "16px 20px",
+  borderRadius: "14px",
+  border: "2px solid var(--x-color-accent)",
   background: "var(--x-color-accent-soft)",
-  color: "var(--x-color-accent-strong)",
-  fontWeight: 800,
 };
 
-/* ── answer grid ── */
+const myRankLabelStyle: CSSProperties = { fontWeight: 800, color: "var(--x-color-ink-muted)" };
 
-const answerGridStyle: CSSProperties = {
-  display: "grid",
-  gap: "12px",
-};
+const myRankNumStyle: CSSProperties = { fontSize: "28px", fontWeight: 900, color: "var(--x-color-accent-strong)" };
 
-const answerBtnStyle = (active: boolean, correct: boolean, picked: boolean): CSSProperties => {
-  const base: CSSProperties = {
-    minHeight: "72px",
-    display: "flex",
-    alignItems: "center",
-    gap: "14px",
-    padding: "12px 18px",
-    borderRadius: "12px",
-    fontSize: "18px",
-    fontWeight: 900,
-    color: "var(--x-color-ink)",
-    cursor: active ? "pointer" : "default",
-    transition: "transform 0.1s, box-shadow 0.1s",
-  };
-  if (correct) {
-    return {
-      ...base,
-      border: "2px solid var(--x-color-success)",
-      background: "linear-gradient(135deg, var(--x-color-success-soft), rgba(21,128,61,0.08))",
-      boxShadow: "0 4px 14px rgba(21,128,61,0.12)",
-    };
-  }
-  if (picked) {
-    return {
-      ...base,
-      border: "2px solid var(--x-color-warning)",
-      background: "var(--x-color-warning-soft)",
-    };
-  }
-  if (active) {
-    return {
-      ...base,
-      border: "2px solid var(--x-color-accent)",
-      background: "var(--x-color-accent-soft)",
-      boxShadow: "0 4px 12px var(--x-color-shadow-soft)",
-    };
-  }
+const myDeltaStyle: CSSProperties = { fontFamily: "var(--x-font-mono)", fontWeight: 900, color: "var(--x-color-accent)" };
+
+const buzzerBtnStyle = (isOpen: boolean, canTap: boolean, hasTapped: boolean): CSSProperties => {
+  const green = isOpen && !hasTapped;
+  const background = hasTapped
+    ? "linear-gradient(135deg, #16a34a, #15803d)"
+    : green
+      ? "linear-gradient(135deg, #22c55e, #16a34a)"
+      : "linear-gradient(135deg, #ef4444, #dc2626)";
   return {
-    ...base,
-    border: "1px solid var(--x-color-line)",
-    background: "var(--x-color-panel-alt)",
-    opacity: 0.6,
+    position: "relative",
+    width: "min(320px, 78vw)",
+    height: "min(320px, 78vw)",
+    borderRadius: "999px",
+    border: "none",
+    background,
+    color: "white",
+    fontWeight: 900,
+    cursor: canTap ? "pointer" : "default",
+    boxShadow: green ? "0 0 0 8px rgba(34,197,94,0.25), 0 18px 40px rgba(22,163,74,0.35)" : "0 14px 34px rgba(220,38,38,0.3)",
+    transition: "background 0.12s, box-shadow 0.12s, transform 0.06s",
+    transform: canTap ? "scale(1)" : "scale(0.98)",
+    display: "grid",
+    placeItems: "center",
+    userSelect: "none",
+    WebkitTapHighlightColor: "transparent",
+    touchAction: "manipulation",
   };
 };
 
-const answerNumStyle = (correct: boolean): CSSProperties => ({
-  width: "38px",
-  height: "38px",
+const countChipStyle: CSSProperties = {
+  position: "absolute",
+  top: "-14px",
+  left: "50%",
+  transform: "translateX(-50%)",
+  minWidth: "64px",
+  padding: "6px 18px",
+  borderRadius: "999px",
+  background: "var(--x-color-ink)",
+  color: "white",
+  fontSize: "30px",
+  fontWeight: 900,
+  boxShadow: "0 8px 20px rgba(0,0,0,0.28)",
+};
+
+const buzzerLabelStyle: CSSProperties = { fontSize: "56px", lineHeight: 1, textShadow: "0 2px 6px rgba(0,0,0,0.25)" };
+
+/* ── leaderboard ── */
+
+const boardCardStyle: CSSProperties = {
+  width: "100%",
+  border: "1px solid var(--x-color-line)",
+  borderRadius: "14px",
+  background: "var(--x-color-panel)",
+  padding: "16px",
+  display: "grid",
+  gap: "10px",
+};
+
+const boardHeaderStyle: CSSProperties = { display: "flex", alignItems: "center", gap: "10px" };
+
+const boardTitleStyle: CSSProperties = { fontSize: "16px", fontWeight: 900 };
+
+const boardCountStyle: CSSProperties = { marginLeft: "auto", color: "var(--x-color-ink-muted)", fontWeight: 800 };
+
+const boardListStyle: CSSProperties = { listStyle: "none", margin: 0, padding: 0, display: "grid", gap: "8px" };
+
+const boardRowStyle = (rank: number, mine: boolean): CSSProperties => ({
+  display: "flex",
+  alignItems: "center",
+  gap: "12px",
+  padding: "10px 14px",
+  borderRadius: "12px",
+  border: mine ? "2px solid var(--x-color-accent)" : rank <= 3 ? "1px solid var(--x-color-accent)" : "1px solid var(--x-color-line)",
+  background: mine ? "var(--x-color-accent-soft)" : rank <= 3 ? "var(--x-color-panel-alt)" : "var(--x-color-panel-alt)",
+});
+
+const rankBadgeStyle = (rank: number): CSSProperties => ({
+  width: "32px",
+  height: "32px",
   borderRadius: "999px",
   display: "grid",
   placeItems: "center",
   flex: "0 0 auto",
   fontWeight: 900,
   fontSize: "15px",
-  background: correct ? "var(--x-color-success)" : "var(--x-color-ink)",
+  background: rank === 1 ? "#f59e0b" : rank === 2 ? "#9ca3af" : rank === 3 ? "#b45309" : "var(--x-color-ink)",
   color: "white",
 });
 
-const answerTxtStyle: CSSProperties = {
-  flex: "1 1 auto",
-};
+const rowNameStyle: CSSProperties = { flex: "1 1 auto", fontSize: "16px", fontWeight: 800, overflowWrap: "anywhere" };
 
-const answerCheckStyle: CSSProperties = {
-  color: "var(--x-color-success)",
-  fontSize: "18px",
+const rowDeltaStyle: CSSProperties = {
+  fontFamily: "var(--x-font-mono)",
+  fontWeight: 900,
+  color: "var(--x-color-accent)",
   flex: "0 0 auto",
 };

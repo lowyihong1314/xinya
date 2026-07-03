@@ -9,9 +9,12 @@ from app.redis_client import redis_client
 QUIZ_TTL_SECONDS = 24 * 60 * 60
 TOKEN_LENGTH = 6
 TOKEN_ALPHABET = string.ascii_lowercase + string.digits
-MAX_QUESTION_LENGTH = 1200
-MAX_ANSWER_LENGTH = 240
-MAX_ANSWERS = 9
+MAX_TITLE_LENGTH = 240
+DEFAULT_WAIT_SECONDS = 6
+MIN_WAIT_SECONDS = 3
+MAX_WAIT_SECONDS = 600
+MAX_LEADERBOARD = 500
+GUEST_TTL_SECONDS = 2 * 60 * 60
 
 
 class QuizError(ValueError):
@@ -38,8 +41,16 @@ def session_key(token):
     return f"quiz:token:{token}"
 
 
-def winner_key(token):
-    return f"quiz:{token}:winner"
+def entries_key(token):
+    return f"quiz:{token}:entries"
+
+
+def guests_key(token):
+    return f"quiz:{token}:guests"
+
+
+def sid_map_key():
+    return "quiz:sid_map"
 
 
 def socket_room(token):
@@ -76,11 +87,10 @@ def _default_session(token, user_id=None):
     return {
         "room_token": token,
         "status": "draft",
-        "start_at_ms": None,
-        "question": "",
-        "correct_answer_index": None,
-        "answers": [],
-        "winner": None,
+        "title": "",
+        "wait_seconds": DEFAULT_WAIT_SECONDS,
+        "cutoff_at_ms": None,
+        "published_at_ms": None,
         "created_by_user_id": user_id,
         "created_at_ms": current_ms,
         "updated_at_ms": current_ms,
@@ -95,8 +105,6 @@ def _save_session(session):
     next_session["token_expires_at_ms"] = current_ms + QUIZ_TTL_SECONDS * 1000
     token = normalize_token(next_session.get("room_token"))
     redis_client.set(session_key(token), _json_dumps(next_session), ex=QUIZ_TTL_SECONDS)
-    if next_session.get("winner"):
-        redis_client.set(winner_key(token), _json_dumps(next_session["winner"]), ex=QUIZ_TTL_SECONDS)
     return next_session
 
 
@@ -106,9 +114,6 @@ def get_session(token):
     if not session:
         return None
     session["room_token"] = normalized
-    winner = _json_loads(redis_client.get(winner_key(normalized)))
-    if winner:
-        session["winner"] = winner
     return session
 
 
@@ -131,86 +136,114 @@ def _clean_text(value, limit):
 
 def sanitize_config(payload):
     data = payload or {}
+    title = _clean_text(data.get("title"), MAX_TITLE_LENGTH)
+
+    raw_wait = data.get("wait_seconds", DEFAULT_WAIT_SECONDS)
     try:
-        start_at_ms = int(data.get("start_at_ms"))
+        wait_seconds = int(raw_wait)
     except (TypeError, ValueError):
-        raise QuizError("请设置抢答开始时间", 400, "invalid_start_time")
-    if start_at_ms <= 0:
-        raise QuizError("请设置有效的抢答开始时间", 400, "invalid_start_time")
+        raise QuizError("请设置有效的等待秒数", 400, "invalid_wait_seconds")
+    if wait_seconds < MIN_WAIT_SECONDS or wait_seconds > MAX_WAIT_SECONDS:
+        raise QuizError(
+            f"等待秒数需在 {MIN_WAIT_SECONDS}~{MAX_WAIT_SECONDS} 之间",
+            400,
+            "invalid_wait_seconds",
+        )
 
-    question = _clean_text(data.get("question"), MAX_QUESTION_LENGTH)
-    if not question:
-        raise QuizError("请填写题目", 400, "missing_question")
+    return {"title": title, "wait_seconds": wait_seconds}
 
-    raw_answers = data.get("answers")
-    if not isinstance(raw_answers, list):
-        raise QuizError("请设置答案选项", 400, "invalid_answers")
 
-    answers = []
-    used_indexes = set()
-    for raw in raw_answers[:MAX_ANSWERS]:
-        if not isinstance(raw, dict):
-            continue
-        try:
-            index = int(raw.get("index"))
-        except (TypeError, ValueError):
-            continue
-        if index < 1 or index > MAX_ANSWERS or index in used_indexes:
-            continue
-        text = _clean_text(raw.get("text"), MAX_ANSWER_LENGTH)
-        enabled = bool(raw.get("enabled", True)) and bool(text)
-        if not text:
-            continue
-        used_indexes.add(index)
-        answers.append({"index": index, "text": text, "enabled": enabled})
+# ─────────────────────── presence (players in the room) ───────────────────────
 
-    enabled_indexes = {answer["index"] for answer in answers if answer.get("enabled")}
-    if not enabled_indexes:
-        raise QuizError("至少需要一个启用答案", 400, "missing_answers")
 
+def add_guest(token, guest_id, sid=None):
+    normalized = normalize_token(token)
+    guest_id = _clean_text(guest_id, 80)
+    if not guest_id:
+        return guest_count(normalized)
+    redis_client.sadd(guests_key(normalized), guest_id)
+    redis_client.expire(guests_key(normalized), GUEST_TTL_SECONDS)
+    if sid:
+        redis_client.hset(sid_map_key(), sid, f"{normalized}|{guest_id}")
+    return guest_count(normalized)
+
+
+def remove_guest_by_sid(sid):
+    if not sid:
+        return None
+    raw = redis_client.hget(sid_map_key(), sid)
+    redis_client.hdel(sid_map_key(), sid)
+    if not raw:
+        return None
+    if isinstance(raw, bytes):
+        raw = raw.decode("utf-8", "ignore")
+    token, _, guest_id = str(raw).partition("|")
+    if not token or not guest_id:
+        return None
+    redis_client.srem(guests_key(token), guest_id)
+    return token
+
+
+def guest_count(token):
     try:
-        correct_answer_index = int(data.get("correct_answer_index"))
-    except (TypeError, ValueError):
-        raise QuizError("请选择正确答案", 400, "missing_correct_answer")
-    if correct_answer_index not in enabled_indexes:
-        raise QuizError("正确答案必须是启用答案", 400, "invalid_correct_answer")
+        return int(redis_client.scard(guests_key(normalize_token(token))))
+    except Exception:
+        return 0
 
-    return {
-        "start_at_ms": start_at_ms,
-        "question": question,
-        "correct_answer_index": correct_answer_index,
-        "answers": answers,
-    }
+
+# ─────────────────────── leaderboard entries ───────────────────────
+
+
+def _load_entries(token):
+    raw = redis_client.hgetall(entries_key(token)) or {}
+    entries = []
+    for value in raw.values():
+        if isinstance(value, bytes):
+            value = value.decode("utf-8", "ignore")
+        parsed = _json_loads(value)
+        if parsed:
+            entries.append(parsed)
+    entries.sort(key=lambda item: item.get("server_received_at_ms", 0))
+    leaderboard = []
+    for rank, entry in enumerate(entries[:MAX_LEADERBOARD], start=1):
+        row = dict(entry)
+        row["rank"] = rank
+        leaderboard.append(row)
+    return leaderboard
+
+
+def _clear_entries(token):
+    redis_client.delete(entries_key(token))
 
 
 def _status_for_session(session, current_ms=None):
-    if session.get("winner"):
-        return "answered"
     stored_status = session.get("status")
     if stored_status == "closed":
         return "closed"
-    if not session.get("start_at_ms") or not session.get("question") or not session.get("answers"):
+    cutoff = session.get("cutoff_at_ms")
+    if not cutoff or not session.get("published_at_ms"):
         return "draft"
     current_ms = current_ms if current_ms is not None else now_ms()
-    return "open" if current_ms >= int(session["start_at_ms"]) else "waiting"
+    return "open" if current_ms >= int(cutoff) else "waiting"
 
 
 def build_snapshot(token_or_session):
     session = token_or_session if isinstance(token_or_session, dict) else require_session(token_or_session)
+    token = session.get("room_token")
     current_ms = now_ms()
     status = _status_for_session(session, current_ms)
-    config = {
-        "start_at_ms": session.get("start_at_ms"),
-        "question": session.get("question") or "",
-        "correct_answer_index": session.get("correct_answer_index"),
-        "answers": session.get("answers") or [],
-    }
     return {
-        "room_token": session.get("room_token"),
+        "room_token": token,
         "status": status,
         "server_now_ms": current_ms,
-        "config": config,
-        "winner": session.get("winner"),
+        "config": {
+            "title": session.get("title") or "",
+            "wait_seconds": session.get("wait_seconds") or DEFAULT_WAIT_SECONDS,
+        },
+        "cutoff_at_ms": session.get("cutoff_at_ms"),
+        "published_at_ms": session.get("published_at_ms"),
+        "player_count": guest_count(token) if token else 0,
+        "leaderboard": _load_entries(token) if token else [],
         "token_expires_at_ms": session.get("token_expires_at_ms"),
     }
 
@@ -219,23 +252,27 @@ def save_config(token, config_payload):
     session = require_session(token)
     config = sanitize_config(config_payload)
     session.update(config)
-    session["winner"] = None
-    session["status"] = _status_for_session(session)
-    redis_client.delete(winner_key(session["room_token"]))
     return _save_session(session)
 
 
 def publish_session(token):
     session = require_session(token)
-    session["status"] = _status_for_session(session)
+    wait_seconds = session.get("wait_seconds") or DEFAULT_WAIT_SECONDS
+    published_at = now_ms()
+    session["published_at_ms"] = published_at
+    session["cutoff_at_ms"] = published_at + int(wait_seconds) * 1000
+    session["status"] = "waiting"
+    _clear_entries(session["room_token"])
     return _save_session(session)
 
 
 def reset_session(token):
+    """Return to the publish page: clear the round + leaderboard."""
     session = require_session(token)
-    session["winner"] = None
-    session["status"] = _status_for_session(session)
-    redis_client.delete(winner_key(session["room_token"]))
+    session["published_at_ms"] = None
+    session["cutoff_at_ms"] = None
+    session["status"] = "draft"
+    _clear_entries(session["room_token"])
     return _save_session(session)
 
 
@@ -245,14 +282,7 @@ def close_session(token):
     return _save_session(session)
 
 
-def _answer_by_index(session, index):
-    for answer in session.get("answers") or []:
-        if int(answer.get("index")) == int(index) and answer.get("enabled"):
-            return answer
-    return None
-
-
-def record_answer(token, guest_id, guest_name, answer_index, client_clicked_at_ms=None):
+def record_tap(token, guest_id, guest_name, client_clicked_at_ms=None):
     session = require_session(token)
     normalized_token = session["room_token"]
     guest_id = _clean_text(guest_id or f"guest_{secrets.token_hex(4)}", 80)
@@ -260,55 +290,33 @@ def record_answer(token, guest_id, guest_name, answer_index, client_clicked_at_m
     if not guest_name:
         raise QuizError("请先输入名称", 400, "missing_guest_name")
 
-    try:
-        answer_index = int(answer_index)
-    except (TypeError, ValueError):
-        raise QuizError("请选择答案", 400, "invalid_answer")
-
     received_at_ms = now_ms()
-    if session.get("status") == "closed":
+    status = _status_for_session(session, received_at_ms)
+    if status == "closed":
         raise QuizError("抢答已关闭", 409, "closed")
-    if not session.get("start_at_ms") or received_at_ms < int(session["start_at_ms"]):
+    cutoff = session.get("cutoff_at_ms")
+    if not cutoff or not session.get("published_at_ms"):
+        raise QuizError("抢答还未开始", 409, "not_published")
+    if received_at_ms < int(cutoff):
         raise QuizError("抢答还未开始", 409, "too_early")
-    if session.get("winner") or redis_client.exists(winner_key(normalized_token)):
-        raise QuizError("已经有人抢答成功", 409, "already_answered")
-
-    answer = _answer_by_index(session, answer_index)
-    if not answer:
-        raise QuizError("答案不可用", 400, "invalid_answer")
-    correct_answer_index = session.get("correct_answer_index")
-    correct_answer = _answer_by_index(session, correct_answer_index)
-    if not correct_answer:
-        raise QuizError("正确答案配置不完整", 409, "missing_correct_answer")
 
     try:
         client_clicked_at_ms = int(client_clicked_at_ms) if client_clicked_at_ms is not None else None
     except (TypeError, ValueError):
         client_clicked_at_ms = None
 
-    winner = {
+    entry = {
         "guest_id": guest_id,
         "guest_name": guest_name,
-        "answer_index": answer["index"],
-        "answer_text": answer["text"],
-        "correct_answer_index": correct_answer["index"],
-        "correct_answer_text": correct_answer["text"],
-        "is_correct": answer["index"] == correct_answer["index"],
         "client_clicked_at_ms": client_clicked_at_ms,
         "server_received_at_ms": received_at_ms,
-        "delta_from_start_ms": received_at_ms - int(session["start_at_ms"]),
+        "delta_from_cutoff_ms": received_at_ms - int(cutoff),
     }
 
-    claimed = redis_client.set(
-        winner_key(normalized_token),
-        _json_dumps(winner),
-        ex=QUIZ_TTL_SECONDS,
-        nx=True,
-    )
+    # First tap per guest wins; later taps by the same guest are ignored.
+    claimed = redis_client.hsetnx(entries_key(normalized_token), guest_id, _json_dumps(entry))
+    redis_client.expire(entries_key(normalized_token), QUIZ_TTL_SECONDS)
     if not claimed:
-        raise QuizError("已经有人抢答成功", 409, "already_answered")
+        raise QuizError("你已经抢答过了", 409, "already_tapped")
 
-    session["winner"] = winner
-    session["status"] = "answered"
-    saved = _save_session(session)
-    return build_snapshot(saved)
+    return build_snapshot(session)

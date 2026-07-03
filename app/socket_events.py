@@ -15,8 +15,15 @@ def handle_connect():
 
 
 @socketio.on("disconnect")
-def handle_disconnect():
-    print(f"🔴 Client disconnected: {request.sid}")
+def handle_disconnect(reason=None):
+    print(f"🔴 Client disconnected: {request.sid}, reason={reason}")
+    try:
+        token = quiz_services.remove_guest_by_sid(request.sid)
+        if token:
+            snapshot = quiz_services.build_snapshot(token)
+            emit("quiz:snapshot", snapshot, to=quiz_services.socket_room(token))
+    except Exception as exc:  # noqa: BLE001 - presence cleanup must never break disconnect
+        print("⚠️ Quiz presence cleanup error:", exc)
 
 
 @socketio.on_error_default
@@ -134,10 +141,14 @@ def handle_quiz_guest_join(data):
         data = data or {}
         token = quiz_services.normalize_token(data.get("room_token") or data.get("token"))
         guest_name = str(data.get("guest_name") or "").strip()
+        guest_id = str(data.get("guest_id") or "").strip()
         if not guest_name:
             raise quiz_services.QuizError("请先输入名称", 400, "missing_guest_name")
         join_room(quiz_services.socket_room(token))
-        _emit_quiz_snapshot(token)
+        quiz_services.add_guest(token, guest_id, sid=request.sid)
+        # Broadcast so the host's player count updates live.
+        snapshot = quiz_services.build_snapshot(token)
+        emit("quiz:snapshot", snapshot, to=quiz_services.socket_room(token))
     except Exception as exc:
         _handle_quiz_error(exc)
 
@@ -191,23 +202,22 @@ def handle_quiz_host_close(data):
         _handle_quiz_error(exc)
 
 
-@socketio.on("quiz:guest:answer")
-def handle_quiz_guest_answer(data):
+@socketio.on("quiz:guest:tap")
+def handle_quiz_guest_tap(data):
     try:
         data = data or {}
         token = data.get("room_token") or data.get("token")
-        snapshot = quiz_services.record_answer(
+        snapshot = quiz_services.record_tap(
             token,
             data.get("guest_id"),
             data.get("guest_name"),
-            data.get("answer_index"),
             data.get("client_clicked_at_ms"),
         )
-        emit("quiz:winner", snapshot, to=quiz_services.socket_room(snapshot["room_token"]))
+        emit("quiz:leaderboard", snapshot, to=quiz_services.socket_room(snapshot["room_token"]))
     except Exception as exc:
         if isinstance(exc, quiz_services.QuizError):
             emit(
-                "quiz:answer_rejected",
+                "quiz:tap_rejected",
                 {"reason": exc.reason, "message": str(exc)},
                 to=request.sid,
             )

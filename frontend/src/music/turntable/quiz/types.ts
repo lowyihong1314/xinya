@@ -1,29 +1,17 @@
-export type QuizStatus = "draft" | "waiting" | "open" | "answered" | "closed";
-
-export type QuizAnswer = {
-  index: number;
-  text: string;
-  enabled: boolean;
-};
+export type QuizStatus = "draft" | "waiting" | "open" | "closed";
 
 export type QuizConfig = {
-  start_at_ms: number | null;
-  question: string;
-  correct_answer_index: number | null;
-  answers: QuizAnswer[];
+  title: string;
+  wait_seconds: number;
 };
 
-export type QuizWinner = {
+export type QuizEntry = {
+  rank: number;
   guest_id: string;
   guest_name: string;
-  answer_index: number;
-  answer_text: string;
-  correct_answer_index: number;
-  correct_answer_text: string;
-  is_correct: boolean;
   client_clicked_at_ms?: number | null;
   server_received_at_ms: number;
-  delta_from_start_ms: number;
+  delta_from_cutoff_ms: number;
 };
 
 export type QuizSessionSnapshot = {
@@ -31,7 +19,10 @@ export type QuizSessionSnapshot = {
   status: QuizStatus;
   server_now_ms: number;
   config: QuizConfig;
-  winner: QuizWinner | null;
+  cutoff_at_ms: number | null;
+  published_at_ms: number | null;
+  player_count: number;
+  leaderboard: QuizEntry[];
   token_expires_at_ms?: number | null;
 };
 
