@@ -20,11 +20,13 @@ from app.account.services import (
     get_payment_voucher_share_data,
     get_public_payment_voucher_data,
     list_claims_for_user,
+    list_finance_payments,
     read_bill_from_file,
     record_claim_decision,
     submit_public_payment_voucher_signature,
     update_claim,
     update_claim_event,
+    update_finance_payment_status,
 )
 
 account_bp = Blueprint("account", __name__)
@@ -75,6 +77,33 @@ def get_all_claim():
             ),
             200,
         )
+    except AccountError as exc:
+        return _error_response(exc)
+
+
+@account_bp.get("/payments")
+def get_finance_payments():
+    try:
+        require_claim_list_permission()
+        payments = list_finance_payments(
+            scope=request.args.get("scope"),
+            status=request.args.get("status"),
+        )
+        return jsonify({"status": "success", "count": len(payments), "payments": payments}), 200
+    except AccountError as exc:
+        return _error_response(exc)
+    except Exception as exc:
+        from models import db
+
+        db.session.rollback()
+        return jsonify({"status": "error", "message": str(exc)}), 500
+
+
+@account_bp.post("/payments/<int:payment_id>/status")
+def update_finance_payment_status_route(payment_id):
+    try:
+        require_claim_edit_permission()
+        return update_finance_payment_status(payment_id, request.get_json(silent=True) or {})
     except AccountError as exc:
         return _error_response(exc)
 

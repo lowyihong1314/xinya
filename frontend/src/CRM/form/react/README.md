@@ -5,23 +5,32 @@
 - `FormWorkspacePage.tsx` is the mounted CRM page for the `register` module.
 - `FormWorkspaceView.tsx` renders the full admin workspace once `useFormWorkspace()` has prepared data and actions.
 
+## UI structure (workbench listing→detail)
+
+The register page mirrors the membership/youth workbench
+(`long_open_registration_form/react/RegistrationWorkbench.tsx`):
+
+- **List view**: a sticky-header ERP table of forms (标题 · 截止日期 · 报名人数 · 关联活动 · 报名费 ·
+  创建时间). Clicking a row opens the detail. Toolbar has 新建表格 (form_edit) + 刷新.
+- **Detail view** (refresh-safe via `?form_id=` + `?form_tab=`): a tab bar — 报名成员 · 报名费 ·
+  表格内容 · 关联活动 · 基本设置 · 公开报名页.
+  - 报名成员: an ERP table of members (付款状态 chip) + search + 下载 Excel; row click opens the
+    existing `showRegisterDetail` modal; 家长同意书 / 移除 actions in the row.
+  - 报名费: `<FeePanel>`; 表格内容: `<ExtraFieldEditor>`; 关联活动: linked-event cards + `showEventPicker`.
+  - 基本设置: **pen→save** editable 标题/截止日期/详情 (via the hook's debounced `patchSelectedForm`)
+    + field-switch toggles + 删除表格.
+  - 公开报名页: phone-mockup `PhoneFrame` previews of the public registration
+    (`/api/form/index/{id}`) and payment (`/api/form/pay_register/{id}`) pages at the public origin
+    (`utbabuddha.com`) + copy-URL buttons.
+
 ## Main pieces
 
-- `useFormWorkspace.ts`: loads forms, detail, fees, and extra fields; owns all create/edit/delete actions.
-- `FormWorkspaceView.tsx`: list navigation, summary editor, field switches, event links, fees, extra fields, members, share actions, and Excel export.
-- `FeePanel.tsx`: shared fee editor with HEIC image normalization and upload support.
-- `ExtraFieldEditor.tsx`: CRUD editor for text, textarea, select, number, date, and checkbox extra fields.
-- `showRegisterDetail.tsx`: member detail modal used for editing member data from the list.
-- `api.ts`: `/api/form/*` helpers for forms, fees, events, members, and NRIC preview checks.
-- `types.ts`: source of `FormRecord`, `FormMember`, `FormPayment`, fee, and extra-field shapes used by other CRM modules too.
-
-## Important flows
-
-- Opening a form triggers `fetchFormDetail()`, `listFees()`, and `listExtraFields()` together.
-- Event binding is done through `showEventPicker()` and `/api/form/add_event` or `/remove_event`.
-- Member detail editing and parental-form opening are coordinated from `useFormWorkspace.ts`.
-- Member export is generated client-side with lazy-loaded `xlsx`.
-- Share actions are exposed from the main workspace for both the registration page and payment page.
+- `useFormWorkspace.ts`: loads the forms list, opens detail on the URL `preferredFormId`, and owns all
+  create/edit/delete actions. Selection is URL-driven — the list loads once, `openForm` reacts to
+  `?form_id=`, and clearing it returns to the list.
+- `FormWorkspaceView.tsx`: the workbench UI (forms table, tabbed detail, members table, pen→save
+  settings, phone previews, create modal). Reuses `FeePanel`, `ExtraFieldEditor`, `showRegisterDetail`.
+- `FeePanel.tsx`, `ExtraFieldEditor.tsx`, `showRegisterDetail.tsx`, `api.ts`, `types.ts`: unchanged.
 
 ## Permission behavior
 

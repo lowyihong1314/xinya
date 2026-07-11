@@ -2,6 +2,7 @@ from flask import Blueprint, jsonify, request
 
 from models.form import RegisForm
 
+from app.common import council_sign
 from . import services
 from .permissions import (
     FORM_EDIT_PERMISSION_NAMES,
@@ -10,6 +11,7 @@ from .permissions import (
     FORM_PAYMENT_EDIT_PERMISSION_NAMES,
     FORM_PAYMENT_READ_PERMISSION_NAMES,
     FORM_READ_PERMISSION_NAMES,
+    YOUTH_CLASS_COUNCIL_PERMISSION_NAMES,
     YOUTH_CLASS_EDIT_PERMISSION_NAMES,
     YOUTH_CLASS_READ_PERMISSION_NAMES,
     current_user_has_any_permission,
@@ -295,3 +297,27 @@ def get_youth_class_payment_proof_image_route(payment_id):
 @permission_required_any(*YOUTH_CLASS_EDIT_PERMISSION_NAMES)
 def update_youth_class_payment_status_route(payment_id):
     return services.update_youth_class_payment_status(payment_id, request.get_json(silent=True) or {})
+
+
+@form_bp.route("/youth-class-registration/<int:entry_id>/council-sign", methods=["POST"])
+@permission_required_any(*YOUTH_CLASS_COUNCIL_PERMISSION_NAMES)
+def add_youth_class_council_signature_route(entry_id):
+    return council_sign.add_council_signature("youth_class", entry_id, request.get_json(silent=True) or {})
+
+
+@form_bp.route("/youth-class-registration/<int:entry_id>", methods=["PUT"])
+@permission_required_any(*YOUTH_CLASS_EDIT_PERMISSION_NAMES)
+def update_youth_class_registration_fields_route(entry_id):
+    return services.update_youth_class_registration_fields(entry_id, request.get_json(silent=True) or {})
+
+
+@form_bp.route("/youth-class-registration/<int:entry_id>/remove", methods=["POST"])
+@permission_required_any(*YOUTH_CLASS_EDIT_PERMISSION_NAMES)
+def remove_youth_class_registration_route(entry_id):
+    return services.remove_youth_class_registration(entry_id)
+
+
+@form_bp.route("/youth-class-registration/<int:entry_id>/upgrade-to-membership", methods=["POST"])
+@permission_required_any(*YOUTH_CLASS_EDIT_PERMISSION_NAMES)
+def upgrade_youth_to_membership_route(entry_id):
+    return services.upgrade_youth_to_membership(entry_id)

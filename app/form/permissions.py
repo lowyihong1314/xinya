@@ -12,8 +12,9 @@ FORM_MEMBER_DETAIL_PERMISSION_NAMES = {"member_detail", "form_edit"}
 FORM_LIST_PERMISSION_NAMES = FORM_READ_PERMISSION_NAMES | {"account_read", "account_edit"}
 FORM_PAYMENT_READ_PERMISSION_NAMES = FORM_MEMBER_DETAIL_PERMISSION_NAMES | {"account_read", "account_edit"}
 FORM_PAYMENT_EDIT_PERMISSION_NAMES = {"account_edit"}
-YOUTH_CLASS_READ_PERMISSION_NAMES = {"youth_class_read", "youth_class_edit"}
+YOUTH_CLASS_READ_PERMISSION_NAMES = {"youth_class_read", "youth_class_edit", "council_approve"}
 YOUTH_CLASS_EDIT_PERMISSION_NAMES = {"youth_class_edit"}
+YOUTH_CLASS_COUNCIL_PERMISSION_NAMES = {"council_approve"}
 
 
 def current_user_permission_names():

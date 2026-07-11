@@ -28,8 +28,13 @@ from models.form import (
 from models.user_data import User, db
 from models.event_data import AlbumFiles, EventData
 from models.youth_class_registration import (
+    YOUTH_COUNCIL_APPROVAL_MAX,
+    YouthClassCouncilSignature,
     YouthClassRegistration,
 )
+from models.membership_registration import MembershipRegistration
+from app.auth import get_current_user_permissions
+from app.common import council_sign
 
 PARENTAL_SHARE_PREFIX = "parental_sign_share"
 PARENTAL_SHARE_TTL = 60 * 60 * 12
@@ -653,7 +658,98 @@ def _serialize_youth_entry(entry, fee_source=None):
     data["fee_amount"] = settings.get("amount")
     data["fee_description"] = settings.get("description")
     data["payment_url"] = _build_youth_payment_public_url(entry)
-    return data
+    return council_sign.augment_serialized("youth_class", entry, data)
+
+
+def _maybe_activate_youth(entry):
+    """财政 + 理事会都通过后，青少年佛学班报名才真正生效（status=paid）。
+
+    青少年报名没有登录账号（无 user_id），生效只是把状态置为 paid，不创建续费/会员记录。
+    """
+    if not entry:
+        return False
+    if entry.status == "paid":
+        return False
+    if not entry.fully_approved():
+        return False
+    entry.status = "paid"
+    return True
+
+
+def _youth_applicant_name(entry):
+    return (
+        getattr(entry, "chinese_name", None)
+        or getattr(entry, "english_name", None)
+        or f"报名 #{getattr(entry, 'id', '')}"
+    )
+
+
+# 注册青少年佛学班 scope 到共用理事会签名模块。
+council_sign.register_scope(
+    council_sign.CouncilScope(
+        scope="youth_class",
+        signature_model=YouthClassCouncilSignature,
+        fk_attr="youth_class_registration_id",
+        signatures_attr="council_signatures",
+        max_signatures=YOUTH_COUNCIL_APPROVAL_MAX,
+        get_registration=lambda rid: YouthClassRegistration.query.get(rid),
+        applicant_name=_youth_applicant_name,
+        consent_object="青少年佛学班",
+        org_name="地南佛学会",
+        activate=_maybe_activate_youth,
+        serialize=_serialize_youth_entry,
+    )
+)
+
+
+YOUTH_EDITABLE_FIELDS = {
+    "chinese_name",
+    "english_name",
+    "phone",
+    "gender",
+    "address",
+    "emergency_contact_name",
+    "emergency_contact_phone",
+    "emergency_contact_relation",
+}
+
+
+def update_youth_class_registration_fields(entry_id, data):
+    entry = YouthClassRegistration.query.get(entry_id)
+    if not entry:
+        return jsonify({"status": "error", "message": "报名记录不存在"}), 404
+
+    if entry.status == "paid":
+        return jsonify({"status": "error", "message": "该报名已经生效，无法再修改资料。"}), 400
+
+    if not isinstance(data, dict):
+        return jsonify({"status": "error", "message": "请求格式错误"}), 400
+
+    unknown = set(data.keys()) - YOUTH_EDITABLE_FIELDS
+    if unknown:
+        return jsonify({"status": "error", "message": f"以下字段不可编辑：{', '.join(sorted(unknown))}"}), 400
+
+    try:
+        for field in YOUTH_EDITABLE_FIELDS:
+            if field not in data:
+                continue
+            value = str(data.get(field) or "").strip()
+            if field == "gender":
+                if value and value not in {"男", "女"}:
+                    return jsonify({"status": "error", "message": "性别无效"}), 400
+                if not value:
+                    return jsonify({"status": "error", "message": "性别不能为空"}), 400
+                entry.gender = value
+            else:
+                if not value:
+                    return jsonify({"status": "error", "message": "该字段不能为空"}), 400
+                setattr(entry, field, value)
+
+        db.session.commit()
+        return jsonify({"status": "success", "message": "资料已更新", "entry": _serialize_youth_entry(entry)})
+    except Exception as exc:
+        db.session.rollback()
+        return jsonify({"status": "error", "message": str(exc)}), 500
 
 
 def _normalize_extra_field_label(value):
@@ -1861,22 +1957,16 @@ def _sync_youth_registration_status(entry):
     original_status = entry.status
     payment = _get_latest_youth_payment(entry)
 
+    # 维护「当前付款」指针，但状态判定统一交给模型的 sync_status_from_payment（含 paid 守卫）：
+    # checked 只代表财政通过，必须再配合理事会签名（_maybe_activate_youth）才会置为 paid。
     if payment:
         if entry.regis_payment_id != payment.id:
             entry.regis_payment_id = payment.id
-        mapping = {
-            "checked": "paid",
-            "process": "process",
-            "fail": "reject",
-        }
-        mapped = mapping.get(payment.status or "")
-        if mapped and entry.status != mapped:
-            entry.status = mapped
     else:
         if entry.regis_payment_id is not None:
             entry.regis_payment_id = None
-        entry.sync_status_from_payment()
 
+    entry.sync_status_from_payment()
     return entry.status != original_status
 
 
@@ -1990,7 +2080,8 @@ def get_youth_class_registrations():
     try:
         fee_rows = _list_scoped_registration_fees(YOUTH_CLASS_FEE_SCOPE)
         entries = (
-            YouthClassRegistration.query.order_by(YouthClassRegistration.submitted_at.desc(), YouthClassRegistration.id.desc())
+            YouthClassRegistration.query.filter(YouthClassRegistration.status != "remove")
+            .order_by(YouthClassRegistration.submitted_at.desc(), YouthClassRegistration.id.desc())
             .all()
         )
         changed = False
@@ -1999,6 +2090,71 @@ def get_youth_class_registrations():
         if changed:
             db.session.commit()
         return jsonify({"status": "success", "entries": [_serialize_youth_entry(entry, fee_source=fee_rows) for entry in entries]})
+    except Exception as exc:
+        db.session.rollback()
+        return jsonify({"status": "error", "message": str(exc)}), 500
+
+
+def remove_youth_class_registration(entry_id):
+    entry = YouthClassRegistration.query.get(entry_id)
+    if not entry:
+        return jsonify({"status": "error", "message": "报名记录不存在"}), 404
+    if entry.status == "paid":
+        return jsonify({"status": "error", "message": "该报名已经生效，无法移除。"}), 400
+    try:
+        entry.status = "remove"
+        db.session.commit()
+        return jsonify({"status": "success", "message": "报名已移除。"})
+    except Exception as exc:
+        db.session.rollback()
+        return jsonify({"status": "error", "message": str(exc)}), 500
+
+
+def upgrade_youth_to_membership(entry_id):
+    entry = YouthClassRegistration.query.get(entry_id)
+    if not entry:
+        return jsonify({"status": "error", "message": "报名记录不存在"}), 404
+    if entry.status != "paid":
+        return jsonify({"status": "error", "message": "只有已生效的报名才能升级为会员。"}), 400
+
+    member = entry.nric_asset
+    if member is None:
+        return jsonify({"status": "error", "message": "该报名没有绑定成员资料，无法升级。"}), 400
+
+    existing = (
+        MembershipRegistration.query.filter_by(nric_asset_id=member.id, registration_type="upgrade")
+        .filter(MembershipRegistration.status != "remove")
+        .order_by(MembershipRegistration.id.desc())
+        .first()
+    )
+    if existing is not None:
+        return jsonify({"status": "error", "message": "该学员已有一份会员申请，请到会员工作台处理。"}), 400
+
+    try:
+        if not str(getattr(member, "name_nric", None) or "").strip():
+            member.name_nric = entry.chinese_name or entry.english_name
+
+        registration = MembershipRegistration(
+            registration_type="upgrade",
+            user_id=None,
+            nric_asset_id=member.id,
+            status="process",
+            english_name=entry.english_name,
+            phone=entry.phone,
+            gender=entry.gender if entry.gender in ("男", "女") else None,
+            nric_address=entry.address,
+            emergency_contact_name=entry.emergency_contact_name,
+            emergency_contact_phone=entry.emergency_contact_phone,
+        )
+        db.session.add(registration)
+        db.session.commit()
+        return jsonify(
+            {
+                "status": "success",
+                "message": "已创建会员申请，请到会员工作台继续走财政 + 理事会审批。",
+                "membership_registration_id": registration.id,
+            }
+        )
     except Exception as exc:
         db.session.rollback()
         return jsonify({"status": "error", "message": str(exc)}), 500
@@ -2171,6 +2327,7 @@ def update_youth_class_payment_status(payment_id, data):
         if entry and entry.regis_payment_id != payment.id:
             entry.regis_payment_id = payment.id
         _sync_youth_registration_status(entry)
+        _maybe_activate_youth(entry)
         db.session.commit()
         return jsonify(
             {

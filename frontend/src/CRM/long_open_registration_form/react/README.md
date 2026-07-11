@@ -3,21 +3,43 @@
 ## Entry points
 
 - `LongOpenRegistrationFormPage.tsx` is the CRM workspace shell for long-open forms.
-- `MembershipRegistrationPage.tsx` renders the membership admin flow inside that shell.
-- `YouthClassRegistrationPage.tsx` renders the youth-class admin flow inside that shell.
+- `RegistrationWorkbench.tsx` is the **shared, config-driven** workbench (tabs, ERP table, detail
+  page, two-gate approval, editable fields, phone previews). Both flows render this component.
+- `workbenchConfig.ts` holds the shared types, the `makeEndpoints(base)` factory, and the
+  `WorkbenchConfig` interface (endpoints, list columns, detail fields, socket, permissions).
+- `MembershipRegistrationPage.tsx` / `YouthClassRegistrationPage.tsx` are **thin wrappers** that
+  pass their scope config to `RegistrationWorkbench`.
 - `FeeOptionEditor.tsx` is a reusable fee editor helper stored with the same workspace.
 
 ## Current behavior
 
-- Keeps membership and youth-class tools under one React path instead of separate CRM folders.
-- Switches between the two workflows inside the page itself instead of through URL query routing.
-- Preserves old CRM aliases by redirecting them into `#/long_open_registration_form`.
+- Membership and youth-class share one workbench UI + logic; only the config differs (endpoints,
+  descriptive fields, labels, youth realtime socket, youth read/edit permission gating).
+- Council threshold is NOT hardcoded in the frontend — it comes from `entry.council`
+  (membership requires 5, youth requires 1).
+- Switches between the two workflows via `?registration_section=` in the shell.
 
 ## Notes
 
-- Membership uses `/api/user_control/membership/*` endpoints.
-- Youth class uses `/api/form/youth-class-registration/*` endpoints.
-- Changes here should be tested from both the CRM sidebar entry and the legacy redirect paths.
+- Membership uses `/api/user_control/membership/*`; youth uses `/api/form/youth-class-registration/*`.
+  Both share the same URL shape (`/entries`, `/settings`, `/payment/<id>/status`,
+  `/<id>/council-sign`, `PUT /<id>`), so `makeEndpoints(base)` builds both.
+- Both flows have two independent approval gates, both required before a registration becomes
+  生效 (activated):
+  - 财政审核 (finance): passes once any payment record is `checked`.
+  - 理事会审核 (council): collect signatures from users holding `council_approve`
+    (membership ≥5, youth ≥1). Signatures are **irreversible** and each stores a snapshot of the
+    signer's `user_data` + JSON strokes in `signature.data`.
+  - Signing: 复制签名 URL copies a **permanent** login-gated link
+    (`/template/council-sign?t=…`, token embeds `{scope, registration_id}`). The signer logs in
+    (Flask session), and if they hold `council_approve` they hand-sign via `sign_tools.js`.
+    Shared endpoints: `GET/POST /api/user_control/council-sign/mobile`.
+  - Editing: while not activated (`status != paid`), editors inline-edit whitelisted fields via
+    `PUT /<id>` (pen → input → save icon).
+- The scope-agnostic council flow lives in `app/common/council_sign.py` (per-scope registry);
+  membership and youth register their scope + activation callback there.
+- The workbench opens a per-entry detail page via `?entry_id=` (refresh-safe); finance/council
+  status show in both the list table and the detail page.
 
 ## React Router Migration Track
 

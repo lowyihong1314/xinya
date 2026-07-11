@@ -6,6 +6,11 @@ from sqlalchemy import and_
 from sqlalchemy.orm import foreign, synonym
 
 
+# 理事会通过：青少年佛学班只需 1 位理事签名（配合财政通过）即可生效；生效后仍可补签到上限。
+YOUTH_COUNCIL_APPROVAL_REQUIRED = 1
+YOUTH_COUNCIL_APPROVAL_MAX = 20
+
+
 class YouthClassRegistration(db.Model):
     __tablename__ = "youth_class_registration"
 
@@ -36,7 +41,7 @@ class YouthClassRegistration(db.Model):
     )
 
     status = db.Column(
-        db.Enum("paid", "process", "reject", name="youth_class_registration_status_enum"),
+        db.Enum("paid", "process", "reject", "remove", name="youth_class_registration_status_enum"),
         nullable=False,
         default="process",
     )
@@ -65,20 +70,44 @@ class YouthClassRegistration(db.Model):
         lazy="selectin",
         order_by="RegisPayment.id.desc()",
     )
+    council_signatures = db.relationship(
+        "YouthClassCouncilSignature",
+        back_populates="youth_class_registration",
+        cascade="all, delete-orphan",
+        lazy="selectin",
+        order_by="YouthClassCouncilSignature.signed_at.asc(), YouthClassCouncilSignature.id.asc()",
+    )
+
+    def finance_approved(self):
+        """财政通过：只要有一条付款记录被审核通过。"""
+        return any((payment.status or "") == "checked" for payment in (self.payments or []))
+
+    def council_signature_count(self):
+        return len(self.council_signatures or [])
+
+    def council_approved(self):
+        return self.council_signature_count() >= YOUTH_COUNCIL_APPROVAL_REQUIRED
+
+    def fully_approved(self):
+        return self.finance_approved() and self.council_approved()
 
     def sync_status_from_payment(self):
-        payment = self.latest_youth_payment() or self.payment
-        if not payment:
+        """根据付款情况刷新状态。
+
+        正式生效（paid）需要财政 + 理事会同时通过，由业务层负责设置；这里不会把状态
+        直接提升为 paid，只处理退回 / 处理中，并且绝不回退已经生效的记录。
+        """
+        if self.status in ("paid", "remove"):
             return self.status
 
-        mapping = {
-            "checked": "paid",
-            "process": "process",
-            "fail": "reject",
-        }
-        mapped = mapping.get(payment.status or "")
-        if mapped and self.status != mapped:
-            self.status = mapped
+        latest_payment = self.latest_youth_payment()
+        if not self.finance_approved() and latest_payment and (latest_payment.status or "") == "fail":
+            new_status = "reject"
+        else:
+            new_status = "process"
+
+        if self.status != new_status:
+            self.status = new_status
         return self.status
 
     def latest_youth_payment(self):
@@ -113,4 +142,73 @@ class YouthClassRegistration(db.Model):
             "payment": payment.to_dict() if payment else None,
             "latest_payment": latest_youth_payment.to_dict() if latest_youth_payment else None,
             "payments": [item.to_dict() for item in (self.payments or [])],
+            "finance_approved": self.finance_approved(),
+            "council": {
+                "required": YOUTH_COUNCIL_APPROVAL_REQUIRED,
+                "max": YOUTH_COUNCIL_APPROVAL_MAX,
+                "count": self.council_signature_count(),
+                "approved": self.council_approved(),
+                "full": self.council_signature_count() >= YOUTH_COUNCIL_APPROVAL_MAX,
+                "signatures": [item.to_dict() for item in (self.council_signatures or [])],
+            },
+            "activated": self.status == "paid",
+        }
+
+
+class YouthClassCouncilSignature(db.Model):
+    """青少年佛学班理事会审批签名：每位有 council_approve 权限的理事对一份报名签一次名。"""
+
+    __tablename__ = "youth_class_council_signature"
+    __table_args__ = (
+        db.UniqueConstraint(
+            "youth_class_registration_id",
+            "user_id",
+            name="uq_youth_class_council_signature_reg_user",
+        ),
+    )
+
+    id = db.Column(db.Integer, primary_key=True, autoincrement=True)
+    youth_class_registration_id = db.Column(
+        db.Integer,
+        db.ForeignKey("youth_class_registration.id", ondelete="CASCADE", onupdate="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    user_id = db.Column(
+        db.Integer,
+        db.ForeignKey("user_data.id", ondelete="CASCADE", onupdate="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    signed_at = db.Column(db.DateTime, nullable=False, default=datetime.utcnow)
+    data = db.Column(db.JSON, nullable=True)
+
+    youth_class_registration = db.relationship(
+        "YouthClassRegistration",
+        back_populates="council_signatures",
+    )
+    user = db.relationship("User", foreign_keys=[user_id], lazy="joined")
+
+    def _snapshot(self):
+        return self.data if isinstance(self.data, dict) else {}
+
+    def to_dict(self):
+        snapshot = self._snapshot()
+        snapshot_user = snapshot.get("user_snapshot") or {}
+        signer_name = (
+            snapshot_user.get("display_name")
+            or getattr(self.user, "display_name", None)
+            or snapshot_user.get("username")
+            or getattr(self.user, "username", None)
+            or (f"用户 #{self.user_id}" if self.user_id else "未知理事")
+        )
+        return {
+            "id": self.id,
+            "youth_class_registration_id": self.youth_class_registration_id,
+            "user_id": self.user_id,
+            "signer_name": signer_name,
+            "signer_username": snapshot_user.get("username") or getattr(self.user, "username", None),
+            "signed_at": self.signed_at.isoformat() if self.signed_at else None,
+            "method": snapshot.get("method") or "workbench",
+            "signature": snapshot.get("signature"),
         }

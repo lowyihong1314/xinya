@@ -11,6 +11,7 @@ from app.auth import get_current_user_permissions, permission_required
 from app.form.services import _apply_member_nric_change
 from app.media.paths import DATA_PATH, to_short_data_path
 from . import membership
+from app.common import council_sign
 from app.user_control.utils import PROFILE_PATH, generate_resized_image
 from models.file_manager_DB import FilePermission
 from models.form import NRIC_Asset
@@ -69,8 +70,9 @@ FULL_DEPARTMENT_READ_PERMISSION_NAMES = {
     "member",
     "member_edit",
 }
-MEMBERSHIP_ADMIN_READ_PERMISSION_NAMES = {"member", "member_edit", "account_edit"}
+MEMBERSHIP_ADMIN_READ_PERMISSION_NAMES = {"member", "member_edit", "account_edit", "council_approve"}
 MEMBERSHIP_ADMIN_WRITE_PERMISSION_NAMES = {"member_edit", "account_edit"}
+MEMBERSHIP_COUNCIL_PERMISSION_NAMES = {"council_approve"}
 
 
 def _format_department_delete_integrity_error(exc):
@@ -566,6 +568,44 @@ def update_membership_payment_status(payment_id):
     if not _current_user_has_any_permission(MEMBERSHIP_ADMIN_WRITE_PERMISSION_NAMES):
         return _permission_denied_response(MEMBERSHIP_ADMIN_WRITE_PERMISSION_NAMES)
     return membership.update_membership_payment_status(payment_id, request.get_json(silent=True) or {})
+
+
+@user_control_bp.post("/membership/<int:registration_id>/council-sign")
+@login_required
+def add_membership_council_signature(registration_id):
+    if not _current_user_has_any_permission(MEMBERSHIP_COUNCIL_PERMISSION_NAMES):
+        return _permission_denied_response(MEMBERSHIP_COUNCIL_PERMISSION_NAMES)
+    return membership.add_membership_council_signature(registration_id, request.get_json(silent=True) or {})
+
+
+# 共用的理事会「手机/链接签名」入口（会员 + 青少年佛学班），scope 由 token 决定。
+@user_control_bp.get("/council-sign/mobile")
+@login_required
+def get_council_sign_mobile_context():
+    return council_sign.get_sign_mobile_context(request.args.get("t"))
+
+
+@user_control_bp.post("/council-sign/mobile")
+@login_required
+def submit_council_sign_mobile():
+    payload = request.get_json(silent=True) or {}
+    return council_sign.submit_sign_mobile(payload.get("t") or request.args.get("t"), payload)
+
+
+@user_control_bp.put("/membership/<int:registration_id>")
+@login_required
+def update_membership_registration_fields(registration_id):
+    if not _current_user_has_any_permission(MEMBERSHIP_ADMIN_WRITE_PERMISSION_NAMES):
+        return _permission_denied_response(MEMBERSHIP_ADMIN_WRITE_PERMISSION_NAMES)
+    return membership.update_membership_registration_fields(registration_id, request.get_json(silent=True) or {})
+
+
+@user_control_bp.post("/membership/<int:registration_id>/remove")
+@login_required
+def remove_membership_registration(registration_id):
+    if not _current_user_has_any_permission(MEMBERSHIP_ADMIN_WRITE_PERMISSION_NAMES):
+        return _permission_denied_response(MEMBERSHIP_ADMIN_WRITE_PERMISSION_NAMES)
+    return membership.remove_membership_registration(registration_id)
 
 
 @user_control_bp.post("/edit_reject_local/<edit_type>")

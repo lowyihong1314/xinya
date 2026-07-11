@@ -16,6 +16,7 @@ from app.account.permissions import resolve_user_permissions, user_can_manage_cl
 from app.account.serializers import serialize_request_data
 from app.paths import DATA_ROOT
 from models import db
+from models.form import RegisForm, RegisPayment
 from models.event_data import EventData
 from models.finance import (
     ReimbursementApproverData,
@@ -890,3 +891,91 @@ def build_public_payment_voucher_context(token):
     if not (data.get("voucher_recipient_name") and data.get("voucher_recipient_sign_json")):
         raise ValidationError("尚未完成签名，暂时不能下载 Payment Voucher")
     return data, approver_list
+
+
+# ---------------------------------------------------------------------------
+# 财政收款（Finance collections）：跨 scope 汇总所有报名付款（RegisPayment）
+# ---------------------------------------------------------------------------
+
+FINANCE_SCOPE_LABELS = {
+    "form": "报名表单",
+    "membership": "会员",
+    "youth_class": "青少年佛学班",
+}
+_FINANCE_PAYMENT_SCOPES = ("form", "membership", "youth_class")
+_FINANCE_PAYMENT_STATUSES = ("process", "checked", "fail")
+
+
+def _finance_payment_source(payment, form_titles):
+    scope = payment.payment_scope or "form"
+    label = None
+    registration_id = None
+    if scope == "membership":
+        reg = payment.membership_registration
+        if reg is not None:
+            registration_id = reg.id
+            member = getattr(reg, "member", None) or getattr(reg, "nric_asset", None)
+            label = (
+                getattr(getattr(reg, "user", None), "display_name", None)
+                or getattr(member, "name_nric", None)
+                or getattr(reg, "requested_username", None)
+            )
+    elif scope == "youth_class":
+        reg = payment.youth_class_registration
+        if reg is not None:
+            registration_id = reg.id
+            label = reg.chinese_name or reg.english_name
+    else:
+        registration_id = payment.regis_form_id
+        if payment.regis_form_id is not None:
+            label = form_titles.get(payment.regis_form_id)
+    return scope, FINANCE_SCOPE_LABELS.get(scope, scope), label, registration_id
+
+
+def _serialize_finance_payment(payment, form_titles):
+    data = payment.to_dict()
+    scope, scope_label, source_label, registration_id = _finance_payment_source(payment, form_titles)
+    data["source_scope"] = scope
+    data["source_scope_label"] = scope_label
+    data["source_label"] = source_label
+    data["registration_id"] = registration_id
+    return data
+
+
+def list_finance_payments(scope=None, status=None):
+    """列出所有报名付款（跨 form / membership / youth_class），可按 scope / status 过滤。"""
+    query = RegisPayment.query
+    if scope in _FINANCE_PAYMENT_SCOPES:
+        query = query.filter(RegisPayment.payment_scope == scope)
+    if status in _FINANCE_PAYMENT_STATUSES:
+        query = query.filter(RegisPayment.status == status)
+    payments = query.order_by(RegisPayment.created_at.desc(), RegisPayment.id.desc()).all()
+
+    form_ids = {p.regis_form_id for p in payments if p.regis_form_id}
+    form_titles = {}
+    if form_ids:
+        for form in RegisForm.query.filter(RegisForm.id.in_(form_ids)).all():
+            form_titles[form.id] = getattr(form, "title", None)
+
+    return [_serialize_finance_payment(payment, form_titles) for payment in payments]
+
+
+def update_finance_payment_status(payment_id, data):
+    """按 scope 分发到对应的付款状态更新流程，保留会员 / 青少年的生效副作用。"""
+    payment = RegisPayment.query.get(payment_id)
+    if payment is None:
+        raise NotFound("付款记录不存在")
+
+    scope = payment.payment_scope or "form"
+    if scope == "membership":
+        from app.user_control import membership as membership_service
+
+        return membership_service.update_membership_payment_status(payment_id, data)
+    if scope == "youth_class":
+        from app.form import services as form_services
+
+        return form_services.update_youth_class_payment_status(payment_id, data)
+
+    from app.form import services as form_services
+
+    return form_services.update_payment_status(payment_id, data)

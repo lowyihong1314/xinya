@@ -1,5 +1,6 @@
 import type { FormListResponse, FormPayment, FormRecord } from "../../../form/react/types";
 import { apiFetch } from "../../../../js/apiFetch";
+import type { FinancePayment } from "./types";
 
 async function parseJson<T>(response: Response): Promise<T> {
   const data = (await response.json().catch(() => ({}))) as T & {
@@ -19,6 +20,29 @@ export async function fetchRegisterPaymentForms() {
   });
   const payload = await parseJson<FormListResponse>(response);
   return Array.isArray(payload.forms) ? payload.forms : [];
+}
+
+// 财政收款：跨 scope 的付款列表（报名表单 / 会员 / 青少年佛学班）。
+export async function fetchFinancePayments(params?: { scope?: string; status?: string }) {
+  const query = new URLSearchParams();
+  if (params?.scope && params.scope !== "all") query.set("scope", params.scope);
+  if (params?.status && params.status !== "all") query.set("status", params.status);
+  const suffix = query.toString();
+  const response = await apiFetch(`/api/account/payments${suffix ? `?${suffix}` : ""}`, {
+    credentials: "include",
+  });
+  const payload = await parseJson<{ payments?: FinancePayment[] }>(response);
+  return Array.isArray(payload.payments) ? payload.payments : [];
+}
+
+export async function updateFinancePaymentStatus(paymentId: number, status: string) {
+  const response = await apiFetch(`/api/account/payments/${paymentId}/status`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    credentials: "include",
+    body: JSON.stringify({ status }),
+  });
+  return parseJson<{ status?: string; message?: string }>(response);
 }
 
 export async function updateRegisterPaymentStatus(paymentId: number, status: FormPayment["status"]) {

@@ -5,6 +5,7 @@ from flask import jsonify, request, send_file
 from flask_login import current_user
 
 from app.auth import get_current_user_permissions
+from app.common import council_sign
 from app.form.services import (
     MEMBERSHIP_FEE_SCOPE,
     _calc_age_from_nric,
@@ -20,7 +21,10 @@ from app.form.services import (
 from models import db
 from models.form import RegisPayment
 from models.membership_registration import (
+    COUNCIL_APPROVAL_MAX,
+    COUNCIL_APPROVAL_REQUIRED,
     MEMBERSHIP_ROLE_OPTIONS,
+    MembershipCouncilSignature,
     MembershipRegistration,
 )
 from models.user_data import MemberRenewal, User
@@ -159,7 +163,8 @@ def _serialize_membership_registration(registration):
     data["selected_fee"] = settings.get("selected_fee")
     data["fee_amount"] = settings.get("amount")
     data["fee_description"] = settings.get("description")
-    return data
+
+    return council_sign.augment_serialized("membership", registration, data)
 
 
 def _membership_settings_payload(age=None):
@@ -462,6 +467,116 @@ def _apply_membership_approval(registration):
     target_user.is_member = True
     registration.status = "paid"
     return renewal
+
+
+def _maybe_activate_membership(registration):
+    """财政 + 理事会都通过后，才真正生效并开始注册日期。"""
+    if registration.status == "paid":
+        return False
+    if not registration.fully_approved():
+        return False
+    _apply_membership_approval(registration)
+    return True
+
+
+def add_membership_council_signature(registration_id, data=None):
+    return council_sign.add_council_signature("membership", registration_id, data)
+
+
+# 注册会员 scope 到共用理事会签名模块（app/common/council_sign.py）。
+council_sign.register_scope(
+    council_sign.CouncilScope(
+        scope="membership",
+        signature_model=MembershipCouncilSignature,
+        fk_attr="membership_registration_id",
+        signatures_attr="council_signatures",
+        max_signatures=COUNCIL_APPROVAL_MAX,
+        get_registration=lambda rid: MembershipRegistration.query.get(rid),
+        applicant_name=lambda reg: _membership_payment_snapshot(reg)[0],
+        consent_object="会员",
+        org_name="地南佛学会",
+        activate=_maybe_activate_membership,
+        serialize=_serialize_membership_registration,
+    )
+)
+
+
+MEMBERSHIP_EDITABLE_FIELDS = {
+    "facebook_profile_url",
+    "english_name",
+    "phone",
+    "gender",
+    "nric_address",
+    "ancestral_home",
+    "occupation",
+    "refuge_master",
+    "dharma_name",
+    "emergency_contact_name",
+    "emergency_contact_phone",
+    "membership_role",
+    "recommender_name",
+}
+
+
+def update_membership_registration_fields(registration_id, data):
+    registration = MembershipRegistration.query.get(registration_id)
+    if not registration:
+        return jsonify({"status": "error", "message": "会员申请不存在"}), 404
+
+    if registration.status == "paid":
+        return jsonify({"status": "error", "message": "该会员申请已经生效，无法再修改资料。"}), 400
+
+    if not isinstance(data, dict):
+        return jsonify({"status": "error", "message": "请求格式错误"}), 400
+
+    unknown = set(data.keys()) - MEMBERSHIP_EDITABLE_FIELDS - {"refuge_year"}
+    if unknown:
+        return jsonify({"status": "error", "message": f"以下字段不可编辑：{', '.join(sorted(unknown))}"}), 400
+
+    try:
+        for field in MEMBERSHIP_EDITABLE_FIELDS:
+            if field not in data:
+                continue
+            if field == "membership_role":
+                value = _clean_text(data.get(field))
+                if value and value not in MEMBERSHIP_ROLE_OPTIONS:
+                    return jsonify({"status": "error", "message": "加入身份无效"}), 400
+                registration.membership_role = value
+            elif field == "gender":
+                value = _clean_text(data.get(field))
+                if value and value not in {"男", "女"}:
+                    return jsonify({"status": "error", "message": "性别无效"}), 400
+                registration.gender = value
+            elif field == "recommender_name":
+                # recommender_name 只读展示，通过 recommender_user_id 维护，忽略直接改名
+                continue
+            else:
+                setattr(registration, field, _clean_text(data.get(field)))
+
+        if "refuge_year" in data:
+            raw_year = _clean_text(data.get("refuge_year"))
+            if not raw_year:
+                registration.refuge_year = None
+            else:
+                try:
+                    year = int(raw_year)
+                except (TypeError, ValueError):
+                    return jsonify({"status": "error", "message": "皈依年份格式无效"}), 400
+                if year < 1900 or year > datetime.utcnow().year:
+                    return jsonify({"status": "error", "message": "皈依年份超出合理范围"}), 400
+                registration.refuge_year = year
+
+        db.session.commit()
+        return jsonify(
+            {
+                "status": "success",
+                "message": "资料已更新",
+                "registration": _serialize_membership_registration(registration),
+            }
+        )
+    except Exception as exc:
+        db.session.rollback()
+        return jsonify({"status": "error", "message": str(exc)}), 500
 
 
 def _submit_membership_upgrade_internal(payload, *, actor_user=None):
@@ -939,10 +1054,12 @@ def update_membership_payment_settings(data):
 def get_membership_registrations():
     try:
         entries = (
-            MembershipRegistration.query.order_by(
+            MembershipRegistration.query.filter(MembershipRegistration.status != "remove")
+            .order_by(
                 MembershipRegistration.submitted_at.desc(),
                 MembershipRegistration.id.desc(),
-            ).all()
+            )
+            .all()
         )
         changed = False
         for entry in entries:
@@ -956,6 +1073,21 @@ def get_membership_registrations():
                 "entries": [_serialize_membership_registration(entry) for entry in entries],
             }
         )
+    except Exception as exc:
+        db.session.rollback()
+        return jsonify({"status": "error", "message": str(exc)}), 500
+
+
+def remove_membership_registration(registration_id):
+    registration = MembershipRegistration.query.get(registration_id)
+    if not registration:
+        return jsonify({"status": "error", "message": "会员申请不存在"}), 404
+    if registration.status == "paid":
+        return jsonify({"status": "error", "message": "该会员申请已经生效，无法移除。"}), 400
+    try:
+        registration.status = "remove"
+        db.session.commit()
+        return jsonify({"status": "success", "message": "会员申请已移除。"})
     except Exception as exc:
         db.session.rollback()
         return jsonify({"status": "error", "message": str(exc)}), 500
@@ -986,12 +1118,10 @@ def update_membership_payment_status(payment_id, data):
     try:
         payment.status = status
 
-        if status == "checked":
-            _apply_membership_approval(registration)
-        elif status == "fail":
-            registration.status = "reject"
-        else:
-            registration.status = "process"
+        # 财政通过（付款审核通过）只是两个条件之一；只有理事会签名也集齐时，
+        # _maybe_activate_membership 才会真正生效并开始注册日期。
+        registration.sync_status_from_payment()
+        _maybe_activate_membership(registration)
 
         db.session.commit()
         return jsonify(

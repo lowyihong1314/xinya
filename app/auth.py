@@ -31,6 +31,7 @@ permission_names = [
     "music_edit",
     "edit_info",
     "info_tree_hole",
+    "council_approve",
     CHANGYOU_ROOM_CONTROL_PERMISSION,
 ]
 

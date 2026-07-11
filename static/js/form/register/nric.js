@@ -1,4 +1,3 @@
-import { open_parental_form } from "../parental/modal.js";
 import { getMaxZIndex } from "../../get_Max_zindex.js";
 import { openFormFieldsModal } from "./form_fields.js";
 import { createField, isFormRegistrationClosed } from "./utils.js";
@@ -326,26 +325,23 @@ export function openNricModal(form, options = {}) {
     saveRegisterProfile(payload);
     console.log("nric_payload =", payload);
 
-    let parent = null;
-    if (parentalFormRequired) {
-      parent = await open_parental_form(form, payload, {
-        parent_cn: savedProfile.parent_cn,
-        parent_en: savedProfile.parent_en,
-        parent_nric: savedProfile.parent_nric,
-        parent_phone: savedProfile.parent_phone,
-        child_cn: savedProfile.child_cn || nameCn,
-        child_en: savedProfile.child_en || name,
-        child_nric: savedProfile.child_nric || icNo,
-        child_phone: savedProfile.child_phone || phone,
-      });
-      if (!parent) {
-        return;
-      }
-      saveRegisterProfile(parent);
-    }
+    // 家长同意书移到最后一步（在 form fields 之后）。这里只把预填资料传下去。
+    const parentalPrefill = parentalFormRequired
+      ? {
+          parent_cn: savedProfile.parent_cn,
+          parent_en: savedProfile.parent_en,
+          parent_nric: savedProfile.parent_nric,
+          parent_phone: savedProfile.parent_phone,
+          child_cn: savedProfile.child_cn || nameCn,
+          child_en: savedProfile.child_en || name,
+          child_nric: savedProfile.child_nric || icNo,
+          child_phone: savedProfile.child_phone || phone,
+        }
+      : null;
 
-    openFormFieldsModal(form, payload, parent, {
+    openFormFieldsModal(form, payload, null, {
       onBack: () => openNricModal(form, options),
+      parentalPrefill,
     });
     overlay.remove();
   };

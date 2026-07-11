@@ -439,6 +439,9 @@ function createActionButtons({
   resolve,
   can_close,
   shareOnly,
+  skipPdfExport,
+  okLabel,
+  nullOnClose,
   syncRoom,
   onShareReady,
   onParentSync,
@@ -498,14 +501,14 @@ function createActionButtons({
     });
     closeBtn.onclick = () => {
       overlay.remove();
-      resolve(parent);
+      resolve(nullOnClose ? null : parent);
     };
     actions.appendChild(closeBtn);
   }
 
   const okBtn = document.createElement("button");
   okBtn.type = "button";
-  okBtn.textContent = readOnly ? "下载 PDF" : "我同意，继续";
+  okBtn.textContent = readOnly ? "下载 PDF" : okLabel || "我同意，继续";
   Object.assign(okBtn.style, {
     border: "none",
     borderRadius: "12px",
@@ -545,7 +548,7 @@ function createActionButtons({
       await new Promise((done) => window.setTimeout(done, 80));
     }
 
-    if (!shareOnly) {
+    if (!shareOnly && !skipPdfExport) {
       await exportModalToPdf(modal, {
         filename: getFormPdfFilename(lastEvent, payload),
       });
@@ -574,6 +577,9 @@ export function openParentalFormModal(
   const safeParent = parent && typeof parent === "object" ? parent : {};
   const syncRoom = options.syncRoom || buildParentalRoomId(lastEvent, payload);
   const shareOnly = Boolean(options.shareOnly);
+  const skipPdfExport = Boolean(options.skipPdfExport);
+  const okLabel = typeof options.okLabel === "string" ? options.okLabel : null;
+  const nullOnClose = Boolean(options.nullOnClose);
   const onParentDataSync =
     typeof options.onParentDataSync === "function"
       ? options.onParentDataSync
@@ -623,6 +629,9 @@ export function openParentalFormModal(
         resolve,
         can_close,
         shareOnly,
+        skipPdfExport,
+        okLabel,
+        nullOnClose,
         syncRoom,
         onShareReady(dialog) {
           shareDialog = dialog;
@@ -638,7 +647,7 @@ export function openParentalFormModal(
     if (can_close) {
       overlay.addEventListener("click", () => {
         overlay.remove();
-        resolve(safeParent);
+        resolve(nullOnClose ? null : safeParent);
       });
       modal.addEventListener("click", (e) => e.stopPropagation());
     }

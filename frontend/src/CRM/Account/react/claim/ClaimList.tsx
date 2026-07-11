@@ -1,27 +1,10 @@
-import { useEffect, useRef, useState, type CSSProperties } from "react";
+import { useEffect, useState, type CSSProperties } from "react";
 
 import { apiFetch } from "../../../../js/apiFetch";
-import {
-  buttonGhostStyle,
-  buttonPrimaryStyle,
-  buttonSecondaryStyle,
-  chipStyle,
-  cardBodyStyle,
-  cardButtonStyle,
-  cardMetaStyle,
-  cardTitleStyle,
-  chipRowStyle,
-  listStyle,
-  paginationRowStyle,
-  paginationRowTopStyle,
-  paginationActionsStyle,
-  placeholderStyle,
-  resultContainerStyle,
-  searchInputStyle,
-  statusBadgeStyle,
-  toolbarStyle,
-} from "./claimStyles";
+import { TablePagination } from "../../../shared/TablePagination";
 import type { ApproverUserProfile, ClaimRecord } from "./types";
+
+type ClaimStatusFilter = "all" | "approved" | "unapproved";
 
 type ClaimListProps = {
   isMobile: boolean;
@@ -29,8 +12,8 @@ type ClaimListProps = {
   claims: ClaimRecord[];
   query: string;
   onQueryChange: (value: string) => void;
-  statusFilter: "all" | "approved" | "unapproved";
-  onStatusFilterChange: (value: "all" | "approved" | "unapproved") => void;
+  statusFilter: ClaimStatusFilter;
+  onStatusFilterChange: (value: ClaimStatusFilter) => void;
   page: number;
   pageCount: number;
   total: number;
@@ -53,439 +36,385 @@ type ClaimListProps = {
   canCreate: boolean;
 };
 
-export function ClaimList({
-  isMobile,
-  loading,
-  claims,
-  query,
-  onQueryChange,
-  statusFilter,
-  onStatusFilterChange,
-  page,
-  pageCount,
-  total,
-  pageSize,
-  onPageChange,
-  onOpen,
-  selectedClaimIds,
-  selectedCount,
-  exportingSelected,
-  exportingReport,
-  onToggleClaimSelected,
-  onSelectPageClaims,
-  onClearSelectedClaims,
-  onDownloadSelectedClaims,
-  onDownloadSelectedReport,
-  scopeLabel,
-  onRefresh,
-  onCreate,
-  onBatchAiCreate,
-  canCreate,
-}: ClaimListProps) {
+const STATUS_TABS: { key: ClaimStatusFilter; label: string }[] = [
+  { key: "all", label: "全部" },
+  { key: "approved", label: "已批准" },
+  { key: "unapproved", label: "未批准" },
+];
+
+export function ClaimList(props: ClaimListProps) {
+  const {
+    loading,
+    claims,
+    query,
+    onQueryChange,
+    statusFilter,
+    onStatusFilterChange,
+    page,
+    pageCount,
+    total,
+    onPageChange,
+    onOpen,
+    selectedClaimIds,
+    selectedCount,
+    exportingSelected,
+    exportingReport,
+    onToggleClaimSelected,
+    onSelectPageClaims,
+    onClearSelectedClaims,
+    onDownloadSelectedClaims,
+    onDownloadSelectedReport,
+    scopeLabel,
+    onRefresh,
+    onCreate,
+    onBatchAiCreate,
+    canCreate,
+  } = props;
+
   const [approverUsers, setApproverUsers] = useState<Record<number, ApproverUserProfile>>({});
-  const [approverLoadError, setApproverLoadError] = useState("");
-  const [resultMaxHeight, setResultMaxHeight] = useState("calc(100dvh - 160px)");
-  const resultContainerRef = useRef<HTMLDivElement | null>(null);
   const allVisibleSelected = claims.length > 0 && claims.every((claim) => selectedClaimIds.has(claim.id));
 
   useEffect(() => {
     const approverIds = Array.from(
-      new Set(
-        claims.flatMap((claim) => (claim.approver_data || []).map((approver) => approver.user_id).filter(Boolean)),
-      ),
+      new Set(claims.flatMap((claim) => (claim.approver_data || []).map((a) => a.user_id).filter(Boolean))),
     );
-
     if (!approverIds.length) {
       setApproverUsers({});
-      setApproverLoadError("");
       return;
     }
-
     let cancelled = false;
-
-    async function loadApproverUsers() {
-      let hasError = false;
+    void (async () => {
       const entries = await Promise.all(
         approverIds.map(async (userId) => {
           try {
-            const response = await apiFetch(`/api/user_control/get_user_detail/${userId}`, {
-              credentials: "include",
-            });
+            const response = await apiFetch(`/api/user_control/get_user_detail/${userId}`, { credentials: "include" });
             const payload = (await response.json().catch(() => ({}))) as ApproverUserProfile;
-            if (!response.ok) {
-              hasError = true;
-              return null;
-            }
-            return [userId, payload] as const;
+            return response.ok ? ([userId, payload] as const) : null;
           } catch {
-            hasError = true;
             return null;
           }
         }),
       );
-
-      if (cancelled) {
-        return;
-      }
-
-      setApproverUsers(
-        Object.fromEntries(entries.filter((item): item is readonly [number, ApproverUserProfile] => Boolean(item))),
-      );
-      setApproverLoadError(hasError ? "部分审批人信息加载失败" : "");
-    }
-
-    void loadApproverUsers();
-
+      if (cancelled) return;
+      setApproverUsers(Object.fromEntries(entries.filter((item): item is readonly [number, ApproverUserProfile] => Boolean(item))));
+    })();
     return () => {
       cancelled = true;
     };
   }, [claims]);
 
-  useEffect(() => {
-    if (loading || !claims.length) {
-      return;
-    }
-
-    const element = resultContainerRef.current;
-    if (!element) {
-      return;
-    }
-
-    let animationFrame = 0;
-    const updateResultMaxHeight = () => {
-      window.cancelAnimationFrame(animationFrame);
-      animationFrame = window.requestAnimationFrame(() => {
-        const viewportHeight = window.visualViewport?.height ?? window.innerHeight;
-        const elementTop = element.getBoundingClientRect().top;
-        const bottomPadding = 8;
-        const nextHeight = Math.max(260, Math.floor(viewportHeight - elementTop - bottomPadding));
-        setResultMaxHeight(`${nextHeight}px`);
-      });
-    };
-
-    updateResultMaxHeight();
-    window.addEventListener("resize", updateResultMaxHeight);
-    window.visualViewport?.addEventListener("resize", updateResultMaxHeight);
-
-    return () => {
-      window.cancelAnimationFrame(animationFrame);
-      window.removeEventListener("resize", updateResultMaxHeight);
-      window.visualViewport?.removeEventListener("resize", updateResultMaxHeight);
-    };
-  }, [claims.length, loading, page, pageCount, query, statusFilter, approverLoadError]);
-
   return (
-    <>
-      <div className="claim-list__toolbar" style={toolbarStyle}>
+    <section style={panelStyle}>
+      <style>{TABLE_CSS}</style>
+
+      <div style={toolbarStyle}>
+        <div>
+          <div style={eyebrowStyle}>财务 / 报销申请</div>
+          <h2 style={titleStyle}>报销申请</h2>
+          <div style={mutedStyle}>
+            {scopeLabel} · 共 {total} 笔 · 已选 {selectedCount}
+          </div>
+        </div>
+        <div style={rowStyle}>
+          <button type="button" style={btnStyle} onClick={onRefresh} disabled={loading}>
+            {loading ? "刷新中…" : "刷新"}
+          </button>
+          {canCreate ? (
+            <>
+              <button type="button" style={primaryButtonStyle} onClick={onCreate}>新建申请</button>
+              <button type="button" style={btnStyle} onClick={onBatchAiCreate}>批量申请AI</button>
+            </>
+          ) : null}
+        </div>
+      </div>
+
+      <div style={filterBarStyle}>
+        <div style={tabBarStyle}>
+          {STATUS_TABS.map((tab) => (
+            <button
+              key={tab.key}
+              type="button"
+              style={tab.key === statusFilter ? tabActiveStyle : tabStyle}
+              onClick={() => onStatusFilterChange(tab.key)}
+            >
+              {tab.label}
+            </button>
+          ))}
+        </div>
         <input
           value={query}
           onChange={(event) => onQueryChange(event.target.value)}
           placeholder="搜索姓名、用途、活动、状态、金额或单号"
           style={searchInputStyle}
         />
-        <select
-          value={statusFilter}
-          onChange={(event) => onStatusFilterChange(event.target.value as "all" | "approved" | "unapproved")}
-          style={statusFilterSelectStyle}
-        >
-          <option value="all">全部</option>
-          <option value="approved">已批准</option>
-          <option value="unapproved">未批准</option>
-        </select>
-        <div className="claim-list__toolbar-spacer" />
-        {query ? (
-          <button type="button" style={buttonGhostStyle} onClick={() => onQueryChange("")}>
-            清空搜索
-          </button>
-        ) : (
-          <div className="claim-list__toolbar-placeholder" />
-        )}
       </div>
 
-      {loading ? <div className="claim-list__placeholder" style={placeholderStyle}>载入申请记录中…</div> : null}
-      {!loading && !claims.length ? (
-        <div className="claim-list__placeholder" style={placeholderStyle}>{query ? "没有匹配的申请记录" : "暂无申请记录"}</div>
-      ) : null}
-      {approverLoadError ? <div style={{ ...chipStyle, color: "var(--x-color-danger)" }}>{approverLoadError}</div> : null}
+      {loading ? <div style={emptyStyle}>载入申请记录中…</div> : null}
+      {!loading && !claims.length ? <div style={emptyStyle}>{query ? "没有匹配的申请记录" : "暂无申请记录"}</div> : null}
 
       {!loading && claims.length ? (
-        <>
-          <div className="claim-list__pagination claim-list__pagination--top" style={paginationRowTopStyle}>
-            <div className="claim-list__pagination-actions" style={paginationActionsStyle}>
-              <span style={chipStyle}>{scopeLabel}</span>
-              <span style={chipStyle}>共 {total} 笔 · 已选 {selectedCount}</span>
-              <button
-                type="button"
-                style={disabledButtonStyle(buttonSecondaryStyle, !claims.length || allVisibleSelected)}
-                onClick={onSelectPageClaims}
-                disabled={!claims.length || allVisibleSelected}
-              >
-                {allVisibleSelected ? "本页已选" : "选择本页"}
-              </button>
-              <button
-                type="button"
-                style={disabledButtonStyle(buttonGhostStyle, selectedCount <= 0)}
-                onClick={onClearSelectedClaims}
-                disabled={selectedCount <= 0}
-              >
-                清空选择
-              </button>
-              <button
-                type="button"
-                style={disabledButtonStyle(buttonPrimaryStyle, selectedCount <= 0 || exportingSelected)}
-                onClick={onDownloadSelectedClaims}
-                disabled={selectedCount <= 0 || exportingSelected}
-              >
-                {exportingSelected ? "生成中…" : "下载XLSX"}
-              </button>
-              <button
-                type="button"
-                style={disabledButtonStyle(buttonSecondaryStyle, selectedCount <= 0 || exportingReport)}
-                onClick={onDownloadSelectedReport}
-                disabled={selectedCount <= 0 || exportingReport}
-              >
-                {exportingReport ? "生成Report…" : "导出Report"}
-              </button>
-
-              {canCreate ? (
-                <>
-                  <button type="button" style={buttonPrimaryStyle} onClick={onCreate}>
-                    新建申请
-                  </button>
-                  <button type="button" style={buttonSecondaryStyle} onClick={onBatchAiCreate}>
-                    批量申请AI
-                  </button>
-                </>
-              ) : null}
-            </div>
-            <div className="claim-list__pagination-actions" style={paginationActionsStyle}>
-              <span style={chipStyle}>
-                第 {page} / {pageCount} 页
-              </span>
-              <button
-                type="button"
-                style={buttonSecondaryStyle}
-                onClick={() => onPageChange(page - 1)}
-                disabled={page <= 1}
-              >
-                上一页
-              </button>
-              <button
-                type="button"
-                style={buttonSecondaryStyle}
-                onClick={() => onPageChange(page + 1)}
-                disabled={page >= pageCount}
-              >
-                下一页
-              </button>
-            </div>
+        <div style={{ display: "grid", gap: "8px", padding: "12px 14px 4px" }}>
+          <div style={bulkBarStyle}>
+            <button type="button" style={disabledBtn(btnStyle, allVisibleSelected)} onClick={onSelectPageClaims} disabled={allVisibleSelected}>
+              {allVisibleSelected ? "本页已选" : "选择本页"}
+            </button>
+            <button type="button" style={disabledBtn(btnStyle, selectedCount <= 0)} onClick={onClearSelectedClaims} disabled={selectedCount <= 0}>
+              清空选择
+            </button>
+            <button type="button" style={disabledBtn(primaryButtonStyle, selectedCount <= 0 || exportingSelected)} onClick={onDownloadSelectedClaims} disabled={selectedCount <= 0 || exportingSelected}>
+              {exportingSelected ? "生成中…" : "下载 XLSX"}
+            </button>
+            <button type="button" style={disabledBtn(btnStyle, selectedCount <= 0 || exportingReport)} onClick={onDownloadSelectedReport} disabled={selectedCount <= 0 || exportingReport}>
+              {exportingReport ? "生成 Report…" : "导出 Report"}
+            </button>
           </div>
 
-          <div
-            className="claim-list__results"
-            ref={resultContainerRef}
-            style={{ ...resultContainerStyle, maxHeight: resultMaxHeight }}
-          >
-            <div className="claim-list__cards" style={claimListStyle(isMobile)}>
-              {claims.map((claim) => {
-                const claimStatus = getClaimStatus(claim);
-                const selected = selectedClaimIds.has(claim.id);
-                return (
-                  <div key={claim.id} className="claim-list__card" style={claimCardShellStyle(isMobile, selected)}>
-                    <div className="claim-list__card-select-row" style={cardSelectRowStyle}>
-                      <label className="claim-list__card-select" style={cardSelectLabelStyle}>
+          <TablePagination page={page} totalPages={pageCount} total={total} onPage={onPageChange} />
+
+          <div style={tableWrapStyle}>
+            <table className="claim-table">
+              <thead>
+                <tr>
+                  <th style={{ width: 40 }} />
+                  <th>状态</th>
+                  <th>申请人</th>
+                  <th>金额</th>
+                  <th>部门</th>
+                  <th>用途</th>
+                  <th>单号</th>
+                  <th>日期</th>
+                  <th>审批</th>
+                </tr>
+              </thead>
+              <tbody>
+                {claims.map((claim) => {
+                  const status = getClaimStatus(claim);
+                  const selected = selectedClaimIds.has(claim.id);
+                  return (
+                    <tr key={claim.id} className="claim-row" onClick={() => onOpen(claim.id)}>
+                      <td onClick={(e) => e.stopPropagation()}>
                         <input
                           type="checkbox"
                           checked={selected}
                           onChange={(event) => onToggleClaimSelected(claim.id, event.target.checked)}
-                          style={cardSelectInputStyle}
+                          style={{ width: 16, height: 16, accentColor: "var(--x-color-accent)" }}
                         />
-                        <span>选择</span>
-                      </label>
-                      <div className="claim-list__card-status" style={statusBadgeStyle(claimStatus)}>
-                        {statusText(claimStatus)}
-                      </div>
-                    </div>
-                    <button
-                      type="button"
-                      className="claim-list__card-open"
-                      style={claimCardOpenStyle}
-                      onClick={() => onOpen(claim.id)}
-                    >
-                      <div className="claim-list__card-head">
-                        <div className="claim-list__card-title" style={cardTitleStyle}>
-                          {claim.applicant_name || "未填姓名"} · RM {safeMoney(claim.amount)}
-                        </div>
-                        <div className="claim-list__card-meta" style={cardMetaStyle}>
-                          单号 #{claim.id} | 日期：{claim.request_date || "-"} | 部门：
-                          {claim.department_name || "-"}
-                        </div>
-                      </div>
-                      {claim.purpose ? (
-                        <div className="claim-list__card-body" style={cardBodyStyle}>
-                          {claim.purpose}
-                        </div>
-                      ) : null}
-                      <div className="claim-list__card-chips" style={chipRowStyle}>
-                        <span style={chipStyle}>附件 {(claim.attachments || []).length}</span>
-                        {claim.event_id ? <span style={chipStyle}>活动 #{claim.event_id}</span> : null}
-                        <span style={chipStyle}>创建 {formatDateTime(claim.created_at)}</span>
-                      </div>
-                      {claim.approver_data?.length ? (
-                        <div className="claim-list__approvers" style={chipRowStyle}>
-                          {claim.approver_data.map((approver) => (
-                            <span
-                              key={`${claim.id}-${approver.user_id}-${approver.decided_at || ""}`}
-                              style={{
-                                ...chipStyle,
-                                color: approver.reject ? "var(--x-color-danger)" : "var(--x-color-success)",
-                              }}
-                            >
-                              {approver.reject ? "拒" : "批"}
-                              {resolveApproverName(approver.user_id, approverUsers)}
-                            </span>
-                          ))}
-                        </div>
-                      ) : null}
-                    </button>
-                  </div>
-                );
-              })}
-            </div>
+                      </td>
+                      <td><span style={chipStyle(statusTone(status))}>{statusText(status)}</span></td>
+                      <td style={cellStrongStyle}>{claim.applicant_name || "未填姓名"}</td>
+                      <td style={cellStrongStyle}>RM {safeMoney(claim.amount)}</td>
+                      <td>{claim.department_name || "-"}</td>
+                      <td style={purposeCellStyle} title={claim.purpose || ""}>{claim.purpose || "-"}</td>
+                      <td style={monoCellStyle}>#{claim.id}</td>
+                      <td style={monoCellStyle}>{claim.request_date || "-"}</td>
+                      <td>
+                        {claim.approver_data?.length ? (
+                          <div style={approverWrapStyle}>
+                            {claim.approver_data.map((approver) => (
+                              <span
+                                key={`${claim.id}-${approver.user_id}-${approver.decided_at || ""}`}
+                                style={approverChipStyle(approver.reject)}
+                              >
+                                {approver.reject ? "拒" : "批"} {resolveApproverName(approver.user_id, approverUsers)}
+                              </span>
+                            ))}
+                          </div>
+                        ) : (
+                          <span style={mutedStyle}>—</span>
+                        )}
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
           </div>
-        </>
+        </div>
       ) : null}
-    </>
+    </section>
   );
 }
 
-const statusFilterSelectStyle = {
-  ...searchInputStyle,
-  width: "150px",
-} satisfies CSSProperties;
-
-function disabledButtonStyle(style: CSSProperties, disabled: boolean): CSSProperties {
-  return disabled ? { ...style, opacity: 0.55, cursor: "not-allowed" } : style;
+function disabledBtn(style: CSSProperties, disabled: boolean): CSSProperties {
+  return disabled ? { ...style, opacity: 0.5, cursor: "not-allowed" } : style;
 }
-
-function claimListStyle(isMobile: boolean): CSSProperties {
-  if (isMobile) {
-    return listStyle;
-  }
-  return {
-    display: "grid",
-    width: "100%",
-    minWidth: 0,
-    gridTemplateColumns: "repeat(auto-fill, minmax(320px, 350px))",
-    justifyContent: "center",
-    gap: "8px",
-    alignItems: "stretch",
-  };
-}
-
-function claimCardStyle(isMobile: boolean): CSSProperties {
-  if (isMobile) {
-    return cardButtonStyle;
-  }
-  return {
-    ...cardButtonStyle,
-    width: "100%",
-    maxWidth: "350px",
-    height: "250px",
-    alignSelf: "stretch",
-  };
-}
-
-function claimCardShellStyle(isMobile: boolean, selected: boolean): CSSProperties {
-  const base = claimCardStyle(isMobile);
-  return {
-    ...base,
-    cursor: "default",
-    border: selected ? "1px solid var(--x-color-accent)" : base.border,
-    boxShadow: selected ? "0 0 0 1px var(--x-color-accent)" : "none",
-  };
-}
-
-const cardSelectRowStyle: CSSProperties = {
-  display: "flex",
-  justifyContent: "space-between",
-  minWidth: 0,
-  gap: "8px",
-  alignItems: "center",
-};
-
-const cardSelectLabelStyle: CSSProperties = {
-  display: "inline-flex",
-  alignItems: "center",
-  gap: "6px",
-  minHeight: "26px",
-  fontSize: "12px",
-  fontWeight: 700,
-  color: "var(--x-color-ink-muted)",
-  cursor: "pointer",
-};
-
-const cardSelectInputStyle: CSSProperties = {
-  width: "16px",
-  height: "16px",
-  margin: 0,
-  accentColor: "var(--x-color-accent)",
-};
-
-const claimCardOpenStyle: CSSProperties = {
-  width: "100%",
-  minWidth: 0,
-  border: "none",
-  padding: 0,
-  background: "transparent",
-  color: "inherit",
-  textAlign: "left",
-  cursor: "pointer",
-  display: "grid",
-  gap: "7px",
-};
 
 function safeMoney(value?: number | string) {
   const amount = Number(value ?? 0);
-  if (!Number.isFinite(amount)) {
-    return "0.00";
-  }
-  return amount.toFixed(2);
+  return Number.isFinite(amount) ? amount.toFixed(2) : "0.00";
 }
 
-function statusText(status?: string) {
-  if (status === "approved") {
-    return "已批准";
-  }
-  if (status === "rejected") {
-    return "已拒绝";
-  }
+function statusText(status: string) {
+  if (status === "approved") return "已批准";
+  if (status === "rejected") return "已拒绝";
   return "待处理";
+}
+
+function statusTone(status: string): "success" | "danger" | "warning" {
+  if (status === "approved") return "success";
+  if (status === "rejected") return "danger";
+  return "warning";
 }
 
 function getClaimStatus(claim: ClaimRecord) {
   const approvers = claim.approver_data || [];
-  if (approvers.some((approver) => approver.reject)) {
-    return "rejected";
-  }
-  if (approvers.some((approver) => !approver.reject)) {
-    return "approved";
-  }
+  if (approvers.some((approver) => approver.reject)) return "rejected";
+  if (approvers.some((approver) => !approver.reject)) return "approved";
   return "pending";
 }
 
-function formatDateTime(value?: string) {
-  if (!value) {
-    return "-";
-  }
-  return value.replace("T", " ").slice(0, 16);
+function resolveApproverName(userId: number, users: Record<number, ApproverUserProfile>) {
+  return users[userId]?.display_name || users[userId]?.name_NRIC || users[userId]?.username || `#${userId}`;
 }
 
-function resolveApproverName(userId: number, users: Record<number, ApproverUserProfile>) {
-  return (
-    users[userId]?.display_name ||
-    users[userId]?.name_NRIC ||
-    users[userId]?.username ||
-    `#${userId}`
-  );
+const TABLE_CSS = `
+.claim-table { width: 100%; border-collapse: collapse; font-size: 13px; min-width: 900px; }
+.claim-table thead th {
+  position: sticky; top: 0; z-index: 1;
+  text-align: left; padding: 9px 12px;
+  font-size: 11px; font-weight: 700; letter-spacing: 0.06em; text-transform: uppercase;
+  color: var(--x-color-ink-muted); background: var(--x-color-canvas-alt);
+  border-bottom: 1px solid var(--x-color-line); white-space: nowrap;
+}
+.claim-table tbody td { padding: 10px 12px; border-bottom: 1px solid var(--x-color-line-soft); vertical-align: middle; color: var(--x-color-ink); }
+.claim-table tbody tr.claim-row { cursor: pointer; }
+.claim-table tbody tr.claim-row:hover td { background: var(--x-color-accent-tint); }
+`;
+
+const panelStyle: CSSProperties = {
+  borderRadius: "12px",
+  background: "var(--x-color-panel)",
+  border: "1px solid var(--x-color-line)",
+  boxShadow: "0 1px 2px var(--x-color-shadow-soft)",
+  overflow: "hidden",
+};
+
+const toolbarStyle: CSSProperties = {
+  display: "flex",
+  justifyContent: "space-between",
+  alignItems: "flex-start",
+  gap: "12px",
+  flexWrap: "wrap",
+  padding: "16px 18px",
+  borderBottom: "1px solid var(--x-color-line-soft)",
+  background: "var(--x-color-panel-alt)",
+};
+
+const filterBarStyle: CSSProperties = {
+  display: "flex",
+  justifyContent: "space-between",
+  gap: "12px",
+  flexWrap: "wrap",
+  alignItems: "center",
+  padding: "10px 14px",
+  borderBottom: "1px solid var(--x-color-line-soft)",
+};
+
+const tabBarStyle: CSSProperties = { display: "flex", gap: "6px", flexWrap: "wrap" };
+const tabStyle: CSSProperties = {
+  padding: "7px 13px",
+  borderRadius: "8px",
+  border: "1px solid transparent",
+  background: "transparent",
+  color: "var(--x-color-ink-muted)",
+  fontWeight: 600,
+  fontSize: "13px",
+  cursor: "pointer",
+  whiteSpace: "nowrap",
+};
+const tabActiveStyle: CSSProperties = {
+  ...tabStyle,
+  border: "1px solid var(--x-color-accent-border)",
+  background: "var(--x-color-panel)",
+  color: "var(--x-color-accent-strong)",
+  boxShadow: "0 1px 2px var(--x-color-shadow-soft)",
+};
+
+const eyebrowStyle: CSSProperties = { fontSize: "11px", letterSpacing: "0.14em", textTransform: "uppercase", color: "var(--x-color-ink-muted)", fontWeight: 700 };
+const titleStyle: CSSProperties = { margin: "2px 0", fontSize: "18px", fontWeight: 800 };
+const mutedStyle: CSSProperties = { fontSize: "12px", color: "var(--x-color-ink-muted)" };
+const rowStyle: CSSProperties = { display: "flex", gap: "8px", alignItems: "center", flexWrap: "wrap" };
+const bulkBarStyle: CSSProperties = { display: "flex", gap: "8px", flexWrap: "wrap", alignItems: "center" };
+
+const btnStyle: CSSProperties = {
+  padding: "8px 14px",
+  borderRadius: "8px",
+  border: "1px solid var(--x-color-line)",
+  background: "var(--x-color-panel)",
+  color: "var(--x-color-ink)",
+  fontWeight: 600,
+  fontSize: "13px",
+  cursor: "pointer",
+  whiteSpace: "nowrap",
+};
+const primaryButtonStyle: CSSProperties = {
+  padding: "8px 16px",
+  borderRadius: "8px",
+  border: "1px solid var(--x-color-accent-strong)",
+  background: "var(--x-color-accent)",
+  color: "white",
+  fontWeight: 700,
+  fontSize: "13px",
+  cursor: "pointer",
+  whiteSpace: "nowrap",
+};
+
+const searchInputStyle: CSSProperties = {
+  flex: "1 1 240px",
+  minHeight: "34px",
+  padding: "7px 10px",
+  borderRadius: "8px",
+  border: "1px solid var(--x-color-line)",
+  background: "var(--x-color-panel)",
+  color: "var(--x-color-ink)",
+  fontSize: "13px",
+  boxSizing: "border-box",
+};
+
+const emptyStyle: CSSProperties = {
+  margin: "16px",
+  padding: "28px",
+  borderRadius: "10px",
+  border: "1px dashed var(--x-color-line)",
+  textAlign: "center",
+  color: "var(--x-color-ink-muted)",
+};
+
+const tableWrapStyle: CSSProperties = { width: "100%", overflowX: "auto" };
+const cellStrongStyle: CSSProperties = { fontWeight: 700, lineHeight: 1.4 };
+const monoCellStyle: CSSProperties = { fontFamily: "var(--x-font-mono)", fontSize: "12.5px", whiteSpace: "nowrap" };
+const purposeCellStyle: CSSProperties = { maxWidth: "260px", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" };
+const approverWrapStyle: CSSProperties = { display: "flex", gap: "4px", flexWrap: "wrap" };
+
+function approverChipStyle(reject: boolean): CSSProperties {
+  return {
+    display: "inline-flex",
+    alignItems: "center",
+    padding: "2px 8px",
+    borderRadius: "6px",
+    fontSize: "11px",
+    fontWeight: 700,
+    whiteSpace: "nowrap",
+    background: reject ? "var(--x-color-danger-soft)" : "var(--x-color-success-soft)",
+    color: reject ? "var(--x-color-danger)" : "var(--x-color-success)",
+  };
+}
+
+function chipStyle(tone: "success" | "danger" | "warning"): CSSProperties {
+  const palette =
+    tone === "success"
+      ? { background: "var(--x-color-success-soft)", color: "var(--x-color-success)" }
+      : tone === "danger"
+        ? { background: "var(--x-color-danger-soft)", color: "var(--x-color-danger)" }
+        : { background: "var(--x-color-warning-soft)", color: "var(--x-color-warning)" };
+  return {
+    display: "inline-flex",
+    alignItems: "center",
+    padding: "4px 10px",
+    borderRadius: "6px",
+    fontSize: "12px",
+    fontWeight: 700,
+    whiteSpace: "nowrap",
+    ...palette,
+  };
 }

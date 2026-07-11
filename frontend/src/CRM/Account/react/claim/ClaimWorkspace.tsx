@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
-import type { ChangeEvent } from "react";
+import type { ChangeEvent, CSSProperties } from "react";
+import { useSearchParams } from "react-router-dom";
 
 import { useUserState } from "../../../../app/UserState";
 import { downloadBlobOrShare } from "../../../../js/browserActions";
@@ -230,7 +231,14 @@ function formatConfidence(value: unknown) {
 export function ClaimWorkspace() {
   const { user, isMobile } = useUserState();
   const accountUser = (user as AccountUser | null) ?? null;
-  const pageSize = isMobile ? PAGE_SIZE_MOBILE : PAGE_SIZE_DESKTOP;
+  const pageSize = 15;
+  const [searchParams, setSearchParams] = useSearchParams();
+
+  const detailClaimId = useMemo(() => {
+    const raw = searchParams.get("claim_id");
+    const parsed = raw == null ? NaN : Number(raw);
+    return Number.isFinite(parsed) && parsed > 0 ? parsed : null;
+  }, [searchParams]);
 
   const [claims, setClaims] = useState<ClaimRecord[]>([]);
   const [canViewAll, setCanViewAll] = useState(false);
@@ -301,11 +309,25 @@ export function ClaimWorkspace() {
   }, [error]);
 
   const selectedClaim = useMemo(() => {
-    if (view.kind !== "detail") {
+    if (detailClaimId == null) {
       return null;
     }
-    return claims.find((item) => item.id === view.claimId) ?? null;
-  }, [claims, view]);
+    return claims.find((item) => item.id === detailClaimId) ?? null;
+  }, [claims, detailClaimId]);
+
+  function openDetail(claimId: number) {
+    const next = new URLSearchParams(searchParams);
+    next.set("claim_id", String(claimId));
+    setSearchParams(next);
+    setView({ kind: "list" });
+  }
+
+  function closeDetail() {
+    const next = new URLSearchParams(searchParams);
+    next.delete("claim_id");
+    setSearchParams(next);
+    setView({ kind: "list" });
+  }
 
   const filteredClaims = useMemo(() => {
     const keyword = query.trim().toLowerCase();
@@ -673,7 +695,7 @@ export function ClaimWorkspace() {
     try {
       const payload = await deleteClaim(selectedClaim.id);
       await loadClaims();
-      setView({ kind: "list" });
+      closeDetail();
       setMessage(payload.message || "申请已删除");
     } catch (err) {
       setError(err instanceof Error ? err.message : "删除失败");
@@ -791,7 +813,7 @@ export function ClaimWorkspace() {
         </div>
       ) : null}
 
-      {view.kind === "list" ? (
+      {detailClaimId == null && view.kind === "list" ? (
         <ClaimList
           isMobile={isMobile}
           loading={loading}
@@ -805,7 +827,7 @@ export function ClaimWorkspace() {
           total={filteredClaims.length}
           pageSize={pageSize}
           onPageChange={setPage}
-          onOpen={(claimId) => setView({ kind: "detail", claimId })}
+          onOpen={(claimId) => openDetail(claimId)}
           selectedClaimIds={selectedClaimIds}
           selectedCount={selectedClaimIds.size}
           exportingSelected={exportingSelected}
@@ -836,7 +858,7 @@ export function ClaimWorkspace() {
         />
       ) : null}
 
-      {view.kind === "batchAi" ? (
+      {detailClaimId == null && view.kind === "batchAi" ? (
         <ClaimBatchAiPage
           onBack={() => setView({ kind: "list" })}
           onSubmitted={async (result) => {
@@ -850,7 +872,7 @@ export function ClaimWorkspace() {
         />
       ) : null}
 
-      {view.kind === "create" ? (
+      {detailClaimId == null && view.kind === "create" ? (
         <ClaimCreateForm
           isMobile={isMobile}
           state={createState}
@@ -867,23 +889,54 @@ export function ClaimWorkspace() {
         />
       ) : null}
 
-      {view.kind === "detail" && selectedClaim ? (
-        <ClaimDetail
-          isMobile={isMobile}
-          claim={selectedClaim}
-          canEditClaims={canEditClaims}
-          isApprovedByMe={isApprovedByMe}
-          currentUserId={accountUser?.id}
-          onBack={() => setView({ kind: "list" })}
-          onApprove={() => void handleDecision("approve")}
-          onReject={() => void handleDecision("reject")}
-          onDelete={() => void handleDeleteClaim()}
-          onClaimUpdated={handleClaimUpdated}
-        />
+      {detailClaimId != null ? (
+        selectedClaim ? (
+          <ClaimDetail
+            isMobile={isMobile}
+            claim={selectedClaim}
+            canEditClaims={canEditClaims}
+            isApprovedByMe={isApprovedByMe}
+            currentUserId={accountUser?.id}
+            onBack={closeDetail}
+            onApprove={() => void handleDecision("approve")}
+            onReject={() => void handleDecision("reject")}
+            onDelete={() => void handleDeleteClaim()}
+            onClaimUpdated={handleClaimUpdated}
+          />
+        ) : (
+          <div style={claimDetailFallbackStyle}>
+            <button type="button" style={claimBackButtonStyle} onClick={closeDetail}>
+              ← 返回列表
+            </button>
+            <div style={{ padding: "24px", textAlign: "center", color: "var(--x-color-ink-muted)" }}>
+              {loading ? "正在加载申请…" : "找不到这条报销申请，可能已被删除或数据已刷新。"}
+            </div>
+          </div>
+        )
       ) : null}
     </>
   );
 }
+
+const claimDetailFallbackStyle: CSSProperties = {
+  borderRadius: "12px",
+  background: "var(--x-color-panel)",
+  border: "1px solid var(--x-color-line)",
+  padding: "16px 18px",
+  display: "grid",
+  gap: "12px",
+};
+const claimBackButtonStyle: CSSProperties = {
+  width: "fit-content",
+  padding: "8px 14px",
+  borderRadius: "8px",
+  border: "1px solid var(--x-color-line)",
+  background: "var(--x-color-panel)",
+  color: "var(--x-color-ink)",
+  fontWeight: 600,
+  fontSize: "13px",
+  cursor: "pointer",
+};
 
 function getClaimStatusForFilter(claim: ClaimRecord) {
   const approvers = claim.approver_data || [];

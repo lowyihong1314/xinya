@@ -1,4 +1,5 @@
 import { getMaxZIndex } from "../../get_Max_zindex.js";
+import { open_parental_form } from "../parental/modal.js";
 import {
   buildExtraFieldsPayload,
   createStyledField,
@@ -18,7 +19,8 @@ export function openFormFieldsModal(
   parentalPayload = null,
   options = {},
 ) {
-  const { onBack = null } = options;
+  const { onBack = null, parentalPrefill = null } = options;
+  const parentalRequired = Boolean(nricPayload?.parental_form_required);
   console.log("Opening form fields modal with:", parentalPayload);
   const savedProfile = loadRegisterProfile();
   const overlay = document.createElement("div");
@@ -308,7 +310,8 @@ export function openFormFieldsModal(
 
   const submitBtn = document.createElement("button");
   submitBtn.type = "button";
-  submitBtn.textContent = "提交报名";
+  // 有家长同意书时，这里先「下一步」进入同意书；同意书里点「确认报名」才真正提交。
+  submitBtn.textContent = parentalRequired ? "下一步" : "确认报名";
   Object.assign(submitBtn.style, {
     border: "none",
     borderRadius: "12px",
@@ -319,56 +322,8 @@ export function openFormFieldsModal(
     color: "#fff",
   });
 
-  submitBtn.onclick = () => {
-    if (!gender.value) {
-      alert("请选择性别");
-      return;
-    }
-    if (form.parent_1 && !p1.value.trim()) {
-      alert("请填写紧急联络人 1（称呼）");
-      return;
-    }
-    if (form.parent_1 && !p1phone.value.trim()) {
-      alert("请填写紧急联络人 1（电话）");
-      return;
-    }
-
-    const extraFieldsPayload = buildExtraFieldsPayload(
-      extraValues,
-      form.extra_field_configs,
-    );
-
-    const formPayload = {
-      ...nricPayload,
-      gender: gender.value,
-      email: form.email ? email.value.trim() || null : null,
-      address: form.address ? address.value.trim() || null : null,
-      parent_1: form.parent_1 ? p1.value.trim() || null : null,
-      parent_1_phone: form.parent_1 ? p1phone.value.trim() || null : null,
-      parent_2: form.parent_2 ? p2.value.trim() || null : null,
-      parent_2_phone: form.parent_2 ? p2phone.value.trim() || null : null,
-      medical: form.medical ? medical.value.trim() || null : null,
-      allergy: form.allergy ? allergy.value.trim() || null : null,
-      other_remark: form.other_remark ? otherRemark.value.trim() || null : null,
-      available_time_slot_json,
-      extra_fields: extraFieldsPayload,
-      parental_payload: parentalPayload || null,
-    };
-
-    saveRegisterProfile({
-      ...nricPayload,
-      gender: gender.value,
-      email: form.email ? email.value.trim() || "" : "",
-      address: form.address ? address.value.trim() || "" : "",
-      parent_1: form.parent_1 ? p1.value.trim() : "",
-      parent_1_phone: form.parent_1 ? p1phone.value.trim() : "",
-      parent_2: form.parent_2 ? p2.value.trim() || "" : "",
-      parent_2_phone: form.parent_2 ? p2phone.value.trim() || "" : "",
-      ...(parentalPayload || {}),
-    });
-
+  function submitRegistration(formPayload) {
     console.log("final_payload =", formPayload);
-
     fetch(`/api/form/register/${form.id}`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -392,6 +347,80 @@ export function openFormFieldsModal(
         console.error("🔥 fetch failed:", err);
         alert("网络错误 / 服务器无响应");
       });
+  }
+
+  submitBtn.onclick = async () => {
+    if (!gender.value) {
+      alert("请选择性别");
+      return;
+    }
+    if (form.parent_1 && !p1.value.trim()) {
+      alert("请填写紧急联络人 1（称呼）");
+      return;
+    }
+    if (form.parent_1 && !p1phone.value.trim()) {
+      alert("请填写紧急联络人 1（电话）");
+      return;
+    }
+
+    const extraFieldsPayload = buildExtraFieldsPayload(
+      extraValues,
+      form.extra_field_configs,
+    );
+
+    const baseValues = {
+      gender: gender.value,
+      email: form.email ? email.value.trim() || null : null,
+      address: form.address ? address.value.trim() || null : null,
+      parent_1: form.parent_1 ? p1.value.trim() || null : null,
+      parent_1_phone: form.parent_1 ? p1phone.value.trim() || null : null,
+      parent_2: form.parent_2 ? p2.value.trim() || null : null,
+      parent_2_phone: form.parent_2 ? p2phone.value.trim() || null : null,
+      medical: form.medical ? medical.value.trim() || null : null,
+      allergy: form.allergy ? allergy.value.trim() || null : null,
+      other_remark: form.other_remark ? otherRemark.value.trim() || null : null,
+    };
+
+    saveRegisterProfile({
+      ...nricPayload,
+      gender: gender.value,
+      email: form.email ? email.value.trim() || "" : "",
+      address: form.address ? address.value.trim() || "" : "",
+      parent_1: form.parent_1 ? p1.value.trim() : "",
+      parent_1_phone: form.parent_1 ? p1phone.value.trim() : "",
+      parent_2: form.parent_2 ? p2.value.trim() || "" : "",
+      parent_2_phone: form.parent_2 ? p2phone.value.trim() || "" : "",
+      ...(parentalPayload || {}),
+    });
+
+    // 家长同意书是最后一步：填完点「确认报名」直接提交，不下载 PDF。
+    let parental = parentalPayload;
+    if (parentalRequired) {
+      const prefill = parentalPrefill || {
+        child_cn: nricPayload.name_cn,
+        child_en: nricPayload.name,
+        child_nric: nricPayload.nric,
+        child_phone: nricPayload.phone,
+      };
+      const parent = await open_parental_form(form, nricPayload, prefill, false, true, {
+        skipPdfExport: true,
+        okLabel: "确认报名",
+        nullOnClose: true,
+      });
+      if (!parent) {
+        return;
+      }
+      saveRegisterProfile(parent);
+      parental = parent;
+    }
+
+    submitRegistration({
+      ...nricPayload,
+      ...baseValues,
+      available_time_slot_json,
+      extra_fields: extraFieldsPayload,
+      parental_payload: parental || null,
+    });
   };
 
   const left = document.createElement("div");

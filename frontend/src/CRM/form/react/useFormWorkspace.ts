@@ -101,6 +101,7 @@ export function useFormWorkspace(options?: { enabled?: boolean; canEditMembers?:
     },
   });
 
+  // Load the forms list once (independent of which form is open).
   useEffect(() => {
     if (!enabled) {
       autosave.clearPending();
@@ -114,7 +115,23 @@ export function useFormWorkspace(options?: { enabled?: boolean; canEditMembers?:
       return;
     }
 
-    void loadForms(preferredFormId);
+    void loadForms();
+  }, [enabled]);
+
+  // Selection is driven by the URL (?form_id=): open on change, clear when absent.
+  useEffect(() => {
+    if (!enabled) {
+      return;
+    }
+    if (preferredFormId) {
+      void openForm(preferredFormId);
+    } else {
+      setSelectedFormId(null);
+      setSelectedForm(null);
+      setFees([]);
+      setExtraFields([]);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [enabled, preferredFormId]);
 
   useEffect(() => {
@@ -154,7 +171,7 @@ export function useFormWorkspace(options?: { enabled?: boolean; canEditMembers?:
     );
   }
 
-  async function loadForms(preferredFormId?: number | null) {
+  async function loadForms() {
     if (!enabled) {
       setLoading(false);
       return;
@@ -166,18 +183,6 @@ export function useFormWorkspace(options?: { enabled?: boolean; canEditMembers?:
       const payload = await fetchForms();
       const nextForms = Array.isArray(payload.forms) ? payload.forms : [];
       setForms(nextForms.map((form) => normalizeFieldSwitches(form) as FormRecord));
-
-      const nextSelectedId =
-        preferredFormId ?? selectedFormId ?? nextForms[0]?.id ?? null;
-
-      if (nextSelectedId) {
-        await openForm(nextSelectedId, nextForms);
-      } else {
-        setSelectedFormId(null);
-        setSelectedForm(null);
-        setFees([]);
-        setExtraFields([]);
-      }
     } catch (err) {
       setToast({ type: "error", text: err instanceof Error ? err.message : "读取报名表失败" });
     } finally {
@@ -225,7 +230,7 @@ export function useFormWorkspace(options?: { enabled?: boolean; canEditMembers?:
     }
     await autosave.flush();
     await openForm(selectedFormId);
-    await loadForms(selectedFormId);
+    await loadForms();
   }
 
   async function handleCreateForm(payload: FormCreatePayload) {
@@ -239,27 +244,23 @@ export function useFormWorkspace(options?: { enabled?: boolean; canEditMembers?:
     }
   }
 
-  async function handleDeleteForm(formId: number) {
+  async function handleDeleteForm(formId: number): Promise<boolean> {
     if (!(await showConfirmDialog({ message: "确认删除这个报名表？", tone: "danger" }))) {
-      return;
+      return false;
     }
     try {
       autosave.clearPending(formId);
       await removeForm(formId);
-      const nextForms = forms.filter((item) => item.id !== formId);
-      setForms(nextForms);
-      const nextSelected = nextForms[0]?.id ?? null;
-      if (nextSelected) {
-        await openForm(nextSelected, nextForms);
-      } else {
-        setSelectedFormId(null);
-        setSelectedForm(null);
-        setFees([]);
-        setExtraFields([]);
-      }
+      setForms((prev) => prev.filter((item) => item.id !== formId));
+      setSelectedFormId(null);
+      setSelectedForm(null);
+      setFees([]);
+      setExtraFields([]);
       setToast({ type: "success", text: "报名表已删除" });
+      return true;
     } catch (err) {
       setToast({ type: "error", text: getErrorMessage(err, "删除报名表失败") });
+      return false;
     }
   }
 

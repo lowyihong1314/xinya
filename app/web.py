@@ -434,3 +434,7 @@ def register_web_routes(app):
     @app.route("/template/membership-payment")
     def membership_payment_template():
         return render_template("form/membership_payment_public.html")
+
+    @app.route("/template/council-sign")
+    def council_sign_template():
+        return render_template("form/council_sign_public.html")

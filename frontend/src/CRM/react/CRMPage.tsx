@@ -467,7 +467,7 @@ const FINANCE_CHILD_ITEMS = [
     key: "register",
     title: "收款审核",
     icon: "fa-solid fa-clipboard-check",
-    description: "报名付款记录审核。",
+    description: "报名 / 会员 / 青少年佛学班付款审核。",
   },
   {
     key: "income_req",

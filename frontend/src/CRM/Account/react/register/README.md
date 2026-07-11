@@ -1,36 +1,38 @@
-# Register Payment Review
+# Register Payment Review (收款审核)
 
 ## Purpose
 
-- This directory contains the finance-side review workspace for registration payments.
-- It lets finance users inspect payment proofs, change payment status, replace proof images, and remove failed records.
+- Finance-side review of **all registration payments across scopes** — 报名表单 (form), 会员
+  (membership), 青少年佛学班 (youth_class) — in one flat ERP listing→detail workspace.
+- Finance users inspect payment proofs and change payment status. For **form‑scope** payments they can
+  also replace the proof image and remove failed records; membership/youth payments are status‑only
+  here (their records are managed in their own modules).
 
 ## Main files
 
-- `RegisterWorkspace.tsx`: loads all forms with payments, groups them by form, and provides status-filtered review.
-- `PaymentDetailPanel.tsx`: focused detail panel for a selected payment, including proof replacement and record removal actions.
-- `api.ts`: helpers for fetching forms and mutating payment records.
-- `types.ts`: local payment status helpers and aliases.
+- `RegisterWorkspace.tsx`: the whole workspace — a flat ERP table of all payments with status + 来源
+  filters, and a refresh‑safe detail view (via `?payment_id=`) with facts, proof image, status
+  buttons, and form‑only replace/delete. Rewritten from the old form‑grouped 3‑pane layout.
+- `api.ts`: `fetchFinancePayments({scope,status})` + `updateFinancePaymentStatus` (unified account
+  endpoints); plus the kept form‑scope `fetchRegisterPaymentForms` (used by income analytics),
+  `replaceRegisterPaymentProof`, `deleteRegisterPayment`.
+- `types.ts`: `FinancePayment` (cross‑scope payment shape) + `SCOPE_FILTERS` / `STATUS_FILTERS`.
 
 ## API usage
 
-- `/api/form/get_all_form`: source of forms and embedded payment arrays.
-- `/api/form/payment/update_status/:paymentId`: updates payment status.
-- `/api/form/payment/proof_image/:paymentId/replace`: replaces proof image for a payment.
-- `/api/form/payment/:paymentId`: deletes a payment record.
+- `/api/account/payments?scope=&status=`: unified cross‑scope payment list (source of the table).
+- `/api/account/payments/:paymentId/status`: unified status update; dispatches by `payment_scope` to
+  the scope's service so membership/youth activation side‑effects still fire.
+- Form‑scope only: `/api/form/payment/proof_image/:id/replace` (replace) and
+  `/api/form/payment/:id` (delete).
 
 ## Business rules in code
 
-- The default filter is `process`, so the workspace opens on pending reviews first.
-- Forms without payment records are filtered out before rendering.
-- Proof replacement is intended for records still being processed.
-- Record deletion is reserved for failed payments in the detail panel workflow.
-
-## Upgrade notes
-
-- This module assumes payment data is nested under each form returned by `/api/form/get_all_form`; if the backend normalizes payments into a separate endpoint, the workspace structure will need to change.
-- `RegisterPaymentForm` is an alias of the shared `FormRecord` type, so schema changes here also affect the form admin workspace and income analytics.
-- Keep status labels aligned with backend values `process`, `checked`, and `fail`.
+- Default filter is `process` (pending reviews first); 来源 filter defaults to 全部.
+- The detail view is refresh‑safe via the `payment_id` search param (plus `pay_status` / `pay_scope`).
+- Proof replacement is only offered for form‑scope records still `process`; deletion only for
+  form‑scope `fail` records. Membership/youth detail shows status buttons only.
+- Status buttons are gated by `account_edit` (`getUserPermissionNames(user)`); `account_read` can view.
 
 ## React Router Migration Track
 
