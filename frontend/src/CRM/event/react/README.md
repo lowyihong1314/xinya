@@ -4,20 +4,28 @@ React rewrite for the CRM event table workspace.
 
 ## Structure
 
-- `EventTablePage.tsx`: page composition and controller wiring.
-- `EventTableView.tsx`: search, event list, detail editor, organizer panel.
-- `useEventTableController.ts`: centralized state and backend updates.
+Restyled to match the 报名表格 (`CRM/form/react`) ERP **workbench** pattern: listing table →
+refresh-safe detail with a tab bar.
+
+- `EventTablePage.tsx`: URL + permission shell. Reads `?event_id=` (selected event) and `?event_tab=`
+  (detail tab, default `settings`) via `useSearchParams`; writers `selectEvent`/`backToList`/`selectTab`
+  clone params. Passes `canEditEvent` + state/actions to the view.
+- `EventTableView.tsx`: presentational ERP chrome. **List view** — toolbar (刷新 / 新建活动) + search +
+  type filter + sticky-header table (`usePagedRows` + `shared/TablePagination`, 15/page), row-click sets
+  `?event_id=`. **Detail view** — 返回列表 + header + 4-tab bar: 基本设置 (pen→save `EditableFact`s) ·
+  海报与附件 · 组织者 · 关联报名表.
+- `useEventTableController.ts`: centralized state and backend updates; selection is driven by
+  `preferredEventId` (the URL). Keeps `query`/`selectedType`/`filteredEvents`; pagination lives in the view.
 - `useEventTableRealtime.ts`: reserved hook for future socket updates.
 - `api.ts`: event table HTTP helpers.
 - `types.ts`: event and organizer types.
 
 ## Current scope
 
-- Event list is React-driven.
-- Search is React-driven.
-- Event detail editing is React-driven.
-- Organizer adding still reuses the legacy `select_users_modal.js` selector.
-- Brochure and event-file management are React-driven.
+- Listing table + refresh-safe detail are URL-driven (`?event_id=` / `?event_tab=`).
+- 基本设置 fields use pen→save (`EditableFact`); persistence is the debounced autosave under the hood.
+- Organizer adding still reuses the shared `select_users_modal` selector.
+- Poster / brochure / event-file management are React-driven.
 - Event creation and deletion are React-driven.
 
 ## Backend endpoints

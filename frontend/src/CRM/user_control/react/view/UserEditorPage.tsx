@@ -66,6 +66,20 @@ export function UserEditorPage({
           <div style={styles.editorPageMetaStyle}>
             Username · {form.username ? `@${form.username}` : "未设置"}
           </div>
+          <div style={styles.detailBadgeRowStyle}>
+            <span style={styles.ageBadgeStyle}>
+              {typeof user.age === "number" ? `${user.age} 岁` : "年龄未知"}
+            </span>
+            {typeof user.age === "number" && user.age <= 18 ? (
+              <span
+                style={
+                  user.xin_ya ? styles.xinYaBadgeStyle : styles.xinYaBadgeMutedStyle
+                }
+              >
+                心芽
+              </span>
+            ) : null}
+          </div>
         </div>
         <button
           type="button"

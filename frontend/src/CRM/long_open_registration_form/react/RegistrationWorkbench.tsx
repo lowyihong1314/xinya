@@ -100,6 +100,8 @@ export function RegistrationWorkbench({ config }: { config: WorkbenchConfig }) {
   const [councilBusy, setCouncilBusy] = useState(false);
   const [savingField, setSavingField] = useState<string | null>(null);
   const [paymentPreview, setPaymentPreview] = useState<string | null>(null);
+  const [selectedIds, setSelectedIds] = useState<Set<number>>(() => new Set());
+  const [batchBusy, setBatchBusy] = useState(false);
   const [error, setError] = useState("");
   const [notice, setNotice] = useState<Notice | null>(null);
   const [activeTab, setActiveTab] = useState<TabKey>("list");
@@ -235,6 +237,45 @@ export function RegistrationWorkbench({ config }: { config: WorkbenchConfig }) {
       setNotice({ tone: "error", text: err instanceof Error ? err.message : "操作失败" });
     } finally {
       setCouncilBusy(false);
+    }
+  }
+
+  function toggleSelected(id: number, checked: boolean) {
+    setSelectedIds((prev) => {
+      const next = new Set(prev);
+      if (checked) next.add(id);
+      else next.delete(id);
+      return next;
+    });
+  }
+
+  function toggleSelectAll(ids: number[], checked: boolean) {
+    setSelectedIds((prev) => {
+      const next = new Set(prev);
+      ids.forEach((id) => (checked ? next.add(id) : next.delete(id)));
+      return next;
+    });
+  }
+
+  function clearSelection() {
+    setSelectedIds(new Set());
+  }
+
+  async function handleCreateBatchUrl() {
+    const ids = Array.from(selectedIds);
+    if (!ids.length) return;
+    setBatchBusy(true);
+    setNotice(null);
+    try {
+      const result = await config.endpoints.batchSignUrl(ids);
+      const url = toPublicUrl(result.url);
+      if (!url) throw new Error("生成批量签名 URL 失败");
+      await copyText(url);
+      setNotice({ tone: "success", text: `批量理事会审核 URL 已复制（${result.count ?? ids.length} 份），可发给理事签名。` });
+    } catch (err) {
+      setNotice({ tone: "error", text: err instanceof Error ? err.message : "生成失败" });
+    } finally {
+      setBatchBusy(false);
     }
   }
 
@@ -401,7 +442,15 @@ export function RegistrationWorkbench({ config }: { config: WorkbenchConfig }) {
         {error ? <div style={errorStyle}>{error}</div> : null}
 
         {activeTab === "list" ? (
-          <ListView config={config} entries={entries} loading={loading} onSelect={openEntry} />
+          <ListView
+            config={config}
+            entries={entries}
+            loading={loading}
+            onSelect={openEntry}
+            selectedIds={selectedIds}
+            onToggleRow={toggleSelected}
+            onToggleAll={toggleSelectAll}
+          />
         ) : null}
 
         {activeTab === "fees" ? (
@@ -449,6 +498,18 @@ export function RegistrationWorkbench({ config }: { config: WorkbenchConfig }) {
           </div>
         ) : null}
       </section>
+
+      {activeTab === "list" && selectedIds.size > 0 ? (
+        <div style={actionBarStyle}>
+          <span style={actionBarCountStyle}>已选 {selectedIds.size} 份</span>
+          <button type="button" className="mrp-btn mrp-btn--go" style={actionBarBtnStyle} disabled={batchBusy} onClick={() => void handleCreateBatchUrl()}>
+            {batchBusy ? "生成中…" : "创建批量理事会审核 URL"}
+          </button>
+          <button type="button" className="mrp-btn" style={actionBarBtnStyle} onClick={clearSelection}>
+            清空
+          </button>
+        </div>
+      ) : null}
     </div>
   );
 }
@@ -458,15 +519,24 @@ function ListView({
   entries,
   loading,
   onSelect,
+  selectedIds,
+  onToggleRow,
+  onToggleAll,
 }: {
   config: WorkbenchConfig;
   entries: WorkbenchEntry[];
   loading: boolean;
   onSelect: (id: number) => void;
+  selectedIds: Set<number>;
+  onToggleRow: (id: number, checked: boolean) => void;
+  onToggleAll: (ids: number[], checked: boolean) => void;
 }) {
   const { page, totalPages, total, pageRows, setPage } = usePagedRows(entries);
   if (loading) return <div style={emptyStyle}>加载中…</div>;
   if (!entries.length) return <div style={emptyStyle}>{config.emptyListText}</div>;
+
+  const allIds = entries.map((entry) => entry.id);
+  const allSelected = allIds.length > 0 && allIds.every((id) => selectedIds.has(id));
 
   return (
     <div style={{ display: "grid", gap: "8px", padding: "12px 14px 4px" }}>
@@ -475,6 +545,15 @@ function ListView({
       <table className="mrp-table">
         <thead>
           <tr>
+            <th style={{ width: 36 }}>
+              <input
+                type="checkbox"
+                aria-label="全选"
+                checked={allSelected}
+                onChange={(e) => onToggleAll(allIds, e.target.checked)}
+                style={checkboxStyle}
+              />
+            </th>
             <th>状态</th>
             <th>财政审核</th>
             <th>理事会审核</th>
@@ -492,6 +571,14 @@ function ListView({
             const financeOk = isFinanceApproved(entry);
             return (
               <tr key={entry.id} className="mrp-row" onClick={() => onSelect(entry.id)}>
+                <td onClick={(e) => e.stopPropagation()}>
+                  <input
+                    type="checkbox"
+                    checked={selectedIds.has(entry.id)}
+                    onChange={(e) => onToggleRow(entry.id, e.target.checked)}
+                    style={checkboxStyle}
+                  />
+                </td>
                 <td>
                   <span style={statusChipStyle(entry.status === "paid" ? "success" : entry.status === "reject" ? "danger" : "info")}>
                     {registrationStatusLabel(entry.status)}
@@ -1109,6 +1196,27 @@ const urlBoxStyle: CSSProperties = {
 };
 
 const tableWrapStyle: CSSProperties = { width: "100%", overflowX: "auto" };
+const checkboxStyle: CSSProperties = { width: "16px", height: "16px", accentColor: "var(--x-color-accent)", cursor: "pointer" };
+
+const actionBarStyle: CSSProperties = {
+  position: "fixed",
+  left: "50%",
+  bottom: "18px",
+  transform: "translateX(-50%)",
+  zIndex: 900,
+  display: "flex",
+  alignItems: "center",
+  gap: "10px",
+  padding: "10px 14px",
+  borderRadius: "12px",
+  background: "var(--x-color-panel)",
+  border: "1px solid var(--x-color-line)",
+  boxShadow: "0 12px 32px var(--x-color-shadow)",
+  flexWrap: "wrap",
+  maxWidth: "calc(100% - 32px)",
+};
+const actionBarCountStyle: CSSProperties = { fontSize: "13px", fontWeight: 800, color: "var(--x-color-ink)" };
+const actionBarBtnStyle: CSSProperties = { width: "auto", padding: "8px 16px" };
 
 const cellStrongStyle: CSSProperties = { fontWeight: 700, lineHeight: 1.4 };
 const cellSubStyle: CSSProperties = { fontSize: "12px", color: "var(--x-color-ink-muted)", marginTop: "2px" };

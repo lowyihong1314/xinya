@@ -34,9 +34,9 @@ export type CRMModuleSpec = {
 export const CRM_MODULES: CRMModuleSpec[] = [
   {
     key: 'user_control',
-    title: '用户管理',
+    title: '用户与部门',
     icon: 'fas fa-users-cog',
-    description: '部门、权限与用户数据维护。',
+    description: '用户名片与部门/权限维护。',
     Component: UserControlPage,
   },
   {
@@ -69,7 +69,7 @@ export const CRM_MODULES: CRMModuleSpec[] = [
   },
   {
     key: 'register',
-    title: '特别活动表格',
+    title: '报名表格',
     icon: 'fas fa-clipboard-list',
     description: '特别活动报名、注册与记录查询。',
     Component: FormWorkspacePage,

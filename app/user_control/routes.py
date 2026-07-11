@@ -8,7 +8,7 @@ from flask_login import current_user, login_required, login_user, logout_user
 from sqlalchemy.exc import IntegrityError
 
 from app.auth import get_current_user_permissions, permission_required
-from app.form.services import _apply_member_nric_change
+from app.form.services import _apply_member_nric_change, _calc_age_from_nric
 from app.media.paths import DATA_PATH, to_short_data_path
 from . import membership
 from app.common import council_sign
@@ -101,6 +101,53 @@ def _current_user_has_any_permission(permission_names):
 def _permission_denied_response(permission_names):
     joined = " / ".join(sorted(permission_names))
     return jsonify({"status": "error", "message": f"缺少权限，需要以下任一权限：{joined}"}), 403
+
+
+def _paid_youth_index():
+    """一次性取出所有已生效（paid）青少年佛学班报名对应的 user_id / 成员 id 集合。"""
+    rows = (
+        YouthClassRegistration.query.filter_by(status="paid")
+        .with_entities(YouthClassRegistration.user_id, YouthClassRegistration.nric_asset_id)
+        .all()
+    )
+    paid_user_ids = {row[0] for row in rows if row[0]}
+    paid_member_ids = {row[1] for row in rows if row[1]}
+    return paid_user_ids, paid_member_ids
+
+
+def _user_nric_age(user):
+    """按全局年份规则（当前年份 - 出生年份）从 NRIC 推算年龄；无法推算返回 None。"""
+    member = getattr(user, "nric_asset", None)
+    nric = getattr(member, "nric", None)
+    if not nric:
+        return None
+    try:
+        return _calc_age_from_nric(nric)
+    except Exception:
+        return None
+
+
+def _is_xin_ya(user, paid_user_ids, paid_member_ids, age=None):
+    """心芽 = 青少年佛学班的生效人，且按 NRIC 年份规则 18 岁及以下。"""
+    if user.id not in paid_user_ids and (
+        user.nric_asset_id is None or user.nric_asset_id not in paid_member_ids
+    ):
+        return False
+    if age is None:
+        age = _user_nric_age(user)
+    return age is not None and age <= 18
+
+
+def _serialize_users_with_xin_ya(users):
+    paid_user_ids, paid_member_ids = _paid_youth_index()
+    result = []
+    for user in users:
+        data = user.to_dict()
+        age = _user_nric_age(user)
+        data["age"] = age
+        data["xin_ya"] = _is_xin_ya(user, paid_user_ids, paid_member_ids, age=age)
+        result.append(data)
+    return result
 
 
 def _serialize_basic_user(user, *, include_membership=False):
@@ -592,6 +639,30 @@ def submit_council_sign_mobile():
     return council_sign.submit_sign_mobile(payload.get("t") or request.args.get("t"), payload)
 
 
+# 共用的批量理事会签名入口（一条链接对应多份申请）。
+@user_control_bp.get("/council-sign/batch")
+@login_required
+def get_council_sign_batch_context():
+    return council_sign.get_batch_sign_context(request.args.get("t"))
+
+
+@user_control_bp.post("/council-sign/batch")
+@login_required
+def submit_council_sign_batch():
+    payload = request.get_json(silent=True) or {}
+    return council_sign.submit_batch_sign(payload.get("t") or request.args.get("t"), payload)
+
+
+# 会员工作台生成批量理事会审核 URL（选中的会员申请）。
+@user_control_bp.post("/membership/council-sign/batch-url")
+@login_required
+def create_membership_council_batch_url():
+    if not _current_user_has_any_permission(MEMBERSHIP_ADMIN_READ_PERMISSION_NAMES):
+        return _permission_denied_response(MEMBERSHIP_ADMIN_READ_PERMISSION_NAMES)
+    payload = request.get_json(silent=True) or {}
+    return council_sign.batch_sign_url_response("membership", payload.get("registration_ids"))
+
+
 @user_control_bp.put("/membership/<int:registration_id>")
 @login_required
 def update_membership_registration_fields(registration_id):
@@ -638,7 +709,7 @@ def edit_reject_local(edit_type):
 def get_all_user_data():
     if current_user.is_authenticated and _current_user_has_any_permission(FULL_USER_READ_PERMISSION_NAMES):
         users = User.query.all()
-        user_data = [user.to_dict() for user in users]
+        user_data = _serialize_users_with_xin_ya(users)
         login = True
     elif current_user.is_authenticated:
         users = User.query.all()
@@ -658,7 +729,13 @@ def get_user_detail(user_id):
     user = User.query.get(user_id)
     if not user:
         return jsonify({"status": "error", "message": "用户不存在"}), 404
-    return jsonify(_serialize_user_for_request(user))
+    data = _serialize_user_for_request(user)
+    if "is_member" in data:
+        paid_user_ids, paid_member_ids = _paid_youth_index()
+        age = _user_nric_age(user)
+        data["age"] = age
+        data["xin_ya"] = _is_xin_ya(user, paid_user_ids, paid_member_ids, age=age)
+    return jsonify(data)
 
 
 @user_control_bp.post("/edit_user_data")
@@ -1044,7 +1121,7 @@ def get_department_users(dept_id):
 
     users = department.users
     if _current_user_has_any_permission(FULL_USER_READ_PERMISSION_NAMES):
-        user_data = [user.to_dict() for user in users]
+        user_data = _serialize_users_with_xin_ya(users)
     else:
         user_data = [_serialize_basic_user(user, include_membership=True) for user in users]
 

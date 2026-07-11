@@ -21,7 +21,6 @@ import type { EventCreatePayload, EventMutationPayload, EventRecord } from "./ty
 import { useEventTableRealtime } from "./useEventTableRealtime";
 
 type Toast = { type: "success" | "error"; text: string } | null;
-const PAGE_SIZE = 6;
 const ALL_EVENT_TYPE_FILTER = "__all__";
 const BLANK_EVENT_TYPE_FILTER = "__blank__";
 const EVENT_EDITOR_DEBOUNCE_MS = 600;
@@ -31,7 +30,6 @@ export function useEventTableController(options?: { preferredEventId?: number | 
   const { events, loading, error, refreshEvents } = useEventData();
   const [query, setQuery] = useState("");
   const [selectedType, setSelectedType] = useState(ALL_EVENT_TYPE_FILTER);
-  const [page, setPage] = useState(1);
   const [selectedEventId, setSelectedEventId] = useState<number | null>(null);
   const [saving, setSaving] = useState(false);
   const [creating, setCreating] = useState(false);
@@ -72,14 +70,20 @@ export function useEventTableController(options?: { preferredEventId?: number | 
     },
   });
 
+  // 选中项完全由 URL 的 ?event_id= 驱动：有就选中，没有就回到列表（不自动选第一个）。
   useEffect(() => {
-    setSelectedEventId((prev) => {
-      if (preferredEventId && mergedEvents.some((event) => event.id === preferredEventId)) {
-        return preferredEventId;
-      }
-      return prev && mergedEvents.some((event) => event.id === prev) ? prev : mergedEvents[0]?.id ?? null;
-    });
+    setSelectedEventId(
+      preferredEventId && mergedEvents.some((event) => event.id === preferredEventId)
+        ? preferredEventId
+        : null,
+    );
   }, [mergedEvents, preferredEventId]);
+
+  // 切换活动时先把未保存的字段编辑 flush 掉。
+  useEffect(() => {
+    void autosave.flush();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [preferredEventId]);
 
   useEffect(() => {
     if (!toast) {
@@ -160,35 +164,6 @@ export function useEventTableController(options?: { preferredEventId?: number | 
       );
     });
   }, [mergedEvents, query, selectedType]);
-
-  const totalPages = useMemo(
-    () => Math.max(1, Math.ceil(filteredEvents.length / PAGE_SIZE)),
-    [filteredEvents.length],
-  );
-
-  const pagedEvents = useMemo(() => {
-    const startIndex = (page - 1) * PAGE_SIZE;
-    return filteredEvents.slice(startIndex, startIndex + PAGE_SIZE);
-  }, [filteredEvents, page]);
-
-  useEffect(() => {
-    setPage(1);
-  }, [query, selectedType]);
-
-  useEffect(() => {
-    setPage((prev) => Math.min(prev, totalPages));
-  }, [totalPages]);
-
-  useEffect(() => {
-    if (!selectedEventId) {
-      return;
-    }
-    const selectedIndex = filteredEvents.findIndex((event) => event.id === selectedEventId);
-    if (selectedIndex < 0) {
-      return;
-    }
-    setPage(Math.floor(selectedIndex / PAGE_SIZE) + 1);
-  }, [filteredEvents, selectedEventId]);
 
   const selectedEvent = useMemo(
     () => mergedEvents.find((event) => event.id === selectedEventId) ?? null,
@@ -286,13 +261,6 @@ export function useEventTableController(options?: { preferredEventId?: number | 
     await Promise.all([hadPendingChanges ? Promise.resolve() : refreshEvents(), loadLinkedForms()]);
   }
 
-  async function selectEvent(eventId: number) {
-    if (selectedEventId && selectedEventId !== eventId) {
-      await flushPendingEventChanges();
-    }
-    setSelectedEventId(eventId);
-  }
-
   function updateEvent(patch: EventMutationPayload) {
     if (!selectedEventId) {
       return;
@@ -324,16 +292,12 @@ export function useEventTableController(options?: { preferredEventId?: number | 
     try {
       const response = await createEvent(payload);
       await refreshEvents();
-      if (response.data?.id) {
-        setSelectedEventId(response.data.id);
-      }
       setQuery("");
-      setPage(1);
       setToast({ type: "success", text: "活动已创建" });
-      return true;
+      return response.data?.id ?? null;
     } catch (err) {
       setToast({ type: "error", text: err instanceof Error ? err.message : "创建失败" });
-      return false;
+      return null;
     } finally {
       setCreating(false);
     }
@@ -341,13 +305,13 @@ export function useEventTableController(options?: { preferredEventId?: number | 
 
   async function removeSelectedEvent() {
     if (!selectedEvent) {
-      return;
+      return false;
     }
     if (!(await showConfirmDialog({
       message: `确认删除活动「${selectedEvent.event_name || `#${selectedEvent.id}`}」？`,
       tone: "danger",
     }))) {
-      return;
+      return false;
     }
 
     try {
@@ -357,8 +321,10 @@ export function useEventTableController(options?: { preferredEventId?: number | 
       setSelectedEventId(null);
       await refreshEvents();
       setToast({ type: "success", text: "活动已删除" });
+      return true;
     } catch (err) {
       setToast({ type: "error", text: err instanceof Error ? err.message : "删除失败" });
+      return false;
     }
   }
 
@@ -478,15 +444,13 @@ export function useEventTableController(options?: { preferredEventId?: number | 
     state: {
       events: mergedEvents,
       filteredEvents,
-      pagedEvents,
+      forms,
       selectedEvent,
       selectedEventId,
       selectedEventForm,
       query,
       selectedType,
       eventTypeOptions,
-      page,
-      totalPages,
       loading,
       saving,
       creating,
@@ -500,8 +464,6 @@ export function useEventTableController(options?: { preferredEventId?: number | 
     actions: {
       setQuery,
       setSelectedType,
-      setPage,
-      setSelectedEventId: selectEvent,
       loadEvents,
       updateEvent,
       createNewEvent,

@@ -34,6 +34,8 @@ export type UserRecord = {
   name_NRIC?: string | null;
   display?: boolean | null;
   is_member?: boolean | null;
+  xin_ya?: boolean | null;
+  age?: number | null;
   member_renewals?: MemberRenewalRecord[];
   NRIC?: string | null;
   gender?: string | null;

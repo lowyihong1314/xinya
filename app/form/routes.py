@@ -305,6 +305,13 @@ def add_youth_class_council_signature_route(entry_id):
     return council_sign.add_council_signature("youth_class", entry_id, request.get_json(silent=True) or {})
 
 
+@form_bp.route("/youth-class-registration/council-sign/batch-url", methods=["POST"])
+@permission_required_any(*YOUTH_CLASS_READ_PERMISSION_NAMES)
+def create_youth_class_council_batch_url():
+    payload = request.get_json(silent=True) or {}
+    return council_sign.batch_sign_url_response("youth_class", payload.get("registration_ids"))
+
+
 @form_bp.route("/youth-class-registration/<int:entry_id>", methods=["PUT"])
 @permission_required_any(*YOUTH_CLASS_EDIT_PERMISSION_NAMES)
 def update_youth_class_registration_fields_route(entry_id):

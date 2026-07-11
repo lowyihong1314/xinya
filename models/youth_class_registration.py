@@ -27,6 +27,14 @@ class YouthClassRegistration(db.Model):
     )
     age = db.Column(db.Integer, nullable=False)
     category = db.Column(db.Enum("青少年", "青年", name="youth_class_category_enum"), nullable=False)
+    # 报名时填写的登录用户名；生效后据此创建 / 关联一个无密码账户（无法登录，需管理员重置密码）。
+    requested_username = db.Column(db.String(255), nullable=True)
+    user_id = db.Column(
+        db.Integer,
+        db.ForeignKey("user_data.id", ondelete="SET NULL", onupdate="CASCADE"),
+        nullable=True,
+        index=True,
+    )
     address = db.Column(db.Text, nullable=False)
     gender = db.Column(db.Enum("男", "女", name="youth_class_gender_enum"), nullable=False)
     phone = db.Column(db.String(32), nullable=False)
@@ -52,6 +60,7 @@ class YouthClassRegistration(db.Model):
         index=True,
     )
     payment = db.relationship("RegisPayment", foreign_keys=[regis_payment_id], lazy="joined")
+    user = db.relationship("User", foreign_keys=[user_id], lazy="joined")
     regis_member_id = synonym("nric_asset_id")
     nric_asset = db.relationship(
         "NRIC_Asset",
@@ -127,6 +136,9 @@ class YouthClassRegistration(db.Model):
             "english_name": self.english_name,
             "nric_asset_id": self.nric_asset_id,
             "regis_member_id": self.nric_asset_id,
+            "user_id": self.user_id,
+            "username": getattr(self.user, "username", None) or self.requested_username,
+            "requested_username": self.requested_username,
             "nric": live_nric,
             "age": self.age,
             "category": self.category,

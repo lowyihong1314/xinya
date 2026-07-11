@@ -83,6 +83,7 @@ export function YouthClassRegistrationPage() {
       ],
       detailFields: [
         { label: "状态", value: (entry) => registrationStatusLabel(entry.status as string) },
+        { label: "Username", value: (entry) => str(entry, "username") || str(entry, "requested_username") },
         { label: "NRIC", key: "nric" },
         { label: "年龄", key: "age" },
         { label: "组别", key: "category" },

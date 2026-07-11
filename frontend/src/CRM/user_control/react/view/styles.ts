@@ -147,57 +147,107 @@ export const departmentMetaStyle: CSSProperties = {
 
 export const cardGridStyle: CSSProperties = {
   display: "grid",
-  gridTemplateColumns: "repeat(auto-fill, minmax(180px, 1fr))",
+  gridTemplateColumns: "repeat(auto-fill, minmax(260px, 1fr))",
   gap: "8px",
 };
 
+// 名片：宽 4 高 2 的横向卡片，头像在左，内容在右。
 export const userCardStyle: CSSProperties = {
-  borderRadius: "6px",
+  position: "relative",
+  aspectRatio: "4 / 2",
+  borderRadius: "8px",
   border: "1px solid var(--x-color-line-soft)",
   background: "var(--x-color-panel)",
   overflow: "hidden",
   boxShadow: "none",
 };
 
-export const userOpenStyle: CSSProperties = {
+const userCardBodyBaseStyle: CSSProperties = {
   width: "100%",
-  padding: "10px",
-  display: "grid",
-  justifyItems: "center",
-  gap: "6px",
+  height: "100%",
+  padding: "12px",
+  display: "flex",
+  flexDirection: "row",
+  alignItems: "center",
+  gap: "12px",
+  textAlign: "left",
+  boxSizing: "border-box",
+};
+
+export const userOpenStyle: CSSProperties = {
+  ...userCardBodyBaseStyle,
   border: "none",
   background: "transparent",
   cursor: "pointer",
 };
 
 export const readOnlyUserCardBodyStyle: CSSProperties = {
-  padding: "10px",
-  display: "grid",
-  justifyItems: "center",
-  gap: "6px",
-  textAlign: "center",
+  ...userCardBodyBaseStyle,
 };
 
 export const avatarStyle: CSSProperties = {
-  width: "56px",
-  height: "56px",
+  width: "64px",
+  height: "64px",
+  flex: "0 0 auto",
   borderRadius: "50%",
   objectFit: "cover",
   border: "3px solid var(--x-color-panel-strong)",
 };
 
+export const userInfoStyle: CSSProperties = {
+  minWidth: 0,
+  flex: "1 1 auto",
+  display: "flex",
+  flexDirection: "column",
+  gap: "5px",
+  overflow: "hidden",
+};
+
+export const userNameRowStyle: CSSProperties = {
+  display: "flex",
+  alignItems: "center",
+  gap: "6px",
+  flexWrap: "wrap",
+};
+
 export const userNameStyle: CSSProperties = {
   fontWeight: 700,
   color: "var(--x-color-ink)",
-  textAlign: "center",
-  fontSize: "13px",
+  fontSize: "14px",
+  whiteSpace: "nowrap",
+  overflow: "hidden",
+  textOverflow: "ellipsis",
+  maxWidth: "100%",
 };
 
 export const userMetaStyle: CSSProperties = {
   fontSize: "12px",
   color: "var(--x-color-ink-muted)",
-  textAlign: "center",
-  wordBreak: "break-word",
+  whiteSpace: "nowrap",
+  overflow: "hidden",
+  textOverflow: "ellipsis",
+  maxWidth: "100%",
+};
+
+export const departmentChipsStyle: CSSProperties = {
+  display: "flex",
+  flexWrap: "wrap",
+  gap: "4px",
+  justifyContent: "flex-start",
+  overflow: "hidden",
+  maxHeight: "44px",
+};
+
+export const departmentChipStyle: CSSProperties = {
+  display: "inline-flex",
+  alignItems: "center",
+  padding: "2px 7px",
+  borderRadius: "999px",
+  fontSize: "11px",
+  fontWeight: 700,
+  background: "var(--x-color-accent-tint)",
+  color: "var(--x-color-accent-strong)",
+  border: "1px solid var(--x-color-accent-border)",
 };
 
 export function memberBadgeStyle(active: boolean): CSSProperties {
@@ -222,16 +272,65 @@ export function memberBadgeStyle(active: boolean): CSSProperties {
   };
 }
 
+export const xinYaBadgeStyle: CSSProperties = {
+  display: "inline-flex",
+  alignItems: "center",
+  justifyContent: "center",
+  minHeight: "24px",
+  padding: "3px 7px",
+  borderRadius: "999px",
+  fontSize: "12px",
+  fontWeight: 800,
+  background: "var(--x-color-accent-tint)",
+  color: "var(--x-color-accent-strong)",
+  border: "1px solid var(--x-color-accent-border)",
+};
+
+// 未通过（非生效青少年）时的心芽标签：灰色。
+export const xinYaBadgeMutedStyle: CSSProperties = {
+  ...xinYaBadgeStyle,
+  background: "var(--x-color-panel-alt)",
+  color: "var(--x-color-ink-muted)",
+  border: "1px solid var(--x-color-line-soft)",
+};
+
+export const ageBadgeStyle: CSSProperties = {
+  display: "inline-flex",
+  alignItems: "center",
+  justifyContent: "center",
+  minHeight: "24px",
+  padding: "3px 9px",
+  borderRadius: "999px",
+  fontSize: "12px",
+  fontWeight: 800,
+  background: "var(--x-color-panel-alt)",
+  color: "var(--x-color-ink)",
+  border: "1px solid var(--x-color-line-soft)",
+};
+
+export const detailBadgeRowStyle: CSSProperties = {
+  display: "flex",
+  alignItems: "center",
+  gap: "6px",
+  flexWrap: "wrap",
+  marginTop: "8px",
+};
+
 export function actionButtonStyle(danger = false): CSSProperties {
   return {
-    width: "100%",
-    padding: "7px 9px",
-    border: "none",
-    borderTop: "1px solid var(--x-color-line-soft)",
+    position: "absolute",
+    top: "8px",
+    right: "8px",
+    padding: "3px 9px",
+    borderRadius: "999px",
+    border: danger
+      ? "1px solid var(--x-color-danger-border)"
+      : "1px solid var(--x-color-accent-border)",
     background: danger
       ? "var(--x-color-danger-soft)"
       : "var(--x-color-accent-tint)",
     color: danger ? "var(--x-color-danger)" : "var(--x-color-accent-strong)",
+    fontSize: "12px",
     fontWeight: 700,
     cursor: "pointer",
   };

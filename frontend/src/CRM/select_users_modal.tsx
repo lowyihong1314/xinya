@@ -18,6 +18,7 @@ type UserResponse = {
 
 type SelectUsersDialogProps = {
   maxId: number;
+  disabledIds: number[];
   onClose: (selectedIds: number[]) => void;
 };
 
@@ -34,13 +35,15 @@ async function fetchUsers() {
   return payload.data || [];
 }
 
-function SelectUsersDialog({ maxId, onClose }: SelectUsersDialogProps) {
+function SelectUsersDialog({ maxId, disabledIds, onClose }: SelectUsersDialogProps) {
   const [users, setUsers] = useState<UserRecord[]>([]);
   const [selectedIds, setSelectedIds] = useState<number[]>([]);
   const [query, setQuery] = useState("");
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [selectionError, setSelectionError] = useState("");
+
+  const disabledSet = useMemo(() => new Set(disabledIds), [disabledIds]);
 
   useEffect(() => {
     let active = true;
@@ -83,6 +86,9 @@ function SelectUsersDialog({ maxId, onClose }: SelectUsersDialogProps) {
   }, [query, users]);
 
   function toggleUser(userId: number) {
+    if (disabledSet.has(userId)) {
+      return;
+    }
     setSelectedIds((current) => {
       if (current.includes(userId)) {
         if (selectionError) {
@@ -123,7 +129,10 @@ function SelectUsersDialog({ maxId, onClose }: SelectUsersDialogProps) {
           style={searchInputStyle}
         />
 
-        <div style={metaStyle}>{`已选 ${selectedIds.length} 人 / 可见 ${filteredUsers.length} 人`}</div>
+        <div style={metaStyle}>
+          {`已选 ${selectedIds.length} 人 / 可见 ${filteredUsers.length} 人`}
+          {disabledSet.size ? ` · 已加入 ${disabledSet.size} 人` : ""}
+        </div>
         {selectionError ? <div style={stateStyle}>{selectionError}</div> : null}
 
         <div style={listStyle}>
@@ -133,12 +142,14 @@ function SelectUsersDialog({ maxId, onClose }: SelectUsersDialogProps) {
 
           {!loading && !error
             ? filteredUsers.map((user) => {
+                const disabled = disabledSet.has(user.id);
                 const selected = selectedIds.includes(user.id);
                 return (
                   <button
                     key={user.id}
                     type="button"
-                    style={cardStyle(selected)}
+                    style={cardStyle(selected, disabled)}
+                    disabled={disabled}
                     onClick={() => toggleUser(user.id)}
                   >
                     <CachedImage
@@ -150,6 +161,7 @@ function SelectUsersDialog({ maxId, onClose }: SelectUsersDialogProps) {
                     />
                     <div style={nameStyle}>{user.display_name || user.username || ""}</div>
                     <div style={usernameStyle}>{user.username || "-"}</div>
+                    {disabled ? <div style={joinedBadgeStyle}>已加入</div> : null}
                   </button>
                 );
               })
@@ -307,11 +319,12 @@ function SelectCounterpartyDialog({
   );
 }
 
-export function select_users_modal(maxId = Infinity) {
+export function select_users_modal(maxId = Infinity, disabledIds: number[] = []) {
   return new Promise<number[]>((resolve) => {
     openOverlay((close) => (
       <SelectUsersDialog
         maxId={maxId}
+        disabledIds={disabledIds}
         onClose={(selectedIds) => {
           close();
           resolve(selectedIds);
@@ -424,7 +437,8 @@ const stateStyle = {
   color: "#7a6241",
 };
 
-const cardStyle = (selected: boolean) => ({
+const cardStyle = (selected: boolean, disabled = false) => ({
+  position: "relative" as const,
   display: "flex",
   flexDirection: "column" as const,
   alignItems: "center",
@@ -434,9 +448,22 @@ const cardStyle = (selected: boolean) => ({
   border: selected ? "1px solid rgba(114, 80, 34, 0.4)" : "1px solid rgba(0,0,0,0.08)",
   background: selected ? "#7c5b2b" : "rgba(255,255,255,0.95)",
   color: selected ? "#fffaf0" : "#362915",
-  cursor: "pointer",
+  cursor: disabled ? "not-allowed" : "pointer",
+  opacity: disabled ? 0.5 : 1,
   boxShadow: "none",
 });
+
+const joinedBadgeStyle = {
+  position: "absolute" as const,
+  top: "4px",
+  right: "4px",
+  padding: "1px 6px",
+  borderRadius: "999px",
+  fontSize: "10px",
+  fontWeight: 800,
+  background: "#e7ddca",
+  color: "#7a6241",
+};
 
 const avatarStyle = {
   width: "42px",

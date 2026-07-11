@@ -1,0 +1,178 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+  <title>批量理事会签名</title>
+  <style>
+    :root{--bg:#f4f6fb;--panel:#fff;--line:#d8e1ee;--text:#172b4d;--muted:#52606d;--accent:#0f766e;--accent-2:#1d4ed8;--ok:#027a48;--bad:#b42318;--warn:#b54708}
+    *{box-sizing:border-box}
+    body{margin:0;font-family:Inter,Arial,"PingFang SC","Microsoft Yahei",sans-serif;background:linear-gradient(180deg,#eef6ff,var(--bg));color:var(--text)}
+    .wrap{max-width:600px;margin:0 auto;padding:22px 16px 40px}
+    .panel{background:var(--panel);border:1px solid var(--line);border-radius:20px;box-shadow:0 16px 40px rgba(15,23,42,.08);padding:20px;display:grid;gap:16px}
+    .eyebrow{font-size:12px;letter-spacing:.14em;text-transform:uppercase;color:var(--muted)}
+    h1{margin:6px 0 2px;font-size:24px}
+    p{margin:0;line-height:1.7;color:var(--muted);font-size:14px}
+    .consent{padding:14px 16px;border:1px solid var(--line);border-radius:14px;background:#fbfdff;font-size:16px;font-weight:800;line-height:1.6}
+    label{display:grid;gap:8px;font-size:14px;font-weight:700}
+    input{width:100%;border:1px solid var(--line);border-radius:12px;padding:12px 13px;font-size:15px;background:#fff}
+    .row{display:flex;gap:10px;flex-wrap:wrap}
+    .btn{flex:1;border:1px solid var(--line);border-radius:12px;padding:14px 16px;font-size:15px;font-weight:800;cursor:pointer;background:#fff;color:var(--text)}
+    .btn-primary{color:#fff;background:linear-gradient(135deg,var(--accent),var(--accent-2));border:none}
+    .btn:disabled{opacity:.5;cursor:not-allowed}
+    .notice{padding:12px 14px;border-radius:12px;border:1px solid;display:none;font-size:14px}
+    .ok{background:#ecfdf3;color:var(--ok);border-color:#abefc6;display:block}
+    .bad{background:#fff1f2;color:var(--bad);border-color:#fecdd3;display:block}
+    .muted{font-size:13px;color:var(--muted)}
+    .list{display:grid;gap:6px;max-height:44vh;overflow:auto}
+    .item{display:flex;justify-content:space-between;align-items:center;gap:10px;padding:10px 12px;border:1px solid var(--line);border-radius:12px;background:#fbfdff}
+    .item .name{font-weight:800;font-size:14px}
+    .badge{padding:3px 9px;border-radius:999px;font-size:12px;font-weight:800;white-space:nowrap}
+    .b-todo{background:#eff6ff;color:#1d4ed8}
+    .b-done{background:#ecfdf3;color:var(--ok)}
+    .b-full{background:#f1f5f9;color:var(--muted)}
+    .b-miss{background:#fff1f2;color:var(--bad)}
+    .sign-preview{min-height:150px;border:2px dashed var(--line);border-radius:14px;background:#fff;display:grid;place-items:center;padding:8px}
+    .sign-preview svg{max-width:100%;height:auto}
+    .hidden{display:none!important}
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <div id="notice" class="notice"></div>
+
+    <section id="loading" class="panel">
+      <div class="muted">正在读取签名信息…</div>
+    </section>
+
+    <section id="login" class="panel hidden">
+      <div>
+        <div class="eyebrow">UTBA / 批量理事会签名</div>
+        <h1>请先登录</h1>
+        <p>这个批量签名链接需要理事本人登录后才能签名。</p>
+      </div>
+      <label>用户名<input id="login-username" type="text" autocomplete="username" /></label>
+      <label>密码<input id="login-password" type="password" autocomplete="current-password" /></label>
+      <button type="button" class="btn btn-primary" id="login-submit">登录</button>
+    </section>
+
+    <section id="content" class="panel hidden">
+      <div>
+        <div class="eyebrow">UTBA / 批量理事会签名</div>
+        <h1>批量理事会审批签名</h1>
+      </div>
+      <div class="consent" id="consent">-</div>
+      <div class="muted" id="summary"></div>
+      <div class="list" id="list"></div>
+      <div class="sign-preview" id="sign-preview"><span class="muted">还没有签名，点下方按钮手写签名。</span></div>
+      <div class="row">
+        <button type="button" class="btn" id="sign-btn">手写签名</button>
+        <button type="button" class="btn btn-primary" id="submit-btn" disabled>确认批量签名</button>
+      </div>
+      <div class="muted">你的签名会一次性记录到上面「待签」的每一份申请，签名后不可撤回。</div>
+    </section>
+
+    <section id="done" class="panel hidden">
+      <div class="eyebrow">UTBA / 批量理事会签名</div>
+      <h1 id="done-title">签名已提交</h1>
+      <p id="done-msg">感谢你的签名，可以关闭此页面了。</p>
+    </section>
+  </div>
+
+  <script type="module">
+    import { render_sign_modal, renderSignPreviewSvg } from "/static/js/sign_tools.js";
+
+    const token = new URLSearchParams(window.location.search).get("t") || "";
+    const noticeEl = document.getElementById("notice");
+    const show = (id) => document.getElementById(id).classList.remove("hidden");
+    const hide = (id) => document.getElementById(id).classList.add("hidden");
+    const only = (id) => { ["loading","login","content","done"].forEach(hide); show(id); };
+    function showNotice(msg, tone){ noticeEl.textContent = msg; noticeEl.className = "notice " + (tone||"bad"); }
+    function clearNotice(){ noticeEl.className = "notice"; }
+    function escapeHtml(s){ return String(s).replace(/[&<>"']/g, (c) => ({ "&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;" }[c])); }
+
+    let signData = null;
+
+    function itemBadge(item){
+      if (item.missing) return '<span class="badge b-miss">不存在</span>';
+      if (item.already_signed) return '<span class="badge b-done">你已签</span>';
+      if (item.full) return '<span class="badge b-full">已满</span>';
+      return '<span class="badge b-todo">待签</span>';
+    }
+
+    async function loadContext(){
+      clearNotice();
+      if(!token){ only("loading"); showNotice("签名链接缺少参数。", "bad"); return; }
+      let res;
+      try{
+        res = await fetch(`/api/user_control/council-sign/batch?t=${encodeURIComponent(token)}`, { credentials: "include" });
+      }catch(e){ only("loading"); showNotice("网络错误，请重试。", "bad"); return; }
+
+      if(res.status === 401){ only("login"); return; }
+      const data = await res.json().catch(() => ({}));
+      if(!res.ok || data.status !== "success"){ only("loading"); showNotice(data.message || "无法读取签名信息。", "bad"); return; }
+
+      if(!data.can_sign){ only("done"); document.getElementById("done-title").textContent = "无法签名"; document.getElementById("done-msg").textContent = "你的账号没有理事会审批（council_approve）权限。"; return; }
+
+      document.getElementById("consent").textContent = data.consent_text || "";
+      document.getElementById("summary").textContent = `共 ${data.total} 份 · 你可签 ${data.signable_count} 份`;
+      const listEl = document.getElementById("list");
+      listEl.innerHTML = (data.items || []).map((item) =>
+        `<div class="item"><span class="name">${escapeHtml(item.applicant_name || ("#" + item.id))}</span>${itemBadge(item)}</div>`
+      ).join("");
+
+      if((data.signable_count || 0) === 0){
+        only("done");
+        document.getElementById("done-title").textContent = "无需签名";
+        document.getElementById("done-msg").textContent = "这个名单里没有需要你签名的申请（都已签或已满）。";
+        return;
+      }
+      only("content");
+    }
+
+    document.getElementById("login-submit").addEventListener("click", async function(){
+      const username = document.getElementById("login-username").value.trim();
+      const password = document.getElementById("login-password").value;
+      if(!username || !password){ showNotice("请输入用户名和密码。", "bad"); return; }
+      this.disabled = true; this.textContent = "登录中…";
+      try{
+        const res = await fetch("/api/user_control/login", {
+          method: "POST", headers: { "Content-Type": "application/json" }, credentials: "include",
+          body: JSON.stringify({ username, password }),
+        });
+        const data = await res.json().catch(() => ({}));
+        if(!res.ok || !data.success){ this.disabled = false; this.textContent = "登录"; showNotice(data.error || "登录失败。", "bad"); return; }
+        clearNotice();
+        await loadContext();
+      }catch(e){ this.disabled = false; this.textContent = "登录"; showNotice("网络错误，请重试。", "bad"); }
+    });
+
+    document.getElementById("sign-btn").addEventListener("click", async function(){
+      const result = await render_sign_modal(signData || { strokes: [] });
+      if(!result || !Array.isArray(result.strokes) || !result.strokes.length) return;
+      signData = result;
+      const wrap = document.getElementById("sign-preview");
+      wrap.innerHTML = "";
+      renderSignPreviewSvg(wrap, signData);
+      document.getElementById("submit-btn").disabled = false;
+    });
+
+    document.getElementById("submit-btn").addEventListener("click", async function(){
+      if(!signData){ showNotice("请先手写签名。", "bad"); return; }
+      this.disabled = true; this.textContent = "提交中…";
+      try{
+        const res = await fetch("/api/user_control/council-sign/batch", {
+          method: "POST", headers: { "Content-Type": "application/json" }, credentials: "include",
+          body: JSON.stringify({ t: token, signature: signData }),
+        });
+        const data = await res.json().catch(() => ({}));
+        if(!res.ok || data.status !== "success"){ this.disabled = false; this.textContent = "确认批量签名"; showNotice(data.message || "提交失败。", "bad"); return; }
+        only("done");
+        document.getElementById("done-msg").textContent = data.message || "批量签名已提交，感谢！";
+      }catch(e){ this.disabled = false; this.textContent = "确认批量签名"; showNotice("网络错误，请重试。", "bad"); }
+    });
+
+    loadContext();
+  </script>
+</body>
+</html>

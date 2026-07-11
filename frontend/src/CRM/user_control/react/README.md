@@ -4,30 +4,33 @@ React migration target for the CRM user control workspace.
 
 ## Files
 
-- `UserControlPage.tsx`: page entry that binds controller state to the view.
-- `UserControlView.tsx`: top-level workspace composition and pagination flow.
-- `view/`: split presentational pieces for the workspace, including the user editor, modals, `UserCard`, shared fields, and styles.
+- `UserControlPage.tsx`: URL-driven dispatcher. Reads `?user_control_view=members|departments`
+  (sidebar sub-nav) and renders the matching view. Also drives refresh-safe selection via
+  `?user_id=` (open user editor) and `?dept_id=` (open a department detail), and hosts the shared
+  toast, `NewUserModal`, and `PermissionModal`.
+- `MembersView.tsx`: 用户管理 — a 名片 (business-card) grid of all users (`view/UserCard`) with search
+  and `shared/TablePagination` (15/page); clicking a card opens the full user editor (`view/UserEditorPage`).
+- `DepartmentsView.tsx`: 部门管理 — a department-card list → detail (改名 / 权限 / 删除 / 加入成员 /
+  移出). 加入成员 reuses the shared `CRM/select_users_modal` picker.
+- `view/`: split presentational pieces — the user editor, modals, `UserCard`, shared fields, and styles.
 - `useUserControlController.ts`: data loading, mutation orchestration, and local workspace state.
 - `api.ts`: department, user, permission, and renewal requests.
 - `types.ts`: department, permission, user, and member-renewal types.
 
 ## Scope
 
-- Department list and selection
-- Department members
-- Global member search
-- Create department
-- Create user
-- User detail editing
-- Reset password
-- Delete user
-- Department permission editing
-- Membership renewal record CRUD
+- Two sidebar-switchable views: 用户管理 (member cards) and 部门管理 (department list → detail)
+- Refresh-safe selection via query params (`user_control_view` / `user_id` / `dept_id`)
+- Global member search + card-grid pagination
+- Create / edit / delete user, reset password, membership renewal record CRUD
+- Create / rename / delete department, department permission editing
+- Add / remove department members (add uses the shared select-users picker)
 
 ## State rule
 
 - Keep data loading and mutations in `useUserControlController.ts`.
-- UI composition stays in `UserControlView.tsx`; reusable presentation pieces live under `view/`.
+- View composition lives in `MembersView.tsx` / `DepartmentsView.tsx`; reusable presentation pieces
+  live under `view/`. Selection state is URL-driven in `UserControlPage.tsx`.
 - New colors must come from `frontend/src/theme/designTokens.ts`.
 
 ## Backend endpoints

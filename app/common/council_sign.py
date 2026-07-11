@@ -306,3 +306,158 @@ def submit_sign_mobile(token, data):
     except Exception as exc:
         db.session.rollback()
         return jsonify({"status": "error", "message": str(exc)}), 500
+
+
+# ---------------------------------------------------------------------------
+# 批量理事会签名：一条永久链接对应多份申请，理事签一次名即批量记录到全部申请。
+# ---------------------------------------------------------------------------
+
+BATCH_MAX = 200
+
+
+def build_batch_sign_url(scope, registration_ids):
+    token = _serializer().dumps({"scope": scope, "registration_ids": list(registration_ids)})
+    return f"{request.host_url.rstrip('/')}/template/council-sign-batch?t={token}"
+
+
+def batch_sign_url_response(scope, registration_ids):
+    cfg = get_scope(scope)
+    if cfg is None:
+        return jsonify({"status": "error", "message": "未知的签名类型。"}), 400
+
+    ids = []
+    for raw in registration_ids or []:
+        try:
+            value = int(raw)
+        except (TypeError, ValueError):
+            continue
+        if value > 0 and value not in ids:
+            ids.append(value)
+
+    if not ids:
+        return jsonify({"status": "error", "message": "请先选择至少一份申请。"}), 400
+    if len(ids) > BATCH_MAX:
+        return jsonify({"status": "error", "message": f"一次最多批量 {BATCH_MAX} 份。"}), 400
+
+    return jsonify({"status": "success", "url": build_batch_sign_url(scope, ids), "count": len(ids)})
+
+
+def _batch_registration_item(cfg, registration_id, signer):
+    registration = cfg.get_registration(registration_id)
+    if not registration:
+        return {"id": registration_id, "missing": True, "applicant_name": f"#{registration_id}"}
+    council = registration.to_dict().get("council") or {}
+    already = _signature_query(cfg, registration.id, signer.id).first() is not None
+    return {
+        "id": registration.id,
+        "missing": False,
+        "applicant_name": cfg.applicant_name(registration) or f"#{registration.id}",
+        "already_signed": already,
+        "full": bool(council.get("full")),
+        "activated": registration.status == "paid",
+        "count": council.get("count", 0),
+        "required": council.get("required"),
+        "max": council.get("max"),
+    }
+
+
+def get_batch_sign_context(token):
+    payload, error = load_token(token)
+    if error is not None:
+        return error
+    cfg = get_scope(payload.get("scope"))
+    if cfg is None:
+        return jsonify({"status": "error", "message": "签名链接无效。"}), 400
+
+    ids = payload.get("registration_ids") or []
+    signer = current_user
+    try:
+        signer_permissions = get_current_user_permissions(signer)
+    except Exception:
+        signer_permissions = set()
+    can_sign = COUNCIL_PERMISSION in signer_permissions
+
+    items = [_batch_registration_item(cfg, rid, signer) for rid in ids]
+    signable = [
+        item
+        for item in items
+        if not item.get("missing") and not item.get("already_signed") and not item.get("full")
+    ]
+    signer_name = getattr(signer, "display_name", None) or getattr(signer, "username", None) or "本人"
+
+    return jsonify(
+        {
+            "status": "success",
+            "scope": cfg.scope,
+            "org_name": cfg.org_name,
+            "consent_object": cfg.consent_object,
+            "signer_name": signer_name,
+            "can_sign": can_sign,
+            "items": items,
+            "total": len(items),
+            "signable_count": len(signable),
+            "consent_text": f"我 {signer_name} 同意以下名单加入{cfg.org_name}{cfg.consent_object}。",
+        }
+    )
+
+
+def submit_batch_sign(token, data):
+    payload, error = load_token(token)
+    if error is not None:
+        return error
+    cfg = get_scope(payload.get("scope"))
+    if cfg is None:
+        return jsonify({"status": "error", "message": "签名链接无效。"}), 400
+
+    signer = current_user
+    try:
+        signer_permissions = get_current_user_permissions(signer)
+    except Exception:
+        signer_permissions = set()
+    if COUNCIL_PERMISSION not in signer_permissions:
+        return jsonify({"status": "error", "message": "你没有理事会审批（council_approve）权限，无法签名。"}), 403
+
+    try:
+        signature = extract_signature_payload(data)
+    except ValueError as exc:
+        return jsonify({"status": "error", "message": str(exc)}), 400
+
+    ids = payload.get("registration_ids") or []
+    signed = 0
+    skipped = 0
+    activated = 0
+    try:
+        for rid in ids:
+            registration = cfg.get_registration(rid)
+            if not registration:
+                skipped += 1
+                continue
+            if _signature_query(cfg, registration.id, signer.id).first() is not None:
+                skipped += 1
+                continue
+            if len(getattr(registration, cfg.signatures_attr) or []) >= cfg.max_signatures:
+                skipped += 1
+                continue
+            record_signature(cfg, registration, signer, "batch_link", signature=signature)
+            registration.sync_status_from_payment()
+            if cfg.activate(registration):
+                activated += 1
+            signed += 1
+        db.session.commit()
+        parts = [f"已为 {signed} 份申请签名"]
+        if activated:
+            parts.append(f"其中 {activated} 份已生效")
+        if skipped:
+            parts.append(f"跳过 {skipped} 份（已签或已满）")
+        return jsonify(
+            {
+                "status": "success",
+                "signed": signed,
+                "skipped": skipped,
+                "activated": activated,
+                "message": "，".join(parts) + "。",
+            }
+        )
+    except Exception as exc:
+        db.session.rollback()
+        return jsonify({"status": "error", "message": str(exc)}), 500

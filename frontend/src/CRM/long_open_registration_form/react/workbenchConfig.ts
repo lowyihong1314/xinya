@@ -120,6 +120,7 @@ export type WorkbenchEndpoints = {
   signCouncil: (registrationId: number, signature: SignStrokes) => Promise<{ message?: string }>;
   updateFields: (registrationId: number, patch: Record<string, string>) => Promise<{ message?: string }>;
   remove: (registrationId: number) => Promise<{ message?: string }>;
+  batchSignUrl: (registrationIds: number[]) => Promise<{ url?: string; count?: number; message?: string }>;
 };
 
 export type WorkbenchConfig = {
@@ -214,6 +215,16 @@ export function makeEndpoints(base: string): WorkbenchEndpoints {
     async remove(registrationId) {
       return parseJson(
         await apiFetch(`${base}/${registrationId}/remove`, { method: "POST", credentials: "include" }),
+      );
+    },
+    async batchSignUrl(registrationIds) {
+      return parseJson(
+        await apiFetch(`${base}/council-sign/batch-url`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          credentials: "include",
+          body: JSON.stringify({ registration_ids: registrationIds }),
+        }),
       );
     },
   };

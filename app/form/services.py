@@ -2,6 +2,7 @@ import base64
 import json
 import mimetypes
 import os
+import re
 import secrets
 from datetime import datetime
 from decimal import Decimal, InvalidOperation
@@ -259,11 +260,11 @@ def _parse_dob_from_nric(nric):
 
 
 def _calc_age_from_nric(nric):
+    # 全局年龄规则：只按出生年份计算（当前年份 - 出生年份），不看月份/生日。
+    # 例：2008 年出生在 2026 年就是 18 岁，不需要等过生日。
     dob = _parse_dob_from_nric(nric)
     today = datetime.utcnow().date()
     age = today.year - dob.year
-    if (today.month, today.day) < (dob.month, dob.day):
-        age -= 1
     if age < 0 or age > 120:
         raise ValueError("NRIC 推算年龄无效")
     return age
@@ -654,6 +655,14 @@ def _serialize_youth_entry(entry, fee_source=None):
         fee_scope=YOUTH_CLASS_FEE_SCOPE,
         fee_source=fee_source,
     )
+    # 展示用年龄按全局年份规则实时从 NRIC 计算（当前年份 - 出生年份），不用报名时存下的旧值。
+    member = getattr(entry, "nric_asset", None)
+    nric = getattr(member, "nric", None)
+    if nric:
+        try:
+            data["age"] = _calc_age_from_nric(nric)
+        except Exception:
+            pass
     data["selected_fee"] = settings.get("selected_fee")
     data["fee_amount"] = settings.get("amount")
     data["fee_description"] = settings.get("description")
@@ -661,10 +670,69 @@ def _serialize_youth_entry(entry, fee_source=None):
     return council_sign.augment_serialized("youth_class", entry, data)
 
 
+def _clean_username(value):
+    normalized = str(value or "").strip()
+    if not normalized:
+        return None
+    if any(char.isspace() for char in normalized):
+        raise ValueError("username 不能包含空格")
+    return normalized
+
+
+def _ensure_approved_youth_user(entry):
+    """青少年报名生效时，据报名填写的 username 创建 / 关联一个无密码账户。
+
+    创建出来的账户没有密码（无法登录），需要管理员到用户管理里重置密码；
+    不写会员身份（is_member 保持 False），也不建续费记录。
+    """
+    member = getattr(entry, "nric_asset", None)
+    requested_username = _clean_username(getattr(entry, "requested_username", None))
+    target_user = entry.user
+
+    if target_user is None:
+        if not requested_username:
+            raise ValueError("这份青少年报名还没有填写 username，暂时无法创建账户")
+
+        target_user = User.query.filter_by(username=requested_username).first()
+        if target_user is None:
+            target_user = User(
+                username=requested_username,
+                display_name=(
+                    getattr(member, "name_nric", None)
+                    or entry.chinese_name
+                    or entry.english_name
+                    or requested_username
+                ),
+                nric_asset_id=entry.nric_asset_id,
+                created_by=getattr(current_user, "id", None),
+                display=True,
+                is_member=False,
+            )
+            db.session.add(target_user)
+            db.session.flush()
+        elif entry.nric_asset_id and target_user.nric_asset_id not in (None, entry.nric_asset_id):
+            raise ValueError("这个 username 已关联到另一份成员资料，无法自动创建账户")
+
+        entry.user = target_user
+        entry.user_id = target_user.id
+
+    if entry.nric_asset_id and target_user.nric_asset_id in (None, entry.nric_asset_id):
+        target_user.nric_asset_id = entry.nric_asset_id
+    elif entry.nric_asset_id and target_user.nric_asset_id != entry.nric_asset_id:
+        raise ValueError("这份青少年报名关联的成员资料和现有账户不一致，请先手动处理")
+
+    if not str(target_user.display_name or "").strip():
+        target_user.display_name = (
+            getattr(member, "name_nric", None) or entry.chinese_name or target_user.username
+        )
+
+    return target_user
+
+
 def _maybe_activate_youth(entry):
     """财政 + 理事会都通过后，青少年佛学班报名才真正生效（status=paid）。
 
-    青少年报名没有登录账号（无 user_id），生效只是把状态置为 paid，不创建续费/会员记录。
+    生效时会据报名填写的 username 创建 / 关联一个无密码账户（无法登录，需重置密码）。
     """
     if not entry:
         return False
@@ -672,6 +740,7 @@ def _maybe_activate_youth(entry):
         return False
     if not entry.fully_approved():
         return False
+    _ensure_approved_youth_user(entry)
     entry.status = "paid"
     return True
 
@@ -1537,7 +1606,8 @@ def remove_regis_form_member(data):
 
 
 def _normalize_member_nric(value):
-    normalized = str(value or "").strip()
+    # 规范化：去掉空格 / 破折号等分隔符，只保留字母数字并转大写，避免同一个人存成多份。
+    normalized = re.sub(r"[^0-9A-Za-z]", "", str(value or "")).upper()
     if not normalized:
         raise ValueError("NRIC 不能为空")
     return normalized
@@ -2015,10 +2085,17 @@ def submit_youth_class_registration(payload):
     emergency_contact_phone = str(payload.get("emergency_contact_phone") or "").strip()
     emergency_contact_relation = str(payload.get("emergency_contact_relation") or "").strip()
 
+    try:
+        requested_username = _clean_username(payload.get("username"))
+    except ValueError as exc:
+        return jsonify({"status": "error", "message": str(exc)}), 400
+
     if not chinese_name:
         return jsonify({"status": "error", "message": "请填写中文名"}), 400
     if not english_name:
         return jsonify({"status": "error", "message": "请填写英文名"}), 400
+    if not requested_username:
+        return jsonify({"status": "error", "message": "请填写 username"}), 400
     if not nric:
         return jsonify({"status": "error", "message": "请填写 NRIC"}), 400
     if not address:
@@ -2041,10 +2118,17 @@ def submit_youth_class_registration(payload):
 
     try:
         member = _get_or_create_member_by_nric(nric, name_nric=english_name)
+
+        existing_user = User.query.filter_by(username=requested_username).first()
+        if existing_user and existing_user.nric_asset_id not in (None, member.id):
+            return jsonify({"status": "error", "message": "这个 username 已被其他账号使用，请换一个"}), 400
+
         entry = YouthClassRegistration(
             chinese_name=chinese_name,
             english_name=english_name,
             nric_asset_id=member.id,
+            requested_username=requested_username,
+            user_id=existing_user.id if existing_user else None,
             age=age,
             category=category,
             address=address,

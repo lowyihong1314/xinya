@@ -17,7 +17,7 @@ export function CRMPage() {
   const { isAuthenticated, openLogin, isMobile } = useUserState();
   const location = useLocation();
   const navigate = useNavigate();
-  const [expandedGroups, setExpandedGroups] = useState<Partial<Record<CRMModuleKey, boolean>>>({});
+  const [expandedGroups, setExpandedGroups] = useState<Record<string, boolean>>({});
   const searchParams = new URLSearchParams(location.search);
   const isMobileHome = isMobile && location.pathname === "/crm/home";
   const activeModule = CRM_MODULES.find((module) => isModulePathActive(location.pathname, module.key)) ?? null;
@@ -49,14 +49,27 @@ export function CRMPage() {
             <span style={navHeaderTitleStyle}>CRM 工作台</span>
           </div>
           {CRM_MODULES.map((module) => {
-            const active = isModulePathActive(location.pathname, module.key);
-            const children = getSidebarChildren(module.key, searchParams, active);
+            // 「报名表格」并入下面的「特别活动」分组，这里不单独渲染。
+            if (module.key === "register") {
+              return null;
+            }
+
+            const isSpecialEvent = module.key === "event_table";
+            const groupKey = isSpecialEvent ? SPECIAL_EVENT_GROUP_KEY : module.key;
+            const groupTitle = isSpecialEvent ? "特别活动" : module.title;
+            const groupIcon = isSpecialEvent ? "fas fa-star" : module.icon;
+            const active = isSpecialEvent
+              ? SPECIAL_EVENT_MODULE_KEYS.some((key) => isModulePathActive(location.pathname, key))
+              : isModulePathActive(location.pathname, module.key);
+            const children = isSpecialEvent
+              ? getSpecialEventChildren(location.pathname)
+              : getSidebarChildren(module.key, searchParams, active);
             const hasChildren = children.length > 0;
-            const expanded = hasChildren && (active || Boolean(expandedGroups[module.key]));
+            const expanded = hasChildren && (active || Boolean(expandedGroups[groupKey]));
 
             if (hasChildren) {
               return (
-                <div key={module.key} style={navGroupStyle(active)}>
+                <div key={groupKey} style={navGroupStyle(active)}>
                   <button
                     type="button"
                     style={navParentButtonStyle(active, expanded)}
@@ -64,15 +77,15 @@ export function CRMPage() {
                     onClick={() =>
                       setExpandedGroups((current) => ({
                         ...current,
-                        [module.key]: !current[module.key],
+                        [groupKey]: !current[groupKey],
                       }))
                     }
                   >
                     <span style={navIconStyle(active)}>
-                      <i className={module.icon} />
+                      <i className={groupIcon} />
                     </span>
                     <span style={navTextWrapStyle}>
-                      <span style={navTitleStyle}>{module.title}</span>
+                      <span style={navTitleStyle}>{groupTitle}</span>
                       <span style={navMetaStyle}>{children.length} 个子模块</span>
                     </span>
                     <i className={`fas fa-chevron-${expanded ? "down" : "right"}`} style={navChevronStyle} />
@@ -84,7 +97,7 @@ export function CRMPage() {
                           key={child.key}
                           to={child.to}
                           title={child.description}
-                          aria-label={`${module.title} · ${child.title}`}
+                          aria-label={`${groupTitle} · ${child.title}`}
                           style={navChildLinkStyle(child.active)}
                         >
                           <span style={navChildIconStyle(child.active)}>
@@ -528,6 +541,21 @@ const ASSET_CHILD_ITEMS = [
   },
 ] as const;
 
+const USER_CONTROL_CHILD_ITEMS = [
+  {
+    key: "members",
+    title: "用户管理",
+    icon: "fa-solid fa-id-badge",
+    description: "用户名片、资料编辑与会员续费。",
+  },
+  {
+    key: "departments",
+    title: "部门管理",
+    icon: "fa-solid fa-sitemap",
+    description: "部门、权限与成员维护。",
+  },
+] as const;
+
 const PERMANENT_REGISTRATION_CHILD_ITEMS = [
   {
     key: "membership",
@@ -564,6 +592,28 @@ function buildPathWithParams(pathname: string, params: Record<string, string>) {
   }
   const query = nextParams.toString();
   return query ? `${pathname}?${query}` : pathname;
+}
+
+export const SPECIAL_EVENT_GROUP_KEY = "special_event";
+export const SPECIAL_EVENT_MODULE_KEYS: CRMModuleKey[] = ["event_table", "register"];
+const SPECIAL_EVENT_CHILD_ICONS: Partial<Record<CRMModuleKey, string>> = {
+  event_table: "fa-solid fa-calendar-plus",
+  register: "fa-solid fa-clipboard-list",
+};
+
+// 「特别活动」分组：把 创建活动 + 报名表格 两个模块作为子项，各自链接到自己的路由。
+function getSpecialEventChildren(pathname: string): SidebarChild[] {
+  return SPECIAL_EVENT_MODULE_KEYS.map((key) => {
+    const module = CRM_MODULES.find((item) => item.key === key);
+    return {
+      key,
+      title: module?.title ?? key,
+      icon: SPECIAL_EVENT_CHILD_ICONS[key] ?? module?.icon ?? "fa-solid fa-circle",
+      description: module?.description ?? "",
+      to: buildCRMModulePath(key),
+      active: isModulePathActive(pathname, key),
+    };
+  });
 }
 
 export function getSidebarChildren(
@@ -623,6 +673,21 @@ export function getSidebarChildren(
       ...item,
       to: buildPathWithParams(assetPath, { asset_panel: item.key }),
       active: moduleActive && activeAssetKey === item.key,
+    }));
+  }
+
+  if (moduleKey === "user_control") {
+    const requestedUserControlView = searchParams.get("user_control_view");
+    const activeUserControlView = USER_CONTROL_CHILD_ITEMS.some(
+      (item) => item.key === requestedUserControlView,
+    )
+      ? requestedUserControlView
+      : "members";
+    const userControlPath = buildCRMModulePath("user_control");
+    return USER_CONTROL_CHILD_ITEMS.map((item) => ({
+      ...item,
+      to: buildPathWithParams(userControlPath, { user_control_view: item.key }),
+      active: moduleActive && activeUserControlView === item.key,
     }));
   }
 

@@ -6,7 +6,7 @@ import { getUserPermissionNames } from "../../app/permissions";
 import { useUserState } from "../../app/UserState";
 import { CachedImage } from "../../components/CachedMedia";
 import { PageHero } from "../../components/PageHero";
-import { UserCard } from "../../CRM/user_control/react/UserControlView";
+import { UserCard } from "../../CRM/user_control/react/view/UserCard";
 import { fetchAllUsers } from "../../CRM/user_control/react/api";
 import type { UserRecord } from "../../CRM/user_control/react/types";
 import { showConfirmDialog } from "../../js/dialogs";
