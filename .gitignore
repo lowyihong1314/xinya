@@ -4,6 +4,7 @@ uploads/
 database/
 _token.py
 _token.txt
+.flaskenv
 *.pyc
 static/vite/
 static/assets/

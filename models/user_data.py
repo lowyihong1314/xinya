@@ -129,6 +129,10 @@ class User(db.Model, UserMixin):
     password_hash = db.Column(db.Text, nullable=True)
     phone = db.Column(db.String(255), unique=True, nullable=True)
     email = db.Column(db.String(255), unique=True, nullable=True)
+    # 待验证的新邮箱：改邮箱后先存这里，点击验证链接后才写入 email 并配置转发。
+    pending_email = db.Column(db.String(255), nullable=True)
+    # Cloudflare Email Routing 规则 id（{username}@utba.my -> email 的转发规则）。
+    email_forward_rule_id = db.Column(db.String(255), nullable=True)
     created_by = db.Column(db.Integer, db.ForeignKey('user_data.id'))
     display = db.Column(db.Boolean, nullable=True)
     nric_asset_id = db.Column(
@@ -210,6 +214,7 @@ class User(db.Model, UserMixin):
             "display_name": self.display_name,
             "has_password": bool(self.password_hash),
             "email": self.email,
+            "pending_email": self.pending_email,
             "phone": self.phone,
             "name_NRIC": member_name_nric,
             "display": self.display,

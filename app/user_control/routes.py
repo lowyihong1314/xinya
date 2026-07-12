@@ -23,6 +23,7 @@ user_control_bp = Blueprint("user_control", __name__)
 
 MEMBER_RENEWAL_ROOT = os.path.join(DATA_PATH, "NAS", "UTBA", "member_renewal")
 SELF_EDITABLE_USER_FIELDS = {
+    "username",
     "display_name",
     "display",
     "email",
@@ -39,7 +40,6 @@ SELF_EDITABLE_USER_FIELDS = {
     "tng_number",
 }
 ADMIN_EXTRA_EDITABLE_USER_FIELDS = {
-    "username",
     "name_NRIC",
     "user_theme",
     "is_member",
@@ -215,18 +215,21 @@ def _parse_nullable_bool(value, field_name):
 
 
 def _validate_unique_user_fields(user, *, username=None, email=None, phone=None):
-    if username:
-        existing = User.query.filter(User.username == username, User.id != user.id).first()
-        if existing:
-            raise ValueError("这个用户名已被其他账号使用")
-    if email:
-        existing = User.query.filter(User.email == email, User.id != user.id).first()
-        if existing:
-            raise ValueError("这个 Email 已被其他账号使用")
-    if phone:
-        existing = User.query.filter(User.phone == phone, User.id != user.id).first()
-        if existing:
-            raise ValueError("这个 Phone 已被其他账号使用")
+    # 用 no_autoflush，避免这里的 SELECT 先把 session 里待写的（可能冲突的）改动 flush 掉，
+    # 否则会先撞唯一约束抛 IntegrityError，拿不到下面这些更友好的提示。
+    with db.session.no_autoflush:
+        if username:
+            existing = User.query.filter(User.username == username, User.id != user.id).first()
+            if existing:
+                raise ValueError("这个用户名已被其他账号使用")
+        if email:
+            existing = User.query.filter(User.email == email, User.id != user.id).first()
+            if existing:
+                raise ValueError("这个 Email 已被其他账号使用")
+        if phone:
+            existing = User.query.filter(User.phone == phone, User.id != user.id).first()
+            if existing:
+                raise ValueError("这个 Phone 已被其他账号使用")
 
 
 def _move_profile_images(previous_username, next_username):
@@ -1211,6 +1214,9 @@ def update_user(user_id):
         allowed_fields = set(SELF_EDITABLE_USER_FIELDS)
         if can_edit_others:
             allowed_fields |= ADMIN_EXTRA_EDITABLE_USER_FIELDS
+        else:
+            # 自助修改邮箱必须走 /api/email/change-request 的验证流程，这里不直接改 email。
+            allowed_fields.discard("email")
 
         _save_user_updates(user, data, allowed_fields=allowed_fields)
         return jsonify({"status": "success", "message": "用户信息更新成功"})

@@ -51,6 +51,51 @@ export async function fetchAppReleases(): Promise<AppRelease[]> {
   return data.releases ?? [];
 }
 
+export interface EmailLogItem {
+  id: number;
+  from_email: string;
+  to_email: string;
+  cc_email: string | null;
+  bcc_email: string | null;
+  subject: string | null;
+  direction: string;
+  status: string;
+  message_id: string | null;
+  error_message: string | null;
+  created_at: string | null;
+}
+
+export async function listEmails() {
+  const response = await apiFetch("/api/email/list", { credentials: "include" });
+  return parseResponse<{ status?: string; data: EmailLogItem[]; from_email?: string }>(response);
+}
+
+export async function sendEmail(payload: {
+  to_email: string;
+  subject: string;
+  body: string;
+  cc_email?: string;
+  bcc_email?: string;
+}) {
+  const response = await apiFetch("/api/email/send", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    credentials: "include",
+    body: JSON.stringify(payload),
+  });
+  return parseResponse<{ status?: string; message?: string; data?: EmailLogItem }>(response);
+}
+
+export async function requestEmailChange(email: string) {
+  const response = await apiFetch("/api/email/change-request", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    credentials: "include",
+    body: JSON.stringify({ email }),
+  });
+  return parseResponse<{ status?: string; message?: string }>(response);
+}
+
 export async function changeMyPassword(payload: { old_password?: string; new_password: string }) {
   const response = await apiFetch("/api/user_control/change_password", {
     method: "POST",
