@@ -13,24 +13,15 @@ import os
 
 import requests
 
+from app.email.service import env_value
+
 CF_BASE = "https://api.cloudflare.com/client/v4"
 EMAIL_DOMAIN = os.environ.get("EMAIL_DOMAIN", "utba.my")
 
-_PROJECT_ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", ".."))
-
 
 def _env(name):
-    value = os.environ.get(name)
-    if value:
-        return value.strip()
-    try:
-        from dotenv import dotenv_values
-
-        values = dotenv_values(os.path.join(_PROJECT_ROOT, ".flaskenv"))
-        got = values.get(name)
-        return got.strip() if got else None
-    except Exception:
-        return None
+    # 与 service.env_value 一致：先环境变量，再手动解析 .flaskenv（不依赖 python-dotenv）。
+    return env_value(name)
 
 
 def cf_config():

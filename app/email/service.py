@@ -14,19 +14,33 @@ EMAIL_DOMAIN = os.environ.get("EMAIL_DOMAIN", "utba.my")
 _PROJECT_ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", ".."))
 
 
-def get_resend_api_key():
-    key = os.environ.get("Resend_API_KEY") or os.environ.get("RESEND_API_KEY")
-    if key:
-        return key.strip()
-    # 兜底：直接从 .flaskenv 读取（非 flask CLI 启动时 os.environ 可能没有）。
+def _read_flaskenv_value(name):
+    """手动解析 .flaskenv 里某个 key（不依赖 python-dotenv，服务器 venv 可能没装）。"""
+    path = os.path.join(_PROJECT_ROOT, ".flaskenv")
     try:
-        from dotenv import dotenv_values
-
-        values = dotenv_values(os.path.join(_PROJECT_ROOT, ".flaskenv"))
-        key = values.get("Resend_API_KEY") or values.get("RESEND_API_KEY")
-        return key.strip() if key else None
-    except Exception:
+        with open(path, "r", encoding="utf-8") as fh:
+            for raw in fh:
+                line = raw.strip()
+                if not line or line.startswith("#") or "=" not in line:
+                    continue
+                key, value = line.split("=", 1)
+                if key.strip() == name:
+                    return value.strip().strip('"').strip("'")
+    except OSError:
         return None
+    return None
+
+
+def env_value(name):
+    """先取进程环境变量；取不到再直接读 .flaskenv（gunicorn 等非 flask CLI 启动时的兜底）。"""
+    value = os.environ.get(name)
+    if value:
+        return value.strip()
+    return _read_flaskenv_value(name)
+
+
+def get_resend_api_key():
+    return env_value("Resend_API_KEY") or env_value("RESEND_API_KEY")
 
 
 def company_email_for(username):
