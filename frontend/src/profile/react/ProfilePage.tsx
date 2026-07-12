@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import type { ChangeEvent, CSSProperties, FormEvent } from "react";
+import type { ChangeEvent, CSSProperties, FormEvent, ReactNode } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
 
 import { useUserState } from "../../app/UserState";
@@ -25,7 +25,7 @@ import {
   type NativeResponseCacheStats,
 } from "../../js/nativeResponseCache";
 import { isMobileNativeRuntime } from "../../mobile/native/capacitor";
-import { changeMyPassword, fetchAppReleases, fetchMyFootprints, requestEmailChange, startMembershipRenewal, updateProfile, uploadProfileImage } from "./api";
+import { changeMyPassword, fetchAppReleases, fetchMyFootprints, requestEmailChange, startMembershipRenewal, updateProfile, uploadProfileImage, verifyCurrentEmail } from "./api";
 import { MembershipActionCard } from "./MembershipActionCard";
 import { EmailPanel } from "./EmailPanel";
 import type {
@@ -665,6 +665,20 @@ export function ProfilePage() {
     }
   }
 
+  async function verifyCurrentEmailFlow() {
+    setSavingKey("email");
+    setError(null);
+    setMessage(null);
+    try {
+      const result = await verifyCurrentEmail();
+      setMessage(result.message || "验证邮件已发送，请点击其中链接完成验证");
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "验证邮件发送失败");
+    } finally {
+      setSavingKey(null);
+    }
+  }
+
   function updatePasswordField<Key extends keyof PasswordFormValues>(key: Key, value: PasswordFormValues[Key]) {
     setPasswordValues((prev) => ({ ...prev, [key]: value }));
   }
@@ -911,6 +925,22 @@ export function ProfilePage() {
                           editing={editingKeys.has(field.key)}
                           saving={savingKey === field.key}
                           isMobile={isMobile}
+                          statusExtra={
+                            field.key === "email" && profileUser.email
+                              ? profileUser.email_verified
+                                ? <span style={emailVerifiedChipStyle}>已验证</span>
+                                : (
+                                  <button
+                                    type="button"
+                                    style={emailVerifyButtonStyle}
+                                    onClick={() => void verifyCurrentEmailFlow()}
+                                    disabled={savingKey === "email"}
+                                  >
+                                    验证
+                                  </button>
+                                )
+                              : undefined
+                          }
                           onEdit={() => startEditField(field.key)}
                           onSave={() => void saveField(field.key)}
                           onCancel={() => cancelEditField(field.key)}
@@ -1318,6 +1348,7 @@ function EditableField({
   editing,
   saving,
   isMobile,
+  statusExtra,
   onEdit,
   onSave,
   onCancel,
@@ -1334,6 +1365,7 @@ function EditableField({
   editing: boolean;
   saving: boolean;
   isMobile: boolean;
+  statusExtra?: ReactNode;
   onEdit: () => void;
   onSave: () => void;
   onCancel: () => void;
@@ -1356,6 +1388,7 @@ function EditableField({
             <div style={editRowValueStyle(locked, field.type === "textarea")}>{displayValue}</div>
           )}
         </div>
+        {!isEditing && statusExtra ? statusExtra : null}
         {locked ? (
           <span style={editRowLockStyle}>只读</span>
         ) : isEditing ? (
@@ -2217,6 +2250,32 @@ const pendingEmailBannerStyle: CSSProperties = {
   color: "#854d0e",
   fontSize: "13px",
   lineHeight: 1.6,
+};
+
+const emailVerifyButtonStyle: CSSProperties = {
+  flex: "none",
+  padding: "4px 10px",
+  borderRadius: "999px",
+  border: "1px solid rgba(202,138,4,0.35)",
+  background: "rgba(202,138,4,0.12)",
+  color: "#a16207",
+  fontSize: "12px",
+  fontWeight: 700,
+  cursor: "pointer",
+  whiteSpace: "nowrap",
+};
+
+const emailVerifiedChipStyle: CSSProperties = {
+  flex: "none",
+  display: "inline-flex",
+  alignItems: "center",
+  padding: "3px 9px",
+  borderRadius: "999px",
+  background: "rgba(15,118,110,0.12)",
+  color: "var(--x-color-accent-strong)",
+  fontSize: "12px",
+  fontWeight: 700,
+  whiteSpace: "nowrap",
 };
 
 // ---- inline-editable field rows ----

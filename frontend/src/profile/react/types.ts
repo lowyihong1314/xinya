@@ -7,6 +7,7 @@ export type ProfileUser = {
   nric_asset_id?: number | null;
   nric_data_id?: number | null;
   email?: string;
+  email_verified?: boolean;
   pending_email?: string | null;
   phone?: string;
   name_NRIC?: string;

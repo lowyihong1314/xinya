@@ -96,6 +96,16 @@ export async function requestEmailChange(email: string) {
   return parseResponse<{ status?: string; message?: string }>(response);
 }
 
+export async function verifyCurrentEmail() {
+  const response = await apiFetch("/api/email/verify-request", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    credentials: "include",
+    body: "{}",
+  });
+  return parseResponse<{ status?: string; message?: string }>(response);
+}
+
 export async function changeMyPassword(payload: { old_password?: string; new_password: string }) {
   const response = await apiFetch("/api/user_control/change_password", {
     method: "POST",

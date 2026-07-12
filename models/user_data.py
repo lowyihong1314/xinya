@@ -129,6 +129,8 @@ class User(db.Model, UserMixin):
     password_hash = db.Column(db.Text, nullable=True)
     phone = db.Column(db.String(255), unique=True, nullable=True)
     email = db.Column(db.String(255), unique=True, nullable=True)
+    # email 是否已通过验证（老用户的历史邮箱默认为未验证，可点「验证」补验证）。
+    email_verified = db.Column(db.Boolean, nullable=False, default=False, server_default="0")
     # 待验证的新邮箱：改邮箱后先存这里，点击验证链接后才写入 email 并配置转发。
     pending_email = db.Column(db.String(255), nullable=True)
     # Cloudflare Email Routing 规则 id（{username}@utba.my -> email 的转发规则）。
@@ -214,6 +216,7 @@ class User(db.Model, UserMixin):
             "display_name": self.display_name,
             "has_password": bool(self.password_hash),
             "email": self.email,
+            "email_verified": bool(self.email_verified),
             "pending_email": self.pending_email,
             "phone": self.phone,
             "name_NRIC": member_name_nric,

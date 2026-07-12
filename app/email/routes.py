@@ -124,6 +124,34 @@ def send_email():
         return jsonify({"status": "error", "message": f"邮件发送失败：{exc}"}), 500
 
 
+def _send_verification_link(user, target_email):
+    """给 target_email 发验证链接（从 {username}@utba.my 发出），并记为 pending_email。发送失败抛异常。"""
+    username = (user.username or "").strip()
+    if not username:
+        raise RuntimeError("当前账号缺少用户名，无法发送验证邮件")
+
+    user.pending_email = target_email
+    db.session.commit()
+
+    token = _email_serializer().dumps({"uid": user.id, "email": target_email})
+    verify_url = f"{request.host_url.rstrip('/')}/api/email/verify?token={token}"
+    from_email = company_email_for(username)
+    display_name = (user.display_name or username).strip()
+    text = (
+        f"你好 {display_name}，\n\n"
+        f"请点击下面的链接验证你的接收邮箱：{target_email}\n\n"
+        f"验证链接（24 小时内有效）：\n{verify_url}\n\n"
+        f"验证通过后，发往 {from_email} 的邮件会通过 Cloudflare 转发到这个邮箱。\n"
+        f"如果这不是你本人操作，请忽略本邮件。"
+    )
+    send_via_resend(
+        from_header=f"{display_name} <{from_email}>",
+        to_email=target_email,
+        subject="验证你的接收邮箱",
+        text=text,
+    )
+
+
 @email_bp.post("/change-request")
 @login_required
 def request_email_change():
@@ -134,38 +162,14 @@ def request_email_change():
     if not _valid_email(new_email):
         return jsonify({"status": "error", "message": "请输入有效的邮箱地址"}), 400
     if current_user.email and new_email.lower() == current_user.email.lower():
-        return jsonify({"status": "error", "message": "新邮箱与当前邮箱相同"}), 400
+        return jsonify({"status": "error", "message": "新邮箱与当前邮箱相同（如需验证，请点邮箱旁的「验证」）"}), 400
 
     existing = User.query.filter(User.email == new_email, User.id != current_user.id).first()
     if existing:
         return jsonify({"status": "error", "message": "这个邮箱已被其他账号使用"}), 400
 
-    username = (current_user.username or "").strip()
-    if not username:
-        return jsonify({"status": "error", "message": "当前账号缺少用户名，无法发送验证邮件"}), 400
-
-    current_user.pending_email = new_email
-    db.session.commit()
-
-    token = _email_serializer().dumps({"uid": current_user.id, "email": new_email})
-    verify_url = f"{request.host_url.rstrip('/')}/api/email/verify?token={token}"
-
-    from_email = company_email_for(username)
-    display_name = (current_user.display_name or username).strip()
-    text = (
-        f"你好 {display_name}，\n\n"
-        f"你正在把接收邮箱设置为：{new_email}\n\n"
-        f"请点击下面的链接完成验证（24 小时内有效）：\n{verify_url}\n\n"
-        f"验证通过后，发往 {from_email} 的邮件会通过 Cloudflare 转发到这个邮箱。\n"
-        f"如果这不是你本人操作，请忽略本邮件。"
-    )
     try:
-        send_via_resend(
-            from_header=f"{display_name} <{from_email}>",
-            to_email=new_email,
-            subject="验证你的接收邮箱",
-            text=text,
-        )
+        _send_verification_link(current_user, new_email)
     except Exception as exc:  # noqa: BLE001
         return jsonify({"status": "error", "message": f"验证邮件发送失败：{exc}"}), 500
 
@@ -174,6 +178,26 @@ def request_email_change():
             "status": "success",
             "message": f"验证邮件已发送到 {new_email}，请查收并点击链接完成验证。验证前邮箱不会变更。",
         }
+    )
+
+
+@email_bp.post("/verify-request")
+@login_required
+def request_email_verify():
+    """验证「已有但未验证」的当前邮箱：给当前邮箱发验证链接（老用户补验证用）。"""
+    email = (current_user.email or "").strip()
+    if not _valid_email(email):
+        return jsonify({"status": "error", "message": "当前没有可验证的邮箱，请先设置邮箱"}), 400
+    if current_user.email_verified:
+        return jsonify({"status": "error", "message": "该邮箱已验证"}), 400
+
+    try:
+        _send_verification_link(current_user, email)
+    except Exception as exc:  # noqa: BLE001
+        return jsonify({"status": "error", "message": f"验证邮件发送失败：{exc}"}), 500
+
+    return jsonify(
+        {"status": "success", "message": f"验证邮件已发送到 {email}，请查收并点击链接完成验证。"}
     )
 
 
@@ -200,6 +224,7 @@ def verify_email_change():
         return _verify_page("邮箱已被占用", "这个邮箱在此期间已被其他账号使用。", ok=False), 400
 
     user.email = new_email
+    user.email_verified = True
     user.pending_email = None
     db.session.commit()
 
