@@ -500,6 +500,30 @@ const FINANCE_CHILD_ITEMS = [
     icon: "fa-solid fa-cash-register",
     description: "库存销售与退回。",
   },
+  {
+    key: "gl",
+    title: "总账",
+    icon: "fa-solid fa-book",
+    description: "会计凭证录入与查询。",
+  },
+  {
+    key: "gl_cash",
+    title: "现金账",
+    icon: "fa-solid fa-wallet",
+    description: "现金 / 银行收付流水与余额。",
+  },
+  {
+    key: "gl_accounts",
+    title: "科目表",
+    icon: "fa-solid fa-list-ol",
+    description: "会计科目 Chart of Accounts。",
+  },
+  {
+    key: "gl_reports",
+    title: "财务报表",
+    icon: "fa-solid fa-chart-column",
+    description: "试算平衡与科目明细账。",
+  },
 ] as const;
 
 const ASSET_CHILD_ITEMS = [

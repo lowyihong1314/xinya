@@ -4,17 +4,24 @@ import { useNavigate, useSearchParams } from "react-router-dom";
 
 import { CachedImage } from "../../../../components/CachedMedia";
 import { showConfirmDialog } from "../../../../js/dialogs";
+import { downloadBlobOrShare } from "../../../../js/browserActions";
 import { useUserState } from "../../../../app/UserState";
 import { getUserPermissionNames } from "../../../../app/permissions";
 import { useEnsureDesignTokens } from "../../../../theme/designTokens";
 import {
   deleteRegisterPayment,
+  downloadPaymentReport,
   fetchFinancePayments,
   replaceRegisterPaymentProof,
   updateFinancePaymentStatus,
 } from "./api";
 import { SCOPE_FILTERS, STATUS_FILTERS, type FinancePayment } from "./types";
 import { TablePagination, usePagedRows } from "../../../shared/TablePagination";
+import { DocDetailHeader } from "../shared/DocDetailHeader";
+import { WriteJEModal } from "../shared/WriteJEModal";
+import { BatchWriteJEModal } from "../shared/BatchWriteJEModal";
+import { fetchGLSourceMap, type GLSourceEntryRef } from "../gl/api";
+import { sortArrow, sortRows, sortableThStyle, toggleSort, type SortState } from "../shared/tableSort";
 
 type Notice = { tone: "success" | "error"; text: string };
 
@@ -52,7 +59,7 @@ function registrationPath(payment: FinancePayment): string | null {
 
 export function RegisterWorkspace() {
   useEnsureDesignTokens();
-  const { user } = useUserState();
+  const { user, isMobile } = useUserState();
   const navigate = useNavigate();
   const [searchParams, setSearchParams] = useSearchParams();
 
@@ -64,6 +71,16 @@ export function RegisterWorkspace() {
   const [replacing, setReplacing] = useState(false);
   const [removing, setRemoving] = useState(false);
   const [proofVersion, setProofVersion] = useState(0);
+  const [jeOpen, setJeOpen] = useState(false);
+  const [batchJeOpen, setBatchJeOpen] = useState(false);
+  const [selectedIds, setSelectedIds] = useState<Set<number>>(new Set());
+  const [jeMap, setJeMap] = useState<Record<string, GLSourceEntryRef>>({});
+  const [exportingXlsx, setExportingXlsx] = useState(false);
+  const [exportingReport, setExportingReport] = useState(false);
+  const [query, setQuery] = useState("");
+  const [dateStart, setDateStart] = useState("");
+  const [dateEnd, setDateEnd] = useState("");
+  const [sort, setSort] = useState<SortState>(null);
   const proofInputRef = useRef<HTMLInputElement | null>(null);
 
   const canEdit = useMemo(() => getUserPermissionNames(user).has("account_edit"), [user]);
@@ -99,13 +116,133 @@ export function RegisterWorkspace() {
     [payments, selectedId],
   );
 
+  const detailNav = useMemo(() => {
+    if (selectedId == null) {
+      return { prevId: null as number | null, nextId: null as number | null, position: "" };
+    }
+    const index = payments.findIndex((p) => p.id === selectedId);
+    if (index === -1) {
+      return { prevId: null as number | null, nextId: null as number | null, position: "" };
+    }
+    return {
+      prevId: index > 0 ? payments[index - 1].id : null,
+      nextId: index < payments.length - 1 ? payments[index + 1].id : null,
+      position: `${index + 1} / ${payments.length}`,
+    };
+  }, [payments, selectedId]);
+
   const stats = useMemo(() => {
     const checked = payments.filter((p) => p.status === "checked");
     const total = checked.reduce((sum, p) => sum + Number(p.amount ?? p.price ?? 0), 0);
     return { count: payments.length, checkedCount: checked.length, checkedTotal: total };
   }, [payments]);
 
-  const paged = usePagedRows(payments, undefined, `${status}|${scope}`);
+  const filteredPayments = useMemo(() => {
+    const kw = query.trim().toLowerCase();
+    const base = payments.filter((p) => {
+      if (kw) {
+        const hay = [
+          p.id,
+          p.name,
+          p.nric,
+          p.phone,
+          p.source_scope_label,
+          p.source_label,
+          p.payment_mode,
+          p.counter,
+          p.amount ?? p.price,
+          paymentStatusLabel(p.status),
+        ].map((v) => String(v ?? "").toLowerCase());
+        if (!hay.some((v) => v.includes(kw))) return false;
+      }
+      const day = paymentDateKey(p);
+      if (dateStart && (!day || day < dateStart)) return false;
+      if (dateEnd && (!day || day > dateEnd)) return false;
+      return true;
+    });
+    return sortRows(base, sort, (p, key) => getPaymentSortValue(p, key, jeMap));
+  }, [payments, query, dateStart, dateEnd, sort, jeMap]);
+
+  const paged = usePagedRows(
+    filteredPayments,
+    undefined,
+    `${status}|${scope}|${query}|${dateStart}|${dateEnd}|${sort?.key ?? ""}|${sort?.dir ?? ""}`,
+  );
+
+  useEffect(() => {
+    if (!payments.length) {
+      setJeMap({});
+      return;
+    }
+    let cancelled = false;
+    void (async () => {
+      try {
+        const map = await fetchGLSourceMap("register_payment", payments.map((p) => p.id));
+        if (!cancelled) setJeMap(map);
+      } catch {
+        if (!cancelled) setJeMap({});
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [payments]);
+
+  const pageRowIds = paged.pageRows.map((p) => p.id);
+  const allVisibleSelected = pageRowIds.length > 0 && pageRowIds.every((id) => selectedIds.has(id));
+  const selectedPayments = payments.filter((p) => selectedIds.has(p.id));
+
+  function toggleSelected(id: number, checked: boolean) {
+    setSelectedIds((prev) => {
+      const next = new Set(prev);
+      if (checked) next.add(id);
+      else next.delete(id);
+      return next;
+    });
+  }
+
+  function toggleSelectPage(checked: boolean) {
+    setSelectedIds((prev) => {
+      const next = new Set(prev);
+      pageRowIds.forEach((id) => (checked ? next.add(id) : next.delete(id)));
+      return next;
+    });
+  }
+
+  function clearSelection() {
+    setSelectedIds(new Set());
+  }
+
+  async function handleDownloadXlsx() {
+    if (!selectedPayments.length) return;
+    setExportingXlsx(true);
+    try {
+      await exportPaymentsToExcel(selectedPayments, isMobile);
+      setNotice({
+        tone: "success",
+        text: isMobile ? `已分享 ${selectedPayments.length} 笔收款 XLSX` : `已下载 ${selectedPayments.length} 笔收款 XLSX`,
+      });
+    } catch (err) {
+      setNotice({ tone: "error", text: err instanceof Error ? err.message : "下载 XLSX 失败" });
+    } finally {
+      setExportingXlsx(false);
+    }
+  }
+
+  async function handleDownloadReport() {
+    if (!selectedPayments.length) return;
+    setExportingReport(true);
+    try {
+      const blob = await downloadPaymentReport(selectedPayments.map((p) => p.id));
+      const filename = `收款审核Report_${selectedPayments.length}笔.pdf`;
+      await downloadBlobOrShare(blob, filename, { isMobile, title: filename, text: `${selectedPayments.length} 笔收款 Report` });
+      setNotice({ tone: "success", text: "Report 已生成" });
+    } catch (err) {
+      setNotice({ tone: "error", text: err instanceof Error ? err.message : "导出 Report 失败" });
+    } finally {
+      setExportingReport(false);
+    }
+  }
 
   function setParam(key: string, value: string | null) {
     const next = new URLSearchParams(searchParams);
@@ -185,32 +322,30 @@ export function RegisterWorkspace() {
       <div style={pageStyle}>
         <style>{TABLE_CSS}</style>
         <section style={panelStyle}>
-          <div style={headerStyle}>
-            <div style={headerLeftStyle}>
-              <button type="button" style={btnStyle} onClick={closePayment}>
-                ← 返回列表
-              </button>
-              <div>
-                <div style={eyebrowStyle}>收款记录 #{selectedId}</div>
-                <h2 style={titleStyle}>{selected?.name || selected?.nric || `付款 #${selectedId}`}</h2>
-                {selected ? (
-                  <div style={mutedStyle}>
-                    {selected.source_scope_label} · {selected.source_label || "-"}
-                  </div>
-                ) : null}
-              </div>
-            </div>
-            {selected ? (
-              <div style={headerRightStyle}>
-                <span style={chipStyle(statusTone(selected.status))}>{paymentStatusLabel(selected.status)}</span>
-                {regPath ? (
-                  <button type="button" style={btnStyle} onClick={() => navigate(regPath)}>
-                    查看关联申请
+          <DocDetailHeader
+            eyebrow={`财务 / 收款审核 · #${selectedId}`}
+            title={selected?.name || selected?.nric || `付款 #${selectedId}`}
+            subtitle={selected ? `${selected.source_scope_label} · ${selected.source_label || "-"} · ${formatAmount(selected.amount ?? selected.price)}` : undefined}
+            onBack={closePayment}
+            onPrev={detailNav.prevId != null ? () => openPayment(detailNav.prevId as number) : undefined}
+            onNext={detailNav.nextId != null ? () => openPayment(detailNav.nextId as number) : undefined}
+            positionLabel={detailNav.position}
+            statusSlot={selected ? <span style={chipStyle(statusTone(selected.status))}>{paymentStatusLabel(selected.status)}</span> : null}
+            actions={
+              selected ? (
+                <>
+                  <button type="button" style={btnStyle} onClick={() => setJeOpen(true)}>
+                    写 JE
                   </button>
-                ) : null}
-              </div>
-            ) : null}
-          </div>
+                  {regPath ? (
+                    <button type="button" style={btnStyle} onClick={() => navigate(regPath)}>
+                      查看关联申请
+                    </button>
+                  ) : null}
+                </>
+              ) : null
+            }
+          />
 
           {notice ? <div style={notice.tone === "success" ? successStyle : errorStyle}>{notice.text}</div> : null}
           {error ? <div style={errorStyle}>{error}</div> : null}
@@ -314,6 +449,19 @@ export function RegisterWorkspace() {
             </div>
           )}
         </section>
+
+        <WriteJEModal
+          open={jeOpen}
+          onClose={() => setJeOpen(false)}
+          source="register_payment"
+          sourceRefType="register_payment"
+          sourceId={selectedId}
+          direction="income"
+          defaultAmount={Number(selected?.amount ?? selected?.price ?? 0)}
+          defaultDate={selected?.date || selected?.created_at || null}
+          defaultMemo={`收款 #${selectedId}${selected?.name ? ` · ${selected.name}` : ""}`}
+          canEdit={canEdit}
+        />
       </div>
     );
   }
@@ -363,34 +511,107 @@ export function RegisterWorkspace() {
           </div>
         </div>
 
+        <div style={searchBarStyle}>
+          <input
+            value={query}
+            onChange={(event) => setQuery(event.target.value)}
+            placeholder="搜索付款人 / NRIC / 电话 / 来源 / 金额"
+            style={searchInputStyle}
+          />
+          <div style={dateRangeStyle}>
+            <span style={mutedStyle}>日期</span>
+            <input type="date" value={dateStart} onChange={(event) => setDateStart(event.target.value)} style={dateInputStyle} />
+            <span style={mutedStyle}>–</span>
+            <input type="date" value={dateEnd} onChange={(event) => setDateEnd(event.target.value)} style={dateInputStyle} />
+            {dateStart || dateEnd ? (
+              <button type="button" style={btnStyle} onClick={() => { setDateStart(""); setDateEnd(""); }}>
+                清除
+              </button>
+            ) : null}
+          </div>
+        </div>
+
         {notice ? <div style={notice.tone === "success" ? successStyle : errorStyle}>{notice.text}</div> : null}
         {error ? <div style={errorStyle}>{error}</div> : null}
 
         {loading ? <div style={emptyStyle}>加载中…</div> : null}
-        {!loading && !payments.length ? <div style={emptyStyle}>没有符合条件的收款记录。</div> : null}
-        {!loading && payments.length ? (
+        {!loading && !filteredPayments.length ? (
+          <div style={emptyStyle}>{payments.length ? "没有匹配的收款记录。" : "没有符合条件的收款记录。"}</div>
+        ) : null}
+        {!loading && filteredPayments.length ? (
           <div style={{ display: "grid", gap: "8px", padding: "12px 14px 4px" }}>
+          <div style={bulkBarStyle}>
+            <span style={mutedStyle}>已选 {selectedIds.size} 笔</span>
+            <button type="button" style={disabledBtn(btnStyle, selectedIds.size <= 0)} onClick={clearSelection} disabled={selectedIds.size <= 0}>
+              清空选择
+            </button>
+            {canEdit ? (
+              <button
+                type="button"
+                style={disabledBtn(primaryBulkBtnStyle, selectedIds.size <= 0)}
+                onClick={() => setBatchJeOpen(true)}
+                disabled={selectedIds.size <= 0}
+              >
+                批量写 JE
+              </button>
+            ) : null}
+            <button
+              type="button"
+              style={disabledBtn(btnStyle, selectedIds.size <= 0 || exportingXlsx)}
+              onClick={() => void handleDownloadXlsx()}
+              disabled={selectedIds.size <= 0 || exportingXlsx}
+            >
+              {exportingXlsx ? "生成中…" : "下载 XLSX"}
+            </button>
+            <button
+              type="button"
+              style={disabledBtn(btnStyle, selectedIds.size <= 0 || exportingReport)}
+              onClick={() => void handleDownloadReport()}
+              disabled={selectedIds.size <= 0 || exportingReport}
+            >
+              {exportingReport ? "生成 Report…" : "导出 Report"}
+            </button>
+          </div>
           <TablePagination page={paged.page} totalPages={paged.totalPages} total={paged.total} onPage={paged.setPage} />
           <div style={tableWrapStyle}>
             <table className="fin-table">
               <thead>
                 <tr>
-                  <th>状态</th>
-                  <th>来源</th>
-                  <th>付款人</th>
-                  <th>NRIC</th>
-                  <th>金额</th>
-                  <th>付款方式</th>
-                  <th>关联</th>
-                  <th>提交时间</th>
+                  <th style={{ width: 40 }}>
+                    <input
+                      type="checkbox"
+                      aria-label="当页全选"
+                      checked={allVisibleSelected}
+                      onChange={(event) => toggleSelectPage(event.target.checked)}
+                      style={{ width: 16, height: 16, accentColor: "var(--x-color-accent)" }}
+                    />
+                  </th>
+                  <th style={sortableThStyle} onClick={() => setSort((s) => toggleSort(s, "status"))}>状态{sortArrow(sort, "status")}</th>
+                  <th style={sortableThStyle} onClick={() => setSort((s) => toggleSort(s, "je"))}>JE{sortArrow(sort, "je")}</th>
+                  <th style={sortableThStyle} onClick={() => setSort((s) => toggleSort(s, "source"))}>来源{sortArrow(sort, "source")}</th>
+                  <th style={sortableThStyle} onClick={() => setSort((s) => toggleSort(s, "name"))}>付款人{sortArrow(sort, "name")}</th>
+                  <th style={sortableThStyle} onClick={() => setSort((s) => toggleSort(s, "nric"))}>NRIC{sortArrow(sort, "nric")}</th>
+                  <th style={sortableThStyle} onClick={() => setSort((s) => toggleSort(s, "amount"))}>金额{sortArrow(sort, "amount")}</th>
+                  <th style={sortableThStyle} onClick={() => setSort((s) => toggleSort(s, "mode"))}>付款方式{sortArrow(sort, "mode")}</th>
+                  <th style={sortableThStyle} onClick={() => setSort((s) => toggleSort(s, "link"))}>关联{sortArrow(sort, "link")}</th>
+                  <th style={sortableThStyle} onClick={() => setSort((s) => toggleSort(s, "submitted"))}>提交时间{sortArrow(sort, "submitted")}</th>
                 </tr>
               </thead>
               <tbody>
                 {paged.pageRows.map((payment) => (
                   <tr key={`${payment.payment_scope}-${payment.id}`} className="fin-row" onClick={() => openPayment(payment.id)}>
+                    <td onClick={(event) => event.stopPropagation()}>
+                      <input
+                        type="checkbox"
+                        checked={selectedIds.has(payment.id)}
+                        onChange={(event) => toggleSelected(payment.id, event.target.checked)}
+                        style={{ width: 16, height: 16, accentColor: "var(--x-color-accent)" }}
+                      />
+                    </td>
                     <td>
                       <span style={chipStyle(statusTone(payment.status))}>{paymentStatusLabel(payment.status)}</span>
                     </td>
+                    <td>{renderJeCell(jeMap[String(payment.id)])}</td>
                     <td>
                       <span style={scopeChipStyle}>{payment.source_scope_label || payment.payment_scope}</span>
                     </td>
@@ -411,7 +632,102 @@ export function RegisterWorkspace() {
           </div>
         ) : null}
       </section>
+
+      <BatchWriteJEModal
+        open={batchJeOpen}
+        onClose={() => setBatchJeOpen(false)}
+        source="register_payment"
+        sourceRefType="register_payment"
+        direction="income"
+        canEdit={canEdit}
+        docs={selectedPayments.map((p) => ({
+          id: p.id,
+          amount: Number(p.amount ?? p.price ?? 0),
+          date: p.date || p.created_at || null,
+          memo: `收款 #${p.id}${p.name ? ` · ${p.name}` : ""}`,
+        }))}
+        onDone={() => void loadData()}
+      />
     </div>
+  );
+}
+
+function disabledBtn(style: CSSProperties, disabled: boolean): CSSProperties {
+  return disabled ? { ...style, opacity: 0.5, cursor: "not-allowed" } : style;
+}
+
+function paymentDateKey(payment: FinancePayment): string {
+  if (payment.date && /^\d{4}-\d{2}-\d{2}/.test(payment.date)) return payment.date.slice(0, 10);
+  if (payment.created_at) return String(payment.created_at).slice(0, 10);
+  return "";
+}
+
+function getPaymentSortValue(
+  payment: FinancePayment,
+  key: string,
+  jeMap: Record<string, GLSourceEntryRef>,
+): number | string | null {
+  switch (key) {
+    case "status":
+      return paymentStatusLabel(payment.status);
+    case "je":
+      return jeMap[String(payment.id)]?.entry_no ?? null;
+    case "source":
+      return payment.source_scope_label || payment.payment_scope || "";
+    case "name":
+      return payment.name || "";
+    case "nric":
+      return payment.nric || "";
+    case "amount":
+      return Number(payment.amount ?? payment.price ?? 0);
+    case "mode":
+      return payment.payment_mode || "";
+    case "link":
+      return payment.source_label || "";
+    case "submitted":
+      return paymentDateKey(payment) || submittedAt(payment);
+    default:
+      return null;
+  }
+}
+
+function renderJeCell(je?: GLSourceEntryRef) {
+  if (!je) {
+    return <span style={jeNoneStyle}>未入账</span>;
+  }
+  return (
+    <span style={jeChipStyle} title={`凭证 ${je.entry_no} · ${je.status === "posted" ? "已过账" : je.status}`}>
+      {je.entry_no}
+    </span>
+  );
+}
+
+async function exportPaymentsToExcel(payments: FinancePayment[], isMobile: boolean) {
+  const XLSX = await import("xlsx");
+  const rows = payments.map((payment) => ({
+    ID: payment.id,
+    状态: paymentStatusLabel(payment.status),
+    来源: payment.source_scope_label || payment.payment_scope || "",
+    关联: payment.source_label || "",
+    付款人: payment.name || "",
+    NRIC: payment.nric || "",
+    电话: payment.phone || "",
+    金额: Number(payment.amount ?? payment.price ?? 0).toFixed(2),
+    付款方式: payment.payment_mode || "",
+    柜台: payment.counter || "",
+    日期: payment.date || "",
+    时间: payment.time || "",
+    提交时间: submittedAt(payment),
+  }));
+  const workbook = XLSX.utils.book_new();
+  const sheet = XLSX.utils.json_to_sheet(rows);
+  XLSX.utils.book_append_sheet(workbook, sheet, "Payments");
+  const filename = `收款审核_${payments.length}笔.xlsx`;
+  const workbookArray = XLSX.write(workbook, { bookType: "xlsx", type: "array" }) as ArrayBuffer;
+  await downloadBlobOrShare(
+    new Blob([workbookArray], { type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" }),
+    filename,
+    { isMobile, title: filename, text: `${payments.length} 笔收款 XLSX` },
   );
 }
 
@@ -424,8 +740,34 @@ function Fact({ label, value }: { label: string; value: string }) {
   );
 }
 
+const bulkBarStyle: CSSProperties = { display: "flex", gap: "8px", flexWrap: "wrap", alignItems: "center" };
+const primaryBulkBtnStyle: CSSProperties = {
+  padding: "8px 14px",
+  borderRadius: "8px",
+  border: "1px solid var(--x-color-accent-strong)",
+  background: "var(--x-color-accent)",
+  color: "white",
+  fontWeight: 700,
+  fontSize: "13px",
+  cursor: "pointer",
+  whiteSpace: "nowrap",
+};
+const jeChipStyle: CSSProperties = {
+  display: "inline-flex",
+  alignItems: "center",
+  padding: "3px 8px",
+  borderRadius: "6px",
+  fontFamily: "var(--x-font-mono)",
+  fontSize: "11.5px",
+  fontWeight: 700,
+  whiteSpace: "nowrap",
+  background: "var(--x-color-success-soft)",
+  color: "var(--x-color-success)",
+};
+const jeNoneStyle: CSSProperties = { fontSize: "12px", color: "var(--x-color-ink-muted)" };
+
 const TABLE_CSS = `
-.fin-table { width: 100%; border-collapse: collapse; font-size: 13px; min-width: 820px; }
+.fin-table { width: 100%; border-collapse: collapse; font-size: 13px; min-width: 900px; }
 .fin-table thead th {
   position: sticky; top: 0; z-index: 1;
   text-align: left; padding: 9px 12px;
@@ -487,6 +829,38 @@ const filterBarStyle: CSSProperties = {
 
 const tabBarStyle: CSSProperties = { display: "flex", gap: "6px", flexWrap: "wrap" };
 
+const searchBarStyle: CSSProperties = {
+  display: "flex",
+  justifyContent: "space-between",
+  gap: "12px",
+  flexWrap: "wrap",
+  alignItems: "center",
+  padding: "10px 14px",
+  borderBottom: "1px solid var(--x-color-line-soft)",
+};
+const searchInputStyle: CSSProperties = {
+  flex: "1 1 240px",
+  minHeight: "34px",
+  padding: "7px 10px",
+  borderRadius: "8px",
+  border: "1px solid var(--x-color-line)",
+  background: "var(--x-color-panel)",
+  color: "var(--x-color-ink)",
+  fontSize: "13px",
+  boxSizing: "border-box",
+};
+const dateRangeStyle: CSSProperties = { display: "flex", gap: "6px", alignItems: "center", flexWrap: "wrap" };
+const dateInputStyle: CSSProperties = {
+  minHeight: "34px",
+  padding: "6px 8px",
+  borderRadius: "8px",
+  border: "1px solid var(--x-color-line)",
+  background: "var(--x-color-panel)",
+  color: "var(--x-color-ink)",
+  fontSize: "13px",
+  boxSizing: "border-box",
+};
+
 const tabStyle: CSSProperties = {
   padding: "7px 13px",
   borderRadius: "8px",
@@ -516,19 +890,6 @@ const eyebrowStyle: CSSProperties = {
 };
 const titleStyle: CSSProperties = { margin: "2px 0", fontSize: "18px", fontWeight: 800 };
 const mutedStyle: CSSProperties = { fontSize: "12px", color: "var(--x-color-ink-muted)" };
-
-const headerStyle: CSSProperties = {
-  display: "flex",
-  justifyContent: "space-between",
-  alignItems: "flex-start",
-  gap: "12px",
-  flexWrap: "wrap",
-  padding: "16px 18px",
-  borderBottom: "1px solid var(--x-color-line-soft)",
-  background: "var(--x-color-panel-alt)",
-};
-const headerLeftStyle: CSSProperties = { display: "flex", gap: "12px", alignItems: "flex-start" };
-const headerRightStyle: CSSProperties = { display: "flex", alignItems: "center", gap: "8px", flexWrap: "wrap" };
 
 const btnStyle: CSSProperties = {
   padding: "8px 14px",

@@ -1,7 +1,7 @@
 from flask import Blueprint, jsonify, request, send_file
 
 from app.account.exceptions import AccountError
-from app.account.pdf import build_claim_report_pdf, build_payment_voucher_pdf
+from app.account.pdf import build_claim_report_pdf, build_payment_report_pdf, build_payment_voucher_pdf
 from app.account.permissions import (
     require_authenticated_user,
     require_claim_edit_permission,
@@ -12,6 +12,7 @@ from app.account.serializers import serialize_request_data
 from app.account.services import (
     add_claim_attachments,
     build_claim_report_context,
+    build_payment_report_context,
     build_payment_voucher_context,
     build_public_payment_voucher_context,
     create_claim_from_form,
@@ -106,6 +107,25 @@ def update_finance_payment_status_route(payment_id):
         return update_finance_payment_status(payment_id, request.get_json(silent=True) or {})
     except AccountError as exc:
         return _error_response(exc)
+
+
+@account_bp.post("/payments/report")
+def download_payment_report():
+    try:
+        user = require_claim_list_permission()
+        payload = request.get_json(silent=True) or {}
+        payments = build_payment_report_context(payload.get("payment_ids") or [], user)
+        pdf_buffer = build_payment_report_pdf(payments)
+        return send_file(
+            pdf_buffer,
+            mimetype="application/pdf",
+            as_attachment=True,
+            download_name=f"PaymentReport_{len(payments)}.pdf",
+        )
+    except AccountError as exc:
+        return _error_response(exc)
+    except Exception as exc:
+        return jsonify({"status": "error", "message": str(exc)}), 500
 
 
 @account_bp.post("/claim/read_bill")

@@ -34,6 +34,50 @@ export type MemberRenewalRecord = {
   created_at?: string | null;
 };
 
+export type MembershipSignatureStrokes = {
+  strokes?: Array<{ points?: Array<{ x: number; y: number; t?: number }> }>;
+};
+
+export type MembershipCouncilSignatureRecord = {
+  id: number;
+  user_id: number;
+  signer_name?: string | null;
+  signer_username?: string | null;
+  signed_at?: string | null;
+  method?: string | null;
+  signature?: MembershipSignatureStrokes | null;
+};
+
+export type MembershipCouncilBlock = {
+  required: number;
+  max: number;
+  count: number;
+  approved: boolean;
+  full: boolean;
+  signatures: MembershipCouncilSignatureRecord[];
+};
+
+export type MembershipRegistrationRecord = {
+  id: number;
+  submitted_at?: string | null;
+  registration_type?: string | null; // upgrade / renew
+  status?: string | null; // paid / process / reject / remove
+  finance_approved?: boolean;
+  activated?: boolean;
+  membership_role?: string | null;
+  target_expiry_date?: string | null;
+  payment_url?: string | null;
+  fee_amount?: number | string | null;
+  council?: MembershipCouncilBlock | null;
+};
+
+export type MembershipContext = {
+  latest_upgrade?: MembershipRegistrationRecord | null;
+  latest_renewal?: MembershipRegistrationRecord | null;
+  next_expiry_date?: string | null;
+  missing_nric?: boolean;
+};
+
 export type ProfileFootprintEvent = {
   id: number;
   event_name?: string | null;

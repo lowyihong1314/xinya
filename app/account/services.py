@@ -960,6 +960,17 @@ def list_finance_payments(scope=None, status=None):
     return [_serialize_finance_payment(payment, form_titles) for payment in payments]
 
 
+def build_payment_report_context(payment_ids, user=None):
+    """Return serialized finance payments for the given ids, preserving id order."""
+    ids = [int(pid) for pid in (payment_ids or []) if str(pid).strip()]
+    if not ids:
+        return []
+    all_payments = list_finance_payments()
+    by_id = {payment.get("id"): payment for payment in all_payments}
+    ordered = [by_id[pid] for pid in ids if pid in by_id]
+    return ordered
+
+
 def update_finance_payment_status(payment_id, data):
     """按 scope 分发到对应的付款状态更新流程，保留会员 / 青少年的生效副作用。"""
     payment = RegisPayment.query.get(payment_id)

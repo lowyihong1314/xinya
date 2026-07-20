@@ -2,8 +2,8 @@ import { useEffect, useMemo, useState } from "react";
 import type { CSSProperties, FormEvent } from "react";
 
 import { useUserState } from "../../../../app/UserState";
-import { designTokens } from "../../../../theme/designTokens";
 import { select_counterparty_modal, select_single_user_modal } from "../../../select_users_modal";
+import { TablePagination, usePagedRows } from "../../../shared/TablePagination";
 import {
   confirmAssetStockDocument,
   createAssetStockDocument,
@@ -12,11 +12,13 @@ import {
 } from "../asset/api";
 import type {
   AssetDashboardPayload,
+  AssetStockDocumentRecord,
   AssetSubItemRecord,
 } from "../asset/types";
 
 type SalesActionType = "sale_out" | "sale_return";
 type SalesViewMode = "overview" | "form";
+type SalesTypeFilter = "all" | "sale_out" | "sale_return";
 
 type SalesPermissionUser = {
   departments?: Array<{
@@ -57,8 +59,11 @@ type SalesSubItemOption = {
   availableQuantity?: number;
 };
 
-const colors = designTokens.colors;
-const radius = designTokens.radius;
+const TYPE_TABS: { key: SalesTypeFilter; label: string }[] = [
+  { key: "all", label: "全部" },
+  { key: "sale_out", label: "销售出库" },
+  { key: "sale_return", label: "销售退回" },
+];
 
 const INITIAL_FORM: SalesFormState = {
   actionType: "sale_out",
@@ -113,6 +118,29 @@ function getSalesActionHint(actionType: SalesActionType) {
 
 function getDocumentLabel(documentType: string) {
   return documentType === "sale_return" ? "销售退回" : documentType === "sale_out" ? "销售出库" : documentType;
+}
+
+function getDocumentWarehouse(document: AssetStockDocumentRecord) {
+  if (document.document_type === "sale_return") {
+    return document.target_warehouse_name || "-";
+  }
+  return document.source_warehouse_name || "-";
+}
+
+function getDocumentTotal(document: AssetStockDocumentRecord) {
+  return (document.lines || []).reduce((sum, line) => {
+    if (line.line_amount != null) {
+      return sum + Number(line.line_amount || 0);
+    }
+    if (line.unit_price != null) {
+      return sum + Number(line.unit_price || 0) * Number(line.quantity || 0);
+    }
+    return sum;
+  }, 0);
+}
+
+function formatMoney(value: number) {
+  return Number.isFinite(value) ? value.toFixed(2) : "0.00";
 }
 
 function formatDateTime(value?: string | null) {
@@ -222,6 +250,7 @@ export function SalesIncomeWorkspace() {
   const [viewMode, setViewMode] = useState<SalesViewMode>("overview");
   const [form, setForm] = useState<SalesFormState>(INITIAL_FORM);
   const [searchQuery, setSearchQuery] = useState("");
+  const [typeFilter, setTypeFilter] = useState<SalesTypeFilter>("all");
   const [message, setMessage] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
 
@@ -277,13 +306,19 @@ export function SalesIncomeWorkspace() {
     }
     return nextMap;
   }, [salesOptionsByItem]);
+
+  const salesDocuments = useMemo(
+    () =>
+      (dashboard?.documents || []).filter(
+        (document) => document.document_type === "sale_out" || document.document_type === "sale_return",
+      ),
+    [dashboard],
+  );
+
   const filteredDocuments = useMemo(
     () =>
-      (dashboard?.documents || [])
-        .filter(
-          (document) =>
-            document.document_type === "sale_out" || document.document_type === "sale_return",
-        )
+      salesDocuments
+        .filter((document) => typeFilter === "all" || document.document_type === typeFilter)
         .filter((document) =>
           matchesSalesSearch(
             searchQuery.trim().toLowerCase(),
@@ -297,7 +332,13 @@ export function SalesIncomeWorkspace() {
             ...((document.lines || []).flatMap((line) => [line.item_name, line.sub_item_name, line.size])),
           ),
         ),
-    [dashboard, searchQuery],
+    [salesDocuments, typeFilter, searchQuery],
+  );
+
+  const { page, setPage, totalPages, total, pageRows } = usePagedRows(
+    filteredDocuments,
+    isMobile ? 8 : 12,
+    `${typeFilter}|${searchQuery}`,
   );
 
   async function loadDashboard() {
@@ -521,518 +562,504 @@ export function SalesIncomeWorkspace() {
   }
 
   if (loading && !dashboard) {
-    return <div className="sales-income sales-income--loading" style={placeholderStyle}>销售收入模块载入中…</div>;
+    return <div style={emptyStyle}>销售收入模块载入中…</div>;
   }
 
   if (!dashboard) {
-    return <div className="sales-income sales-income--error" style={errorStyle}>{error || "销售收入模块暂时不可用"}</div>;
+    return <div style={noticeErrorStyle}>{error || "销售收入模块暂时不可用"}</div>;
   }
 
   return (
-    <div className="sales-income" style={workspaceStyle}>
-      {message ? <div className="sales-income__alert sales-income__alert--success" style={successStyle}>{message}</div> : null}
-      {error ? <div className="sales-income__alert sales-income__alert--error" style={errorStyle}>{error}</div> : null}
+    <section style={panelStyle}>
+      <style>{TABLE_CSS}</style>
 
-      <section className="sales-income__panel sales-income__panel--editor" style={panelStyle}>
-        <div className="sales-income__panel-header" style={panelHeaderStyle(isMobile)}>
-          <div className="sales-income__panel-copy" style={panelCopyStyle}>
-            <div className="sales-income__panel-title" style={panelTitleStyle}>销售收入</div>
-            <div className="sales-income__panel-hint" style={panelHintStyle}>
-              直接从仓库库存选择商品销售，或把客户退货重新入库。
-            </div>
+      {message ? <div style={noticeSuccessStyle}>{message}</div> : null}
+      {error ? <div style={noticeErrorStyle}>{error}</div> : null}
+
+      <div style={toolbarStyle}>
+        <div>
+          <div style={eyebrowStyle}>财务 / 销售收入</div>
+          <h2 style={titleStyle}>销售收入</h2>
+          <div style={mutedStyle}>
+            {viewMode === "form"
+              ? getSalesActionHint(form.actionType)
+              : `共 ${salesDocuments.length} 笔销售单据 · 仅显示销售出库与销售退回`}
           </div>
+        </div>
+        <div style={rowStyle}>
           {viewMode === "form" ? (
-            <button className="sales-income__button sales-income__button--secondary" type="button" style={secondaryButtonStyle} onClick={closeForm}>
+            <button type="button" style={btnStyle} onClick={closeForm}>
               返回销售列表
             </button>
-          ) : null}
-        </div>
-
-        {viewMode === "overview" ? (
-          <div className="sales-income__overview" style={overviewStyle}>
-            <div className="sales-income__action-grid" style={actionGridStyle(isMobile)}>
-              <button
-                className="sales-income__action-card sales-income__action-card--sale"
-                type="button"
-                style={actionCardStyle}
-                onClick={() => openForm("sale_out")}
-                disabled={!canEdit}
-              >
-                <div style={actionTitleStyle}>新建销售</div>
-                <div style={actionHintStyle}>选择仓库现有库存，提交后自动生成卖出记录并扣减库存。</div>
+          ) : (
+            <>
+              <button type="button" style={btnStyle} onClick={() => void loadDashboard()} disabled={loading}>
+                {loading ? "刷新中…" : "刷新"}
               </button>
-              <button
-                className="sales-income__action-card sales-income__action-card--return"
-                type="button"
-                style={actionCardStyle}
-                onClick={() => openForm("sale_return")}
-                disabled={!canEdit}
-              >
-                <div style={actionTitleStyle}>销售退回</div>
-                <div style={actionHintStyle}>把客户退回的商品重新入库，系统自动写回退回记录。</div>
+              <button type="button" style={disabledBtn(primaryButtonStyle, !canEdit)} onClick={() => openForm("sale_out")} disabled={!canEdit}>
+                新建销售
+              </button>
+              <button type="button" style={disabledBtn(btnStyle, !canEdit)} onClick={() => openForm("sale_return")} disabled={!canEdit}>
+                销售退回
+              </button>
+            </>
+          )}
+        </div>
+      </div>
+
+      {viewMode === "overview" ? (
+        <>
+          <div style={filterBarStyle}>
+            <div style={tabBarStyle}>
+              {TYPE_TABS.map((tab) => (
+                <button
+                  key={tab.key}
+                  type="button"
+                  style={tab.key === typeFilter ? tabActiveStyle : tabStyle}
+                  onClick={() => setTypeFilter(tab.key)}
+                >
+                  {tab.label}
+                </button>
+              ))}
+            </div>
+            <input
+              value={searchQuery}
+              onChange={(event) => setSearchQuery(event.target.value)}
+              placeholder="搜索单号 / 客户 / 仓库 / 经手 / item / size"
+              style={searchInputStyle}
+            />
+          </div>
+
+          {!salesDocuments.length ? (
+            <div style={emptyStyle}>还没有销售记录。</div>
+          ) : !filteredDocuments.length ? (
+            <div style={emptyStyle}>没有匹配的销售记录。</div>
+          ) : (
+            <div style={{ display: "grid", gap: "8px", padding: "12px 14px 14px" }}>
+              <TablePagination page={page} totalPages={totalPages} total={total} onPage={setPage} />
+
+              <div style={tableWrapStyle}>
+                <table className="sales-table">
+                  <thead>
+                    <tr>
+                      <th>单号</th>
+                      <th>类型</th>
+                      <th>状态</th>
+                      <th>客户</th>
+                      <th>仓库</th>
+                      <th>经手</th>
+                      <th>明细</th>
+                      <th style={{ textAlign: "right" }}>金额</th>
+                      <th>日期</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {pageRows.map((document) => {
+                      const totalAmount = getDocumentTotal(document);
+                      return (
+                        <tr key={document.id} className="sales-row">
+                          <td style={monoCellStyle}>{document.document_no}</td>
+                          <td>
+                            <span style={typeChipStyle(document.document_type)}>{getDocumentLabel(document.document_type)}</span>
+                          </td>
+                          <td>
+                            <span style={statusChipStyle(document.status)}>{document.status}</span>
+                          </td>
+                          <td style={cellStrongStyle}>{document.counterparty_name || "—"}</td>
+                          <td>{getDocumentWarehouse(document)}</td>
+                          <td>{document.taken_by_name || "—"}</td>
+                          <td>
+                            {(document.lines || []).length ? (
+                              <div style={lineWrapStyle}>
+                                {(document.lines || []).map((line) => (
+                                  <span key={line.id} style={lineChipStyle}>
+                                    {line.item_name || "未命名 item"}
+                                    {line.size ? ` · ${line.size}` : ""}
+                                    {` · ${line.quantity}件`}
+                                    {line.unit_price != null ? ` · RM ${line.unit_price}` : ""}
+                                  </span>
+                                ))}
+                              </div>
+                            ) : (
+                              <span style={mutedStyle}>—</span>
+                            )}
+                          </td>
+                          <td style={{ ...cellStrongStyle, textAlign: "right", whiteSpace: "nowrap" }}>
+                            {totalAmount > 0 ? `RM ${formatMoney(totalAmount)}` : "—"}
+                          </td>
+                          <td style={monoCellStyle}>{formatDateTime(document.created_at)}</td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          )}
+        </>
+      ) : (
+        <form onSubmit={handleSubmit} style={formStyle}>
+          <div style={editorHeaderCardStyle}>
+            <div style={sectionTitleStyle}>{getSalesActionLabel(form.actionType)}</div>
+            <div style={mutedStyle}>{getSalesActionHint(form.actionType)}</div>
+          </div>
+
+          <div style={fieldGridStyle(isMobile)}>
+            <select style={inputStyle} value={form.warehouseId} onChange={(event) => handleWarehouseChange(event.target.value)}>
+              <option value="">选择仓库</option>
+              {dashboard.warehouses.map((warehouse) => (
+                <option key={warehouse.id} value={warehouse.id}>
+                  {warehouse.name}
+                </option>
+              ))}
+            </select>
+            <div style={pickerBlockStyle}>
+              <div style={pickerCopyStyle}>
+                <div style={pickerLabelStyle}>客户</div>
+                <div style={pickerValueStyle}>{form.counterpartyName || "暂未选择客户"}</div>
+              </div>
+              <div style={formActionRowStyle}>
+                <button type="button" style={btnStyle} onClick={() => void handlePickCustomer()} disabled={!canEdit || submitting}>
+                  选择客户
+                </button>
+                {form.counterpartyId ? (
+                  <button
+                    type="button"
+                    style={ghostButtonStyle}
+                    onClick={() => setForm((current) => ({ ...current, counterpartyId: "", counterpartyName: "" }))}
+                    disabled={!canEdit || submitting}
+                  >
+                    清除
+                  </button>
+                ) : null}
+              </div>
+            </div>
+            <div style={pickerBlockStyle}>
+              <div style={pickerCopyStyle}>
+                <div style={pickerLabelStyle}>经手对象</div>
+                <div style={pickerValueStyle}>{form.takenByName || "暂未选择经手对象"}</div>
+              </div>
+              <div style={formActionRowStyle}>
+                <button type="button" style={btnStyle} onClick={() => void handlePickTakenBy()} disabled={!canEdit || submitting}>
+                  选择经手对象
+                </button>
+                {form.takenByUserId || form.takenByName ? (
+                  <button
+                    type="button"
+                    style={ghostButtonStyle}
+                    onClick={() => setForm((current) => ({ ...current, takenByUserId: "", takenByName: "" }))}
+                    disabled={!canEdit || submitting}
+                  >
+                    清除
+                  </button>
+                ) : null}
+              </div>
+            </div>
+            <input
+              style={inputStyle}
+              placeholder="去向 / 地址"
+              value={form.destinationText}
+              onChange={(event) => setForm((current) => ({ ...current, destinationText: event.target.value }))}
+            />
+          </div>
+
+          <div style={lineEditorStyle}>
+            <div style={sectionHeaderStyle}>
+              <div>
+                <div style={sectionTitleStyle}>销售明细</div>
+                <div style={mutedStyle}>
+                  {form.actionType === "sale_out"
+                    ? "先选 Item，再选当前仓库可销售的子 Item / size。"
+                    : "先选 Item，再选对应的子 Item / size 做退回。"}
+                </div>
+              </div>
+              <button type="button" style={btnStyle} onClick={handleAddLine} disabled={!canEdit || submitting}>
+                新增一行
               </button>
             </div>
 
-            <div className="sales-income__list-block" style={listBlockStyle}>
-              <div className="sales-income__toolbar" style={toolbarStyle(isMobile)}>
-                <div>
-                  <div style={sectionTitleStyle}>最近销售记录</div>
-                  <div style={panelHintStyle}>这里只显示销售出库和销售退回产生的库存单据。</div>
-                </div>
-                <input
-                  className="sales-income__search-input"
-                  style={inputStyle}
-                  placeholder="搜索单号 / 客户 / 仓库 / item / size"
-                  value={searchQuery}
-                  onChange={(event) => setSearchQuery(event.target.value)}
-                />
+            {!itemOptions.length ? (
+              <div style={placeholderSubtleStyle}>
+                {form.actionType === "sale_out"
+                  ? "当前仓库没有可销售 item，请先切换仓库或先做入库。"
+                  : "还没有可选 item，请先去资产库存建立 Item / 子 Item。"}
               </div>
+            ) : null}
 
-              <div className="sales-income__document-list" style={documentListStyle}>
-                {filteredDocuments.map((document) => (
-                  <article key={document.id} className="sales-income__document-card" style={documentCardStyle}>
-                    <div style={documentHeaderStyle}>
-                      <div>
-                        <div style={documentNoStyle}>{document.document_no}</div>
-                        <div style={documentMetaStyle}>
-                          {getDocumentLabel(document.document_type)} · {document.status}
-                          {document.source_warehouse_name ? ` · 出自 ${document.source_warehouse_name}` : ""}
-                          {document.target_warehouse_name ? ` · 入到 ${document.target_warehouse_name}` : ""}
-                        </div>
-                      </div>
-                      <div style={statusChipStyle(document.status)}>{document.status}</div>
-                    </div>
-                    <div style={documentMetaStyle}>
-                      {document.counterparty_name ? `客户：${document.counterparty_name}` : "未选择客户"}
-                      {document.destination_text ? ` · 去向：${document.destination_text}` : ""}
-                    </div>
-                    <div style={documentMetaStyle}>
-                      {document.taken_by_name ? `经手：${document.taken_by_name}` : "未填写经手人"} · {formatDateTime(document.created_at)}
-                    </div>
-                    <div style={lineWrapStyle}>
-                      {(document.lines || []).map((line) => (
-                        <div key={line.id} style={lineChipStyle}>
-                          {line.item_name || "未命名 item"}
-                          {line.size ? ` · ${line.size}` : ""}
-                          {` · ${line.quantity} 件`}
-                          {line.unit_price != null ? ` · RM ${line.unit_price}` : ""}
-                        </div>
+            <div style={lineListStyle}>
+              {form.lines.map((line, index) => (
+                <div key={line.key} style={lineCardStyle}>
+                  <div style={sectionHeaderStyle}>
+                    <div style={sectionTitleStyle}>明细 #{index + 1}</div>
+                    <button type="button" style={ghostButtonStyle} onClick={() => handleRemoveLine(index)} disabled={!canEdit || submitting}>
+                      删除
+                    </button>
+                  </div>
+                  <div style={fieldGridStyle(isMobile)}>
+                    <select style={inputStyle} value={line.itemId} onChange={(event) => handleLineItemChange(index, event.target.value)}>
+                      <option value="">选择 Item</option>
+                      {itemOptions.map((option) => (
+                        <option key={option.id} value={option.id}>
+                          {option.label}
+                        </option>
                       ))}
-                    </div>
-                  </article>
-                ))}
-                {!dashboard.documents.some((document) => document.document_type === "sale_out" || document.document_type === "sale_return") ? (
-                  <div style={placeholderSubtleStyle}>还没有销售记录。</div>
-                ) : null}
-                {dashboard.documents.some((document) => document.document_type === "sale_out" || document.document_type === "sale_return") && !filteredDocuments.length ? (
-                  <div style={placeholderSubtleStyle}>没有匹配的销售记录。</div>
-                ) : null}
-              </div>
+                    </select>
+                    <select style={inputStyle} value={line.subItemId} onChange={(event) => handleLineChange(index, "subItemId", event.target.value)}>
+                      <option value="">选择规格</option>
+                      {(salesOptionsByItem.get(line.itemId) || []).map((option) => (
+                        <option key={option.id} value={option.id}>
+                          {option.label}
+                        </option>
+                      ))}
+                    </select>
+                    <input style={inputStyle} placeholder="数量" value={line.quantity} onChange={(event) => handleLineChange(index, "quantity", event.target.value)} />
+                    <input style={inputStyle} placeholder="销售单价" value={line.unitPrice} onChange={(event) => handleLineChange(index, "unitPrice", event.target.value)} />
+                    <input
+                      style={{ ...inputStyle, gridColumn: isMobile ? "auto" : "1 / -1" }}
+                      placeholder="备注"
+                      value={line.remark}
+                      onChange={(event) => handleLineChange(index, "remark", event.target.value)}
+                    />
+                  </div>
+                </div>
+              ))}
             </div>
           </div>
-        ) : (
-          <form className="sales-income__form" onSubmit={handleSubmit} style={formStyle}>
-            <div style={editorHeaderCardStyle}>
-              <div style={sectionTitleStyle}>{getSalesActionLabel(form.actionType)}</div>
-              <div style={panelHintStyle}>{getSalesActionHint(form.actionType)}</div>
-            </div>
 
-            <div className="sales-income__field-grid" style={fieldGridStyle(isMobile)}>
-              <select
-                className="sales-income__field sales-income__field--warehouse"
-                style={inputStyle}
-                value={form.warehouseId}
-                onChange={(event) => handleWarehouseChange(event.target.value)}
-              >
-                <option value="">选择仓库</option>
-                {dashboard.warehouses.map((warehouse) => (
-                  <option key={warehouse.id} value={warehouse.id}>
-                    {warehouse.name}
-                  </option>
-                ))}
-              </select>
-              <div className="sales-income__picker sales-income__picker--customer" style={pickerBlockStyle}>
-                <div style={pickerCopyStyle}>
-                  <div style={pickerLabelStyle}>客户</div>
-                  <div style={pickerValueStyle}>
-                    {form.counterpartyName || "暂未选择客户"}
-                  </div>
-                </div>
-                <div style={formActionRowStyle}>
-                  <button
-                    className="sales-income__button sales-income__button--secondary"
-                    type="button"
-                    style={secondaryButtonStyle}
-                    onClick={() => void handlePickCustomer()}
-                    disabled={!canEdit || submitting}
-                  >
-                    选择客户
-                  </button>
-                  {form.counterpartyId ? (
-                    <button
-                      className="sales-income__button sales-income__button--ghost"
-                      type="button"
-                      style={ghostButtonStyle}
-                      onClick={() => setForm((current) => ({ ...current, counterpartyId: "", counterpartyName: "" }))}
-                      disabled={!canEdit || submitting}
-                    >
-                      清除
-                    </button>
-                  ) : null}
-                </div>
-              </div>
-              <div className="sales-income__picker sales-income__picker--taken-by" style={pickerBlockStyle}>
-                <div style={pickerCopyStyle}>
-                  <div style={pickerLabelStyle}>经手对象</div>
-                  <div style={pickerValueStyle}>{form.takenByName || "暂未选择经手对象"}</div>
-                </div>
-                <div style={formActionRowStyle}>
-                  <button
-                    className="sales-income__button sales-income__button--secondary"
-                    type="button"
-                    style={secondaryButtonStyle}
-                    onClick={() => void handlePickTakenBy()}
-                    disabled={!canEdit || submitting}
-                  >
-                    选择经手对象
-                  </button>
-                  {form.takenByUserId || form.takenByName ? (
-                    <button
-                      className="sales-income__button sales-income__button--ghost"
-                      type="button"
-                      style={ghostButtonStyle}
-                      onClick={() =>
-                        setForm((current) => ({
-                          ...current,
-                          takenByUserId: "",
-                          takenByName: "",
-                        }))
-                      }
-                      disabled={!canEdit || submitting}
-                    >
-                      清除
-                    </button>
-                  ) : null}
-                </div>
-              </div>
-              <input
-                className="sales-income__field sales-income__field--destination"
-                style={inputStyle}
-                placeholder="去向 / 地址"
-                value={form.destinationText}
-                onChange={(event) => setForm((current) => ({ ...current, destinationText: event.target.value }))}
-              />
-            </div>
+          <textarea
+            style={textareaStyle}
+            placeholder="备注"
+            value={form.note}
+            onChange={(event) => setForm((current) => ({ ...current, note: event.target.value }))}
+          />
 
-            <div className="sales-income__line-editor" style={lineEditorStyle}>
-              <div style={sectionHeaderStyle}>
-                <div>
-                  <div style={sectionTitleStyle}>销售明细</div>
-                  <div style={panelHintStyle}>
-                    {form.actionType === "sale_out"
-                      ? "先选 Item，再选当前仓库可销售的子 Item / size。"
-                      : "先选 Item，再选对应的子 Item / size 做退回。"}
-                  </div>
-                </div>
-                <button
-                  className="sales-income__button sales-income__button--secondary"
-                  type="button"
-                  style={secondaryButtonStyle}
-                  onClick={handleAddLine}
-                  disabled={!canEdit || submitting}
-                >
-                  新增一行
-                </button>
-              </div>
-
-              {!itemOptions.length ? (
-                <div style={placeholderSubtleStyle}>
-                  {form.actionType === "sale_out"
-                    ? "当前仓库没有可销售 item，请先切换仓库或先做入库。"
-                    : "还没有可选 item，请先去资产库存建立 Item / 子 Item。"}
-                </div>
-              ) : null}
-
-              <div style={lineListStyle}>
-                {form.lines.map((line, index) => (
-                  <div key={line.key} className="sales-income__line-card" style={lineCardStyle}>
-                    <div style={sectionHeaderStyle}>
-                      <div style={sectionTitleStyle}>明细 #{index + 1}</div>
-                      <button
-                        className="sales-income__button sales-income__button--ghost"
-                        type="button"
-                        style={ghostButtonStyle}
-                        onClick={() => handleRemoveLine(index)}
-                        disabled={!canEdit || submitting}
-                      >
-                        删除
-                      </button>
-                    </div>
-                    <div style={fieldGridStyle(isMobile)}>
-                      <select
-                        className="sales-income__field sales-income__field--item"
-                        style={inputStyle}
-                        value={line.itemId}
-                        onChange={(event) => handleLineItemChange(index, event.target.value)}
-                      >
-                        <option value="">选择 Item</option>
-                        {itemOptions.map((option) => (
-                          <option key={option.id} value={option.id}>
-                            {option.label}
-                          </option>
-                        ))}
-                      </select>
-                      <select
-                        className="sales-income__field sales-income__field--sub-item"
-                        style={inputStyle}
-                        value={line.subItemId}
-                        onChange={(event) => handleLineChange(index, "subItemId", event.target.value)}
-                      >
-                        <option value="">选择规格</option>
-                        {(salesOptionsByItem.get(line.itemId) || []).map((option) => (
-                          <option key={option.id} value={option.id}>
-                            {option.label}
-                          </option>
-                        ))}
-                      </select>
-                      <input
-                        className="sales-income__field sales-income__field--quantity"
-                        style={inputStyle}
-                        placeholder="数量"
-                        value={line.quantity}
-                        onChange={(event) => handleLineChange(index, "quantity", event.target.value)}
-                      />
-                      <input
-                        className="sales-income__field sales-income__field--unit-price"
-                        style={inputStyle}
-                        placeholder="销售单价"
-                        value={line.unitPrice}
-                        onChange={(event) => handleLineChange(index, "unitPrice", event.target.value)}
-                      />
-                      <input
-                        className="sales-income__field sales-income__field--remark"
-                        style={{ ...inputStyle, gridColumn: isMobile ? "auto" : "1 / -1" }}
-                        placeholder="备注"
-                        value={line.remark}
-                        onChange={(event) => handleLineChange(index, "remark", event.target.value)}
-                      />
-                    </div>
-                  </div>
-                ))}
-              </div>
-            </div>
-
-            <textarea
-              className="sales-income__textarea sales-income__textarea--note"
-              style={textareaStyle}
-              placeholder="备注"
-              value={form.note}
-              onChange={(event) => setForm((current) => ({ ...current, note: event.target.value }))}
-            />
-
-            <div style={formActionRowStyle}>
-              <button
-                className="sales-income__button sales-income__button--primary"
-                type="submit"
-                style={primaryButtonStyle}
-                disabled={!canEdit || submitting}
-              >
-                {submitting ? "提交中…" : form.actionType === "sale_out" ? "确认销售并扣减库存" : "确认退回并回补库存"}
-              </button>
-            </div>
-          </form>
-        )}
-      </section>
-    </div>
+          <div style={formActionRowStyle}>
+            <button type="submit" style={disabledBtn(primaryButtonStyle, !canEdit || submitting)} disabled={!canEdit || submitting}>
+              {submitting ? "提交中…" : form.actionType === "sale_out" ? "确认销售并扣减库存" : "确认退回并回补库存"}
+            </button>
+          </div>
+        </form>
+      )}
+    </section>
   );
 }
 
-const workspaceStyle: CSSProperties = {
-  display: "grid",
-  gap: "10px",
-  height: "100%",
-  overflowY: "auto",
-  paddingRight: "2px",
-};
+function disabledBtn(style: CSSProperties, disabled: boolean): CSSProperties {
+  return disabled ? { ...style, opacity: 0.5, cursor: "not-allowed" } : style;
+}
+
+const TABLE_CSS = `
+.sales-table { width: 100%; border-collapse: collapse; font-size: 13px; min-width: 960px; }
+.sales-table thead th {
+  position: sticky; top: 0; z-index: 1;
+  text-align: left; padding: 9px 12px;
+  font-size: 11px; font-weight: 700; letter-spacing: 0.06em; text-transform: uppercase;
+  color: var(--x-color-ink-muted); background: var(--x-color-canvas-alt);
+  border-bottom: 1px solid var(--x-color-line); white-space: nowrap;
+}
+.sales-table tbody td { padding: 10px 12px; border-bottom: 1px solid var(--x-color-line-soft); vertical-align: middle; color: var(--x-color-ink); }
+.sales-table tbody tr.sales-row:hover td { background: var(--x-color-accent-tint); }
+`;
 
 const panelStyle: CSSProperties = {
-  display: "grid",
-  gap: "10px",
-  padding: "10px",
-  borderRadius: radius.sm,
-  background: colors.panelStrong,
-  border: `1px solid ${colors.lineSoft}`,
-  boxShadow: "none",
+  borderRadius: "12px",
+  background: "var(--x-color-panel)",
+  border: "1px solid var(--x-color-line)",
+  boxShadow: "0 1px 2px var(--x-color-shadow-soft)",
+  overflow: "hidden",
 };
 
-function panelHeaderStyle(isMobile: boolean): CSSProperties {
-  return {
-    display: "grid",
-    gridTemplateColumns: isMobile ? "1fr" : "minmax(0, 1fr) auto",
-    gap: "8px",
-    alignItems: "center",
-  };
-}
-
-const panelCopyStyle: CSSProperties = {
-  display: "grid",
-  gap: "4px",
-};
-
-const panelTitleStyle: CSSProperties = {
-  fontSize: "16px",
-  fontWeight: 700,
-  color: colors.ink,
-};
-
-const panelHintStyle: CSSProperties = {
-  fontSize: "13px",
-  lineHeight: 1.6,
-  color: colors.inkMuted,
-};
-
-const overviewStyle: CSSProperties = {
-  display: "grid",
-  gap: "8px",
-};
-
-function actionGridStyle(isMobile: boolean): CSSProperties {
-  return {
-    display: "grid",
-    gridTemplateColumns: isMobile ? "1fr" : "repeat(2, minmax(0, 1fr))",
-    gap: "8px",
-  };
-}
-
-const actionCardStyle: CSSProperties = {
-  display: "grid",
-  gap: "6px",
-  textAlign: "left",
-  padding: "10px",
-  borderRadius: radius.sm,
-  border: `1px solid ${colors.accentBorder}`,
-  background: `linear-gradient(145deg, ${colors.panel}, ${colors.accentTint})`,
-  color: colors.ink,
-  cursor: "pointer",
-};
-
-const actionTitleStyle: CSSProperties = {
-  fontSize: "14px",
-  fontWeight: 700,
-  color: colors.accentStrong,
-};
-
-const actionHintStyle: CSSProperties = {
-  fontSize: "13px",
-  lineHeight: 1.6,
-  color: colors.inkMuted,
-};
-
-const listBlockStyle: CSSProperties = {
-  display: "grid",
-  gap: "6px",
-};
-
-function toolbarStyle(isMobile: boolean): CSSProperties {
-  return {
-    display: "grid",
-    gridTemplateColumns: isMobile ? "1fr" : "minmax(0, 1fr) minmax(280px, 360px)",
-    gap: "8px",
-    alignItems: "center",
-  };
-}
-
-const sectionTitleStyle: CSSProperties = {
-  fontSize: "15px",
-  fontWeight: 700,
-  color: colors.accentStrong,
-};
-
-const documentListStyle: CSSProperties = {
-  display: "grid",
-  gap: "6px",
-};
-
-const documentCardStyle: CSSProperties = {
-  display: "grid",
-  gap: "6px",
-  padding: "8px 10px",
-  borderRadius: radius.sm,
-  border: `1px solid ${colors.lineSoft}`,
-  background: colors.panelAlt,
-};
-
-const documentHeaderStyle: CSSProperties = {
+const toolbarStyle: CSSProperties = {
   display: "flex",
   justifyContent: "space-between",
   alignItems: "flex-start",
-  gap: "10px",
+  gap: "12px",
+  flexWrap: "wrap",
+  padding: "16px 18px",
+  borderBottom: "1px solid var(--x-color-line-soft)",
+  background: "var(--x-color-panel-alt)",
 };
 
-const documentNoStyle: CSSProperties = {
-  fontSize: "14px",
-  fontWeight: 700,
-  color: colors.ink,
+const filterBarStyle: CSSProperties = {
+  display: "flex",
+  justifyContent: "space-between",
+  gap: "12px",
+  flexWrap: "wrap",
+  alignItems: "center",
+  padding: "10px 14px",
+  borderBottom: "1px solid var(--x-color-line-soft)",
 };
 
-const documentMetaStyle: CSSProperties = {
+const tabBarStyle: CSSProperties = { display: "flex", gap: "6px", flexWrap: "wrap" };
+const tabStyle: CSSProperties = {
+  padding: "7px 13px",
+  borderRadius: "8px",
+  border: "1px solid transparent",
+  background: "transparent",
+  color: "var(--x-color-ink-muted)",
+  fontWeight: 600,
   fontSize: "13px",
-  lineHeight: 1.6,
-  color: colors.inkMuted,
+  cursor: "pointer",
+  whiteSpace: "nowrap",
 };
+const tabActiveStyle: CSSProperties = {
+  ...tabStyle,
+  border: "1px solid var(--x-color-accent-border)",
+  background: "var(--x-color-panel)",
+  color: "var(--x-color-accent-strong)",
+  boxShadow: "0 1px 2px var(--x-color-shadow-soft)",
+};
+
+const eyebrowStyle: CSSProperties = { fontSize: "11px", letterSpacing: "0.14em", textTransform: "uppercase", color: "var(--x-color-ink-muted)", fontWeight: 700 };
+const titleStyle: CSSProperties = { margin: "2px 0", fontSize: "18px", fontWeight: 800, color: "var(--x-color-ink)" };
+const mutedStyle: CSSProperties = { fontSize: "12px", color: "var(--x-color-ink-muted)", lineHeight: 1.5 };
+const rowStyle: CSSProperties = { display: "flex", gap: "8px", alignItems: "center", flexWrap: "wrap" };
+
+const btnStyle: CSSProperties = {
+  padding: "8px 14px",
+  borderRadius: "8px",
+  border: "1px solid var(--x-color-line)",
+  background: "var(--x-color-panel)",
+  color: "var(--x-color-ink)",
+  fontWeight: 600,
+  fontSize: "13px",
+  cursor: "pointer",
+  whiteSpace: "nowrap",
+};
+const primaryButtonStyle: CSSProperties = {
+  padding: "8px 16px",
+  borderRadius: "8px",
+  border: "1px solid var(--x-color-accent-strong)",
+  background: "var(--x-color-accent)",
+  color: "white",
+  fontWeight: 700,
+  fontSize: "13px",
+  cursor: "pointer",
+  whiteSpace: "nowrap",
+};
+const ghostButtonStyle: CSSProperties = {
+  padding: "7px 12px",
+  borderRadius: "8px",
+  border: "1px solid var(--x-color-line-soft)",
+  background: "var(--x-color-panel-alt)",
+  color: "var(--x-color-ink-muted)",
+  fontWeight: 600,
+  fontSize: "12px",
+  cursor: "pointer",
+  whiteSpace: "nowrap",
+};
+
+const searchInputStyle: CSSProperties = {
+  flex: "1 1 240px",
+  minHeight: "34px",
+  padding: "7px 10px",
+  borderRadius: "8px",
+  border: "1px solid var(--x-color-line)",
+  background: "var(--x-color-panel)",
+  color: "var(--x-color-ink)",
+  fontSize: "13px",
+  boxSizing: "border-box",
+};
+
+const emptyStyle: CSSProperties = {
+  margin: "16px",
+  padding: "28px",
+  borderRadius: "10px",
+  border: "1px dashed var(--x-color-line)",
+  textAlign: "center",
+  color: "var(--x-color-ink-muted)",
+};
+
+const tableWrapStyle: CSSProperties = { width: "100%", overflowX: "auto" };
+const cellStrongStyle: CSSProperties = { fontWeight: 700, lineHeight: 1.4 };
+const monoCellStyle: CSSProperties = { fontFamily: "var(--x-font-mono)", fontSize: "12.5px", whiteSpace: "nowrap" };
+
+const lineWrapStyle: CSSProperties = { display: "flex", gap: "4px", flexWrap: "wrap", maxWidth: "320px" };
+const lineChipStyle: CSSProperties = {
+  display: "inline-flex",
+  alignItems: "center",
+  padding: "2px 8px",
+  borderRadius: "6px",
+  fontSize: "11px",
+  fontWeight: 600,
+  whiteSpace: "nowrap",
+  background: "var(--x-color-panel-alt)",
+  border: "1px solid var(--x-color-line-soft)",
+  color: "var(--x-color-ink-muted)",
+};
+
+function typeChipStyle(documentType: string): CSSProperties {
+  const isReturn = documentType === "sale_return";
+  return {
+    display: "inline-flex",
+    alignItems: "center",
+    padding: "4px 10px",
+    borderRadius: "6px",
+    fontSize: "12px",
+    fontWeight: 700,
+    whiteSpace: "nowrap",
+    background: isReturn ? "var(--x-color-warning-soft)" : "var(--x-color-accent-tint)",
+    color: isReturn ? "var(--x-color-warning)" : "var(--x-color-accent-strong)",
+  };
+}
 
 function statusChipStyle(status: string): CSSProperties {
   const palette =
     status === "confirmed"
-      ? { background: colors.successSoft, color: colors.success, border: colors.successStrong }
+      ? { background: "var(--x-color-success-soft)", color: "var(--x-color-success)" }
       : status === "draft"
-        ? { background: colors.infoSoft, color: colors.info, border: colors.infoTintStrong }
-        : { background: colors.warningSoft, color: colors.warning, border: colors.warningBorder };
+        ? { background: "var(--x-color-info-soft)", color: "var(--x-color-info)" }
+        : { background: "var(--x-color-warning-soft)", color: "var(--x-color-warning)" };
   return {
     display: "inline-flex",
     alignItems: "center",
-    justifyContent: "center",
-    padding: "4px 7px",
-    borderRadius: "999px",
-    border: `1px solid ${palette.border}`,
-    background: palette.background,
-    color: palette.color,
+    padding: "4px 10px",
+    borderRadius: "6px",
     fontSize: "12px",
     fontWeight: 700,
     whiteSpace: "nowrap",
+    ...palette,
   };
 }
 
-const lineWrapStyle: CSSProperties = {
-  display: "flex",
-  flexWrap: "wrap",
-  gap: "8px",
+const noticeSuccessStyle: CSSProperties = {
+  margin: "12px 14px 0",
+  padding: "10px 12px",
+  borderRadius: "8px",
+  border: "1px solid var(--x-color-success-strong)",
+  background: "var(--x-color-success-soft)",
+  color: "var(--x-color-success)",
+  fontWeight: 700,
+  fontSize: "13px",
 };
 
-const lineChipStyle: CSSProperties = {
-  display: "inline-flex",
-  alignItems: "center",
-  padding: "4px 7px",
-  borderRadius: "999px",
-  background: colors.panel,
-  border: `1px solid ${colors.lineSoft}`,
-  fontSize: "12px",
-  color: colors.inkMuted,
+const noticeErrorStyle: CSSProperties = {
+  margin: "12px 14px 0",
+  padding: "10px 12px",
+  borderRadius: "8px",
+  border: "1px solid var(--x-color-warning-border)",
+  background: "var(--x-color-warning-soft)",
+  color: "var(--x-color-warning)",
+  fontWeight: 700,
+  fontSize: "13px",
 };
 
 const formStyle: CSSProperties = {
   display: "grid",
-  gap: "8px",
+  gap: "10px",
+  padding: "14px",
 };
 
 const editorHeaderCardStyle: CSSProperties = {
   display: "grid",
   gap: "4px",
-  padding: "8px 10px",
-  borderRadius: radius.sm,
-  background: colors.panelAlt,
-  border: `1px solid ${colors.lineSoft}`,
+  padding: "10px 12px",
+  borderRadius: "8px",
+  background: "var(--x-color-panel-alt)",
+  border: "1px solid var(--x-color-line-soft)",
 };
+
+const sectionTitleStyle: CSSProperties = { fontSize: "14px", fontWeight: 700, color: "var(--x-color-accent-strong)" };
 
 function fieldGridStyle(isMobile: boolean): CSSProperties {
   return {
@@ -1044,12 +1071,12 @@ function fieldGridStyle(isMobile: boolean): CSSProperties {
 
 const inputStyle: CSSProperties = {
   width: "100%",
-  borderRadius: radius.sm,
-  border: `1px solid ${colors.line}`,
-  background: colors.panel,
-  color: colors.ink,
-  minHeight: "32px",
-  padding: "6px 8px",
+  borderRadius: "8px",
+  border: "1px solid var(--x-color-line)",
+  background: "var(--x-color-panel)",
+  color: "var(--x-color-ink)",
+  minHeight: "34px",
+  padding: "7px 10px",
   fontSize: "13px",
   outline: "none",
   boxSizing: "border-box",
@@ -1065,35 +1092,22 @@ const pickerBlockStyle: CSSProperties = {
   display: "grid",
   gap: "6px",
   padding: "8px 10px",
-  borderRadius: radius.sm,
-  border: `1px solid ${colors.lineSoft}`,
-  background: colors.panel,
+  borderRadius: "8px",
+  border: "1px solid var(--x-color-line-soft)",
+  background: "var(--x-color-panel)",
 };
 
-const pickerCopyStyle: CSSProperties = {
-  display: "grid",
-  gap: "6px",
-};
-
-const pickerLabelStyle: CSSProperties = {
-  fontSize: "12px",
-  fontWeight: 700,
-  color: colors.inkMuted,
-};
-
-const pickerValueStyle: CSSProperties = {
-  fontSize: "14px",
-  fontWeight: 700,
-  color: colors.ink,
-};
+const pickerCopyStyle: CSSProperties = { display: "grid", gap: "4px" };
+const pickerLabelStyle: CSSProperties = { fontSize: "12px", fontWeight: 700, color: "var(--x-color-ink-muted)" };
+const pickerValueStyle: CSSProperties = { fontSize: "14px", fontWeight: 700, color: "var(--x-color-ink)" };
 
 const lineEditorStyle: CSSProperties = {
   display: "grid",
   gap: "8px",
-  padding: "10px",
-  borderRadius: radius.sm,
-  background: colors.panelAlt,
-  border: `1px solid ${colors.lineSoft}`,
+  padding: "12px",
+  borderRadius: "8px",
+  background: "var(--x-color-panel-alt)",
+  border: "1px solid var(--x-color-line-soft)",
 };
 
 const sectionHeaderStyle: CSSProperties = {
@@ -1104,91 +1118,29 @@ const sectionHeaderStyle: CSSProperties = {
   flexWrap: "wrap",
 };
 
-const lineListStyle: CSSProperties = {
-  display: "grid",
-  gap: "6px",
-};
+const lineListStyle: CSSProperties = { display: "grid", gap: "8px" };
 
 const lineCardStyle: CSSProperties = {
   display: "grid",
-  gap: "6px",
-  padding: "8px 10px",
-  borderRadius: radius.sm,
-  background: colors.panel,
-  border: `1px solid ${colors.lineSoft}`,
+  gap: "8px",
+  padding: "10px 12px",
+  borderRadius: "8px",
+  background: "var(--x-color-panel)",
+  border: "1px solid var(--x-color-line-soft)",
 };
 
 const formActionRowStyle: CSSProperties = {
   display: "flex",
   flexWrap: "wrap",
-  gap: "6px",
+  gap: "8px",
   alignItems: "center",
 };
 
-const primaryButtonStyle: CSSProperties = {
-  border: "none",
-  borderRadius: radius.sm,
-  background: `linear-gradient(135deg, ${colors.accent}, ${colors.accentStrong})`,
-  color: colors.panel,
-  padding: "7px 10px",
-  fontWeight: 700,
-  cursor: "pointer",
-  fontSize: "13px",
-};
-
-const secondaryButtonStyle: CSSProperties = {
-  border: `1px solid ${colors.accentBorder}`,
-  borderRadius: radius.sm,
-  background: colors.panel,
-  color: colors.accentStrong,
-  padding: "7px 10px",
-  fontWeight: 700,
-  cursor: "pointer",
-  fontSize: "13px",
-};
-
-const ghostButtonStyle: CSSProperties = {
-  border: `1px solid ${colors.lineSoft}`,
-  borderRadius: radius.sm,
-  background: colors.panelStrong,
-  color: colors.inkMuted,
-  padding: "6px 8px",
-  fontWeight: 700,
-  cursor: "pointer",
-  fontSize: "12px",
-};
-
-const successStyle: CSSProperties = {
-  padding: "8px 10px",
-  borderRadius: radius.sm,
-  border: `1px solid ${colors.successStrong}`,
-  background: colors.successSoft,
-  color: colors.success,
-  fontWeight: 700,
-};
-
-const errorStyle: CSSProperties = {
-  padding: "8px 10px",
-  borderRadius: radius.sm,
-  border: `1px solid ${colors.warningBorder}`,
-  background: colors.warningSoft,
-  color: colors.warning,
-  fontWeight: 700,
-};
-
-const placeholderStyle: CSSProperties = {
-  padding: "14px",
-  borderRadius: radius.sm,
-  background: colors.panelStrong,
-  border: `1px solid ${colors.lineSoft}`,
-  color: colors.inkMuted,
-};
-
 const placeholderSubtleStyle: CSSProperties = {
-  padding: "10px",
-  borderRadius: radius.sm,
-  background: colors.panelAlt,
-  border: `1px dashed ${colors.lineSoft}`,
-  color: colors.inkMuted,
+  padding: "12px",
+  borderRadius: "8px",
+  background: "var(--x-color-panel)",
+  border: "1px dashed var(--x-color-line-soft)",
+  color: "var(--x-color-ink-muted)",
   fontSize: "13px",
 };

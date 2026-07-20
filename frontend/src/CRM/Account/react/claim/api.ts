@@ -87,6 +87,17 @@ export async function downloadClaimReport(claimIds: number[]) {
   return response.blob();
 }
 
+export async function downloadPaymentVoucher(requestId: number) {
+  const response = await apiFetch(`/api/account/print_payment_voucher/download_payment_voucher/${requestId}`, {
+    credentials: "include",
+  });
+  if (!response.ok) {
+    const data = (await response.json().catch(() => ({}))) as { error?: string; message?: string };
+    throw new Error(data.error || data.message || "下载 Payment Voucher 失败");
+  }
+  return response.blob();
+}
+
 export async function deleteClaimAttachment(attachmentId: number) {
   const response = await apiFetch(`/api/account/claim/attachments/${attachmentId}`, {
     method: "DELETE",

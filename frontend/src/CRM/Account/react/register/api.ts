@@ -71,4 +71,18 @@ export async function deleteRegisterPayment(paymentId: number) {
   return parseJson<{ status?: string; message?: string; payment_id?: number; regis_form_id?: number }>(response);
 }
 
+export async function downloadPaymentReport(paymentIds: number[]) {
+  const response = await apiFetch("/api/account/payments/report", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    credentials: "include",
+    body: JSON.stringify({ payment_ids: paymentIds }),
+  });
+  if (!response.ok) {
+    const data = (await response.json().catch(() => ({}))) as { error?: string; message?: string };
+    throw new Error(data.error || data.message || "导出 Report 失败");
+  }
+  return response.blob();
+}
+
 export type RegisterPaymentForm = FormRecord;

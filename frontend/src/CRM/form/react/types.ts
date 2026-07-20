@@ -77,6 +77,7 @@ export type FormMemberTimeSlot = {
 
 export type FormMember = {
   id: number;
+  registered_at?: string | null;
   name_cn?: string;
   name?: string;
   phone?: string;

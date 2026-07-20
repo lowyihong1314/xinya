@@ -7,6 +7,7 @@ import { smartImageURL } from "../../../js/get_img";
 import { ExtraFieldEditor } from "./ExtraFieldEditor";
 import { FeePanel } from "./FeePanel";
 import { TablePagination, usePagedRows } from "../../shared/TablePagination";
+import { sortArrow, sortRows, sortableThStyle, toggleSort, type SortState } from "../../Account/react/shared/tableSort";
 import type { ExtraFieldDraft } from "./ExtraFieldEditor";
 import type { ExtraFieldConfig, FormCreatePayload, FormEvent, FormFee, FormMember, FormRecord } from "./types";
 
@@ -46,6 +47,7 @@ async function exportMembersToExcel(formTitle: string, members: FormMember[], ex
     const values = member.extra_fields || member.field_values || [];
     const row: Record<string, unknown> = {
       ID: member.id,
+      报名时间: formatRegDatetime(member.registered_at),
       中文名: member.name_cn || "",
       英文名: member.name || "",
       NRIC: member.nric || "",
@@ -130,6 +132,33 @@ function memberPaymentMeta(member: FormMember) {
   if (latest.status === "checked") return { label: "已付款", tone: "success" as const };
   if (latest.status === "fail") return { label: "付款失败", tone: "danger" as const };
   return { label: "处理中", tone: "warning" as const };
+}
+
+function formatRegDatetime(value?: string | null) {
+  if (!value) return "—";
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return String(value).slice(0, 16).replace("T", " ");
+  const pad = (n: number) => String(n).padStart(2, "0");
+  return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())} ${pad(date.getHours())}:${pad(date.getMinutes())}`;
+}
+
+function getMemberSortValue(member: FormMember, key: string): number | string | null {
+  switch (key) {
+    case "name":
+      return member.name_cn || member.name || "";
+    case "phone":
+      return member.phone || "";
+    case "gender":
+      return String(member.gender || "");
+    case "nric":
+      return String(member.nric || "");
+    case "pay":
+      return memberPaymentMeta(member).label;
+    case "registered_at":
+      return member.registered_at || "";
+    default:
+      return null;
+  }
 }
 
 async function copyToClipboard(text: string): Promise<boolean> {
@@ -396,15 +425,18 @@ function MembersTab({
   onRemoveMember: (memberId: number) => void;
 }) {
   const [query, setQuery] = useState("");
+  const [sort, setSort] = useState<SortState>(null);
   const members = form.members || [];
   const parentalFormEnabled = Boolean(form.field_switches?.parental_form ?? form.parental_form);
 
   const filtered = useMemo(() => {
     const keyword = query.trim().toLowerCase();
-    if (!keyword) return members;
-    return members.filter((member) => buildMemberSearchText(member, extraFields).includes(keyword));
-  }, [members, extraFields, query]);
-  const paged = usePagedRows(filtered, undefined, query);
+    const base = keyword
+      ? members.filter((member) => buildMemberSearchText(member, extraFields).includes(keyword))
+      : members;
+    return sortRows(base, sort, getMemberSortValue);
+  }, [members, extraFields, query, sort]);
+  const paged = usePagedRows(filtered, undefined, `${query}|${sort?.key ?? ""}|${sort?.dir ?? ""}`);
 
   if (!canViewMemberDetail) {
     return (
@@ -435,11 +467,12 @@ function MembersTab({
           <table className="fw-table">
             <thead>
               <tr>
-                <th>姓名</th>
-                <th>电话</th>
-                <th>性别</th>
-                <th>NRIC</th>
-                <th>付款状态</th>
+                <th style={sortableThStyle} onClick={() => setSort((s) => toggleSort(s, "name"))}>姓名{sortArrow(sort, "name")}</th>
+                <th style={sortableThStyle} onClick={() => setSort((s) => toggleSort(s, "phone"))}>电话{sortArrow(sort, "phone")}</th>
+                <th style={sortableThStyle} onClick={() => setSort((s) => toggleSort(s, "gender"))}>性别{sortArrow(sort, "gender")}</th>
+                <th style={sortableThStyle} onClick={() => setSort((s) => toggleSort(s, "nric"))}>NRIC{sortArrow(sort, "nric")}</th>
+                <th style={sortableThStyle} onClick={() => setSort((s) => toggleSort(s, "pay"))}>付款状态{sortArrow(sort, "pay")}</th>
+                <th style={sortableThStyle} onClick={() => setSort((s) => toggleSort(s, "registered_at"))}>报名时间{sortArrow(sort, "registered_at")}</th>
                 <th style={{ width: isMobile ? 150 : 200 }}>操作</th>
               </tr>
             </thead>
@@ -456,6 +489,7 @@ function MembersTab({
                     <td>{String(member.gender || "—")}</td>
                     <td style={monoCellStyle}>{String(member.nric || "—")}</td>
                     <td><span style={chipStyle(pay.tone)}>{pay.label}</span></td>
+                    <td style={monoCellStyle}>{formatRegDatetime(member.registered_at)}</td>
                     <td onClick={(e) => e.stopPropagation()}>
                       <div style={actionsCellStyle}>
                         {parentalFormEnabled || member.parental_data ? (

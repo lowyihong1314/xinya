@@ -6,7 +6,8 @@ import { apiFetch } from "../../../../js/apiFetch";
 import { openPreviewModal } from "../../../../js/attachment_preview";
 import { showConfirmDialog } from "../../../../js/dialogs";
 import { showEventPicker } from "../../../shared/showEventPicker";
-import { deleteClaimAttachment, updateClaim, updateClaimEvent, uploadClaimAttachments } from "./api";
+import { downloadBlobOrShare } from "../../../../js/browserActions";
+import { deleteClaimAttachment, downloadPaymentVoucher, updateClaim, updateClaimEvent, uploadClaimAttachments } from "./api";
 import {
   approverAvatarStyle,
   approverCardStyle,
@@ -29,8 +30,6 @@ import {
   detailValueStyle,
   footerActionsStyle,
   inputStyle,
-  panelHeaderStyle,
-  panelTitleStyle,
   purposeBoxStyle,
   sectionStyle,
   sectionTitleStyle,
@@ -38,6 +37,8 @@ import {
   textareaStyle,
 } from "./claimStyles";
 import { PaymentVoucherModal } from "./PaymentVoucherModal";
+import { DocDetailHeader } from "../shared/DocDetailHeader";
+import { WriteJEModal } from "../shared/WriteJEModal";
 import type { ApproverUserProfile, ClaimAttachment, ClaimChangeLog, ClaimRecord } from "./types";
 
 type ClaimDetailProps = {
@@ -51,6 +52,9 @@ type ClaimDetailProps = {
   onReject: () => void;
   onDelete: () => void;
   onClaimUpdated: (claim: ClaimRecord) => void;
+  onPrev?: () => void;
+  onNext?: () => void;
+  positionLabel?: string;
 };
 
 type ClaimEditDraft = {
@@ -78,7 +82,12 @@ export function ClaimDetail({
   onReject,
   onDelete,
   onClaimUpdated,
+  onPrev,
+  onNext,
+  positionLabel,
 }: ClaimDetailProps) {
+  const [jeOpen, setJeOpen] = useState(false);
+  const [downloadingVoucher, setDownloadingVoucher] = useState(false);
   const [approverUsers, setApproverUsers] = useState<Record<number, ApproverUserProfile>>({});
   const [approverLoadError, setApproverLoadError] = useState("");
   const [selectedApprover, setSelectedApprover] = useState<{
@@ -294,16 +303,56 @@ export function ClaimDetail({
     }
   }
 
-  return (
-    <>
-      <div className="claim-detail__header" style={panelHeaderStyle}>
-        <button type="button" style={buttonGhostStyle} onClick={onBack}>
-          返回列表
-        </button>
-        <div className="claim-detail__title" style={panelTitleStyle}>申请详情 #{claim.id}</div>
-      </div>
+  const isVoucherSigned = Boolean(claim.voucher_signed_at) || Boolean(claim.voucher_recipient_sign_json);
 
-      <div className="claim-detail__status-row" style={{ display: "flex", gap: "6px", flexWrap: "wrap", alignItems: "center" }}>
+  function openSign(name: string, signValue: unknown) {
+    const sign = parseApproverSign(signValue);
+    if (!sign) {
+      return;
+    }
+    setSelectedApprover({ userId: -1, name, sign });
+  }
+
+  async function handleDownloadVoucher() {
+    setDownloadingVoucher(true);
+    try {
+      const blob = await downloadPaymentVoucher(claim.id);
+      const filename = `PaymentVoucher_${claim.id}.pdf`;
+      await downloadBlobOrShare(blob, filename, { isMobile, title: filename, text: `报销 #${claim.id} Payment Voucher` });
+    } catch (error) {
+      setEditError(error instanceof Error ? error.message : "下载 Payment Voucher 失败");
+    } finally {
+      setDownloadingVoucher(false);
+    }
+  }
+
+  return (
+    <div style={detailPageStyle}>
+      <section style={detailPanelStyle}>
+      <DocDetailHeader
+        eyebrow="财务 / 报销申请"
+        title={`申请详情 #${claim.id}`}
+        subtitle={`${claim.applicant_name || "未填姓名"} · RM ${Number(claim.amount ?? 0).toFixed(2)}${claim.department_name ? ` · ${claim.department_name}` : ""}`}
+        onBack={onBack}
+        onPrev={onPrev}
+        onNext={onNext}
+        positionLabel={positionLabel}
+        actions={
+          <>
+            {isVoucherSigned ? (
+              <button type="button" style={buttonPrimaryStyle} onClick={() => void handleDownloadVoucher()} disabled={downloadingVoucher}>
+                {downloadingVoucher ? "下载中…" : "下载 Payment Voucher"}
+              </button>
+            ) : null}
+            <button type="button" style={buttonSecondaryStyle} onClick={() => setJeOpen(true)}>
+              写 JE
+            </button>
+          </>
+        }
+      />
+
+      <div style={detailBodyStyle}>
+      <div className="claim-detail__status-row" style={{ display: "flex", gap: "6px", flexWrap: "wrap", alignItems: "center", marginTop: "10px" }}>
         <div className="claim-detail__status-badge" style={statusBadgeStyle(claimStatus)}>{statusText(claimStatus)}</div>
         <span style={chipStyle}>
           批准 {claim.approver_data?.filter((item) => !item.reject).length || 0} 人
@@ -328,7 +377,11 @@ export function ClaimDetail({
             />
           </EditableDetailRow>
         ) : (
-          <DetailRow label="申请人" value={claim.applicant_name} />
+          <DetailRow
+            label="申请人"
+            value={claim.applicant_name}
+            onClick={parseApproverSign(claim.sign_json_data) ? () => openSign(claim.applicant_name || "申请人", claim.sign_json_data) : undefined}
+          />
         )}
         {editingClaim ? (
           <EditableDetailRow label="金额">
@@ -378,7 +431,11 @@ export function ClaimDetail({
         ) : (
           <DetailRow label="采购日期" value={formatDateTime(claim.purchase_datetime)} />
         )}
-        <DetailRow label="收款人 / 签收人" value={claim.voucher_recipient_name || "-"} />
+        <DetailRow
+          label="收款人 / 签收人"
+          value={claim.voucher_recipient_name || "-"}
+          onClick={parseApproverSign(claim.voucher_recipient_sign_json) ? () => openSign(claim.voucher_recipient_name || "收款人", claim.voucher_recipient_sign_json) : undefined}
+        />
         <DetailRow label="签收时间" value={formatDateTime(claim.voucher_signed_at)} />
         <div className="claim-detail__row" style={detailRowStyle}>
           <div className="claim-detail__row-label" style={detailLabelStyle}>活动</div>
@@ -698,15 +755,40 @@ export function ClaimDetail({
           ) : null}
         </div>
       ) : null}
+      </div>
+      </section>
 
       {selectedApprover ? (
         <SignViewerModal approver={selectedApprover} onClose={() => setSelectedApprover(null)} />
       ) : null}
 
       {voucherOpen ? <PaymentVoucherModal claimId={claim.id} onClose={() => setVoucherOpen(false)} /> : null}
-    </>
+
+      <WriteJEModal
+        open={jeOpen}
+        onClose={() => setJeOpen(false)}
+        source="reimbursement"
+        sourceRefType="reimbursement_request"
+        sourceId={claim.id}
+        direction="expense"
+        defaultAmount={Number(claim.amount ?? 0)}
+        defaultDate={claim.request_date}
+        defaultMemo={`报销 #${claim.id}${claim.purpose ? ` · ${claim.purpose}` : ""}`}
+        canEdit={canEditClaims}
+      />
+    </div>
   );
 }
+
+const detailPageStyle: CSSProperties = { display: "grid", gap: "10px" };
+const detailPanelStyle: CSSProperties = {
+  borderRadius: "12px",
+  background: "var(--x-color-panel)",
+  border: "1px solid var(--x-color-line)",
+  boxShadow: "0 1px 2px var(--x-color-shadow-soft)",
+  overflow: "hidden",
+};
+const detailBodyStyle: CSSProperties = { display: "grid", gap: "12px", padding: "14px 16px" };
 
 function AttachmentCard({
   attachment,
@@ -761,14 +843,51 @@ function ChangeLogCard({ log }: { log: ClaimChangeLog }) {
   );
 }
 
-function DetailRow({ label, value }: { label: string; value?: string }) {
+function DetailRow({ label, value, onClick }: { label: string; value?: string; onClick?: () => void }) {
   return (
     <div className="claim-detail__row" style={detailRowStyle}>
       <div className="claim-detail__row-label" style={detailLabelStyle}>{label}</div>
-      <div className="claim-detail__row-value" style={detailValueStyle}>{value || "-"}</div>
+      {onClick ? (
+        <button
+          type="button"
+          className="claim-detail__row-value claim-detail__row-value--sign"
+          style={signValueButtonStyle}
+          onClick={onClick}
+          title="点击查看签名"
+        >
+          <span>{value || "-"}</span>
+          <span style={signHintStyle}>🖊 查看签名</span>
+        </button>
+      ) : (
+        <div className="claim-detail__row-value" style={detailValueStyle}>{value || "-"}</div>
+      )}
     </div>
   );
 }
+
+const signValueButtonStyle: CSSProperties = {
+  display: "inline-flex",
+  alignItems: "center",
+  gap: "8px",
+  padding: 0,
+  border: "none",
+  background: "transparent",
+  color: "var(--x-color-accent-strong)",
+  fontWeight: 700,
+  fontSize: "13px",
+  cursor: "pointer",
+  textAlign: "left",
+};
+
+const signHintStyle: CSSProperties = {
+  fontSize: "11px",
+  fontWeight: 600,
+  color: "var(--x-color-accent)",
+  border: "1px solid var(--x-color-accent-border)",
+  borderRadius: "999px",
+  padding: "1px 8px",
+  whiteSpace: "nowrap",
+};
 
 function EditableDetailRow({ label, children }: { label: string; children: ReactNode }) {
   return (

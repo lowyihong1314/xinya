@@ -108,6 +108,94 @@ def _format_datetime(value):
     return str(value).replace("T", " ").split(".")[0][:16]
 
 
+def _payment_status_label(status):
+    return {"checked": "已确认", "fail": "失败", "process": "处理中"}.get(status, status or "处理中")
+
+
+def build_payment_report_pdf(payments):
+    """Tabular收款审核 report — one row per payment plus a summary line."""
+    _register_fonts()
+    buffer = BytesIO()
+    pdf = canvas.Canvas(buffer, pagesize=A4)
+    width, height = A4
+    pdf.setTitle("Payment Report")
+
+    margin = 16 * mm
+    # column layout: (label, x-offset from margin, width)
+    columns = [
+        ("#", 0, 14 * mm),
+        ("付款人", 15 * mm, 34 * mm),
+        ("来源", 50 * mm, 40 * mm),
+        ("金额", 91 * mm, 26 * mm),
+        ("状态", 118 * mm, 20 * mm),
+        ("日期", 139 * mm, 39 * mm),
+    ]
+
+    def draw_header(y):
+        pdf.setFont(PDF_FONT_BOLD, 16)
+        pdf.setFillColor(colors.HexColor("#1f2d3d"))
+        pdf.drawString(margin, y, "收款审核 Report")
+        pdf.setFont(PDF_FONT, 9)
+        pdf.setFillColor(colors.HexColor("#5d6678"))
+        pdf.drawString(margin, y - 6 * mm, f"生成时间：{datetime.utcnow().isoformat(timespec='seconds')} UTC · 共 {len(payments)} 笔")
+        row_y = y - 14 * mm
+        pdf.setFont(PDF_FONT_BOLD, 9)
+        pdf.setFillColor(colors.HexColor("#1f2d3d"))
+        for label, dx, _w in columns:
+            pdf.drawString(margin + dx, row_y, label)
+        pdf.setStrokeColor(colors.HexColor("#c9d2e0"))
+        pdf.line(margin, row_y - 2 * mm, width - margin, row_y - 2 * mm)
+        return row_y - 8 * mm
+
+    y = draw_header(height - margin)
+    pdf.setFont(PDF_FONT, 9)
+    pdf.setFillColor(colors.HexColor("#1f2d3d"))
+
+    total_amount = 0.0
+    checked_total = 0.0
+    for payment in payments:
+        if y < margin + 20 * mm:
+            pdf.showPage()
+            y = draw_header(height - margin)
+            pdf.setFont(PDF_FONT, 9)
+            pdf.setFillColor(colors.HexColor("#1f2d3d"))
+
+        amount = float(payment.get("amount") or payment.get("price") or 0)
+        total_amount += amount
+        if payment.get("status") == "checked":
+            checked_total += amount
+
+        source = " / ".join(
+            part for part in [payment.get("source_scope_label"), payment.get("source_label")] if part
+        ) or "-"
+        cells = [
+            str(payment.get("id") or "-"),
+            payment.get("name") or payment.get("nric") or "-",
+            source,
+            _format_money(amount),
+            _payment_status_label(payment.get("status")),
+            payment.get("date") or _format_datetime(payment.get("created_at")),
+        ]
+        for (label, dx, col_w), value in zip(columns, cells):
+            text = str(value)
+            while text and pdf.stringWidth(text, PDF_FONT, 9) > col_w - 2 * mm:
+                text = text[:-1]
+            pdf.drawString(margin + dx, y, text)
+        y -= 6.5 * mm
+
+    y -= 3 * mm
+    pdf.setStrokeColor(colors.HexColor("#c9d2e0"))
+    pdf.line(margin, y + 2 * mm, width - margin, y + 2 * mm)
+    pdf.setFont(PDF_FONT_BOLD, 10)
+    pdf.drawString(margin, y - 4 * mm, f"合计金额：{_format_money(total_amount)}")
+    pdf.drawString(margin + 70 * mm, y - 4 * mm, f"已确认金额：{_format_money(checked_total)}")
+
+    pdf.showPage()
+    pdf.save()
+    buffer.seek(0)
+    return buffer
+
+
 def _claim_report_status(claim):
     approvers = claim.get("approver_data") or []
     if any(item.get("reject") for item in approvers):

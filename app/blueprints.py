@@ -6,6 +6,7 @@ BLUEPRINT_SPECS = [
     ("app.account", "account_bp", "/account", "api"),
     ("app.account", "payment_voucher_bp", "/account/print_payment_voucher", "api"),
     ("app.asset", "asset_bp", "/asset", "api"),
+    ("app.gl", "gl_bp", "/gl", "api"),
     ("app.public_api", "api_bp", "/api", "api"),
     ("app.twilio", "twilio_bp", "/twilio", "api"),
     ("app.user_control", "user_control_bp", "/user_control", "api"),

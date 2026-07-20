@@ -302,6 +302,20 @@ class NRIC_Asset(db.Model):
         if latest:
             data.update(latest.to_dict())
 
+        # 报名时间：来自 regis_form_member 中间表（该成员报名此表单的时间）
+        if form_id is not None:
+            link_row = db.session.execute(
+                regis_form_member.select().where(
+                    regis_form_member.c.form_id == form_id,
+                    regis_form_member.c.member_id == self.id,
+                )
+            ).first()
+            data["registered_at"] = (
+                link_row.created_at.isoformat()
+                if link_row and link_row.created_at
+                else None
+            )
+
         payment_query = RegisPayment.query.filter_by(nric_asset_id=self.id)
         if form_id is not None:
             payment_query = payment_query.filter_by(regis_form_id=form_id)

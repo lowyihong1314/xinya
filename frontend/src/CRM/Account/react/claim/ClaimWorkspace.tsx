@@ -12,6 +12,9 @@ import { ClaimBatchAiPage } from "./ClaimBatchAiPage";
 import { ClaimCreateForm, type CreateState } from "./ClaimCreateForm";
 import { ClaimDetail } from "./ClaimDetail";
 import { ClaimList } from "./ClaimList";
+import { BatchWriteJEModal } from "../shared/BatchWriteJEModal";
+import { fetchGLSourceMap, type GLSourceEntryRef } from "../gl/api";
+import { sortRows, toggleSort, type SortState } from "../shared/tableSort";
 import {
   chipStyle,
   noticeErrorStyle,
@@ -255,6 +258,11 @@ export function ClaimWorkspace() {
   const [selectedClaimIds, setSelectedClaimIds] = useState<Set<number>>(() => new Set());
   const [exportingSelected, setExportingSelected] = useState(false);
   const [exportingReport, setExportingReport] = useState(false);
+  const [batchJeOpen, setBatchJeOpen] = useState(false);
+  const [dateStart, setDateStart] = useState("");
+  const [dateEnd, setDateEnd] = useState("");
+  const [sort, setSort] = useState<SortState>(null);
+  const [jeMap, setJeMap] = useState<Record<string, GLSourceEntryRef>>({});
 
   useEffect(() => {
     const nextInitial = buildInitialCreateState(accountUser);
@@ -331,13 +339,19 @@ export function ClaimWorkspace() {
 
   const filteredClaims = useMemo(() => {
     const keyword = query.trim().toLowerCase();
-    const sorted = [...claims].sort((left, right) => right.id - left.id);
-    return sorted.filter((claim) => {
+    const base = [...claims].sort((left, right) => right.id - left.id).filter((claim) => {
       const claimStatus = getClaimStatusForFilter(claim);
       if (statusFilter === "approved" && claimStatus !== "approved") {
         return false;
       }
       if (statusFilter === "unapproved" && claimStatus === "approved") {
+        return false;
+      }
+      const day = (claim.request_date || "").slice(0, 10);
+      if (dateStart && (!day || day < dateStart)) {
+        return false;
+      }
+      if (dateEnd && (!day || day > dateEnd)) {
         return false;
       }
       if (!keyword) {
@@ -364,7 +378,42 @@ export function ClaimWorkspace() {
         .map((value) => String(value ?? "").toLowerCase())
         .some((value) => value.includes(keyword));
     });
-  }, [claims, query, statusFilter]);
+    return sortRows(base, sort, (claim, key) => getClaimSortValue(claim, key, jeMap));
+  }, [claims, query, statusFilter, dateStart, dateEnd, sort, jeMap]);
+
+  useEffect(() => {
+    if (!claims.length) {
+      setJeMap({});
+      return;
+    }
+    let cancelled = false;
+    void (async () => {
+      try {
+        const map = await fetchGLSourceMap("reimbursement_request", claims.map((claim) => claim.id));
+        if (!cancelled) setJeMap(map);
+      } catch {
+        if (!cancelled) setJeMap({});
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [claims]);
+
+  const detailNav = useMemo(() => {
+    if (detailClaimId == null) {
+      return { prevId: null as number | null, nextId: null as number | null, position: "" };
+    }
+    const index = filteredClaims.findIndex((claim) => claim.id === detailClaimId);
+    if (index === -1) {
+      return { prevId: null as number | null, nextId: null as number | null, position: "" };
+    }
+    return {
+      prevId: index > 0 ? filteredClaims[index - 1].id : null,
+      nextId: index < filteredClaims.length - 1 ? filteredClaims[index + 1].id : null,
+      position: `${index + 1} / ${filteredClaims.length}`,
+    };
+  }, [filteredClaims, detailClaimId]);
 
   const pageCount = Math.max(1, Math.ceil(filteredClaims.length / pageSize));
   const safePage = Math.min(page, pageCount);
@@ -822,6 +871,13 @@ export function ClaimWorkspace() {
           onQueryChange={setQuery}
           statusFilter={statusFilter}
           onStatusFilterChange={setStatusFilter}
+          dateStart={dateStart}
+          dateEnd={dateEnd}
+          onDateStartChange={setDateStart}
+          onDateEndChange={setDateEnd}
+          jeMap={jeMap}
+          sort={sort}
+          onSort={(key) => setSort((current) => toggleSort(current, key))}
           page={safePage}
           pageCount={pageCount}
           total={filteredClaims.length}
@@ -837,6 +893,8 @@ export function ClaimWorkspace() {
           onClearSelectedClaims={handleClearSelectedClaims}
           onDownloadSelectedClaims={() => void handleDownloadSelectedClaims()}
           onDownloadSelectedReport={() => void handleDownloadSelectedReport()}
+          onBatchWriteJE={() => setBatchJeOpen(true)}
+          canBatchJe={canEditClaims}
           scopeLabel={canViewAll || canReadAllClaims ? "范围：全部申请" : "范围：我的申请"}
           onRefresh={() => void loadClaims()}
           canCreate={canSubmitClaims}
@@ -902,6 +960,9 @@ export function ClaimWorkspace() {
             onReject={() => void handleDecision("reject")}
             onDelete={() => void handleDeleteClaim()}
             onClaimUpdated={handleClaimUpdated}
+            onPrev={detailNav.prevId != null ? () => openDetail(detailNav.prevId as number) : undefined}
+            onNext={detailNav.nextId != null ? () => openDetail(detailNav.nextId as number) : undefined}
+            positionLabel={detailNav.position}
           />
         ) : (
           <div style={claimDetailFallbackStyle}>
@@ -914,6 +975,24 @@ export function ClaimWorkspace() {
           </div>
         )
       ) : null}
+
+      <BatchWriteJEModal
+        open={batchJeOpen}
+        onClose={() => setBatchJeOpen(false)}
+        source="reimbursement"
+        sourceRefType="reimbursement_request"
+        direction="expense"
+        canEdit={canEditClaims}
+        docs={claims
+          .filter((claim) => selectedClaimIds.has(claim.id))
+          .map((claim) => ({
+            id: claim.id,
+            amount: Number(claim.amount ?? 0),
+            date: claim.request_date,
+            memo: `报销 #${claim.id}${claim.purpose ? ` · ${claim.purpose}` : ""}`,
+          }))}
+        onDone={() => void loadClaims()}
+      />
     </>
   );
 }
@@ -947,6 +1026,35 @@ function getClaimStatusForFilter(claim: ClaimRecord) {
     return "approved";
   }
   return "pending";
+}
+
+function getClaimSortValue(
+  claim: ClaimRecord,
+  key: string,
+  jeMap: Record<string, GLSourceEntryRef>,
+): number | string | null {
+  switch (key) {
+    case "status":
+      return getClaimStatusForFilter(claim);
+    case "je":
+      return jeMap[String(claim.id)]?.entry_no ?? null;
+    case "applicant":
+      return claim.applicant_name || "";
+    case "amount":
+      return Number(claim.amount ?? 0);
+    case "department":
+      return claim.department_name || "";
+    case "purpose":
+      return claim.purpose || "";
+    case "id":
+      return claim.id;
+    case "request_date":
+      return claim.request_date || "";
+    case "approver":
+      return (claim.approver_data || []).length;
+    default:
+      return null;
+  }
 }
 
 function statusTextForFilter(status: string) {

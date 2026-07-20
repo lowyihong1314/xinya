@@ -25,11 +25,18 @@ import {
   type NativeResponseCacheStats,
 } from "../../js/nativeResponseCache";
 import { isMobileNativeRuntime } from "../../mobile/native/capacitor";
-import { changeMyPassword, fetchAppReleases, fetchMyFootprints, requestEmailChange, startMembershipRenewal, updateProfile, uploadProfileImage, verifyCurrentEmail } from "./api";
+import { changeMyPassword, fetchAppReleases, fetchMembershipContext, fetchMyFootprints, requestEmailChange, startMembershipRenewal, updateProfile, uploadProfileImage, verifyCurrentEmail } from "./api";
 import { MembershipActionCard } from "./MembershipActionCard";
 import { EmailPanel } from "./EmailPanel";
+// eslint-disable-next-line @typescript-eslint/ban-ts-comment
+// @ts-ignore -- plain JS sign helper, no types
+import { renderSignPreviewSvg } from "../../../../static/js/sign_tools.js";
 import type {
   AppRelease,
+  MembershipContext,
+  MembershipCouncilSignatureRecord,
+  MembershipRegistrationRecord,
+  MembershipSignatureStrokes,
   ProfileFootprintPayload,
   ProfileFootprintSummary,
   ProfileFormFootprint,
@@ -401,6 +408,9 @@ export function ProfilePage() {
   const [savingKey, setSavingKey] = useState<string | null>(null);
   const [uploading, setUploading] = useState(false);
   const [membershipActionBusy, setMembershipActionBusy] = useState(false);
+  const [membershipContext, setMembershipContext] = useState<MembershipContext | null>(null);
+  const [membershipContextLoading, setMembershipContextLoading] = useState(false);
+  const membershipContextFetched = useRef(false);
   const [message, setMessage] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [footprints, setFootprints] = useState<ProfileFootprintPayload>(emptyFootprintPayload);
@@ -437,6 +447,23 @@ export function ProfilePage() {
       setFootprintsError(err instanceof Error ? err.message : "足迹加载失败");
     } finally {
       setFootprintsLoading(false);
+    }
+  }
+
+  async function loadMembershipContext() {
+    if (!isAuthenticated) {
+      setMembershipContext(null);
+      return;
+    }
+    setMembershipContextLoading(true);
+    try {
+      const context = await fetchMembershipContext();
+      setMembershipContext(context);
+    } catch {
+      // 静默失败：会员申请状态不是关键路径，读取失败时保持原有基础视图。
+      setMembershipContext(null);
+    } finally {
+      setMembershipContextLoading(false);
     }
   }
 
@@ -511,6 +538,29 @@ export function ProfilePage() {
     }
     void loadNativeCacheStats();
   }, [activeSection, isNativeMobileRuntime]);
+
+  useEffect(() => {
+    if (activeSection !== "membership" || !isAuthenticated || membershipContextFetched.current) return;
+    membershipContextFetched.current = true;
+    void loadMembershipContext();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [activeSection, isAuthenticated]);
+
+  const membershipApplication = useMemo<MembershipRegistrationRecord | null>(() => {
+    const candidates = [membershipContext?.latest_upgrade, membershipContext?.latest_renewal].filter(
+      Boolean,
+    ) as MembershipRegistrationRecord[];
+    if (!candidates.length) return null;
+    return [...candidates].sort((a, b) =>
+      String(b.submitted_at || "").localeCompare(String(a.submitted_at || "")),
+    )[0];
+  }, [membershipContext]);
+
+  // 已有进行中 / 已通过的申请时，不再提示非会员去“立刻填写注册会员表格”。
+  const hasActiveMembershipApplication = Boolean(
+    membershipApplication &&
+      (membershipApplication.status === "process" || membershipApplication.status === "paid"),
+  );
 
   const avatarSrc = useMemo(() => {
     if (!profileUser?.username) {
@@ -1099,15 +1149,25 @@ export function ProfilePage() {
                   <InfoRow label="绑定 NRIC" value={profileUser.NRIC || "未绑定"} isMobile={isMobile} />
                   <InfoRow label="下次到期" value={nextMembershipExpiry || "—"} isMobile={isMobile} />
                 </div>
-                <MembershipActionCard
-                  isMember={Boolean(profileUser.is_member)}
-                  hasBoundNric={hasBoundNric}
-                  nextExpiryDate={nextMembershipExpiry}
-                  actionBusy={membershipActionBusy}
-                  isMobile={isMobile}
-                  onAction={() => void handleMembershipAction()}
-                />
+                {Boolean(profileUser.is_member) || !hasActiveMembershipApplication ? (
+                  <MembershipActionCard
+                    isMember={Boolean(profileUser.is_member)}
+                    hasBoundNric={hasBoundNric}
+                    nextExpiryDate={nextMembershipExpiry}
+                    actionBusy={membershipActionBusy}
+                    isMobile={isMobile}
+                    onAction={() => void handleMembershipAction()}
+                  />
+                ) : null}
               </article>
+
+              {membershipContextLoading && !membershipApplication ? (
+                <div style={membershipLoadingStyle}>正在加载会员申请状态…</div>
+              ) : null}
+
+              {membershipApplication ? (
+                <MembershipApplicationCard application={membershipApplication} isMobile={isMobile} />
+              ) : null}
             </section>
           ) : null}
 
@@ -1474,6 +1534,127 @@ function FootprintStatusChip({
   tone: "neutral" | "success" | "warning" | "danger";
 }) {
   return <span style={statusChipStyle(tone)}>{label}</span>;
+}
+
+function membershipStatusLabel(status?: string | null) {
+  switch (status) {
+    case "paid":
+      return "已生效";
+    case "reject":
+      return "已退回";
+    case "remove":
+      return "已移除";
+    default:
+      return "审核中";
+  }
+}
+
+function membershipStatusTone(status?: string | null): "neutral" | "success" | "warning" | "danger" {
+  if (status === "paid") return "success";
+  if (status === "reject" || status === "remove") return "danger";
+  return "warning";
+}
+
+function registrationTypeLabel(type?: string | null) {
+  return type === "renew" ? "会员续费申请" : "会员升级申请";
+}
+
+function formatMembershipDateTime(value?: string | null) {
+  if (!value) return "—";
+  const parsed = new Date(value);
+  if (Number.isNaN(parsed.getTime())) return String(value).slice(0, 16).replace("T", " ");
+  const pad = (n: number) => String(n).padStart(2, "0");
+  return `${parsed.getFullYear()}-${pad(parsed.getMonth() + 1)}-${pad(parsed.getDate())} ${pad(parsed.getHours())}:${pad(parsed.getMinutes())}`;
+}
+
+function MembershipSignaturePreview({ data }: { data?: MembershipSignatureStrokes | null }) {
+  const ref = useRef<HTMLDivElement | null>(null);
+  useEffect(() => {
+    const el = ref.current;
+    if (!el) return;
+    el.innerHTML = "";
+    if (data && Array.isArray(data.strokes) && data.strokes.length) {
+      try {
+        renderSignPreviewSvg(el, data);
+      } catch {
+        el.textContent = "✓";
+      }
+    } else {
+      el.textContent = "✓";
+    }
+  }, [data]);
+  return <div ref={ref} style={signaturePreviewBoxStyle} />;
+}
+
+function MembershipApplicationCard({
+  application,
+  isMobile,
+}: {
+  application: MembershipRegistrationRecord;
+  isMobile: boolean;
+}) {
+  const council = application.council;
+  const signatures: MembershipCouncilSignatureRecord[] = council?.signatures || [];
+  const required = council?.required ?? 5;
+  const max = council?.max ?? 20;
+  const count = council?.count ?? signatures.length;
+  const approved = Boolean(council?.approved);
+  const target = approved ? max : required;
+  const pct = Math.min(100, Math.round((count / Math.max(1, target)) * 100));
+
+  return (
+    <article style={applicationCardStyle(isMobile)}>
+      <div style={applicationHeaderStyle}>
+        <div>
+          <div style={applicationEyebrowStyle}>{registrationTypeLabel(application.registration_type)}</div>
+          <h3 style={applicationTitleStyle}>会员申请状态</h3>
+        </div>
+        <span style={statusChipStyle(membershipStatusTone(application.status))}>
+          {membershipStatusLabel(application.status)}
+        </span>
+      </div>
+
+      <div style={featureListStyle}>
+        <InfoRow label="提交时间" value={formatMembershipDateTime(application.submitted_at)} isMobile={isMobile} />
+        <InfoRow label="付款审核" value={application.finance_approved ? "已通过" : "待通过"} isMobile={isMobile} />
+        <InfoRow
+          label="理事会签名"
+          value={`${count} / ${target}${approved ? " · 已达标" : ""}`}
+          isMobile={isMobile}
+        />
+        {application.target_expiry_date ? (
+          <InfoRow label="生效到期" value={formatMembershipDateTime(application.target_expiry_date)} isMobile={isMobile} />
+        ) : null}
+      </div>
+
+      <div style={progressTrackStyle}>
+        <div style={{ ...progressFillStyle, width: `${pct}%` }} />
+      </div>
+
+      <div style={signaturesSectionStyle}>
+        <div style={signaturesHeadStyle}>签名理事{signatures.length ? `（${signatures.length}）` : ""}</div>
+        {signatures.length ? (
+          <div style={signatureListStyle}>
+            {signatures.map((sig) => (
+              <div key={sig.id} style={signatureCardStyle} title={sig.signed_at || undefined}>
+                <MembershipSignaturePreview data={sig.signature} />
+                <div style={signatureNameStyle}>{sig.signer_name || `理事 #${sig.user_id}`}</div>
+                {sig.signed_at ? <div style={signatureDateStyle}>{formatMembershipDateTime(sig.signed_at)}</div> : null}
+              </div>
+            ))}
+          </div>
+        ) : (
+          <div style={membershipMutedStyle}>还没有理事签名。达标需 ≥ {required} 位理事签名。</div>
+        )}
+      </div>
+
+      {application.status !== "paid" && application.payment_url ? (
+        <a href={application.payment_url} target="_blank" rel="noreferrer" style={paymentLinkStyle}>
+          去完成付款 / 查看付款页 →
+        </a>
+      ) : null}
+    </article>
+  );
 }
 
 function FormFootprintCard({ item }: { item: ProfileFormFootprint }) {
@@ -3129,4 +3310,125 @@ const gateActionsStyle: CSSProperties = {
   gap: "12px",
   marginTop: "20px",
   flexWrap: "wrap",
+};
+
+const membershipLoadingStyle: CSSProperties = {
+  padding: "12px 14px",
+  borderRadius: "12px",
+  border: "1px dashed var(--x-color-line)",
+  color: "var(--x-color-ink-muted)",
+  fontSize: "13px",
+  textAlign: "center",
+};
+
+function applicationCardStyle(isMobile: boolean): CSSProperties {
+  return {
+    display: "grid",
+    gap: isMobile ? "12px" : "14px",
+    padding: isMobile ? "14px" : "18px",
+    borderRadius: isMobile ? "16px" : "20px",
+    border: "1px solid var(--x-color-line-soft)",
+    background: "var(--x-color-panel)",
+    boxSizing: "border-box",
+  };
+}
+
+const applicationHeaderStyle: CSSProperties = {
+  display: "flex",
+  justifyContent: "space-between",
+  alignItems: "center",
+  gap: "12px",
+  flexWrap: "wrap",
+};
+
+const applicationEyebrowStyle: CSSProperties = {
+  fontSize: "12px",
+  letterSpacing: "0.12em",
+  textTransform: "uppercase",
+  fontWeight: 800,
+  color: "var(--x-color-accent-strong)",
+};
+
+const applicationTitleStyle: CSSProperties = {
+  margin: "2px 0 0",
+  fontSize: "18px",
+  fontWeight: 900,
+  color: "var(--x-color-ink)",
+};
+
+const progressTrackStyle: CSSProperties = {
+  height: "8px",
+  borderRadius: "999px",
+  background: "var(--x-color-panel-alt)",
+  border: "1px solid var(--x-color-line-soft)",
+  overflow: "hidden",
+};
+
+const progressFillStyle: CSSProperties = {
+  height: "100%",
+  background: "linear-gradient(135deg, var(--x-color-accent), var(--x-color-accent-strong))",
+  transition: "width 0.25s ease",
+};
+
+const signaturesSectionStyle: CSSProperties = { display: "grid", gap: "8px" };
+
+const signaturesHeadStyle: CSSProperties = {
+  fontSize: "13px",
+  fontWeight: 800,
+  color: "var(--x-color-ink)",
+};
+
+const signatureListStyle: CSSProperties = { display: "flex", flexWrap: "wrap", gap: "10px" };
+
+const signatureCardStyle: CSSProperties = {
+  width: "132px",
+  padding: "8px",
+  borderRadius: "10px",
+  border: "1px solid var(--x-color-line-soft)",
+  background: "var(--x-color-panel-alt)",
+  display: "grid",
+  gap: "4px",
+  justifyItems: "center",
+};
+
+const signaturePreviewBoxStyle: CSSProperties = {
+  width: "100%",
+  height: "64px",
+  display: "grid",
+  placeItems: "center",
+  borderRadius: "6px",
+  background: "#fff",
+  border: "1px solid var(--x-color-line-soft)",
+  overflow: "hidden",
+  color: "var(--x-color-success)",
+  fontWeight: 800,
+};
+
+const signatureNameStyle: CSSProperties = {
+  fontSize: "12px",
+  fontWeight: 700,
+  textAlign: "center",
+  wordBreak: "break-word",
+  lineHeight: 1.3,
+  color: "var(--x-color-ink)",
+};
+
+const signatureDateStyle: CSSProperties = {
+  fontSize: "11px",
+  color: "var(--x-color-ink-muted)",
+  textAlign: "center",
+};
+
+const membershipMutedStyle: CSSProperties = {
+  fontSize: "12.5px",
+  color: "var(--x-color-ink-muted)",
+  lineHeight: 1.6,
+};
+
+const paymentLinkStyle: CSSProperties = {
+  justifySelf: "start",
+  fontSize: "13px",
+  fontWeight: 700,
+  color: "var(--x-color-accent-strong)",
+  textDecoration: "none",
 };

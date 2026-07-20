@@ -2,6 +2,8 @@ import { useEffect, useState, type CSSProperties } from "react";
 
 import { apiFetch } from "../../../../js/apiFetch";
 import { TablePagination } from "../../../shared/TablePagination";
+import type { GLSourceEntryRef } from "../gl/api";
+import { sortArrow, sortableThStyle, type SortState } from "../shared/tableSort";
 import type { ApproverUserProfile, ClaimRecord } from "./types";
 
 type ClaimStatusFilter = "all" | "approved" | "unapproved";
@@ -14,6 +16,13 @@ type ClaimListProps = {
   onQueryChange: (value: string) => void;
   statusFilter: ClaimStatusFilter;
   onStatusFilterChange: (value: ClaimStatusFilter) => void;
+  dateStart: string;
+  dateEnd: string;
+  onDateStartChange: (value: string) => void;
+  onDateEndChange: (value: string) => void;
+  jeMap: Record<string, GLSourceEntryRef>;
+  sort: SortState;
+  onSort: (key: string) => void;
   page: number;
   pageCount: number;
   total: number;
@@ -29,6 +38,8 @@ type ClaimListProps = {
   onClearSelectedClaims: () => void;
   onDownloadSelectedClaims: () => void;
   onDownloadSelectedReport: () => void;
+  onBatchWriteJE: () => void;
+  canBatchJe: boolean;
   scopeLabel: string;
   onRefresh: () => void;
   onCreate: () => void;
@@ -50,6 +61,13 @@ export function ClaimList(props: ClaimListProps) {
     onQueryChange,
     statusFilter,
     onStatusFilterChange,
+    dateStart,
+    dateEnd,
+    onDateStartChange,
+    onDateEndChange,
+    jeMap,
+    sort,
+    onSort,
     page,
     pageCount,
     total,
@@ -64,6 +82,8 @@ export function ClaimList(props: ClaimListProps) {
     onClearSelectedClaims,
     onDownloadSelectedClaims,
     onDownloadSelectedReport,
+    onBatchWriteJE,
+    canBatchJe,
     scopeLabel,
     onRefresh,
     onCreate,
@@ -141,12 +161,32 @@ export function ClaimList(props: ClaimListProps) {
             </button>
           ))}
         </div>
-        <input
-          value={query}
-          onChange={(event) => onQueryChange(event.target.value)}
-          placeholder="搜索姓名、用途、活动、状态、金额或单号"
-          style={searchInputStyle}
-        />
+        <div style={filterRightStyle}>
+          <div style={dateRangeStyle}>
+            <span style={mutedStyle}>日期</span>
+            <input type="date" value={dateStart} onChange={(event) => onDateStartChange(event.target.value)} style={dateInputStyle} />
+            <span style={mutedStyle}>–</span>
+            <input type="date" value={dateEnd} onChange={(event) => onDateEndChange(event.target.value)} style={dateInputStyle} />
+            {dateStart || dateEnd ? (
+              <button
+                type="button"
+                style={btnStyle}
+                onClick={() => {
+                  onDateStartChange("");
+                  onDateEndChange("");
+                }}
+              >
+                清除
+              </button>
+            ) : null}
+          </div>
+          <input
+            value={query}
+            onChange={(event) => onQueryChange(event.target.value)}
+            placeholder="搜索姓名、用途、活动、状态、金额或单号"
+            style={searchInputStyle}
+          />
+        </div>
       </div>
 
       {loading ? <div style={emptyStyle}>载入申请记录中…</div> : null}
@@ -167,6 +207,11 @@ export function ClaimList(props: ClaimListProps) {
             <button type="button" style={disabledBtn(btnStyle, selectedCount <= 0 || exportingReport)} onClick={onDownloadSelectedReport} disabled={selectedCount <= 0 || exportingReport}>
               {exportingReport ? "生成 Report…" : "导出 Report"}
             </button>
+            {canBatchJe ? (
+              <button type="button" style={disabledBtn(primaryButtonStyle, selectedCount <= 0)} onClick={onBatchWriteJE} disabled={selectedCount <= 0}>
+                批量写 JE
+              </button>
+            ) : null}
           </div>
 
           <TablePagination page={page} totalPages={pageCount} total={total} onPage={onPageChange} />
@@ -175,15 +220,30 @@ export function ClaimList(props: ClaimListProps) {
             <table className="claim-table">
               <thead>
                 <tr>
-                  <th style={{ width: 40 }} />
-                  <th>状态</th>
-                  <th>申请人</th>
-                  <th>金额</th>
-                  <th>部门</th>
-                  <th>用途</th>
-                  <th>单号</th>
-                  <th>日期</th>
-                  <th>审批</th>
+                  <th style={{ width: 40 }}>
+                    <input
+                      type="checkbox"
+                      aria-label="当页全选"
+                      checked={allVisibleSelected}
+                      onChange={(event) => {
+                        if (event.target.checked) {
+                          onSelectPageClaims();
+                        } else {
+                          claims.forEach((claim) => onToggleClaimSelected(claim.id, false));
+                        }
+                      }}
+                      style={{ width: 16, height: 16, accentColor: "var(--x-color-accent)" }}
+                    />
+                  </th>
+                  <th style={sortableThStyle} onClick={() => onSort("status")}>状态{sortArrow(sort, "status")}</th>
+                  <th style={sortableThStyle} onClick={() => onSort("je")}>JE{sortArrow(sort, "je")}</th>
+                  <th style={sortableThStyle} onClick={() => onSort("applicant")}>申请人{sortArrow(sort, "applicant")}</th>
+                  <th style={sortableThStyle} onClick={() => onSort("amount")}>金额{sortArrow(sort, "amount")}</th>
+                  <th style={sortableThStyle} onClick={() => onSort("department")}>部门{sortArrow(sort, "department")}</th>
+                  <th style={sortableThStyle} onClick={() => onSort("purpose")}>用途{sortArrow(sort, "purpose")}</th>
+                  <th style={sortableThStyle} onClick={() => onSort("id")}>单号{sortArrow(sort, "id")}</th>
+                  <th style={sortableThStyle} onClick={() => onSort("request_date")}>日期{sortArrow(sort, "request_date")}</th>
+                  <th style={sortableThStyle} onClick={() => onSort("approver")}>审批{sortArrow(sort, "approver")}</th>
                 </tr>
               </thead>
               <tbody>
@@ -201,6 +261,7 @@ export function ClaimList(props: ClaimListProps) {
                         />
                       </td>
                       <td><span style={chipStyle(statusTone(status))}>{statusText(status)}</span></td>
+                      <td>{renderJeCell(jeMap[String(claim.id)])}</td>
                       <td style={cellStrongStyle}>{claim.applicant_name || "未填姓名"}</td>
                       <td style={cellStrongStyle}>RM {safeMoney(claim.amount)}</td>
                       <td>{claim.department_name || "-"}</td>
@@ -266,6 +327,32 @@ function getClaimStatus(claim: ClaimRecord) {
 function resolveApproverName(userId: number, users: Record<number, ApproverUserProfile>) {
   return users[userId]?.display_name || users[userId]?.name_NRIC || users[userId]?.username || `#${userId}`;
 }
+
+function renderJeCell(je?: GLSourceEntryRef) {
+  if (!je) {
+    return <span style={jeNoneStyle}>未入账</span>;
+  }
+  return (
+    <span style={jeChipStyle} title={`凭证 ${je.entry_no} · ${je.status === "posted" ? "已过账" : je.status}`}>
+      {je.entry_no}
+    </span>
+  );
+}
+
+const jeChipStyle: CSSProperties = {
+  display: "inline-flex",
+  alignItems: "center",
+  padding: "3px 8px",
+  borderRadius: "6px",
+  fontFamily: "var(--x-font-mono)",
+  fontSize: "11.5px",
+  fontWeight: 700,
+  whiteSpace: "nowrap",
+  background: "var(--x-color-success-soft)",
+  color: "var(--x-color-success)",
+};
+
+const jeNoneStyle: CSSProperties = { fontSize: "12px", color: "var(--x-color-ink-muted)" };
 
 const TABLE_CSS = `
 .claim-table { width: 100%; border-collapse: collapse; font-size: 13px; min-width: 900px; }
@@ -363,6 +450,19 @@ const searchInputStyle: CSSProperties = {
   flex: "1 1 240px",
   minHeight: "34px",
   padding: "7px 10px",
+  borderRadius: "8px",
+  border: "1px solid var(--x-color-line)",
+  background: "var(--x-color-panel)",
+  color: "var(--x-color-ink)",
+  fontSize: "13px",
+  boxSizing: "border-box",
+};
+
+const filterRightStyle: CSSProperties = { display: "flex", gap: "10px", alignItems: "center", flexWrap: "wrap", flex: "1 1 auto", justifyContent: "flex-end" };
+const dateRangeStyle: CSSProperties = { display: "flex", gap: "6px", alignItems: "center", flexWrap: "wrap" };
+const dateInputStyle: CSSProperties = {
+  minHeight: "34px",
+  padding: "6px 8px",
   borderRadius: "8px",
   border: "1px solid var(--x-color-line)",
   background: "var(--x-color-panel)",

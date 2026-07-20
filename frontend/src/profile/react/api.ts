@@ -1,4 +1,4 @@
-import type { AppRelease, ProfileFootprintPayload, ProfileFormValues, ProfileUser } from "./types";
+import type { AppRelease, MembershipContext, ProfileFootprintPayload, ProfileFormValues, ProfileUser } from "./types";
 import { apiFetch } from "../../js/apiFetch";
 
 async function parseResponse<T>(response: Response): Promise<T> {
@@ -35,6 +35,12 @@ export async function fetchMyFootprints() {
     credentials: "include",
   });
   return parseResponse<ProfileFootprintPayload>(response);
+}
+
+export async function fetchMembershipContext() {
+  const response = await apiFetch("/api/user_control/membership/context", { credentials: "include" });
+  const data = await parseResponse<{ context: MembershipContext }>(response);
+  return data.context;
 }
 
 export async function startMembershipRenewal() {
