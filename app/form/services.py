@@ -112,12 +112,40 @@ def _upsert_parental_data(member_data, payload):
     return parental
 
 
-def _is_form_registration_closed(form):
+def _normalize_max_members(raw):
+    # 空/None/<=0 视为不限人数（NULL）。
+    if raw is None or (isinstance(raw, str) and not raw.strip()):
+        return None
+    try:
+        value = int(raw)
+    except (TypeError, ValueError):
+        raise ValueError("最大报名人数需为整数")
+    return value if value > 0 else None
+
+
+def _form_member_count(form):
+    return len(form.members or [])
+
+
+def _is_form_expired(form):
     return bool(form.expired and malaysia_now().date() > form.expired)
+
+
+def _is_form_full(form):
+    return form.max_members is not None and _form_member_count(form) >= form.max_members
+
+
+def _is_form_registration_closed(form):
+    # 综合判定：手动终止 / 已过期 / 名额已满 都视为截止。
+    return bool(form.closed_manually) or _is_form_expired(form) or _is_form_full(form)
 
 
 def _inject_public_registration_status(form_data, form):
     form_data["registration_closed"] = _is_form_registration_closed(form)
+    form_data["closed_manually"] = bool(form.closed_manually)
+    form_data["is_full"] = _is_form_full(form)
+    form_data["member_count"] = _form_member_count(form)
+    form_data["max_members"] = form.max_members
     return form_data
 
 
@@ -936,6 +964,7 @@ def create_form(data):
             title=data["title"],
             detail=data["detail"],
             expired=datetime.fromisoformat(data["expired"]).date(),
+            max_members=_normalize_max_members(data.get("max_members")),
             email=field_switches.get("email", data.get("email", True)),
             parental_form=field_switches.get("parental_form", data.get("parental_form", False)),
             parent_1=field_switches.get("parent_1", data.get("parent_1", True)),
@@ -1010,8 +1039,10 @@ def _get_or_create_member_by_nric(nric, *, name_nric=None):
 
 def register_member(form_id, data):
     form = RegisForm.query.get_or_404(form_id)
-    if _is_form_registration_closed(form):
+    if bool(form.closed_manually) or _is_form_expired(form):
         return jsonify({"status": "error", "message": "报名已截止，无法继续报名"}), 400
+    if _is_form_full(form):
+        return jsonify({"status": "error", "message": "报名人数已满，无法继续报名"}), 400
 
     for field in ["name", "name_cn", "nric", "phone", "gender"]:
         if not data.get(field):
@@ -1959,6 +1990,15 @@ def edit_form(form_id, data):
                     form.expired = datetime.strptime(expired, "%Y-%m-%d").date()
                 except Exception:
                     return jsonify({"status": "error", "message": "expired 格式需为 YYYY-MM-DD"}), 400
+
+        if "max_members" in data:
+            try:
+                form.max_members = _normalize_max_members(data.get("max_members"))
+            except ValueError as exc:
+                return jsonify({"status": "error", "message": str(exc)}), 400
+
+        if "closed_manually" in data:
+            form.closed_manually = bool(data.get("closed_manually"))
 
         switches = _extract_field_switches(data)
 

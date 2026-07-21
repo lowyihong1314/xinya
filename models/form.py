@@ -48,6 +48,11 @@ class RegisForm(db.Model):
 
     expired = db.Column(db.Date, nullable=False)
 
+    # 报名名额上限（NULL = 不限人数）
+    max_members = db.Column(db.Integer, nullable=True)
+    # 手动终止报名（可手动开回去）
+    closed_manually = db.Column(db.Boolean, nullable=False, default=False)
+
     # 配置字段
     email = db.Column(db.Boolean, nullable=False, default=True)
     parental_form = db.Column(db.Boolean, nullable=False, default=False)
@@ -101,6 +106,9 @@ class RegisForm(db.Model):
             "fees": [f.to_dict() for f in self.fees],
             "expired": self.expired.isoformat() if self.expired else None,
             "created_at": self.created_at.isoformat() if self.created_at else None,
+            "max_members": self.max_members,
+            "closed_manually": bool(self.closed_manually),
+            "member_count": len(self.members),
             "field_switches": field_switches,
             **field_switches,
         }

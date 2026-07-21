@@ -543,8 +543,22 @@ function SettingsTab({
       <div style={detailGridStyle(isMobile)}>
         <EditableFact label="标题" value={form.title} editable={canEdit} onSave={(v) => onPatchForm({ title: v })} />
         <EditableFact label="截止日期" value={form.expired || ""} kind="date" editable={canEdit} onSave={(v) => onPatchForm({ expired: v })} />
+        <EditableFact
+          label="最大报名人数（留空=不限）"
+          value={form.max_members != null ? String(form.max_members) : ""}
+          kind="number"
+          editable={canEdit}
+          onSave={(v) => {
+            const trimmed = v.trim();
+            const num = trimmed === "" ? null : Number(trimmed);
+            onPatchForm({ max_members: num != null && Number.isFinite(num) && num > 0 ? Math.floor(num) : null });
+          }}
+        />
       </div>
       <EditableFact label="详情" value={form.detail || ""} kind="textarea" editable={canEdit} onSave={(v) => onPatchForm({ detail: v })} />
+
+      <div style={sectionTitleStyle}>报名状态</div>
+      <RegistrationStatusControl form={form} canEdit={canEdit} onPatchForm={onPatchForm} />
 
       <div style={sectionTitleStyle}>字段开关</div>
       <div style={toggleGridStyle}>
@@ -558,6 +572,60 @@ function SettingsTab({
         <ConfigToggle label="其他备注" checked={sw("other_remark", form.other_remark)} disabled={!canEdit} onChange={(n) => setSwitch({ other_remark: n })} />
       </div>
       <div style={mutedStyle}>已启用 {getEnabledFieldSwitchCount(form)} 个默认字段。</div>
+    </div>
+  );
+}
+
+function RegistrationStatusControl({
+  form,
+  canEdit,
+  onPatchForm,
+}: {
+  form: FormRecord;
+  canEdit: boolean;
+  onPatchForm: (patch: Partial<FormRecord>) => void;
+}) {
+  const count = form.member_count ?? (form.members || []).length;
+  const max = form.max_members ?? null;
+  const closedManually = Boolean(form.closed_manually);
+  const isFull = form.is_full ?? (max != null && count >= max);
+  const isExpired = form.expired
+    ? new Date(`${form.expired}T23:59:59`) < new Date()
+    : false;
+
+  let label = "报名进行中";
+  let tone: CSSProperties = { background: "var(--x-color-success-soft)", color: "var(--x-color-success)", borderColor: "rgba(21,128,61,0.28)" };
+  if (closedManually) {
+    label = "已手动终止";
+    tone = { background: "var(--x-color-danger-soft)", color: "var(--x-color-danger)", borderColor: "var(--x-color-danger-border)" };
+  } else if (isExpired) {
+    label = "已过截止日期";
+    tone = { background: "var(--x-color-panel-alt)", color: "var(--x-color-ink-muted)", borderColor: "var(--x-color-line)" };
+  } else if (isFull) {
+    label = "名额已满";
+    tone = { background: "var(--x-color-warning-soft)", color: "var(--x-color-warning)", borderColor: "var(--x-color-warning-border)" };
+  }
+
+  return (
+    <div style={{ display: "grid", gap: "10px", padding: "12px 14px", borderRadius: "8px", background: "var(--x-color-panel-alt)", border: "1px solid var(--x-color-line-soft)" }}>
+      <div style={{ display: "flex", alignItems: "center", gap: "10px", flexWrap: "wrap" }}>
+        <span style={{ padding: "3px 12px", borderRadius: "999px", border: "1px solid", fontSize: "13px", fontWeight: 700, ...tone }}>{label}</span>
+        <span style={mutedStyle}>
+          已报名 {count} {max != null ? `/ ${max}` : ""} 人{max == null ? "（不限人数）" : ""}
+        </span>
+      </div>
+      {canEdit ? (
+        closedManually ? (
+          <button type="button" style={btnStyle} onClick={() => onPatchForm({ closed_manually: false })}>
+            重新开放报名
+          </button>
+        ) : (
+          <button type="button" style={dangerButtonStyle} onClick={() => onPatchForm({ closed_manually: true })}>
+            终止报名
+          </button>
+        )
+      ) : null}
+      {closedManually ? <div style={mutedStyle}>报名已手动终止，公开报名页将显示「报名已截止」。可随时重新开放。</div> : null}
     </div>
   );
 }
@@ -619,7 +687,7 @@ function EditableFact({
   value: string;
   editable: boolean;
   onSave: (value: string) => void;
-  kind?: "text" | "date" | "textarea";
+  kind?: "text" | "date" | "textarea" | "number";
 }) {
   const [editing, setEditing] = useState(false);
   const [draft, setDraft] = useState(value ?? "");
@@ -651,7 +719,7 @@ function EditableFact({
         kind === "textarea" ? (
           <textarea style={{ ...factInputStyle, minHeight: "180px", resize: "vertical" }} value={draft} autoFocus onChange={(e) => setDraft(e.target.value)} />
         ) : (
-          <input type={kind === "date" ? "date" : "text"} style={factInputStyle} value={draft} autoFocus onChange={(e) => setDraft(e.target.value)} onKeyDown={(e) => { if (e.key === "Enter") commit(); if (e.key === "Escape") setEditing(false); }} />
+          <input type={kind === "date" ? "date" : kind === "number" ? "number" : "text"} min={kind === "number" ? 0 : undefined} style={factInputStyle} value={draft} autoFocus onChange={(e) => setDraft(e.target.value)} onKeyDown={(e) => { if (e.key === "Enter") commit(); if (e.key === "Escape") setEditing(false); }} />
         )
       ) : (
         <div style={{ ...factValueStyle, ...(kind === "textarea" ? { whiteSpace: "pre-wrap" } : {}) }}>{display}</div>

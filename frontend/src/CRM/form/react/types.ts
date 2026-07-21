@@ -107,6 +107,9 @@ export type FormRecord = {
   expired?: string;
   created_at?: string;
   member_count?: number;
+  max_members?: number | null;
+  closed_manually?: boolean;
+  is_full?: boolean;
   fees?: FormFee[];
   payments?: FormPayment[];
   extra_field_configs?: ExtraFieldConfig[];
