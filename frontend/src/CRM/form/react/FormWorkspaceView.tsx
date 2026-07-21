@@ -4,6 +4,7 @@ import type { CSSProperties, ReactNode } from "react";
 import { CachedImage } from "../../../components/CachedMedia";
 import { downloadBlobOrShare } from "../../../js/browserActions";
 import { smartImageURL } from "../../../js/get_img";
+import { calcAgeFromNric } from "../../../js/nric";
 import { ExtraFieldEditor } from "./ExtraFieldEditor";
 import { FeePanel } from "./FeePanel";
 import { TablePagination, usePagedRows } from "../../shared/TablePagination";
@@ -51,6 +52,7 @@ async function exportMembersToExcel(formTitle: string, members: FormMember[], ex
       中文名: member.name_cn || "",
       英文名: member.name || "",
       NRIC: member.nric || "",
+      年龄: calcAgeFromNric(member.nric) ?? "",
       电话: member.phone || "",
       Email: member.email || "",
       性别: member.gender || "",
@@ -152,6 +154,10 @@ function getMemberSortValue(member: FormMember, key: string): number | string | 
       return String(member.gender || "");
     case "nric":
       return String(member.nric || "");
+    case "age": {
+      const age = calcAgeFromNric(member.nric);
+      return age == null ? Number.NEGATIVE_INFINITY : age;
+    }
     case "pay":
       return memberPaymentMeta(member).label;
     case "registered_at":
@@ -471,6 +477,7 @@ function MembersTab({
                 <th style={sortableThStyle} onClick={() => setSort((s) => toggleSort(s, "phone"))}>电话{sortArrow(sort, "phone")}</th>
                 <th style={sortableThStyle} onClick={() => setSort((s) => toggleSort(s, "gender"))}>性别{sortArrow(sort, "gender")}</th>
                 <th style={sortableThStyle} onClick={() => setSort((s) => toggleSort(s, "nric"))}>NRIC{sortArrow(sort, "nric")}</th>
+                <th style={sortableThStyle} onClick={() => setSort((s) => toggleSort(s, "age"))}>年龄{sortArrow(sort, "age")}</th>
                 <th style={sortableThStyle} onClick={() => setSort((s) => toggleSort(s, "pay"))}>付款状态{sortArrow(sort, "pay")}</th>
                 <th style={sortableThStyle} onClick={() => setSort((s) => toggleSort(s, "registered_at"))}>报名时间{sortArrow(sort, "registered_at")}</th>
                 <th style={{ width: isMobile ? 150 : 200 }}>操作</th>
@@ -488,6 +495,7 @@ function MembersTab({
                     <td style={monoCellStyle}>{member.phone || "—"}</td>
                     <td>{String(member.gender || "—")}</td>
                     <td style={monoCellStyle}>{String(member.nric || "—")}</td>
+                    <td style={monoCellStyle}>{calcAgeFromNric(member.nric) ?? "—"}</td>
                     <td><span style={chipStyle(pay.tone)}>{pay.label}</span></td>
                     <td style={monoCellStyle}>{formatRegDatetime(member.registered_at)}</td>
                     <td onClick={(e) => e.stopPropagation()}>
