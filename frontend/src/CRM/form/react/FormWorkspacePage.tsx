@@ -21,6 +21,8 @@ export function FormWorkspacePage() {
     permissionNames.has("member_detail");
   const canEditForms = permissionNames.has("form_edit");
   const canViewMemberDetail = canEditForms || permissionNames.has("member_detail");
+  const canConfirmPayments = permissionNames.has("account_edit");
+  const canManagePayments = canEditForms || canConfirmPayments;
 
   const rawFormId = searchParams.get("form_id");
   const selectedFormId =
@@ -30,6 +32,8 @@ export function FormWorkspacePage() {
   const { state, actions } = useFormWorkspace({
     enabled: canReadForms,
     canEditMembers: canEditForms,
+    canManagePayments,
+    canConfirmPayments,
     preferredFormId: selectedFormId,
   });
 

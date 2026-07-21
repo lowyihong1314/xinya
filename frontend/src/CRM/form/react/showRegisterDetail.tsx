@@ -6,9 +6,10 @@ import { openOverlay } from "../../../app/OverlayProvider";
 import { CachedImage } from "../../../components/CachedMedia";
 import { showConfirmDialog } from "../../../js/dialogs";
 import { designTokens } from "../../../theme/designTokens";
-import { previewMemberNricChange } from "./api";
+import { createMemberPayment, previewMemberNricChange, updateMemberPaymentStatus } from "./api";
 import type {
   ExtraFieldConfig,
+  FormFee,
   FormMember,
   FormMemberExtraField,
   FormMemberTimeSlot,
@@ -30,9 +31,15 @@ type ShowRegisterDetailOptions = {
   form?: FormRecord;
   formId?: number;
   extraFields?: ExtraFieldConfig[];
+  fees?: FormFee[];
   onSaveField?: (member: FormMember, field: string | number, value: unknown) => Promise<void>;
+  onPaymentChanged?: () => void;
+  canManagePayments?: boolean;
+  canConfirmPayments?: boolean;
   readOnly?: boolean;
 };
+
+const PAYMENT_MODE_OPTIONS = ["现金", "QR", "CDM", "银行转账", "支票"];
 
 type EditableField = {
   key: string;
@@ -198,12 +205,182 @@ function PaymentCard({ payment }: { payment: FormPayment }) {
   );
 }
 
+function PaymentComposer({
+  formId,
+  nric,
+  fees,
+  canConfirm,
+  onCreated,
+}: {
+  formId: number;
+  nric: string;
+  fees: FormFee[];
+  canConfirm: boolean;
+  onCreated: (payment: FormPayment) => void;
+}) {
+  const [open, setOpen] = useState(false);
+  const [feeId, setFeeId] = useState<string>(() => (fees[0] ? String(fees[0].id) : ""));
+  const [paymentMode, setPaymentMode] = useState(PAYMENT_MODE_OPTIONS[0]);
+  const [proofFile, setProofFile] = useState<File | null>(null);
+  const [markChecked, setMarkChecked] = useState(false);
+  const [counter, setCounter] = useState("");
+  const [submitting, setSubmitting] = useState(false);
+  const [error, setError] = useState("");
+
+  function reset() {
+    setFeeId(fees[0] ? String(fees[0].id) : "");
+    setPaymentMode(PAYMENT_MODE_OPTIONS[0]);
+    setProofFile(null);
+    setMarkChecked(false);
+    setCounter("");
+    setError("");
+  }
+
+  async function handleSubmit() {
+    setError("");
+    if (!nric) {
+      setError("这个成员没有 NRIC，无法记录付款");
+      return;
+    }
+    const parsedFeeId = Number(feeId);
+    if (!feeId || Number.isNaN(parsedFeeId)) {
+      setError("请选择收费项");
+      return;
+    }
+    setSubmitting(true);
+    try {
+      const created = await createMemberPayment(
+        formId,
+        { nric, fee_id: parsedFeeId, payment_mode: paymentMode.trim() || "现金" },
+        proofFile,
+      );
+      let payment = created.payment;
+      if (!payment) {
+        throw new Error(created.message || "记录付款失败");
+      }
+      if (markChecked && canConfirm) {
+        const confirmed = await updateMemberPaymentStatus(payment.id, "checked", counter.trim() || undefined);
+        payment = confirmed.payment || { ...payment, status: "checked", counter: counter.trim() || null };
+      }
+      onCreated(payment);
+      reset();
+      setOpen(false);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "记录付款失败");
+    } finally {
+      setSubmitting(false);
+    }
+  }
+
+  if (!open) {
+    return (
+      <button type="button" style={composerToggleStyle} onClick={() => setOpen(true)}>
+        + 帮成员记录付款
+      </button>
+    );
+  }
+
+  return (
+    <div style={composerStyle}>
+      <div style={composerHeaderStyle}>
+        <span style={composerTitleStyle}>记录付款</span>
+        <button
+          type="button"
+          style={composerCloseStyle}
+          onClick={() => {
+            reset();
+            setOpen(false);
+          }}
+        >
+          取消
+        </button>
+      </div>
+
+      {error ? <div style={composerErrorStyle}>{error}</div> : null}
+
+      <div style={composerFieldStyle}>
+        <label style={composerLabelStyle}>收费项</label>
+        {fees.length ? (
+          <select style={inputStyle} value={feeId} onChange={(event) => setFeeId(event.target.value)} disabled={submitting}>
+            {fees.map((fee) => (
+              <option key={fee.id} value={String(fee.id)}>
+                {fee.category} · RM {Number(fee.amount || 0).toFixed(2)}
+              </option>
+            ))}
+          </select>
+        ) : (
+          <div style={emptyStateStyle}>这个表格还没有设置报名费，请先到「报名费」分页添加。</div>
+        )}
+      </div>
+
+      <div style={composerFieldStyle}>
+        <label style={composerLabelStyle}>付款方式</label>
+        <select style={inputStyle} value={paymentMode} onChange={(event) => setPaymentMode(event.target.value)} disabled={submitting}>
+          {PAYMENT_MODE_OPTIONS.map((mode) => (
+            <option key={mode} value={mode}>
+              {mode}
+            </option>
+          ))}
+        </select>
+      </div>
+
+      <div style={composerFieldStyle}>
+        <label style={composerLabelStyle}>付款截图（可选）</label>
+        <input
+          type="file"
+          accept="image/png,image/jpeg,image/jpg,image/heic,image/heif"
+          style={{ ...inputStyle, padding: "5px" }}
+          disabled={submitting}
+          onChange={(event) => setProofFile(event.target.files?.[0] || null)}
+        />
+      </div>
+
+      {canConfirm ? (
+        <div style={composerFieldStyle}>
+          <label style={checkboxWrapStyle}>
+            <input
+              type="checkbox"
+              checked={markChecked}
+              disabled={submitting}
+              onChange={(event) => setMarkChecked(event.target.checked)}
+            />
+            <span>直接标记为「已确认」</span>
+          </label>
+          {markChecked ? (
+            <input
+              type="text"
+              style={inputStyle}
+              placeholder="柜台 / 经手人（可选）"
+              value={counter}
+              disabled={submitting}
+              onChange={(event) => setCounter(event.target.value)}
+            />
+          ) : null}
+        </div>
+      ) : null}
+
+      <button
+        type="button"
+        style={{ ...saveButtonStyle, opacity: submitting || !fees.length ? 0.6 : 1, cursor: submitting || !fees.length ? "not-allowed" : "pointer" }}
+        disabled={submitting || !fees.length}
+        onClick={() => void handleSubmit()}
+      >
+        {submitting ? "提交中" : "记录付款"}
+      </button>
+    </div>
+  );
+}
+
 function MemberDetailModal({
   member,
   form,
   formId,
   extraFields,
+  fees,
   onSaveField,
+  onPaymentChanged,
+  canManagePayments = false,
+  canConfirmPayments = false,
   readOnly = false,
   onClose,
 }: ShowRegisterDetailOptions & {
@@ -215,7 +392,11 @@ function MemberDetailModal({
   const availableSlots = Array.isArray(member.available_time_slot_json)
     ? (member.available_time_slot_json as FormMemberTimeSlot[])
     : [];
-  const payments = Array.isArray(member.payments) ? member.payments : [];
+  const [payments, setPayments] = useState<FormPayment[]>(
+    Array.isArray(member.payments) ? member.payments : [],
+  );
+  const effectiveFormId = formId ?? form?.id ?? null;
+  const availableFees = fees && fees.length ? fees : form?.fees || [];
   const [saving, setSaving] = useState(false);
 
   const editableBaseFields = useMemo<EditableField[]>(
@@ -427,6 +608,18 @@ function MemberDetailModal({
         ) : null}
 
         <Section title="付款记录">
+          {canManagePayments && effectiveFormId != null ? (
+            <PaymentComposer
+              formId={effectiveFormId}
+              nric={String(member.nric || "")}
+              fees={availableFees}
+              canConfirm={canConfirmPayments}
+              onCreated={(payment) => {
+                setPayments((current) => [payment, ...current]);
+                onPaymentChanged?.();
+              }}
+            />
+          ) : null}
           {payments.length ? (
             <div style={paymentListStyle}>
               {payments.map((payment) => (
@@ -924,6 +1117,72 @@ const timeSlotValueStyle: CSSProperties = {
 const paymentListStyle: CSSProperties = {
   display: "grid",
   gap: "6px",
+};
+
+const composerToggleStyle: CSSProperties = {
+  width: "fit-content",
+  padding: "6px 10px",
+  borderRadius: radius.sm,
+  border: `1px dashed ${colors.accentBorder}`,
+  background: colors.accentSoft,
+  color: colors.accent,
+  cursor: "pointer",
+  fontSize: "12px",
+  fontWeight: 800,
+};
+
+const composerStyle: CSSProperties = {
+  display: "grid",
+  gap: "7px",
+  padding: "10px",
+  borderRadius: radius.sm,
+  background: colors.panelAlt,
+  border: `1px solid ${colors.accentBorder}`,
+};
+
+const composerHeaderStyle: CSSProperties = {
+  display: "flex",
+  justifyContent: "space-between",
+  alignItems: "center",
+  gap: "8px",
+};
+
+const composerTitleStyle: CSSProperties = {
+  color: colors.ink,
+  fontSize: "13px",
+  fontWeight: 900,
+};
+
+const composerCloseStyle: CSSProperties = {
+  padding: "4px 8px",
+  borderRadius: radius.sm,
+  border: `1px solid ${colors.line}`,
+  background: colors.panel,
+  color: colors.inkMuted,
+  cursor: "pointer",
+  fontSize: "11px",
+  fontWeight: 700,
+};
+
+const composerFieldStyle: CSSProperties = {
+  display: "grid",
+  gap: "4px",
+};
+
+const composerLabelStyle: CSSProperties = {
+  color: colors.inkMuted,
+  fontSize: "11px",
+  fontWeight: 700,
+};
+
+const composerErrorStyle: CSSProperties = {
+  padding: "6px 8px",
+  borderRadius: radius.sm,
+  border: `1px solid ${colors.danger}`,
+  background: colors.dangerSoft,
+  color: colors.danger,
+  fontSize: "12px",
+  fontWeight: 700,
 };
 
 const paymentCardStyle: CSSProperties = {

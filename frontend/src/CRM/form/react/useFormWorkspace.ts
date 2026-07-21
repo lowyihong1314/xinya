@@ -67,9 +67,17 @@ function mergeFormPatch(form: FormRecord, patch: Partial<FormRecord>) {
   } as FormRecord) as FormRecord;
 }
 
-export function useFormWorkspace(options?: { enabled?: boolean; canEditMembers?: boolean; preferredFormId?: number | null }) {
+export function useFormWorkspace(options?: {
+  enabled?: boolean;
+  canEditMembers?: boolean;
+  canManagePayments?: boolean;
+  canConfirmPayments?: boolean;
+  preferredFormId?: number | null;
+}) {
   const enabled = options?.enabled ?? true;
   const canEditMembers = options?.canEditMembers ?? true;
+  const canManagePayments = options?.canManagePayments ?? false;
+  const canConfirmPayments = options?.canConfirmPayments ?? false;
   const preferredFormId = options?.preferredFormId ?? null;
   const [forms, setForms] = useState<FormRecord[]>([]);
   const [selectedFormId, setSelectedFormId] = useState<number | null>(null);
@@ -423,7 +431,11 @@ export function useFormWorkspace(options?: { enabled?: boolean; canEditMembers?:
       form: selectedForm ?? (selectedFormId ? ({ id: selectedFormId, title: "" } as FormRecord) : undefined),
       formId: selectedFormId ?? undefined,
       extraFields,
+      fees,
       onSaveField: canEditMembers ? handleEditMemberField : undefined,
+      onPaymentChanged: () => void refreshSelectedForm(),
+      canManagePayments,
+      canConfirmPayments,
       readOnly: !canEditMembers,
     });
   }

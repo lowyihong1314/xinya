@@ -1,0 +1,1 @@
+- [GL + Cash Book module](gl-cash-book-module.md) — finance now has a full double-entry GL + Cash Book (models/gl.py, app/gl, Account/react/gl); auto-posting reserved but not wired

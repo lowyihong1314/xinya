@@ -4,6 +4,7 @@ import type {
   FormDetailResponse,
   FormFee,
   FormListResponse,
+  FormPayment,
   FormRecord,
 } from "./types";
 import { apiFetch } from "../../../js/apiFetch";
@@ -201,6 +202,38 @@ export async function editMemberField(payload: {
     body: JSON.stringify(payload),
   });
   return parseJson<{ status?: string; message?: string }>(response);
+}
+
+export async function createMemberPayment(
+  formId: number,
+  payload: { nric: string; fee_id: number; payment_mode: string },
+  proofImage?: File | null,
+) {
+  const formData = new FormData();
+  formData.append("nric", payload.nric);
+  formData.append("fee_id", String(payload.fee_id));
+  formData.append("payment_mode", payload.payment_mode);
+  if (proofImage) {
+    formData.append("proof_image", proofImage);
+  }
+  const response = await apiFetch(`/api/form/payment/create/${formId}`, {
+    method: "POST",
+    body: formData,
+  });
+  return parseJson<{ status?: string; message?: string; payment?: FormPayment }>(response);
+}
+
+export async function updateMemberPaymentStatus(
+  paymentId: number,
+  status: "process" | "checked" | "fail",
+  counter?: string,
+) {
+  const response = await apiFetch(`/api/form/payment/update_status/${paymentId}`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(counter ? { status, counter } : { status }),
+  });
+  return parseJson<{ status?: string; message?: string; payment?: FormPayment }>(response);
 }
 
 export type MemberNricChangePreviewResponse = {
