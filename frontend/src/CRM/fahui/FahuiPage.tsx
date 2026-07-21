@@ -362,6 +362,7 @@ export function FahuiPage() {
   const [itemModal, setItemModal] = useState<{ item: YlpOrderItem | null } | null>(null);
   const [paiweiPreviewUrl, setPaiweiPreviewUrl] = useState<string | null>(null);
   const [paiweiPreviewLoading, setPaiweiPreviewLoading] = useState(false);
+  const [intakeDrawerOpen, setIntakeDrawerOpen] = useState(false);
 
   const currentWorkspace =
     screen.kind === "workspace" || screen.kind === "payment-detail" ? screen.workspace : screen.kind === "ylp-order-detail" ? "ylp" : null;
@@ -871,7 +872,7 @@ export function FahuiPage() {
   }
 
   function openYlpIntakePage() {
-    window.open("/#/ylp-registration", "_blank", "noopener,noreferrer");
+    setIntakeDrawerOpen(true);
   }
 
   function renderWorkspaceHeader() {
@@ -1578,10 +1579,54 @@ export function FahuiPage() {
 
       {renderWorkspaceHeader()}
 
-      {screen.kind === "workspace" && screen.workspace === "ylp" && screen.section === "orders"
-        ? renderYlpOrderList()
-        : null}
-      {screen.kind === "ylp-order-detail" ? renderYlpOrderDetailView() : null}
+      <div style={styles.workspaceBody(isMobile)}>
+        <div style={styles.workspaceMain}>
+          {screen.kind === "workspace" && screen.workspace === "ylp" && screen.section === "orders"
+            ? renderYlpOrderList()
+            : null}
+          {screen.kind === "ylp-order-detail" ? renderYlpOrderDetailView() : null}
+        </div>
+
+        {intakeDrawerOpen ? (
+          <aside style={styles.intakeDockPanel(isMobile)} className="ylp-intake-drawer">
+            <style>{INTAKE_DRAWER_CSS}</style>
+            <header style={styles.intakeDrawerHeader}>
+              <div>
+                <p style={styles.intakeDrawerEyebrow}>牌位填写页 · 手机预览</p>
+                <p style={styles.intakeDrawerHint}>在此模拟手机端直接测试填写流程</p>
+              </div>
+              <div style={styles.itemActionCell}>
+                <a
+                  href="/#/ylp-registration"
+                  target="_blank"
+                  rel="noreferrer"
+                  style={styles.itemEditButton}
+                >
+                  新标签打开
+                </a>
+                <button
+                  type="button"
+                  style={styles.addItemCancel}
+                  onClick={() => setIntakeDrawerOpen(false)}
+                >
+                  关闭
+                </button>
+              </div>
+            </header>
+            <div style={styles.intakePhoneShell}>
+              <div style={styles.intakePhoneNotch} />
+              <div style={styles.intakePhoneScreenWrap}>
+                <iframe
+                  title="牌位填写页"
+                  src="/#/ylp-registration"
+                  style={styles.intakePhoneScreen}
+                />
+              </div>
+              <div style={styles.intakePhoneHomeBar} />
+            </div>
+          </aside>
+        ) : null}
+      </div>
     </section>
   );
 }
@@ -1600,6 +1645,11 @@ function DetailField({
     </article>
   );
 }
+
+const INTAKE_DRAWER_CSS = `
+@keyframes ylpIntakeSlideIn { from { transform: translateX(100%); } to { transform: translateX(0); } }
+.ylp-intake-drawer { animation: ylpIntakeSlideIn 0.28s cubic-bezier(0.22, 1, 0.36, 1); }
+`;
 
 const YLP_ORDER_TABLE_CSS = `
 .ylp-order-table { width: 100%; border-collapse: collapse; font-size: 13px; min-width: 720px; }
@@ -2641,6 +2691,95 @@ const styles = {
     border: "1px solid var(--x-color-line-soft)",
     borderRadius: "8px",
     background: "var(--x-color-panel-alt)",
+  },
+  workspaceBody: (isMobile: boolean) => ({
+    display: "flex",
+    flexDirection: (isMobile ? "column" : "row") as "column" | "row",
+    alignItems: "flex-start",
+    gap: "16px",
+    width: "100%",
+  }),
+  workspaceMain: {
+    flex: 1,
+    minWidth: 0,
+    width: "100%",
+  },
+  intakeDockPanel: (isMobile: boolean) => ({
+    width: isMobile ? "100%" : "min(400px, 42vw)",
+    flexShrink: 0,
+    position: (isMobile ? "static" : "sticky") as "static" | "sticky",
+    top: "12px",
+    alignSelf: "flex-start" as const,
+    maxHeight: isMobile ? "none" : "calc(100vh - 24px)",
+    overflowY: "auto" as const,
+    display: "grid",
+    gridTemplateRows: "auto auto",
+    gap: "12px",
+    padding: "16px",
+    boxSizing: "border-box" as const,
+    background: "var(--x-color-panel)",
+    border: "1px solid var(--x-color-line)",
+    borderRadius: "16px",
+    boxShadow: "0 24px 60px var(--x-color-shadow)",
+  }),
+  intakeDrawerHeader: {
+    display: "flex",
+    justifyContent: "space-between",
+    alignItems: "flex-start",
+    gap: "12px",
+  },
+  intakeDrawerEyebrow: {
+    margin: 0,
+    fontSize: "14px",
+    fontWeight: 800,
+    color: "var(--x-color-ink)",
+  },
+  intakeDrawerHint: {
+    margin: "4px 0 0",
+    fontSize: "12px",
+    color: "var(--x-color-ink-muted)",
+  },
+  intakePhoneShell: {
+    position: "relative" as const,
+    width: "min(340px, 100%)",
+    alignSelf: "start",
+    margin: "0 auto",
+    background: "linear-gradient(160deg, #1b2432, #0b1220)",
+    borderRadius: "46px",
+    padding: "14px",
+    boxShadow: "0 30px 60px rgba(15,23,42,0.35), inset 0 0 0 2px rgba(255,255,255,0.06)",
+    boxSizing: "border-box" as const,
+  },
+  intakePhoneNotch: {
+    position: "absolute" as const,
+    top: "22px",
+    left: "50%",
+    transform: "translateX(-50%)",
+    width: "120px",
+    height: "24px",
+    borderRadius: "999px",
+    background: "#05070c",
+    zIndex: 2,
+  },
+  intakePhoneScreenWrap: {
+    borderRadius: "34px",
+    overflow: "hidden" as const,
+    background: "#fff",
+    border: "1px solid rgba(0,0,0,0.35)",
+  },
+  intakePhoneScreen: {
+    display: "block",
+    width: "100%",
+    height: "min(74vh, 720px)",
+    border: "none",
+    background: "#fff",
+  },
+  intakePhoneHomeBar: {
+    width: "132px",
+    height: "5px",
+    borderRadius: "999px",
+    background: "rgba(255,255,255,0.65)",
+    margin: "10px auto 2px",
   },
   addItemHeader: {
     display: "flex",
