@@ -1,5 +1,5 @@
-import { useDeferredValue, useEffect, useMemo, useState } from "react";
-import type { CSSProperties, FormEvent } from "react";
+import { useDeferredValue, useEffect, useMemo, useRef, useState } from "react";
+import type { CSSProperties, Dispatch, FormEvent, SetStateAction } from "react";
 import { useSearchParams } from "react-router-dom";
 
 import { useUserState } from "../../../../app/UserState";
@@ -259,6 +259,8 @@ export function AssetWorkspace() {
   const { user, isMobile } = useUserState();
   const [searchParams] = useSearchParams();
   const permissionUser = user as AssetPermissionUser;
+  const currentUser = user as { id?: number; display_name?: string; username?: string } | null;
+  const claimPrefillDone = useRef(false);
   const requestedPanelKey = resolveAssetPanelKey(searchParams.get("asset_panel"));
   const [dashboard, setDashboard] = useState<AssetDashboardPayload>(EMPTY_ASSET_DASHBOARD);
   const [movementDocuments, setMovementDocuments] = useState<AssetStockDocumentRecord[]>([]);
@@ -279,6 +281,9 @@ export function AssetWorkspace() {
   const [editingSubItemId, setEditingSubItemId] = useState<number | null>(null);
   const [editingDocumentId, setEditingDocumentId] = useState<number | null>(null);
   const [masterEditorMode, setMasterEditorMode] = useState<MasterEditorMode>("overview");
+  // Item 汇总面板里的 item 详情页 / 编辑态（与基础档案的 master editor 复用同一套表单 state）。
+  const [detailItemId, setDetailItemId] = useState<number | null>(null);
+  const [summaryEditMode, setSummaryEditMode] = useState<"none" | "item" | "sub_item">("none");
   const [documentEditorMode, setDocumentEditorMode] = useState<DocumentEditorMode>("overview");
   const [activePanelKey, setActivePanelKey] = useState<AssetPanelKey>(requestedPanelKey);
   const [collapsedSections, setCollapsedSections] = useState<Record<AssetPanelKey, boolean>>({
@@ -299,6 +304,45 @@ export function AssetWorkspace() {
     openPanel(requestedPanelKey);
     void loadDashboard(requestedPanelKey);
   }, [requestedPanelKey]);
+
+  useEffect(() => {
+    // Item 汇总面板复用为 item 管理入口，需要 master items（含子 item）来渲染详情；
+    // 该面板本身只加载 inventory，这里额外确保 master 数据加载一次。
+    if (activePanelKey === "item_summary" && !loadedData.master && !loading) {
+      void loadDashboard("master");
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [activePanelKey, loadedData.master, loading]);
+
+  useEffect(() => {
+    // 从报销详情「采购入库」按钮跳转过来：自动打开采购入库单据表单并按报销单预填。
+    if (claimPrefillDone.current || !dashboard) {
+      return;
+    }
+    const claimId = searchParams.get("doc_from_claim");
+    if (!claimId) {
+      return;
+    }
+    claimPrefillDone.current = true;
+    const vendor = searchParams.get("doc_vendor") || "";
+    const note = searchParams.get("doc_note") || "";
+    openPanel("documents");
+    setDocumentEditorMode("form");
+    setDocumentForm({
+      ...INITIAL_DOCUMENT_FORM,
+      documentType: "purchase_in",
+      sourceWarehouseId: "",
+      targetWarehouseId: dashboard.warehouses?.[0]?.id ? String(dashboard.warehouses[0].id) : "",
+      takenByUserId: currentUser?.id ? String(currentUser.id) : "",
+      takenByName: currentUser?.display_name || currentUser?.username || "",
+      counterpartyName: vendor,
+      referenceClaimId: String(claimId),
+      invoiceNo: String(claimId),
+      note,
+      lines: [createDocumentLineState(String(flatSubItems[0]?.id || ""))],
+    });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [dashboard, searchParams]);
 
   useEffect(() => {
     if (!message && !error) {
@@ -341,10 +385,6 @@ export function AssetWorkspace() {
   );
 
   const inventoryRows = useMemo(() => dashboard?.inventory || [], [dashboard]);
-  const lowStockRows = useMemo(
-    () => inventoryRows.filter((row) => row.min_quantity > 0 && row.available_quantity <= row.min_quantity),
-    [inventoryRows],
-  );
   const itemSummaryRows = useMemo<ItemSummaryRow[]>(() => {
     const summaryMap = new Map<
       number,
@@ -437,26 +477,6 @@ export function AssetWorkspace() {
       ),
     [dashboard, deferredMasterQuery],
   );
-  const filteredItems = useMemo(
-    () =>
-      (dashboard?.items || []).filter(
-        (item) =>
-          !deferredMasterQuery ||
-          matchesAssetSearch(deferredMasterQuery, item.name, item.code, item.category, item.unit, item.remark) ||
-          (item.sub_items || []).some((subItem) =>
-            matchesAssetSearch(
-              deferredMasterQuery,
-              subItem.name,
-              subItem.sku,
-              subItem.size,
-              subItem.color,
-              subItem.barcode,
-              subItem.remark,
-            ),
-          ),
-      ),
-    [dashboard, deferredMasterQuery],
-  );
   const filteredPartners = useMemo(
     () =>
       (dashboard?.partners || []).filter((partner) =>
@@ -535,13 +555,24 @@ export function AssetWorkspace() {
       }),
     [dashboard, deferredDocumentQuery, documentStatusFilter, documentTypeFilter],
   );
-  const filteredItemSummaryRows = useMemo(
-    () =>
-      itemSummaryRows.filter((row) =>
-        matchesAssetSearch(deferredInventoryQuery, row.itemName, row.itemCode),
-      ),
-    [deferredInventoryQuery, itemSummaryRows],
-  );
+  const filteredItemSummaryRows = useMemo<ItemSummaryRow[]>(() => {
+    // 以全部 item（master）为准，合并库存汇总统计，保证新建但还没库存的 item 也能出现。
+    const statsById = new Map(itemSummaryRows.map((row) => [row.itemId, row]));
+    const rows: ItemSummaryRow[] = (dashboard.items || []).map((item) => {
+      const stats = statsById.get(item.id);
+      return {
+        itemId: item.id,
+        itemName: item.name,
+        itemCode: item.code,
+        totalAvailable: stats?.totalAvailable ?? 0,
+        totalReserved: stats?.totalReserved ?? 0,
+        warehouseCount: stats?.warehouseCount ?? 0,
+        subItemCount: item.sub_items?.length ?? stats?.subItemCount ?? 0,
+        lowStockCount: stats?.lowStockCount ?? 0,
+      };
+    });
+    return rows.filter((row) => matchesAssetSearch(deferredInventoryQuery, row.itemName, row.itemCode));
+  }, [dashboard.items, itemSummaryRows, deferredInventoryQuery]);
   const filteredMovementRows = useMemo(
     () =>
       movementRows.filter((movement) =>
@@ -693,6 +724,7 @@ export function AssetWorkspace() {
       setItemForm(INITIAL_ITEM_FORM);
       setEditingItemId(null);
       setMasterEditorMode("overview");
+      setSummaryEditMode("none");
       setMessage(editingItemId ? "资产 item 已更新" : "资产 item 已创建");
       markAssetDataStale(["documents", "inventory", "movements"]);
       await loadDashboard("master");
@@ -767,6 +799,7 @@ export function AssetWorkspace() {
       }));
       setEditingSubItemId(null);
       setMasterEditorMode("overview");
+      setSummaryEditMode("none");
       setMessage(editingSubItemId ? "子 item 已更新" : "子 item 已创建");
       markAssetDataStale(["documents", "inventory", "movements"]);
       await loadDashboard("master");
@@ -1002,18 +1035,6 @@ export function AssetWorkspace() {
     setMasterEditorMode("warehouse");
   }
 
-  function beginItemEdit(item: AssetItemRecord) {
-    openPanel("master");
-    setItemForm({
-      name: item.name,
-      code: item.code,
-      category: item.category || "",
-      unit: item.unit || "件",
-    });
-    setEditingItemId(item.id);
-    setMasterEditorMode("item");
-  }
-
   function beginPartnerEdit(partner: AssetPartnerRecord) {
     openPanel("master");
     setPartnerForm({
@@ -1028,29 +1049,10 @@ export function AssetWorkspace() {
     setMasterEditorMode("partner");
   }
 
-  function beginSubItemEdit(subItem: AssetSubItemRecord) {
-    openPanel("master");
-    setSubItemForm({
-      itemId: String(subItem.item_id),
-      name: subItem.name,
-      sku: subItem.sku || "",
-      size: subItem.size || "",
-      color: subItem.color || "",
-    });
-    setEditingSubItemId(subItem.id);
-    setMasterEditorMode("sub_item");
-  }
-
   function beginWarehouseCreate() {
     openPanel("master");
     resetWarehouseForm();
     setMasterEditorMode("warehouse");
-  }
-
-  function beginItemCreate() {
-    openPanel("master");
-    resetItemForm();
-    setMasterEditorMode("item");
   }
 
   function beginPartnerCreate() {
@@ -1059,10 +1061,54 @@ export function AssetWorkspace() {
     setMasterEditorMode("partner");
   }
 
-  function beginSubItemCreate() {
-    openPanel("master");
-    resetSubItemForm();
-    setMasterEditorMode("sub_item");
+  // ---- Item 汇总面板：item 详情页里的 item / 子 item 维护（不切换到基础档案）----
+  function openItemDetail(itemId: number) {
+    setSummaryEditMode("none");
+    setDetailItemId(itemId);
+  }
+
+  function closeItemDetail() {
+    setSummaryEditMode("none");
+    setDetailItemId(null);
+  }
+
+  function openSummaryItemCreate() {
+    setDetailItemId(null);
+    setItemForm(INITIAL_ITEM_FORM);
+    setEditingItemId(null);
+    setSummaryEditMode("item");
+  }
+
+  function openSummaryItemEdit(item: AssetItemRecord) {
+    setItemForm({ name: item.name, code: item.code, category: item.category || "", unit: item.unit || "件" });
+    setEditingItemId(item.id);
+    setSummaryEditMode("item");
+  }
+
+  function openSummarySubItemCreate(itemId: number) {
+    setSubItemForm({ ...INITIAL_SUB_ITEM_FORM, itemId: String(itemId) });
+    setEditingSubItemId(null);
+    setSummaryEditMode("sub_item");
+  }
+
+  function openSummarySubItemEdit(subItem: AssetSubItemRecord) {
+    setSubItemForm({
+      itemId: String(subItem.item_id),
+      name: subItem.name,
+      sku: subItem.sku || "",
+      size: subItem.size || "",
+      color: subItem.color || "",
+    });
+    setEditingSubItemId(subItem.id);
+    setSummaryEditMode("sub_item");
+  }
+
+  function cancelSummaryEdit() {
+    setSummaryEditMode("none");
+    setItemForm(INITIAL_ITEM_FORM);
+    setEditingItemId(null);
+    setSubItemForm(INITIAL_SUB_ITEM_FORM);
+    setEditingSubItemId(null);
   }
 
   function beginDocumentCreate() {
@@ -1141,15 +1187,7 @@ export function AssetWorkspace() {
   }
 
   function closeMasterEditor() {
-    if (masterEditorMode === "warehouse") {
-      resetWarehouseForm();
-    } else if (masterEditorMode === "item") {
-      resetItemForm();
-    } else if (masterEditorMode === "partner") {
-      resetPartnerForm();
-    } else if (masterEditorMode === "sub_item") {
-      resetSubItemForm();
-    }
+    resetWarehouseForm();
     setMasterEditorMode("overview");
   }
 
@@ -1429,18 +1467,6 @@ export function AssetWorkspace() {
                   onClick={beginWarehouseCreate}
                   disabled={!canEdit}
                 />
-                <MasterActionCard
-                  title="新增 Item"
-                  hint="建立主档名称、分类和单位。"
-                  onClick={beginItemCreate}
-                  disabled={!canEdit}
-                />
-                <MasterActionCard
-                  title="新增子 Item"
-                  hint="录入 size、SKU 和颜色规格。"
-                  onClick={beginSubItemCreate}
-                  disabled={!canEdit}
-                />
               </div>
 
               <div className="asset-workspace__list-block asset-workspace__list-block--master-search" style={listBlockStyle}>
@@ -1449,7 +1475,7 @@ export function AssetWorkspace() {
                   <input
                     className={`${INPUT_CLASS_NAME} asset-workspace__search-input asset-workspace__search-input--master`}
                     style={toolbarSearchInputStyle}
-                    placeholder="搜索仓库 / Item / 子 Item / size"
+                    placeholder="搜索仓库"
                     value={masterQuery}
                     onChange={(event) => setMasterQuery(event.target.value)}
                   />
@@ -1458,64 +1484,59 @@ export function AssetWorkspace() {
 
               <div className="asset-workspace__list-block asset-workspace__list-block--warehouses" style={listBlockStyle}>
                 <div className="asset-workspace__form-title" style={formTitleStyle}>当前仓库</div>
-                <div className="asset-workspace__compact-list asset-workspace__compact-list--warehouses" style={compactListStyle}>
-                  {filteredWarehouses.map((warehouse) => (
-                    <div key={warehouse.id} className="asset-workspace__compact-item asset-workspace__compact-item--warehouse" style={compactListItemStyle}>
-                      <div className="asset-workspace__row-header" style={lineEditorHeaderStyle}>
-                        <div className="asset-workspace__item-title" style={compactListTitleStyle}>{warehouse.name}</div>
-                        <div className="asset-workspace__action-group" style={actionGroupStyle}>
-                          <button
-                            className={GHOST_BUTTON_CLASS_NAME}
-                            type="button"
-                            style={ghostButtonStyle}
-                            onClick={() =>
-                              beginWarehouseEdit({
-                                id: warehouse.id,
-                                name: warehouse.name,
-                                code: warehouse.code,
-                                location: warehouse.location || "",
-                              })
-                            }
-                            disabled={!canEdit}
-                          >
-                            编辑
-                          </button>
-                          <button
-                            className={GHOST_DANGER_BUTTON_CLASS_NAME}
-                            type="button"
-                            style={ghostDangerButtonStyle}
-                            onClick={() => void handleDeleteWarehouse(warehouse)}
-                            disabled={!canEdit || submitting}
-                          >
-                            删除
-                          </button>
-                        </div>
-                      </div>
-                      <div className="asset-workspace__item-meta" style={compactListMetaStyle}>{warehouse.code}{warehouse.location ? ` · ${warehouse.location}` : ""}</div>
-                    </div>
-                  ))}
+                <div className="asset-workspace__table-wrap" style={tableWrapStyle}>
+                  <table className="asset-workspace__table asset-workspace__table--warehouses" style={tableStyle}>
+                    <thead>
+                      <tr>
+                        <th style={thStyle}>名称</th>
+                        <th style={thStyle}>编号</th>
+                        <th style={thStyle}>地点</th>
+                        <th style={thStyle}>操作</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {filteredWarehouses.map((warehouse) => (
+                        <tr key={warehouse.id}>
+                          <td style={tdStyle}>{warehouse.name}</td>
+                          <td style={tdStyle}>{warehouse.code}</td>
+                          <td style={tdStyle}>{warehouse.location || "-"}</td>
+                          <td style={tdStyle}>
+                            <div className="asset-workspace__action-group" style={actionGroupStyle}>
+                              <button
+                                className={GHOST_BUTTON_CLASS_NAME}
+                                type="button"
+                                style={ghostButtonStyle}
+                                onClick={() =>
+                                  beginWarehouseEdit({
+                                    id: warehouse.id,
+                                    name: warehouse.name,
+                                    code: warehouse.code,
+                                    location: warehouse.location || "",
+                                  })
+                                }
+                                disabled={!canEdit}
+                              >
+                                编辑
+                              </button>
+                              <button
+                                className={GHOST_DANGER_BUTTON_CLASS_NAME}
+                                type="button"
+                                style={ghostDangerButtonStyle}
+                                onClick={() => void handleDeleteWarehouse(warehouse)}
+                                disabled={!canEdit || submitting}
+                              >
+                                删除
+                              </button>
+                            </div>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
                   {!filteredWarehouses.length ? <div className="asset-workspace__empty-state asset-workspace__empty-state--warehouses" style={placeholderSubtleStyle}>没有匹配的仓库。</div> : null}
                 </div>
               </div>
 
-              <div className="asset-workspace__list-block asset-workspace__list-block--items" style={listBlockStyle}>
-                <div className="asset-workspace__form-title" style={formTitleStyle}>当前 Item / 子 Item</div>
-                <div className="asset-workspace__compact-list asset-workspace__compact-list--items" style={compactListStyle}>
-                  {filteredItems.map((item) => (
-                    <ItemCard
-                      key={item.id}
-                      item={item}
-                      canEdit={canEdit}
-                      onEditItem={beginItemEdit}
-                      onEditSubItem={beginSubItemEdit}
-                      onDeleteItem={handleDeleteItem}
-                      onDeleteSubItem={handleDeleteSubItem}
-                      submitting={submitting}
-                    />
-                  ))}
-                  {!filteredItems.length ? <div className="asset-workspace__empty-state asset-workspace__empty-state--items" style={placeholderSubtleStyle}>没有匹配的 Item / 子 Item。</div> : null}
-                </div>
-              </div>
               </>
             ) : (
               <div className="asset-workspace__master-editor" style={masterEditorShellStyle}>
@@ -1525,25 +1546,9 @@ export function AssetWorkspace() {
                 </button>
                 <div>
                   <div className="asset-workspace__form-title" style={formTitleStyle}>
-                    {masterEditorMode === "warehouse"
-                      ? editingWarehouseId
-                        ? `编辑仓库 #${editingWarehouseId}`
-                        : "新增仓库"
-                      : masterEditorMode === "item"
-                        ? editingItemId
-                          ? `编辑 Item #${editingItemId}`
-                          : "新增 Item"
-                        : editingSubItemId
-                            ? `编辑子 Item #${editingSubItemId}`
-                            : "新增子 Item / Size"}
+                    {editingWarehouseId ? `编辑仓库 #${editingWarehouseId}` : "新增仓库"}
                   </div>
-                  <div className="asset-workspace__panel-hint" style={panelHintStyle}>
-                    {masterEditorMode === "warehouse"
-                      ? "保存成功后会自动返回基础档案列表。"
-                      : masterEditorMode === "item"
-                        ? "先录主档，再去维护子 Item / size。"
-                        : "这里录入具体规格、size、SKU 和颜色。"}
-                  </div>
+                  <div className="asset-workspace__panel-hint" style={panelHintStyle}>保存成功后会自动返回基础档案列表。</div>
                 </div>
               </div>
 
@@ -1580,98 +1585,6 @@ export function AssetWorkspace() {
                 </form>
               ) : null}
 
-              {masterEditorMode === "item" ? (
-                <form className="asset-workspace__form asset-workspace__form--item" onSubmit={handleItemSubmit} style={formBlockStyle}>
-                  <div className="asset-workspace__field-grid asset-workspace__field-grid--item" style={fieldGridStyle(isMobile)}>
-                    <input
-                      className={`${INPUT_CLASS_NAME} asset-workspace__input asset-workspace__input--item-name`}
-                      style={inputStyle}
-                      placeholder="item 名称"
-                      value={itemForm.name}
-                      onChange={(event) => setItemForm((current) => ({ ...current, name: event.target.value }))}
-                    />
-                    <input
-                      className={`${INPUT_CLASS_NAME} asset-workspace__input asset-workspace__input--item-code`}
-                      style={inputStyle}
-                      placeholder="item 编码，留空自动生成"
-                      value={itemForm.code}
-                      onChange={(event) => setItemForm((current) => ({ ...current, code: event.target.value }))}
-                    />
-                    <input
-                      className={`${INPUT_CLASS_NAME} asset-workspace__input asset-workspace__input--item-category`}
-                      style={inputStyle}
-                      placeholder="分类"
-                      value={itemForm.category}
-                      onChange={(event) => setItemForm((current) => ({ ...current, category: event.target.value }))}
-                    />
-                    <input
-                      className={`${INPUT_CLASS_NAME} asset-workspace__input asset-workspace__input--item-unit`}
-                      style={inputStyle}
-                      placeholder="单位"
-                      value={itemForm.unit}
-                      onChange={(event) => setItemForm((current) => ({ ...current, unit: event.target.value }))}
-                    />
-                  </div>
-                  <div className="asset-workspace__form-actions" style={formActionRowStyle}>
-                    <button className={PRIMARY_BUTTON_CLASS_NAME} type="submit" style={primaryButtonStyle} disabled={!canEdit || submitting}>
-                      {editingItemId ? "保存 Item" : "创建 Item"}
-                    </button>
-                  </div>
-                </form>
-              ) : null}
-
-              {masterEditorMode === "sub_item" ? (
-                <form className="asset-workspace__form asset-workspace__form--sub-item" onSubmit={handleSubItemSubmit} style={formBlockStyle}>
-                  <div className="asset-workspace__field-grid asset-workspace__field-grid--sub-item" style={fieldGridStyle(isMobile)}>
-                    <select
-                      className={`${SELECT_CLASS_NAME} asset-workspace__select asset-workspace__select--sub-item-parent`}
-                      style={inputStyle}
-                      value={subItemForm.itemId}
-                      onChange={(event) => setSubItemForm((current) => ({ ...current, itemId: event.target.value }))}
-                    >
-                      <option value="">选择 item</option>
-                      {(dashboard.items || []).map((item) => (
-                        <option key={item.id} value={item.id}>
-                          {item.name}
-                        </option>
-                      ))}
-                    </select>
-                    <input
-                      className={`${INPUT_CLASS_NAME} asset-workspace__input asset-workspace__input--sub-item-name`}
-                      style={inputStyle}
-                      placeholder="子 item 名称"
-                      value={subItemForm.name}
-                      onChange={(event) => setSubItemForm((current) => ({ ...current, name: event.target.value }))}
-                    />
-                    <input
-                      className={`${INPUT_CLASS_NAME} asset-workspace__input asset-workspace__input--sub-item-sku`}
-                      style={inputStyle}
-                      placeholder="SKU"
-                      value={subItemForm.sku}
-                      onChange={(event) => setSubItemForm((current) => ({ ...current, sku: event.target.value }))}
-                    />
-                    <input
-                      className={`${INPUT_CLASS_NAME} asset-workspace__input asset-workspace__input--sub-item-size`}
-                      style={inputStyle}
-                      placeholder="size"
-                      value={subItemForm.size}
-                      onChange={(event) => setSubItemForm((current) => ({ ...current, size: event.target.value }))}
-                    />
-                    <input
-                      className={`${INPUT_CLASS_NAME} asset-workspace__input asset-workspace__input--sub-item-color`}
-                      style={inputStyle}
-                      placeholder="color"
-                      value={subItemForm.color}
-                      onChange={(event) => setSubItemForm((current) => ({ ...current, color: event.target.value }))}
-                    />
-                  </div>
-                  <div className="asset-workspace__form-actions" style={formActionRowStyle}>
-                    <button className={PRIMARY_BUTTON_CLASS_NAME} type="submit" style={primaryButtonStyle} disabled={!canEdit || submitting}>
-                      {editingSubItemId ? "保存子 Item" : "创建子 Item"}
-                    </button>
-                  </div>
-                </form>
-              ) : null}
               </div>
             )}
             </>
@@ -2019,121 +1932,121 @@ export function AssetWorkspace() {
                 </button>
               </div>
             </div>
-            <div className="asset-workspace__document-list" style={documentListStyle}>
-              {filteredDocuments.map((document) => (
-                <article key={document.id} className="asset-workspace__document-card" style={documentCardStyle}>
-                  <div className="asset-workspace__document-header" style={documentHeaderStyle}>
-                    <div>
-                      <div className="asset-workspace__document-no" style={documentNoStyle}>{document.document_no}</div>
-                      <div className="asset-workspace__document-meta" style={documentMetaStyle}>
-                        {getDocumentTypeLabel(document.document_type)} · {document.status}
-                        {document.source_warehouse_name ? ` · 出自 ${document.source_warehouse_name}` : ""}
-                        {document.target_warehouse_name ? ` · 到 ${document.target_warehouse_name}` : ""}
-                      </div>
-                    </div>
-                    <div className="asset-workspace__document-actions" style={documentActionRowStyle}>
-                      {document.status === "draft" ? (
-                        <>
-                          <button
-                            className={SECONDARY_BUTTON_CLASS_NAME}
-                            type="button"
-                            style={secondaryButtonStyle}
-                            onClick={() => beginDocumentEdit(document)}
-                            disabled={!canEdit || submitting}
-                          >
-                            编辑
-                          </button>
-                          <button
-                            className={SECONDARY_BUTTON_CLASS_NAME}
-                            type="button"
-                            style={secondaryButtonStyle}
-                            onClick={() => void handleConfirmDocument(document.id)}
-                            disabled={!canEdit || submitting}
-                          >
-                            确认入账
-                          </button>
-                          <button
-                            className={GHOST_BUTTON_CLASS_NAME}
-                            type="button"
-                            style={ghostButtonStyle}
-                            onClick={() => void handleCancelDocument(document.id, false)}
-                            disabled={!canEdit || submitting}
-                          >
-                            作废
-                          </button>
-                          <button
-                            className={GHOST_DANGER_BUTTON_CLASS_NAME}
-                            type="button"
-                            style={ghostDangerButtonStyle}
-                            onClick={() => void handleDeleteDocument(document.id)}
-                            disabled={!canEdit || submitting}
-                          >
-                            删除
-                          </button>
-                        </>
-                      ) : document.status === "confirmed" ? (
-                        <>
-                          <span className="asset-workspace__chip asset-workspace__chip--confirmed" style={chipStyle("confirmed")}>已确认</span>
-                          <button
-                            className={GHOST_DANGER_BUTTON_CLASS_NAME}
-                            type="button"
-                            style={ghostDangerButtonStyle}
-                            onClick={() => void handleCancelDocument(document.id, true)}
-                            disabled={!canEdit || submitting}
-                          >
-                            作废回滚
-                          </button>
-                        </>
-                      ) : (
-                        <span className="asset-workspace__chip asset-workspace__chip--warning" style={chipStyle("warning")}>已作废</span>
-                      )}
-                    </div>
-                  </div>
-                  <div className="asset-workspace__document-meta" style={documentMetaStyle}>
-                    {document.taken_by_name ? `经手对象：${document.taken_by_name}` : "未填写经手对象"}
-                    {document.destination_text ? ` · 去向：${document.destination_text}` : ""}
-                    {document.invoice_no ? ` · Invoice：${document.invoice_no}` : ""}
-                  </div>
-                  <div className="asset-workspace__document-actions asset-workspace__document-actions--invoice" style={documentActionRowStyle}>
-                    <label className="asset-workspace__file-action" style={fileActionLabelStyle}>
-                      {document.invoice_file_path ? "替换 Invoice" : "上传 Invoice"}
-                      <input
-                        className="asset-workspace__hidden-input asset-workspace__hidden-input--invoice"
-                        type="file"
-                        accept=".pdf,image/*,.heic,.heif"
-                        style={hiddenInputStyle}
-                        onChange={(event) => {
-                          const file = event.target.files?.[0] || null;
-                          event.currentTarget.value = "";
-                          void handleUploadInvoice(document.id, file);
-                        }}
-                        disabled={!canEdit || submitting}
-                      />
-                    </label>
-                    {document.invoice_file_path ? (
-                      <button
-                        className={SECONDARY_BUTTON_CLASS_NAME}
-                        type="button"
-                        style={secondaryButtonStyle}
-                        onClick={() => handlePreviewInvoice(document.invoice_file_path, document.invoice_file_name || document.invoice_no)}
-                      >
-                        预览 Invoice
-                      </button>
-                    ) : (
-                      <span className="asset-workspace__inline-meta" style={inlineMetaStyle}>未上传附件</span>
-                    )}
-                  </div>
-                  <div className="asset-workspace__line-wrap" style={lineWrapStyle}>
-                    {(document.lines || []).map((line) => (
-                      <div key={line.id} className="asset-workspace__line-chip" style={lineChipStyle}>
-                        {line.item_name || "未命名 item"}
-                        {line.size ? ` · ${line.size}` : ""}
-                        {` · ${line.quantity} 件`}
-                      </div>
-                    ))}
-                  </div>
-                </article>
-              ))}
+            <div className="asset-workspace__table-wrap" style={tableWrapStyle}>
+              <table className="asset-workspace__table asset-workspace__table--documents" style={tableStyle}>
+                <thead>
+                  <tr>
+                    <th style={thStyle}>单号</th>
+                    <th style={thStyle}>类型</th>
+                    <th style={thStyle}>状态</th>
+                    <th style={thStyle}>仓库</th>
+                    <th style={thStyle}>经手 / 去向</th>
+                    <th style={thStyle}>明细</th>
+                    <th style={thStyle}>Invoice</th>
+                    <th style={thStyle}>操作</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {filteredDocuments.map((document) => (
+                    <tr key={document.id}>
+                      <td style={{ ...tdStyle, fontWeight: 700 }}>{document.document_no}</td>
+                      <td style={tdStyle}>{getDocumentTypeLabel(document.document_type)}</td>
+                      <td style={tdStyle}>
+                        {document.status === "confirmed" ? (
+                          <span style={chipStyle("confirmed")}>已确认</span>
+                        ) : document.status === "draft" ? (
+                          <span style={chipStyle("neutral")}>草稿</span>
+                        ) : (
+                          <span style={chipStyle("warning")}>已作废</span>
+                        )}
+                      </td>
+                      <td style={tdStyle}>
+                        {[document.source_warehouse_name ? `出 ${document.source_warehouse_name}` : null, document.target_warehouse_name ? `到 ${document.target_warehouse_name}` : null]
+                          .filter(Boolean)
+                          .join(" · ") || "-"}
+                      </td>
+                      <td style={tdStyle}>
+                        {[
+                          document.taken_by_name ? `经手 ${document.taken_by_name}` : null,
+                          document.destination_text ? `去向 ${document.destination_text}` : null,
+                          document.invoice_no ? `Invoice ${document.invoice_no}` : null,
+                        ]
+                          .filter(Boolean)
+                          .join(" · ") || "-"}
+                      </td>
+                      <td style={tdStyle}>
+                        {(document.lines || []).length ? (
+                          <div style={lineWrapStyle}>
+                            {(document.lines || []).map((line) => (
+                              <span key={line.id} className="asset-workspace__line-chip" style={lineChipStyle}>
+                                {line.item_name || "未命名 item"}
+                                {line.size ? ` · ${line.size}` : ""}
+                                {` · ${line.quantity} 件`}
+                              </span>
+                            ))}
+                          </div>
+                        ) : (
+                          "-"
+                        )}
+                      </td>
+                      <td style={tdStyle}>
+                        <div className="asset-workspace__action-group" style={actionGroupStyle}>
+                          <label className="asset-workspace__file-action" style={fileActionLabelStyle}>
+                            {document.invoice_file_path ? "替换" : "上传"}
+                            <input
+                              type="file"
+                              accept=".pdf,image/*,.heic,.heif"
+                              style={hiddenInputStyle}
+                              onChange={(event) => {
+                                const file = event.target.files?.[0] || null;
+                                event.currentTarget.value = "";
+                                void handleUploadInvoice(document.id, file);
+                              }}
+                              disabled={!canEdit || submitting}
+                            />
+                          </label>
+                          {document.invoice_file_path ? (
+                            <button
+                              className={SECONDARY_BUTTON_CLASS_NAME}
+                              type="button"
+                              style={secondaryButtonStyle}
+                              onClick={() => handlePreviewInvoice(document.invoice_file_path, document.invoice_file_name || document.invoice_no)}
+                            >
+                              预览
+                            </button>
+                          ) : null}
+                        </div>
+                      </td>
+                      <td style={tdStyle}>
+                        <div className="asset-workspace__action-group" style={actionGroupStyle}>
+                          {document.status === "draft" ? (
+                            <>
+                              <button className={SECONDARY_BUTTON_CLASS_NAME} type="button" style={secondaryButtonStyle} onClick={() => beginDocumentEdit(document)} disabled={!canEdit || submitting}>
+                                编辑
+                              </button>
+                              <button className={SECONDARY_BUTTON_CLASS_NAME} type="button" style={secondaryButtonStyle} onClick={() => void handleConfirmDocument(document.id)} disabled={!canEdit || submitting}>
+                                确认入账
+                              </button>
+                              <button className={GHOST_BUTTON_CLASS_NAME} type="button" style={ghostButtonStyle} onClick={() => void handleCancelDocument(document.id, false)} disabled={!canEdit || submitting}>
+                                作废
+                              </button>
+                              <button className={GHOST_DANGER_BUTTON_CLASS_NAME} type="button" style={ghostDangerButtonStyle} onClick={() => void handleDeleteDocument(document.id)} disabled={!canEdit || submitting}>
+                                删除
+                              </button>
+                            </>
+                          ) : document.status === "confirmed" ? (
+                            <button className={GHOST_DANGER_BUTTON_CLASS_NAME} type="button" style={ghostDangerButtonStyle} onClick={() => void handleCancelDocument(document.id, true)} disabled={!canEdit || submitting}>
+                              作废回滚
+                            </button>
+                          ) : (
+                            <span style={inlineMetaStyle}>-</span>
+                          )}
+                        </div>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
               {!dashboard.documents.length ? <div className="asset-workspace__empty-state asset-workspace__empty-state--documents" style={placeholderSubtleStyle}>还没有库存单据。</div> : null}
               {dashboard.documents.length && !filteredDocuments.length ? <div className="asset-workspace__empty-state asset-workspace__empty-state--documents-filtered" style={placeholderSubtleStyle}>没有匹配的库存单据。</div> : null}
             </div>
@@ -2279,18 +2192,32 @@ export function AssetWorkspace() {
             </div>
           </div>
           {!collapsedSections.low_stock ? (
-          <div className="asset-workspace__compact-list asset-workspace__compact-list--low-stock" style={compactListStyle}>
-            {filteredLowStockRows.map((row) => (
-              <div key={row.id} className="asset-workspace__warning-item" style={warningItemStyle}>
-                <div className="asset-workspace__item-title" style={compactListTitleStyle}>
-                  {row.warehouse_name || "-"} · {row.item_name || "-"}
-                  {row.size ? ` · ${row.size}` : ""}
-                </div>
-                <div className="asset-workspace__item-meta" style={compactListMetaStyle}>
-                  可用 {row.available_quantity} / 最低 {row.min_quantity}
-                </div>
-              </div>
-            ))}
+          <div className="asset-workspace__table-wrap" style={tableWrapStyle}>
+            <table className="asset-workspace__table asset-workspace__table--low-stock" style={tableStyle}>
+              <thead>
+                <tr>
+                  <th style={thStyle}>仓库</th>
+                  <th style={thStyle}>Item</th>
+                  <th style={thStyle}>子 Item</th>
+                  <th style={thStyle}>可用</th>
+                  <th style={thStyle}>最低库存</th>
+                </tr>
+              </thead>
+              <tbody>
+                {filteredLowStockRows.map((row) => (
+                  <tr key={row.id}>
+                    <td style={tdStyle}>{row.warehouse_name || "-"}</td>
+                    <td style={tdStyle}>{row.item_name || "-"}</td>
+                    <td style={tdStyle}>
+                      {row.sub_item_name || "-"}
+                      {row.size ? <span style={inlineMetaStyle}> · {row.size}</span> : null}
+                    </td>
+                    <td style={tdStyle}>{row.available_quantity}</td>
+                    <td style={tdStyle}>{row.min_quantity}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
             {!filteredLowStockRows.length ? <div className="asset-workspace__empty-state asset-workspace__empty-state--low-stock" style={placeholderSubtleStyle}>目前没有低库存提醒。</div> : null}
           </div>
           ) : (
@@ -2307,7 +2234,14 @@ export function AssetWorkspace() {
               <div className="asset-workspace__panel-hint" style={panelHintStyle}>按 item 汇总全部仓库的可用库存，方便快速看总量。</div>
             </div>
             <div className="asset-workspace__panel-header-actions" style={panelHeaderActionsStyle}>
-              {!collapsedSections.item_summary ? <span className="asset-workspace__chip asset-workspace__chip--neutral" style={chipStyle("neutral")}>{filteredItemSummaryRows.length} 个 Item</span> : null}
+              {!collapsedSections.item_summary && detailItemId === null && summaryEditMode === "none" ? (
+                <>
+                  <span className="asset-workspace__chip asset-workspace__chip--neutral" style={chipStyle("neutral")}>{filteredItemSummaryRows.length} 个 Item</span>
+                  <button className={PRIMARY_BUTTON_CLASS_NAME} type="button" style={primaryButtonStyle} onClick={openSummaryItemCreate} disabled={!canEdit}>
+                    新增 Item
+                  </button>
+                </>
+              ) : null}
               <button
                 className={PANEL_TOGGLE_BUTTON_CLASS_NAME}
                 type="button"
@@ -2319,26 +2253,177 @@ export function AssetWorkspace() {
             </div>
           </div>
           {!collapsedSections.item_summary ? (
-          <div className="asset-workspace__compact-list asset-workspace__compact-list--item-summary" style={compactListStyle}>
-            {filteredItemSummaryRows.map((row) => (
-              <div key={row.itemId} className="asset-workspace__compact-item asset-workspace__compact-item--summary" style={compactListItemStyle}>
-                <div className="asset-workspace__item-card-header" style={itemCardHeaderStyle}>
-                  <div>
-                    <div className="asset-workspace__item-title" style={compactListTitleStyle}>
-                      {row.itemName} <span className="asset-workspace__inline-meta" style={inlineMetaStyle}>· {row.itemCode}</span>
+            summaryEditMode === "item" && detailItemId === null ? (
+              // 新增 Item 表单
+              <SummaryItemForm
+                itemForm={itemForm}
+                setItemForm={setItemForm}
+                editingItemId={editingItemId}
+                canEdit={canEdit}
+                submitting={submitting}
+                isMobile={isMobile}
+                onSubmit={handleItemSubmit}
+                onCancel={cancelSummaryEdit}
+              />
+            ) : detailItemId !== null ? (
+              (() => {
+                const detailItem = (dashboard.items || []).find((it) => it.id === detailItemId) || null;
+                if (!detailItem) {
+                  return (
+                    <div style={{ display: "grid", gap: "10px" }}>
+                      <button className={SECONDARY_BUTTON_CLASS_NAME} type="button" style={secondaryButtonStyle} onClick={closeItemDetail}>
+                        ← 返回 Item 汇总
+                      </button>
+                      <div className="asset-workspace__empty-state" style={placeholderSubtleStyle}>
+                        {!loadedData.master ? "正在加载 Item 资料…" : "找不到这个 Item，可能已被删除。"}
+                      </div>
                     </div>
-                    <div className="asset-workspace__item-meta" style={compactListMetaStyle}>
-                      覆盖 {row.warehouseCount} 个仓库 · {row.subItemCount} 个规格
-                      {row.lowStockCount ? ` · ${row.lowStockCount} 个低库存规格` : ""}
+                  );
+                }
+                return (
+                  <div className="asset-workspace__item-detail" style={{ display: "grid", gap: "12px" }}>
+                    <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: "10px", flexWrap: "wrap" }}>
+                      <button className={SECONDARY_BUTTON_CLASS_NAME} type="button" style={secondaryButtonStyle} onClick={closeItemDetail}>
+                        ← 返回 Item 汇总
+                      </button>
+                      <div className="asset-workspace__form-title" style={formTitleStyle}>
+                        {detailItem.name} <span style={inlineMetaStyle}>· {detailItem.code}</span>
+                      </div>
                     </div>
+
+                    {summaryEditMode === "item" ? (
+                      <SummaryItemForm
+                        itemForm={itemForm}
+                        setItemForm={setItemForm}
+                        editingItemId={editingItemId}
+                        canEdit={canEdit}
+                        submitting={submitting}
+                        isMobile={isMobile}
+                        onSubmit={handleItemSubmit}
+                        onCancel={cancelSummaryEdit}
+                      />
+                    ) : (
+                      <div className="asset-workspace__table-wrap" style={tableWrapStyle}>
+                        <table className="asset-workspace__table" style={tableStyle}>
+                          <tbody>
+                            <tr><th style={thStyle}>名称</th><td style={tdStyle}>{detailItem.name}</td></tr>
+                            <tr><th style={thStyle}>编码</th><td style={tdStyle}>{detailItem.code}</td></tr>
+                            <tr><th style={thStyle}>分类</th><td style={tdStyle}>{detailItem.category || "未分类"}</td></tr>
+                            <tr><th style={thStyle}>单位</th><td style={tdStyle}>{detailItem.unit || "-"}</td></tr>
+                            <tr>
+                              <th style={thStyle}>操作</th>
+                              <td style={tdStyle}>
+                                <div className="asset-workspace__action-group" style={actionGroupStyle}>
+                                  <button className={GHOST_BUTTON_CLASS_NAME} type="button" style={ghostButtonStyle} onClick={() => openSummaryItemEdit(detailItem)} disabled={!canEdit}>
+                                    编辑 Item
+                                  </button>
+                                  <button
+                                    className={GHOST_DANGER_BUTTON_CLASS_NAME}
+                                    type="button"
+                                    style={ghostDangerButtonStyle}
+                                    onClick={() => { void handleDeleteItem(detailItem); closeItemDetail(); }}
+                                    disabled={!canEdit || submitting || Boolean(detailItem.sub_items?.length)}
+                                  >
+                                    删除 Item
+                                  </button>
+                                </div>
+                              </td>
+                            </tr>
+                          </tbody>
+                        </table>
+                      </div>
+                    )}
+
+                    <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: "10px", flexWrap: "wrap" }}>
+                      <div className="asset-workspace__form-title" style={formTitleStyle}>子 Item / 规格（{(detailItem.sub_items || []).length}）</div>
+                      {summaryEditMode !== "sub_item" ? (
+                        <button className={SECONDARY_BUTTON_CLASS_NAME} type="button" style={secondaryButtonStyle} onClick={() => openSummarySubItemCreate(detailItem.id)} disabled={!canEdit}>
+                          新增规格
+                        </button>
+                      ) : null}
+                    </div>
+
+                    {summaryEditMode === "sub_item" ? (
+                      <SummarySubItemForm
+                        subItemForm={subItemForm}
+                        setSubItemForm={setSubItemForm}
+                        editingSubItemId={editingSubItemId}
+                        canEdit={canEdit}
+                        submitting={submitting}
+                        isMobile={isMobile}
+                        onSubmit={handleSubItemSubmit}
+                        onCancel={cancelSummaryEdit}
+                      />
+                    ) : (
+                      <div className="asset-workspace__table-wrap" style={tableWrapStyle}>
+                        <table className="asset-workspace__table asset-workspace__table--sub-items" style={tableStyle}>
+                          <thead>
+                            <tr>
+                              <th style={thStyle}>名称</th>
+                              <th style={thStyle}>SKU</th>
+                              <th style={thStyle}>Size</th>
+                              <th style={thStyle}>颜色</th>
+                              <th style={thStyle}>操作</th>
+                            </tr>
+                          </thead>
+                          <tbody>
+                            {(detailItem.sub_items || []).map((subItem) => (
+                              <tr key={subItem.id}>
+                                <td style={tdStyle}>{subItem.name}</td>
+                                <td style={tdStyle}>{subItem.sku || "-"}</td>
+                                <td style={tdStyle}>{subItem.size || "-"}</td>
+                                <td style={tdStyle}>{subItem.color || "-"}</td>
+                                <td style={tdStyle}>
+                                  <div className="asset-workspace__action-group" style={actionGroupStyle}>
+                                    <button className={GHOST_BUTTON_CLASS_NAME} type="button" style={ghostButtonStyle} onClick={() => openSummarySubItemEdit(subItem)} disabled={!canEdit}>
+                                      编辑
+                                    </button>
+                                    <button className={GHOST_DANGER_BUTTON_CLASS_NAME} type="button" style={ghostDangerButtonStyle} onClick={() => handleDeleteSubItem(subItem)} disabled={!canEdit || submitting}>
+                                      删除
+                                    </button>
+                                  </div>
+                                </td>
+                              </tr>
+                            ))}
+                          </tbody>
+                        </table>
+                        {!(detailItem.sub_items || []).length ? <div className="asset-workspace__empty-state" style={placeholderSubtleStyle}>还没有子 item / 规格，点「新增规格」添加。</div> : null}
+                      </div>
+                    )}
                   </div>
-                  <div className="asset-workspace__summary-value" style={summaryValueStyle}>{row.totalAvailable} 件</div>
-                </div>
-                <div className="asset-workspace__item-meta" style={compactListMetaStyle}>预留库存 {row.totalReserved} 件</div>
+                );
+              })()
+            ) : (
+              <div className="asset-workspace__table-wrap" style={tableWrapStyle}>
+                <table className="asset-workspace__table asset-workspace__table--item-summary" style={tableStyle}>
+                  <thead>
+                    <tr>
+                      <th style={thStyle}>Item</th>
+                      <th style={thStyle}>编码</th>
+                      <th style={thStyle}>覆盖仓库</th>
+                      <th style={thStyle}>规格数</th>
+                      <th style={thStyle}>低库存规格</th>
+                      <th style={thStyle}>可用</th>
+                      <th style={thStyle}>预留</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {filteredItemSummaryRows.map((row) => (
+                      <tr key={row.itemId} style={{ cursor: "pointer" }} onClick={() => openItemDetail(row.itemId)}>
+                        <td style={{ ...tdStyle, fontWeight: 700 }}>{row.itemName}</td>
+                        <td style={tdStyle}>{row.itemCode}</td>
+                        <td style={tdStyle}>{row.warehouseCount}</td>
+                        <td style={tdStyle}>{row.subItemCount}</td>
+                        <td style={tdStyle}>{row.lowStockCount || 0}</td>
+                        <td style={tdStyle}>{row.totalAvailable} 件</td>
+                        <td style={tdStyle}>{row.totalReserved} 件</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+                {!filteredItemSummaryRows.length ? <div className="asset-workspace__empty-state asset-workspace__empty-state--item-summary" style={placeholderSubtleStyle}>{loadedData.master ? "还没有 Item，点右上角「新增 Item」创建。" : "正在加载 Item 资料…"}</div> : null}
               </div>
-            ))}
-            {!filteredItemSummaryRows.length ? <div className="asset-workspace__empty-state asset-workspace__empty-state--item-summary" style={placeholderSubtleStyle}>还没有可汇总的库存数据。</div> : null}
-          </div>
+            )
           ) : (
             <div className="asset-workspace__panel-collapsed-note" style={placeholderSubtleStyle}>点击“展开”查看 Item 汇总内容。</div>
           )}
@@ -2380,37 +2465,50 @@ export function AssetWorkspace() {
               onChange={(event) => setMovementQuery(event.target.value)}
             />
           </div>
-          <div className="asset-workspace__movement-list" style={movementListStyle}>
-            {filteredMovementRows.map((movement) => (
-              <div key={movement.id} className="asset-workspace__movement-card" style={movementCardStyle}>
-                <div className="asset-workspace__item-card-header" style={itemCardHeaderStyle}>
-                  <div>
-                    <div className="asset-workspace__item-title" style={compactListTitleStyle}>
-                      {movement.documentNo}{" "}
-                      <span className="asset-workspace__inline-meta" style={inlineMetaStyle}>
-                        · {getMovementTypeLabel(movement.documentType, movement.quantityDelta, movement.movementType)}
-                      </span>
-                    </div>
-                    <div className="asset-workspace__item-meta" style={compactListMetaStyle}>
-                      {movement.warehouseName} · {movement.itemName} · {movement.subItemName}
-                    </div>
-                  </div>
-                  <div className="asset-workspace__movement-delta" style={movementDeltaStyle(movement.quantityDelta)}>
-                    {movement.quantityDelta > 0 ? "+" : ""}
-                    {movement.quantityDelta}
-                  </div>
-                </div>
-                <div className="asset-workspace__item-meta" style={compactListMetaStyle}>
-                  单据状态 {movement.documentStatus} · 结余 {movement.quantityAfter}
-                  {movement.takenByName ? ` · 经手 ${movement.takenByName}` : ""}
-                  {movement.destinationText ? ` · 去向 ${movement.destinationText}` : ""}
-                  {movement.invoiceNo ? ` · Invoice ${movement.invoiceNo}` : ""}
-                </div>
-                <div className="asset-workspace__movement-footer" style={movementFooterStyle}>
-                  <span className="asset-workspace__inline-meta" style={inlineMetaStyle}>流水时间 {formatDateTime(movement.createdAt)}</span>
-                </div>
-              </div>
-            ))}
+          <div className="asset-workspace__table-wrap" style={tableWrapStyle}>
+            <table className="asset-workspace__table asset-workspace__table--movements" style={tableStyle}>
+              <thead>
+                <tr>
+                  <th style={thStyle}>单号</th>
+                  <th style={thStyle}>类型</th>
+                  <th style={thStyle}>仓库</th>
+                  <th style={thStyle}>Item</th>
+                  <th style={thStyle}>子 Item</th>
+                  <th style={thStyle}>变化</th>
+                  <th style={thStyle}>结余</th>
+                  <th style={thStyle}>状态</th>
+                  <th style={thStyle}>经手 / 去向</th>
+                  <th style={thStyle}>时间</th>
+                </tr>
+              </thead>
+              <tbody>
+                {filteredMovementRows.map((movement) => (
+                  <tr key={movement.id}>
+                    <td style={tdStyle}>{movement.documentNo}</td>
+                    <td style={tdStyle}>{getMovementTypeLabel(movement.documentType, movement.quantityDelta, movement.movementType)}</td>
+                    <td style={tdStyle}>{movement.warehouseName}</td>
+                    <td style={tdStyle}>{movement.itemName}</td>
+                    <td style={tdStyle}>{movement.subItemName}</td>
+                    <td style={{ ...tdStyle, ...movementDeltaStyle(movement.quantityDelta) }}>
+                      {movement.quantityDelta > 0 ? "+" : ""}
+                      {movement.quantityDelta}
+                    </td>
+                    <td style={tdStyle}>{movement.quantityAfter}</td>
+                    <td style={tdStyle}>{movement.documentStatus}</td>
+                    <td style={tdStyle}>
+                      {[
+                        movement.takenByName ? `经手 ${movement.takenByName}` : null,
+                        movement.destinationText ? `去向 ${movement.destinationText}` : null,
+                        movement.invoiceNo ? `Invoice ${movement.invoiceNo}` : null,
+                      ]
+                        .filter(Boolean)
+                        .join(" · ") || "-"}
+                    </td>
+                    <td style={tdStyle}>{formatDateTime(movement.createdAt)}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
             {!movementRows.length ? <div className="asset-workspace__empty-state asset-workspace__empty-state--movements" style={placeholderSubtleStyle}>还没有库存流水，确认单据后会自动出现。</div> : null}
             {movementRows.length && !filteredMovementRows.length ? <div className="asset-workspace__empty-state asset-workspace__empty-state--movements-filtered" style={placeholderSubtleStyle}>没有匹配的库存流水。</div> : null}
           </div>
@@ -2421,6 +2519,76 @@ export function AssetWorkspace() {
         </section>
       </div>
     </div>
+  );
+}
+
+function SummaryItemForm({
+  itemForm,
+  setItemForm,
+  editingItemId,
+  canEdit,
+  submitting,
+  isMobile,
+  onSubmit,
+  onCancel,
+}: {
+  itemForm: ItemFormState;
+  setItemForm: Dispatch<SetStateAction<ItemFormState>>;
+  editingItemId: number | null;
+  canEdit: boolean;
+  submitting: boolean;
+  isMobile: boolean;
+  onSubmit: (event: FormEvent<HTMLFormElement>) => void;
+  onCancel: () => void;
+}) {
+  return (
+    <form className="asset-workspace__form asset-workspace__form--item" onSubmit={onSubmit} style={formBlockStyle}>
+      <div className="asset-workspace__field-grid" style={fieldGridStyle(isMobile)}>
+        <input className={INPUT_CLASS_NAME} style={inputStyle} placeholder="item 名称" value={itemForm.name} onChange={(event) => setItemForm((current) => ({ ...current, name: event.target.value }))} />
+        <input className={INPUT_CLASS_NAME} style={inputStyle} placeholder="item 编码，留空自动生成" value={itemForm.code} onChange={(event) => setItemForm((current) => ({ ...current, code: event.target.value }))} />
+        <input className={INPUT_CLASS_NAME} style={inputStyle} placeholder="分类" value={itemForm.category} onChange={(event) => setItemForm((current) => ({ ...current, category: event.target.value }))} />
+        <input className={INPUT_CLASS_NAME} style={inputStyle} placeholder="单位" value={itemForm.unit} onChange={(event) => setItemForm((current) => ({ ...current, unit: event.target.value }))} />
+      </div>
+      <div className="asset-workspace__form-actions" style={formActionRowStyle}>
+        <button className={SECONDARY_BUTTON_CLASS_NAME} type="button" style={secondaryButtonStyle} onClick={onCancel}>取消</button>
+        <button className={PRIMARY_BUTTON_CLASS_NAME} type="submit" style={primaryButtonStyle} disabled={!canEdit || submitting}>{editingItemId ? "保存 Item" : "创建 Item"}</button>
+      </div>
+    </form>
+  );
+}
+
+function SummarySubItemForm({
+  subItemForm,
+  setSubItemForm,
+  editingSubItemId,
+  canEdit,
+  submitting,
+  isMobile,
+  onSubmit,
+  onCancel,
+}: {
+  subItemForm: SubItemFormState;
+  setSubItemForm: Dispatch<SetStateAction<SubItemFormState>>;
+  editingSubItemId: number | null;
+  canEdit: boolean;
+  submitting: boolean;
+  isMobile: boolean;
+  onSubmit: (event: FormEvent<HTMLFormElement>) => void;
+  onCancel: () => void;
+}) {
+  return (
+    <form className="asset-workspace__form asset-workspace__form--sub-item" onSubmit={onSubmit} style={formBlockStyle}>
+      <div className="asset-workspace__field-grid" style={fieldGridStyle(isMobile)}>
+        <input className={INPUT_CLASS_NAME} style={inputStyle} placeholder="子 item 名称" value={subItemForm.name} onChange={(event) => setSubItemForm((current) => ({ ...current, name: event.target.value }))} />
+        <input className={INPUT_CLASS_NAME} style={inputStyle} placeholder="SKU" value={subItemForm.sku} onChange={(event) => setSubItemForm((current) => ({ ...current, sku: event.target.value }))} />
+        <input className={INPUT_CLASS_NAME} style={inputStyle} placeholder="size" value={subItemForm.size} onChange={(event) => setSubItemForm((current) => ({ ...current, size: event.target.value }))} />
+        <input className={INPUT_CLASS_NAME} style={inputStyle} placeholder="color" value={subItemForm.color} onChange={(event) => setSubItemForm((current) => ({ ...current, color: event.target.value }))} />
+      </div>
+      <div className="asset-workspace__form-actions" style={formActionRowStyle}>
+        <button className={SECONDARY_BUTTON_CLASS_NAME} type="button" style={secondaryButtonStyle} onClick={onCancel}>取消</button>
+        <button className={PRIMARY_BUTTON_CLASS_NAME} type="submit" style={primaryButtonStyle} disabled={!canEdit || submitting}>{editingSubItemId ? "保存规格" : "创建规格"}</button>
+      </div>
+    </form>
   );
 }
 
@@ -2446,83 +2614,6 @@ function MasterActionCard({
       <div className="asset-workspace__master-action-title" style={masterActionTitleStyle}>{title}</div>
       <div className="asset-workspace__master-action-hint" style={masterActionHintStyle}>{hint}</div>
     </button>
-  );
-}
-
-function ItemCard({
-  item,
-  canEdit,
-  onEditItem,
-  onEditSubItem,
-  onDeleteItem,
-  onDeleteSubItem,
-  submitting,
-}: {
-  item: AssetItemRecord;
-  canEdit: boolean;
-  onEditItem: (item: AssetItemRecord) => void;
-  onEditSubItem: (subItem: AssetSubItemRecord) => void;
-  onDeleteItem: (item: AssetItemRecord) => void;
-  onDeleteSubItem: (subItem: AssetSubItemRecord) => void;
-  submitting: boolean;
-}) {
-  return (
-    <div className="asset-workspace__compact-item asset-workspace__compact-item--item-card" style={compactListItemStyle}>
-      <div className="asset-workspace__item-card-header" style={itemCardHeaderStyle}>
-        <div>
-          <div className="asset-workspace__item-title" style={compactListTitleStyle}>
-            {item.name} <span className="asset-workspace__inline-meta" style={inlineMetaStyle}>· {item.code}</span>
-          </div>
-          <div className="asset-workspace__item-meta" style={compactListMetaStyle}>
-            {item.category || "未分类"}
-            {item.unit ? ` · 单位 ${item.unit}` : ""}
-          </div>
-        </div>
-        <div className="asset-workspace__action-group" style={actionGroupStyle}>
-          <button className={GHOST_BUTTON_CLASS_NAME} type="button" style={ghostButtonStyle} onClick={() => onEditItem(item)} disabled={!canEdit}>
-            编辑 Item
-          </button>
-          <button
-            className={GHOST_DANGER_BUTTON_CLASS_NAME}
-            type="button"
-            style={ghostDangerButtonStyle}
-            onClick={() => onDeleteItem(item)}
-            disabled={!canEdit || submitting || Boolean(item.sub_items?.length)}
-          >
-            删除 Item
-          </button>
-        </div>
-      </div>
-      <div className="asset-workspace__sub-item-list" style={subItemListStyle}>
-        {(item.sub_items || []).map((subItem) => (
-          <div key={subItem.id} className="asset-workspace__sub-item-card" style={subItemCardStyle}>
-            <span className="asset-workspace__line-chip" style={lineChipStyle}>{buildSubItemOptionLabel(subItem)}</span>
-            <div className="asset-workspace__action-group" style={actionGroupStyle}>
-              <button
-                className={GHOST_BUTTON_CLASS_NAME}
-                type="button"
-                style={ghostButtonStyle}
-                onClick={() => onEditSubItem(subItem)}
-                disabled={!canEdit}
-              >
-                编辑规格
-              </button>
-              <button
-                className={GHOST_DANGER_BUTTON_CLASS_NAME}
-                type="button"
-                style={ghostDangerButtonStyle}
-                onClick={() => onDeleteSubItem(subItem)}
-                disabled={!canEdit || submitting}
-              >
-                删除规格
-              </button>
-            </div>
-          </div>
-        ))}
-      </div>
-      {item.sub_items?.length ? <div className="asset-workspace__item-meta" style={compactListMetaStyle}>有子 Item 时不能直接删除主 Item。</div> : null}
-      {!item.sub_items?.length ? <div className="asset-workspace__empty-state asset-workspace__empty-state--sub-items" style={placeholderSubtleStyle}>这个 Item 还没有子 Item / Size。</div> : null}
-    </div>
   );
 }
 
@@ -2982,90 +3073,10 @@ const actionGroupStyle: CSSProperties = {
   alignItems: "center",
 };
 
-const compactListStyle: CSSProperties = {
-  display: "grid",
-  gap: "6px",
-};
-
-const compactListItemStyle: CSSProperties = {
-  padding: "8px 10px",
-  borderRadius: radius.sm,
-  background: colors.panel,
-  border: `1px solid ${colors.lineSoft}`,
-};
-
 const compactListTitleStyle: CSSProperties = {
   fontSize: "14px",
   fontWeight: 700,
   color: colors.ink,
-};
-
-const compactListMetaStyle: CSSProperties = {
-  marginTop: "4px",
-  fontSize: "12px",
-  color: colors.inkMuted,
-  lineHeight: 1.5,
-};
-
-const itemCardHeaderStyle: CSSProperties = {
-  display: "flex",
-  justifyContent: "space-between",
-  alignItems: "flex-start",
-  gap: "10px",
-};
-
-const subItemListStyle: CSSProperties = {
-  display: "grid",
-  gap: "6px",
-  marginTop: "8px",
-};
-
-const subItemCardStyle: CSSProperties = {
-  display: "flex",
-  alignItems: "center",
-  justifyContent: "space-between",
-  gap: "10px",
-  flexWrap: "wrap",
-};
-
-const documentListStyle: CSSProperties = {
-  display: "grid",
-  gap: "6px",
-};
-
-const documentCardStyle: CSSProperties = {
-  padding: "10px",
-  borderRadius: radius.sm,
-  background: colors.panel,
-  border: `1px solid ${colors.lineSoft}`,
-};
-
-const documentHeaderStyle: CSSProperties = {
-  display: "flex",
-  justifyContent: "space-between",
-  gap: "12px",
-  alignItems: "flex-start",
-};
-
-const documentNoStyle: CSSProperties = {
-  fontSize: "15px",
-  fontWeight: 700,
-  color: colors.ink,
-};
-
-const documentMetaStyle: CSSProperties = {
-  marginTop: "4px",
-  fontSize: "12px",
-  color: colors.inkMuted,
-  lineHeight: 1.6,
-};
-
-const documentActionRowStyle: CSSProperties = {
-  display: "flex",
-  flexWrap: "wrap",
-  alignItems: "center",
-  gap: "6px",
-  marginTop: "8px",
 };
 
 const fileActionLabelStyle: CSSProperties = {
@@ -3130,20 +3141,6 @@ const lineChipStyle: CSSProperties = {
   fontWeight: 600,
 };
 
-const movementListStyle: CSSProperties = {
-  display: "grid",
-  gap: "6px",
-};
-
-const movementCardStyle: CSSProperties = {
-  padding: "8px 10px",
-  borderRadius: radius.sm,
-  background: colors.panel,
-  border: `1px solid ${colors.lineSoft}`,
-  display: "grid",
-  gap: "6px",
-};
-
 function movementDeltaStyle(quantityDelta: number): CSSProperties {
   const positive = quantityDelta >= 0;
   return {
@@ -3155,18 +3152,6 @@ function movementDeltaStyle(quantityDelta: number): CSSProperties {
     fontSize: "12px",
   };
 }
-
-const movementFooterStyle: CSSProperties = {
-  display: "flex",
-  justifyContent: "flex-end",
-};
-
-const summaryValueStyle: CSSProperties = {
-  fontSize: "20px",
-  fontWeight: 700,
-  color: colors.accentStrong,
-  whiteSpace: "nowrap",
-};
 
 const tableWrapStyle: CSSProperties = {
   overflowX: "auto",
@@ -3217,13 +3202,6 @@ const thresholdButtonStyle: CSSProperties = {
   ...secondaryButtonStyle,
   padding: "6px 8px",
   whiteSpace: "nowrap",
-};
-
-const warningItemStyle: CSSProperties = {
-  padding: "8px 10px",
-  borderRadius: radius.sm,
-  background: colors.warningSoft,
-  border: `1px solid ${colors.warningBorder}`,
 };
 
 const placeholderStyle: CSSProperties = {

@@ -1165,3 +1165,19 @@ def confirm_stock_document(document_id, user):
     document.updated_at = datetime.utcnow()
     db.session.commit()
     return _get_document_or_raise(document.id)
+
+
+def post_document_to_finance(document_id, user):
+    """把已确认的销售单据推送到「收款审核」——生成一条待审核收款（finance_payment_status=process）。"""
+    document = _get_document_or_raise(document_id)
+    if document.document_type not in {"sale_out", "sale_return"}:
+        raise ValidationError("只有销售单据才能推送到收款审核")
+    if document.status != "confirmed":
+        raise ValidationError("请先确认销售单据再推送到收款审核")
+    if document.finance_payment_status:
+        raise ValidationError("这笔销售已经推送到收款审核了")
+
+    document.finance_payment_status = "process"
+    document.updated_at = datetime.utcnow()
+    db.session.commit()
+    return _get_document_or_raise(document.id)

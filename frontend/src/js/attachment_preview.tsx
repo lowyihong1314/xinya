@@ -514,6 +514,24 @@ export async function openPreviewModal(attachment: AttachmentRecord) {
   );
 }
 
+// 直接可用于 <img>/<iframe> src 的附件地址（媒体文件公开，无需鉴权）。
+export function resolveAttachmentPreviewUrl(attachment: AttachmentRecord): string {
+  return resolveFileFetchUrl(getFileUrl(attachment));
+}
+
+export function getAttachmentKind(attachment: AttachmentRecord): "image" | "pdf" | "other" {
+  const fileName = attachment.file_name || attachment.file_path || "";
+  const mime = attachment.mime_type || "";
+  const ext = getExt(fileName, mime);
+  if (isImage(ext, mime) || isHeic(ext, mime)) {
+    return "image";
+  }
+  if (ext === "pdf" || mime.toLowerCase() === "application/pdf") {
+    return "pdf";
+  }
+  return "other";
+}
+
 function overlayStyle(isMobile: boolean): CSSProperties {
   return {
     position: "fixed",

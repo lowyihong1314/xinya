@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import type { ReactNode } from "react";
+import type { CSSProperties, ReactNode } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
 
 import { useEnsureDesignTokens } from "../../theme/designTokens";
@@ -9,17 +9,34 @@ import { showConfirmDialog } from "../../js/dialogs";
 import { downloadBlobOrShare, downloadUrlOrShare } from "../../js/browserActions";
 import { show_alert } from "../../js/show_alert";
 import { LAMP_META } from "../../lamp/lampMeta";
+import { LampWorkspacePage } from "../lamp/react/LampWorkspacePage";
 import {
   approvePayment,
+  createYlpOrderItem,
+  deleteYlpOrderItem,
   downloadYlpPaiwei,
   fetchPayments,
   fetchYlpOrderDetail,
   fetchYlpPayments,
   fetchYlpVersions,
+  previewYlpPaiwei,
   removePayment,
   revokePayment,
   searchYlpOrders,
+  updateYlpOrderCustomer,
+  updateYlpOrderItem,
+  updateYlpOrderStatus,
 } from "./api";
+import {
+  PAIWEI_TEMPLATES,
+  buildItemPayload,
+  createDraft,
+  getTemplate,
+  getDraftTotalPrice,
+  validateDraft,
+  type PaiweiCode,
+  type PaiweiDraft,
+} from "./intake/paiwei";
 import type {
   PaymentRecord,
   RegistrationRecord,
@@ -31,13 +48,13 @@ import type {
 } from "./types";
 
 const PAGE_SIZE = 8;
+const YLP_ORDER_PAGE_SIZE = 15;
 
 type WorkspaceTab = "lamp" | "ylp";
 type WorkspaceSection = "payments" | "orders";
 type WorkspaceStateValue<T> = Record<WorkspaceTab, T>;
 
 type ScreenState =
-  | { kind: "selection" }
   | { kind: "workspace"; workspace: WorkspaceTab; section: WorkspaceSection }
   | { kind: "payment-detail"; workspace: WorkspaceTab; paymentId: number }
   | { kind: "ylp-order-detail"; orderId: number };
@@ -157,10 +174,6 @@ function matchesPaymentQuery(payment: PaymentRecord, normalizedQuery: string) {
   );
 }
 
-function getWorkspaceTitle(workspace: WorkspaceTab) {
-  return workspace === "ylp" ? "YLP 工作区" : "Lamp 工作区";
-}
-
 function getWorkspaceDescription(workspace: WorkspaceTab) {
   return workspace === "ylp"
     ? "先锁定盂兰盆，再切到付款审核或订单查询。"
@@ -217,8 +230,6 @@ function screensEqual(left: ScreenState, right: ScreenState) {
   }
 
   switch (left.kind) {
-    case "selection":
-      return true;
     case "workspace":
       return left.workspace === (right as Extract<ScreenState, { kind: "workspace" }>).workspace &&
         left.section === (right as Extract<ScreenState, { kind: "workspace" }>).section;
@@ -244,22 +255,12 @@ function parseFahuiRouteState(search: string): FahuiRouteState {
   const paymentId = parsePositiveInt(params.get("fahui_payment_id"), 0);
   const orderId = parsePositiveInt(params.get("fahui_order_id"), 0);
 
-  let screen: ScreenState = { kind: "selection" };
-  if (view === "payment" && isWorkspaceTab(workspace) && paymentId > 0) {
-    screen = { kind: "payment-detail", workspace, paymentId };
-  } else if (view === "ylp_order" && orderId > 0) {
+  // 法会付款审核已移至「财政 · 收款审核」；这里只保留订单查询。
+  let screen: ScreenState = { kind: "workspace", workspace: "ylp", section: "orders" };
+  if (view === "ylp_order" && orderId > 0) {
     screen = { kind: "ylp-order-detail", orderId };
   } else if (view === "workspace" && isWorkspaceTab(workspace)) {
-    screen = {
-      kind: "workspace",
-      workspace,
-      section:
-        workspace === "lamp"
-          ? "payments"
-          : isWorkspaceSection(section)
-            ? section
-            : "orders",
-    };
+    screen = { kind: "workspace", workspace, section: "orders" };
   }
 
   return {
@@ -355,6 +356,12 @@ export function FahuiPage() {
   const [ylpOrders, setYlpOrders] = useState<YlpOrderSummary[]>([]);
   const [ylpPagination, setYlpPagination] = useState<YlpPagination | null>(null);
   const [ylpDetail, setYlpDetail] = useState<YlpDetailState | null>(null);
+  const [orderForm, setOrderForm] = useState({ customer_name: "", phone: "", email: "" });
+  const [orderSaving, setOrderSaving] = useState(false);
+  const [statusSaving, setStatusSaving] = useState(false);
+  const [itemModal, setItemModal] = useState<{ item: YlpOrderItem | null } | null>(null);
+  const [paiweiPreviewUrl, setPaiweiPreviewUrl] = useState<string | null>(null);
+  const [paiweiPreviewLoading, setPaiweiPreviewLoading] = useState(false);
 
   const currentWorkspace =
     screen.kind === "workspace" || screen.kind === "payment-detail" ? screen.workspace : screen.kind === "ylp-order-detail" ? "ylp" : null;
@@ -439,7 +446,6 @@ export function FahuiPage() {
   ]);
 
   useEffect(() => {
-    void loadPayments();
     void loadYlpVersions();
   }, []);
 
@@ -502,6 +508,23 @@ export function FahuiPage() {
     void loadYlpDetail(screen.orderId);
   }, [screen, ylpDetail]);
 
+  useEffect(() => {
+    const order = ylpDetail?.order;
+    setOrderForm({
+      customer_name: order?.customer_name || order?.name || "",
+      phone: order?.phone || "",
+      email: order?.email || "",
+    });
+    setItemModal(null);
+    setPaiweiPreviewUrl((prev) => {
+      if (prev) {
+        URL.revokeObjectURL(prev);
+      }
+      return null;
+    });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [ylpDetail?.order?.id]);
+
   async function loadPayments() {
     setPaymentLoading(true);
     setPaymentError("");
@@ -542,7 +565,7 @@ export function FahuiPage() {
         version: ylpVersion,
         value: ylpQuery,
         page: ylpPage,
-        perPage: PAGE_SIZE,
+        perPage: YLP_ORDER_PAGE_SIZE,
       });
       setYlpOrders(response.data?.items || []);
       setYlpPagination(response.data?.pagination || null);
@@ -553,24 +576,7 @@ export function FahuiPage() {
     }
   }
 
-  function enterWorkspace(workspace: WorkspaceTab) {
-    setScreen({
-      kind: "workspace",
-      workspace,
-      section: workspace === "ylp" ? "orders" : "payments",
-    });
-  }
-
   function goBack() {
-    if (screen.kind === "selection") {
-      return;
-    }
-
-    if (screen.kind === "workspace") {
-      setScreen({ kind: "selection" });
-      return;
-    }
-
     if (screen.kind === "payment-detail") {
       setScreen({
         kind: "workspace",
@@ -580,11 +586,13 @@ export function FahuiPage() {
       return;
     }
 
-    setScreen({
-      kind: "workspace",
-      workspace: "ylp",
-      section: "orders",
-    });
+    if (screen.kind === "ylp-order-detail") {
+      setScreen({
+        kind: "workspace",
+        workspace: "ylp",
+        section: "orders",
+      });
+    }
   }
 
   function openPaymentDetail(workspace: WorkspaceTab, paymentId: number) {
@@ -733,6 +741,33 @@ export function FahuiPage() {
     }
   }
 
+  async function handlePreviewPaiwei(orderId: number) {
+    setPaiweiPreviewLoading(true);
+    try {
+      const blob = await previewYlpPaiwei(orderId);
+      const url = URL.createObjectURL(blob);
+      setPaiweiPreviewUrl((prev) => {
+        if (prev) {
+          URL.revokeObjectURL(prev);
+        }
+        return url;
+      });
+    } catch (previewError) {
+      show_alert("error", previewError instanceof Error ? previewError.message : "预览牌位失败");
+    } finally {
+      setPaiweiPreviewLoading(false);
+    }
+  }
+
+  function closePaiweiPreview() {
+    setPaiweiPreviewUrl((prev) => {
+      if (prev) {
+        URL.revokeObjectURL(prev);
+      }
+      return null;
+    });
+  }
+
   async function handleDownloadQuotation(orderId: number) {
     const filename = `ylp-order-${orderId}-quotation.pdf`;
     try {
@@ -749,41 +784,94 @@ export function FahuiPage() {
     }
   }
 
-  function openYlpIntakePage() {
-    window.open("/#/ylp-registration", "_blank", "noopener,noreferrer");
+  async function handleSaveOrderInfo(orderId: number) {
+    setOrderSaving(true);
+    try {
+      await updateYlpOrderCustomer(orderId, {
+        customer_name: orderForm.customer_name.trim(),
+        phone: orderForm.phone.trim(),
+        email: orderForm.email.trim(),
+      });
+      setYlpDetail((current) =>
+        current && current.order
+          ? {
+              ...current,
+              order: {
+                ...current.order,
+                customer_name: orderForm.customer_name.trim(),
+                phone: orderForm.phone.trim(),
+                email: orderForm.email.trim(),
+              },
+            }
+          : current,
+      );
+      setActionMessage("订单资料已保存");
+    } catch (saveError) {
+      show_alert("error", saveError instanceof Error ? saveError.message : "保存资料失败");
+    } finally {
+      setOrderSaving(false);
+    }
   }
 
-  function renderSelectionView() {
-    return (
-      <>
-        <section style={styles.heroCard}>
-          <p style={styles.eyebrow}>Dharma CRM</p>
-          <h1 style={styles.title}>法会工作台</h1>
-          <p style={styles.subtitle}>
-            先选 YLP 或 Lamp，再进入对应流程。列表点击后直接进页面，不再用详情弹窗把内容包起来。
-          </p>
-          <div style={styles.heroActions}>
-            <button type="button" style={styles.heroActionButton} onClick={openYlpIntakePage}>
-              打开牌位填写页
-            </button>
-          </div>
-        </section>
+  async function handleSetOrderStatus(orderId: number, nextStatus: string) {
+    if (nextStatus === "cancel") {
+      const ok = await showConfirmDialog({ message: `确认取消订单 #${orderId}？`, tone: "danger" });
+      if (!ok) {
+        return;
+      }
+    }
+    setStatusSaving(true);
+    try {
+      const result = await updateYlpOrderStatus(orderId, nextStatus);
+      const saved = result.status || nextStatus;
+      setYlpDetail((current) =>
+        current && current.order ? { ...current, order: { ...current.order, order_status: saved } } : current,
+      );
+      setActionMessage("订单状态已更新");
+    } catch (saveError) {
+      show_alert("error", saveError instanceof Error ? saveError.message : "更新状态失败");
+    } finally {
+      setStatusSaving(false);
+    }
+  }
 
-        <section style={styles.choiceGrid(isMobile)}>
-          <button type="button" style={styles.choiceCard} onClick={() => enterWorkspace("ylp")}>
-            <p style={styles.choiceEyebrow}>YLP</p>
-            <h2 style={styles.choiceTitle}>盂兰盆</h2>
-            <p style={styles.choiceBody}>先看订单查询，也可以切去付款审核，适合从法会项目往下钻。</p>
-          </button>
+  async function handleDeleteYlpOrder(orderId: number) {
+    const confirmed = await showConfirmDialog({
+      message: `确认删除订单 #${orderId}？删除后会从列表隐藏。`,
+      tone: "danger",
+    });
+    if (!confirmed) {
+      return;
+    }
+    setStatusSaving(true);
+    try {
+      await updateYlpOrderStatus(orderId, "delete");
+      setActionMessage("订单已删除");
+      setScreen({ kind: "workspace", workspace: "ylp", section: "orders" });
+      void loadYlpOrders();
+    } catch (deleteError) {
+      show_alert("error", deleteError instanceof Error ? deleteError.message : "删除订单失败");
+    } finally {
+      setStatusSaving(false);
+    }
+  }
 
-          <button type="button" style={styles.choiceCard} onClick={() => enterWorkspace("lamp")}>
-            <p style={styles.choiceEyebrow}>LAMP</p>
-            <h2 style={styles.choiceTitle}>点灯</h2>
-            <p style={styles.choiceBody}>直接进入 Lamp 付款审核，列表卡片点开就是详情页和操作区。</p>
-          </button>
-        </section>
-      </>
-    );
+  async function handleDeleteYlpItem(orderId: number, itemId: number) {
+    const ok = await showConfirmDialog({ message: `确认删除项目 #${itemId}？`, tone: "danger" });
+    if (!ok) {
+      return;
+    }
+    try {
+      await deleteYlpOrderItem(orderId, itemId);
+      setActionMessage("项目已删除");
+      void loadYlpDetail(orderId);
+    } catch (deleteError) {
+      show_alert("error", deleteError instanceof Error ? deleteError.message : "删除项目失败");
+    }
+  }
+
+  function openYlpIntakePage() {
+    window.open("/#/ylp-registration", "_blank", "noopener,noreferrer");
   }
 
   function renderWorkspaceHeader() {
@@ -804,59 +892,43 @@ export function FahuiPage() {
           ? "订单信息、付款记录和项目内容直接展开在页面里。"
           : getSectionDescription(currentWorkspace, currentSection);
 
+    const isDetail = screen.kind === "payment-detail" || screen.kind === "ylp-order-detail";
+
+    // 详情页保留返回按钮 + 标题，列表页压缩成紧凑的一排。
+    if (isDetail) {
+      return (
+        <section style={styles.workspaceCard}>
+          <header style={styles.workspaceHeader(isMobile, true)}>
+            <button type="button" style={styles.backButton} onClick={goBack}>
+              <i className="fas fa-arrow-left" />
+              <span>返回列表</span>
+            </button>
+
+            <section style={styles.workspaceCopy}>
+              <p style={styles.workspaceEyebrow}>{getWorkspaceEyebrow(currentWorkspace)}</p>
+              <h2 style={styles.workspaceTitle}>{title}</h2>
+              <p style={styles.workspaceDescription}>{description}</p>
+            </section>
+          </header>
+        </section>
+      );
+    }
+
     return (
-      <section style={styles.workspaceCard}>
-        <header style={styles.workspaceHeader(isMobile)}>
-          <button type="button" style={styles.backButton} onClick={goBack}>
-            <i className="fas fa-arrow-left" />
-            <span>Back</span>
+      <section style={styles.workspaceBar}>
+        <section style={styles.workspaceCopy}>
+          <p style={styles.workspaceEyebrow}>{getWorkspaceEyebrow(currentWorkspace)}</p>
+          <h2 style={styles.workspaceTitle}>{currentWorkspace === "ylp" ? "订单查询" : "法会"}</h2>
+          {currentWorkspace === "ylp" ? null : (
+            <p style={styles.workspaceHint}>法会付款审核已移至「财政 · 收款审核」统一管理。</p>
+          )}
+        </section>
+
+        {currentWorkspace === "ylp" ? (
+          <button type="button" style={styles.secondaryActionCompact} onClick={openYlpIntakePage}>
+            打开牌位填写页
           </button>
-
-          <section style={styles.workspaceCopy}>
-            <p style={styles.workspaceEyebrow}>{getWorkspaceEyebrow(currentWorkspace)}</p>
-            <h2 style={styles.workspaceTitle}>{title}</h2>
-            <p style={styles.workspaceDescription}>{description}</p>
-            {currentWorkspace === "ylp" ? (
-              <div style={styles.workspaceActions}>
-                <button type="button" style={styles.secondaryActionCompact} onClick={openYlpIntakePage}>
-                  打开牌位填写页
-                </button>
-              </div>
-            ) : null}
-          </section>
-        </header>
-
-        {screen.kind === "workspace" ? (
-          currentWorkspace === "ylp" ? (
-            <nav style={styles.sectionTabs}>
-              <button
-                type="button"
-                style={{
-                  ...styles.sectionTab,
-                  ...(currentSection === "orders" ? styles.sectionTabActive : null),
-                }}
-                onClick={() => openSection("ylp", "orders")}
-              >
-                订单查询
-              </button>
-
-              <button
-                type="button"
-                style={{
-                  ...styles.sectionTab,
-                  ...(currentSection === "payments" ? styles.sectionTabActive : null),
-                }}
-                onClick={() => openSection("ylp", "payments")}
-              >
-                付款审核
-              </button>
-            </nav>
-          ) : (
-            <p style={styles.workspaceHint}>Lamp 入口只显示 Lamp 付款审核；如需切去 YLP，请先返回选择页。</p>
-          )
-        ) : (
-          <p style={styles.workspaceHint}>{getWorkspaceTitle(currentWorkspace)}</p>
-        )}
+        ) : null}
       </section>
     );
   }
@@ -1052,7 +1124,7 @@ export function FahuiPage() {
               }
             }}
             placeholder="搜索订单号 / 功德主 / 电话 / 牌位内容"
-            style={styles.searchInput}
+            style={{ ...styles.searchInput, flex: "1 1 200px", width: "auto", minWidth: 0 }}
           />
 
           <button
@@ -1066,7 +1138,35 @@ export function FahuiPage() {
             搜索
           </button>
 
-          <p style={styles.summary}>{`共 ${ylpPagination?.total || 0} 条，当前第 ${ylpSafePage}/${ylpTotalPages} 页`}</p>
+          <nav style={styles.pagination}>
+            <button
+              type="button"
+              onClick={() => setYlpPage(Math.max(1, ylpSafePage - 1))}
+              disabled={ylpSafePage <= 1}
+              style={{
+                ...styles.pageButton,
+                ...(ylpSafePage <= 1 ? styles.pageButtonDisabled : null),
+              }}
+            >
+              上一页
+            </button>
+
+            <span style={styles.pageIndicator}>{`${ylpSafePage} / ${ylpTotalPages}`}</span>
+
+            <button
+              type="button"
+              onClick={() => setYlpPage(Math.min(ylpTotalPages, ylpSafePage + 1))}
+              disabled={ylpSafePage >= ylpTotalPages}
+              style={{
+                ...styles.pageButton,
+                ...(ylpSafePage >= ylpTotalPages ? styles.pageButtonDisabled : null),
+              }}
+            >
+              下一页
+            </button>
+          </nav>
+
+          <p style={styles.summary}>{`共 ${ylpPagination?.total || 0} 条 · ${ylpSafePage}/${ylpTotalPages} 页`}</p>
         </section>
 
         {ylpLoading ? <section style={styles.stateCard}>加载中…</section> : null}
@@ -1074,51 +1174,39 @@ export function FahuiPage() {
 
         {!ylpLoading && !ylpError ? (
           <>
-            <nav style={styles.pagination}>
-              {Array.from({ length: ylpTotalPages }, (_, index) => {
-                const nextPage = index + 1;
-                const active = nextPage === ylpSafePage;
-
-                return (
-                  <button
-                    key={nextPage}
-                    type="button"
-                    onClick={() => setYlpPage(nextPage)}
-                    style={{
-                      ...styles.pageButton,
-                      ...(active ? styles.pageButtonActive : null),
-                    }}
-                  >
-                    {nextPage}
-                  </button>
-                );
-              })}
-            </nav>
-
-            <section style={styles.grid}>
-              {ylpOrders.map((order) => (
-                <article
-                  key={order.id}
-                  style={{
-                    ...styles.card,
-                    ...(order.status === "approved" || order.status === "paid"
-                      ? styles.cardApproved
-                      : styles.cardPending),
-                  }}
-                >
-                  <p style={styles.orderBadge}>{`#${order.id}`}</p>
-                  <h3 style={styles.cardTitle}>{order.customer_name || order.name || "-"}</h3>
-                  <p style={styles.cardMeta}>{`电话：${order.phone || "-"}`}</p>
-                  <p style={styles.cardMeta}>{`版本：${order.version || "-"}`}</p>
-                  <p style={styles.cardMeta}>{`状态：${order.status || "-"}`}</p>
-                  <p style={styles.cardNote}>{order.created_at || "暂无创建时间"}</p>
-
-                  <button type="button" style={styles.cardAction} onClick={() => void openYlpDetail(order.id)}>
-                    查看详情
-                  </button>
-                </article>
-              ))}
-            </section>
+            <div style={styles.tableWrap}>
+              <style>{YLP_ORDER_TABLE_CSS}</style>
+              <table className="ylp-order-table">
+                <thead>
+                  <tr>
+                    <th>状态</th>
+                    <th>单号</th>
+                    <th>功德主</th>
+                    <th>电话</th>
+                    <th>版本</th>
+                    <th>创建时间</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {ylpOrders.map((order) => (
+                    <tr
+                      key={order.id}
+                      className="ylp-order-row"
+                      onClick={() => void openYlpDetail(order.id)}
+                    >
+                      <td>
+                        <span style={ylpStatusChipStyle(order.status)}>{order.status || "-"}</span>
+                      </td>
+                      <td style={styles.cellMono}>{`#${order.id}`}</td>
+                      <td style={styles.cellStrong}>{order.customer_name || order.name || "-"}</td>
+                      <td style={styles.cellMono}>{order.phone || "-"}</td>
+                      <td>{order.version || "-"}</td>
+                      <td style={styles.cellMono}>{order.created_at || "-"}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
           </>
         ) : null}
       </>
@@ -1126,6 +1214,9 @@ export function FahuiPage() {
   }
 
   function renderYlpOrderDetailView() {
+    const orderStatus = ylpDetail?.order?.order_status || "Draft";
+    const editable = orderStatus === "Draft";
+    const canDelete = orderStatus === "cancel";
     return (
       <section style={styles.detailCard}>
         {ylpDetail?.loading ? <section style={styles.stateCard}>加载中…</section> : null}
@@ -1143,6 +1234,15 @@ export function FahuiPage() {
               <nav style={styles.detailActions(isMobile)}>
                 <button
                   type="button"
+                  style={{ ...styles.primaryAction, ...(paiweiPreviewLoading ? styles.pageButtonDisabled : null) }}
+                  disabled={paiweiPreviewLoading}
+                  onClick={() => void handlePreviewPaiwei(ylpDetail.orderId)}
+                >
+                  {paiweiPreviewLoading ? "生成中…" : "预览牌位"}
+                </button>
+
+                <button
+                  type="button"
                   style={styles.secondaryAction}
                   onClick={() => void handleDownloadPaiwei(ylpDetail.orderId)}
                 >
@@ -1156,49 +1256,288 @@ export function FahuiPage() {
                 >
                   下载报价单
                 </button>
+
+                {canDelete ? (
+                  <button
+                    type="button"
+                    style={{ ...styles.dangerAction, ...(statusSaving ? styles.pageButtonDisabled : null) }}
+                    disabled={statusSaving}
+                    onClick={() => void handleDeleteYlpOrder(ylpDetail.orderId)}
+                  >
+                    删除订单
+                  </button>
+                ) : null}
               </nav>
             </header>
 
-            <section style={styles.infoGrid}>
-              <DetailField label="订单编号" value={ylpDetail.order.id} />
-              <DetailField label="功德主" value={ylpDetail.order.customer_name || ylpDetail.order.name} />
-              <DetailField label="联系电话" value={ylpDetail.order.phone} />
-              <DetailField label="状态" value={ylpDetail.order.status} />
-              <DetailField label="版本" value={ylpDetail.order.version} />
-              <DetailField label="创建时间" value={ylpDetail.order.created_at} />
+            <style>{YLP_DETAIL_TABLE_CSS}</style>
+
+            <section style={styles.statusEditRow}>
+              <span style={styles.statusEditLabel}>订单状态</span>
+              <span style={ylpStatusChipStyle(orderStatus)}>{orderStatus}</span>
+              {orderStatus === "Draft" ? (
+                <button
+                  type="button"
+                  style={{ ...styles.primaryAction, ...(statusSaving ? styles.pageButtonDisabled : null) }}
+                  disabled={statusSaving}
+                  onClick={() => void handleSetOrderStatus(ylpDetail.orderId, "confirm")}
+                >
+                  确认 (Confirm)
+                </button>
+              ) : null}
+              {orderStatus === "confirm" ? (
+                <>
+                  <button
+                    type="button"
+                    style={{ ...styles.secondaryAction, ...(statusSaving ? styles.pageButtonDisabled : null) }}
+                    disabled={statusSaving}
+                    onClick={() => void handleSetOrderStatus(ylpDetail.orderId, "Draft")}
+                  >
+                    取消确认 (Unconfirm)
+                  </button>
+                  <button
+                    type="button"
+                    style={{ ...styles.dangerAction, ...(statusSaving ? styles.pageButtonDisabled : null) }}
+                    disabled={statusSaving}
+                    onClick={() => void handleSetOrderStatus(ylpDetail.orderId, "cancel")}
+                  >
+                    取消订单 (Cancel)
+                  </button>
+                </>
+              ) : null}
+              {orderStatus !== "Draft" && orderStatus !== "confirm" ? (
+                <button
+                  type="button"
+                  style={{ ...styles.secondaryAction, ...(statusSaving ? styles.pageButtonDisabled : null) }}
+                  disabled={statusSaving}
+                  onClick={() => void handleSetOrderStatus(ylpDetail.orderId, "Draft")}
+                >
+                  重新打开 (Draft)
+                </button>
+              ) : null}
             </section>
 
             <section style={styles.detailSection}>
               <header style={styles.detailSectionHeader}>
-                <h4 style={styles.detailSectionTitle}>支付记录</h4>
+                <h4 style={styles.detailSectionTitle}>
+                  订单资料{editable ? "" : "（已确认，只读）"}
+                </h4>
+                {editable ? (
+                  <button
+                    type="button"
+                    style={{ ...styles.primaryAction, ...(orderSaving ? styles.pageButtonDisabled : null) }}
+                    disabled={orderSaving}
+                    onClick={() => void handleSaveOrderInfo(ylpDetail.orderId)}
+                  >
+                    {orderSaving ? "保存中…" : "保存资料"}
+                  </button>
+                ) : null}
+              </header>
+              <div style={styles.tableWrap}>
+                <table className="ylp-detail-table">
+                  <tbody>
+                    <tr>
+                      <th style={{ width: 110 }}>订单编号</th>
+                      <td>{ylpDetail.order.id}</td>
+                    </tr>
+                    <tr>
+                      <th>功德主</th>
+                      <td>
+                        {editable ? (
+                          <input
+                            style={styles.detailInput}
+                            value={orderForm.customer_name}
+                            disabled={orderSaving}
+                            onChange={(event) => setOrderForm((prev) => ({ ...prev, customer_name: event.target.value }))}
+                          />
+                        ) : (
+                          orderForm.customer_name || "-"
+                        )}
+                      </td>
+                    </tr>
+                    <tr>
+                      <th>联系电话</th>
+                      <td>
+                        {editable ? (
+                          <input
+                            style={styles.detailInput}
+                            value={orderForm.phone}
+                            disabled={orderSaving}
+                            onChange={(event) => setOrderForm((prev) => ({ ...prev, phone: event.target.value }))}
+                          />
+                        ) : (
+                          orderForm.phone || "-"
+                        )}
+                      </td>
+                    </tr>
+                    <tr>
+                      <th>Email</th>
+                      <td>
+                        {editable ? (
+                          <input
+                            style={styles.detailInput}
+                            value={orderForm.email}
+                            disabled={orderSaving}
+                            onChange={(event) => setOrderForm((prev) => ({ ...prev, email: event.target.value }))}
+                          />
+                        ) : (
+                          orderForm.email || "-"
+                        )}
+                      </td>
+                    </tr>
+                    <tr>
+                      <th>版本</th>
+                      <td>{ylpDetail.order.version || "-"}</td>
+                    </tr>
+                    <tr>
+                      <th>创建时间</th>
+                      <td>{ylpDetail.order.created_at || "-"}</td>
+                    </tr>
+                  </tbody>
+                </table>
+              </div>
+            </section>
+
+            <section style={styles.detailSection}>
+              <header style={styles.detailSectionHeader}>
+                <h4 style={styles.detailSectionTitle}>
+                  付款记录（共 {(ylpDetail.payments || []).length} 条）
+                </h4>
+                <span style={ylpStatusChipStyle(ylpDetail.order.status)}>{`汇总：${ylpDetail.order.status || "none"}`}</span>
               </header>
 
               {ylpDetail.paymentsError ? <p style={styles.emptyText}>{ylpDetail.paymentsError}</p> : null}
 
               {(ylpDetail.payments || []).length ? (
-                <section style={styles.listSection}>
-                  {ylpDetail.payments.map((payment) => (
-                    <article key={payment.id} style={styles.listCard}>
-                      <p style={styles.listTitle}>{`#${payment.id}`}</p>
-                      <p style={styles.listText}>{`${payment.payment_mode || "-"} · RM ${payment.total_price ?? 0}`}</p>
-                      <p style={styles.listText}>{`${payment.status || "-"} · ${payment.created_at || "-"}`}</p>
-                    </article>
-                  ))}
-                </section>
+                <div style={styles.tableWrap}>
+                  <table className="ylp-detail-table">
+                    <thead>
+                      <tr>
+                        <th>#</th>
+                        <th>方式</th>
+                        <th>金额</th>
+                        <th>状态</th>
+                        <th>时间</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {ylpDetail.payments.map((payment) => (
+                        <tr key={payment.id}>
+                          <td>{payment.id}</td>
+                          <td>{payment.payment_mode || "-"}</td>
+                          <td>{`RM ${payment.total_price ?? 0}`}</td>
+                          <td>
+                            <span style={ylpStatusChipStyle(payment.is_approved ? "approved" : payment.status)}>
+                              {payment.is_approved ? "approved" : payment.status || "-"}
+                            </span>
+                          </td>
+                          <td>{payment.created_at || "-"}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
               ) : (
-                <p style={styles.emptyText}>暂无支付记录</p>
+                <p style={styles.emptyText}>暂无付款记录</p>
               )}
             </section>
 
-            {(ylpDetail.order.order_items || []).length ? (
-              <section style={styles.detailSection}>
-                <header style={styles.detailSectionHeader}>
-                  <h4 style={styles.detailSectionTitle}>项目内容</h4>
-                </header>
-                {(ylpDetail.order.order_items || []).map(renderYlpItem)}
-              </section>
-            ) : null}
+            <section style={styles.detailSection}>
+              <header style={styles.detailSectionHeader}>
+                <h4 style={styles.detailSectionTitle}>
+                  项目内容（共 {(ylpDetail.order.order_items || []).length} 条）
+                </h4>
+                {editable ? (
+                  <button type="button" style={styles.addItemToggle} onClick={() => setItemModal({ item: null })}>
+                    + 添加项目
+                  </button>
+                ) : null}
+              </header>
+
+              {(ylpDetail.order.order_items || []).length ? (
+                <div style={styles.tableWrap}>
+                  <table className="ylp-detail-table">
+                    <thead>
+                      <tr>
+                        <th>项目</th>
+                        <th>代码</th>
+                        <th>金额</th>
+                        <th>内容</th>
+                        <th>位置</th>
+                        {editable ? <th>操作</th> : null}
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {(ylpDetail.order.order_items || []).map((item) => (
+                        <tr key={item.id}>
+                          <td>{item.item_name || item.code || "项目"}</td>
+                          <td>{item.code || "-"}</td>
+                          <td>{`RM ${item.price ?? 0}`}</td>
+                          <td><YlpItemFields item={item} /></td>
+                          <td>{ylpItemLocationText(item) || "-"}</td>
+                          {editable ? (
+                            <td>
+                              <div style={styles.itemActionCell}>
+                                <button
+                                  type="button"
+                                  style={styles.itemEditButton}
+                                  onClick={() => setItemModal({ item })}
+                                >
+                                  编辑
+                                </button>
+                                <button
+                                  type="button"
+                                  style={styles.itemDeleteButton}
+                                  onClick={() => void handleDeleteYlpItem(ylpDetail.orderId, item.id)}
+                                >
+                                  删除
+                                </button>
+                              </div>
+                            </td>
+                          ) : null}
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              ) : (
+                <p style={styles.emptyText}>暂无项目内容</p>
+              )}
+            </section>
           </>
+        ) : null}
+
+        {itemModal ? (
+          <YlpItemModal
+            orderId={ylpDetail?.orderId ?? 0}
+            item={itemModal.item}
+            onClose={() => setItemModal(null)}
+            onSaved={() => {
+              setItemModal(null);
+              if (ylpDetail?.orderId) {
+                void loadYlpDetail(ylpDetail.orderId);
+              }
+            }}
+          />
+        ) : null}
+
+        {paiweiPreviewUrl ? (
+          <div style={styles.itemModalOverlay} onClick={closePaiweiPreview}>
+            <div style={styles.pdfModalContent} onClick={(event) => event.stopPropagation()}>
+              <div style={styles.addItemHeader}>
+                <span style={styles.detailSectionTitle}>牌位预览</span>
+                <div style={styles.itemActionCell}>
+                  <a href={paiweiPreviewUrl} target="_blank" rel="noreferrer" style={styles.itemEditButton}>
+                    新标签打开
+                  </a>
+                  <button type="button" style={styles.addItemCancel} onClick={closePaiweiPreview}>
+                    关闭
+                  </button>
+                </div>
+              </div>
+              <iframe title="牌位预览" src={paiweiPreviewUrl} style={styles.pdfFrame} />
+            </div>
+          </div>
         ) : null}
       </section>
     );
@@ -1228,64 +1567,21 @@ export function FahuiPage() {
     );
   }
 
-  function renderYlpItem(item: YlpOrderItem, index: number) {
-    const fieldEntries = Object.entries(item.item_form_data || {});
-
-    return (
-      <article key={`${item.id}-${index}`} style={styles.listCard}>
-        <p style={styles.listTitle}>{`${item.item_name || item.code || "项目"} · RM ${item.price ?? 0}`}</p>
-        <p style={styles.listText}>{`项目编号：${item.id} / 代码：${item.code || "-"}`}</p>
-
-        {fieldEntries.length ? (
-          <section style={styles.inlineList}>
-            {fieldEntries.map(([key, values]) => (
-              <p key={key} style={styles.listText}>
-                {`${key}：${(values || []).map((value) => value.val).filter(Boolean).join(" / ") || "-"}`}
-              </p>
-            ))}
-          </section>
-        ) : null}
-
-        {(item.item_location || []).length ? (
-          <section style={styles.inlineList}>
-            {(item.item_location || []).map((location, locationIndex) => {
-              const boards = (location.boards || [])
-                .map((board) =>
-                  board.board_name ? `${board.board_name}${board.location ? ` #${board.location}` : ""}` : null,
-                )
-                .filter(Boolean)
-                .join("、");
-
-              return (
-                <p key={`${location.print_pdf?.id || "pdf"}-${locationIndex}`} style={styles.listText}>
-                  {`打印 PDF ${location.print_pdf?.id || "-"}${boards ? ` · ${boards}` : ""}`}
-                </p>
-              );
-            })}
-          </section>
-        ) : null}
-      </article>
-    );
+  // LAMP（点灯登记管理）作为法会下的一个子工作区，直接渲染独立的点灯工作台。
+  if (screen.kind === "workspace" && screen.workspace === "lamp") {
+    return <LampWorkspacePage />;
   }
 
   return (
     <section style={styles.page}>
       {actionMessage ? <section style={styles.toast}>{actionMessage}</section> : null}
 
-      {screen.kind === "selection" ? renderSelectionView() : null}
+      {renderWorkspaceHeader()}
 
-      {screen.kind !== "selection" ? (
-        <>
-          {renderWorkspaceHeader()}
-
-          {screen.kind === "workspace" && screen.section === "payments" ? renderPaymentList(screen.workspace) : null}
-          {screen.kind === "workspace" && screen.workspace === "ylp" && screen.section === "orders"
-            ? renderYlpOrderList()
-            : null}
-          {screen.kind === "payment-detail" && selectedPayment ? renderPaymentDetail(selectedPayment, screen.workspace) : null}
-          {screen.kind === "ylp-order-detail" ? renderYlpOrderDetailView() : null}
-        </>
-      ) : null}
+      {screen.kind === "workspace" && screen.workspace === "ylp" && screen.section === "orders"
+        ? renderYlpOrderList()
+        : null}
+      {screen.kind === "ylp-order-detail" ? renderYlpOrderDetailView() : null}
     </section>
   );
 }
@@ -1305,11 +1601,464 @@ function DetailField({
   );
 }
 
+const YLP_ORDER_TABLE_CSS = `
+.ylp-order-table { width: 100%; border-collapse: collapse; font-size: 13px; min-width: 720px; }
+.ylp-order-table thead th {
+  position: sticky; top: 0; z-index: 1;
+  text-align: left; padding: 9px 12px;
+  font-size: 11px; font-weight: 700; letter-spacing: 0.06em; text-transform: uppercase;
+  color: var(--x-color-ink-muted); background: var(--x-color-canvas-alt);
+  border-bottom: 1px solid var(--x-color-line); white-space: nowrap;
+}
+.ylp-order-table tbody td { padding: 10px 12px; border-bottom: 1px solid var(--x-color-line-soft); vertical-align: middle; color: var(--x-color-ink); }
+.ylp-order-table tbody tr.ylp-order-row { cursor: pointer; }
+.ylp-order-table tbody tr.ylp-order-row:hover td { background: var(--x-color-accent-tint); }
+`;
+
+const YLP_DETAIL_TABLE_CSS = `
+.ylp-detail-table { width: 100%; border-collapse: collapse; font-size: 13px; min-width: 480px; }
+.ylp-detail-table th {
+  text-align: left; padding: 8px 10px; font-weight: 700; white-space: nowrap; vertical-align: middle;
+  color: var(--x-color-ink-muted); background: var(--x-color-canvas-alt);
+  border-bottom: 1px solid var(--x-color-line-soft);
+}
+.ylp-detail-table thead th { font-size: 11px; letter-spacing: 0.06em; text-transform: uppercase; }
+.ylp-detail-table tbody td { padding: 8px 10px; border-bottom: 1px solid var(--x-color-line-soft); vertical-align: middle; color: var(--x-color-ink); }
+`;
+
+const PAIWEI_FIELD_LABELS: Record<string, string> = {
+  owner: "阳上",
+  deceased: "对象",
+  relation: "关系",
+  surname: "姓氏",
+  suffix: "内容",
+  father: "显考",
+  mother: "显妣",
+  quantity: "数量",
+  note: "备注",
+};
+
+const PAIWEI_FIELD_ORDER = ["owner", "deceased", "relation", "surname", "suffix", "father", "mother", "quantity", "note"];
+
+function YlpItemFields({ item }: { item: YlpOrderItem }) {
+  const grouped = item.item_form_data || {};
+  const keys = [
+    ...PAIWEI_FIELD_ORDER.filter((key) => (grouped[key] || []).length),
+    ...Object.keys(grouped).filter((key) => !PAIWEI_FIELD_ORDER.includes(key) && (grouped[key] || []).length),
+  ];
+  if (!keys.length) {
+    return <span style={styles.itemFieldEmpty}>—</span>;
+  }
+  return (
+    <div style={styles.itemFieldList}>
+      {keys.map((key) => {
+        const values = (grouped[key] || []).map((entry) => String(entry.val || "").trim()).filter(Boolean);
+        if (!values.length) {
+          return null;
+        }
+        return (
+          <div key={key} style={styles.itemFieldRow}>
+            <span style={styles.itemFieldLabel}>
+              {key === "deceased" ? paiweiDeceasedLabel(item.code) : PAIWEI_FIELD_LABELS[key] || key}
+            </span>
+            <span style={styles.itemFieldValues}>
+              {values.map((value, index) => (
+                <span key={`${key}-${index}`} style={styles.itemFieldChip}>
+                  {value}
+                </span>
+              ))}
+            </span>
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
+function ListInput({
+  label,
+  values,
+  disabled,
+  onChange,
+}: {
+  label: string;
+  values: string[];
+  disabled: boolean;
+  onChange: (next: string[]) => void;
+}) {
+  return (
+    <div style={styles.addItemField}>
+      <span style={styles.addItemLabel}>{label}</span>
+      <div style={styles.listInputWrap}>
+        {values.map((value, index) => (
+          <div key={index} style={styles.listInputRow}>
+            <input
+              style={styles.detailInput}
+              value={value}
+              disabled={disabled}
+              placeholder={`${label} ${index + 1}`}
+              onChange={(event) => onChange(values.map((entry, i) => (i === index ? event.target.value : entry)))}
+            />
+            <button
+              type="button"
+              style={styles.listRemoveButton}
+              disabled={disabled || values.length <= 1}
+              onClick={() => onChange(values.length <= 1 ? [""] : values.filter((_, i) => i !== index))}
+              aria-label="删除这一行"
+            >
+              ×
+            </button>
+          </div>
+        ))}
+        <button
+          type="button"
+          style={styles.listAddButton}
+          disabled={disabled}
+          onClick={() => onChange([...values, ""])}
+        >
+          + 添加一行
+        </button>
+      </div>
+    </div>
+  );
+}
+
+const PAIWEI_ROWS_CSS = `
+.paiwei-rows { width: 100%; border-collapse: collapse; font-size: 13px; min-width: 320px; }
+.paiwei-rows th { text-align: left; padding: 4px 6px; font-size: 11px; font-weight: 800; color: var(--x-color-ink-muted); white-space: nowrap; }
+.paiwei-rows td { padding: 4px 6px; vertical-align: middle; }
+.paiwei-rows td.paiwei-rows-action { width: 34px; }
+`;
+
+// 无缘子女用「子女」，其余（超度亡灵 / 冤亲债主）用「对象」。
+function paiweiDeceasedLabel(code?: string | null): string {
+  return code === "A3" || code === "B3" ? "子女" : "对象";
+}
+
+// 对象/子女 与 关系 是一组一起的（阳上分开填），用一行来对应，整行一起增删。
+function PaiweiRowsTable({
+  deceaseds,
+  relations,
+  deceasedLabel,
+  disabled,
+  onChange,
+}: {
+  deceaseds: string[];
+  relations: string[];
+  deceasedLabel: string;
+  disabled: boolean;
+  onChange: (next: { deceaseds: string[]; relations: string[] }) => void;
+}) {
+  const rowCount = Math.max(deceaseds.length, relations.length, 1);
+  const pad = (values: string[]) => Array.from({ length: rowCount }, (_, index) => values[index] ?? "");
+
+  function updateCell(field: "deceaseds" | "relations", index: number, value: string) {
+    const next = { deceaseds: pad(deceaseds), relations: pad(relations) };
+    next[field][index] = value;
+    onChange(next);
+  }
+
+  function addRow() {
+    onChange({ deceaseds: [...pad(deceaseds), ""], relations: [...pad(relations), ""] });
+  }
+
+  function removeRow(index: number) {
+    if (rowCount <= 1) {
+      onChange({ deceaseds: [""], relations: [""] });
+      return;
+    }
+    const drop = (values: string[]) => pad(values).filter((_, i) => i !== index);
+    onChange({ deceaseds: drop(deceaseds), relations: drop(relations) });
+  }
+
+  return (
+    <div style={{ ...styles.addItemField, gridColumn: "1 / -1" }}>
+      <span style={styles.addItemLabel}>{`${deceasedLabel} / 关系`}</span>
+      <div style={styles.tableWrap}>
+        <style>{PAIWEI_ROWS_CSS}</style>
+        <table className="paiwei-rows">
+          <thead>
+            <tr>
+              <th style={{ width: "40px" }}>#</th>
+              <th>{deceasedLabel}</th>
+              <th>{PAIWEI_FIELD_LABELS.relation}</th>
+              <th className="paiwei-rows-action" />
+            </tr>
+          </thead>
+          <tbody>
+            {Array.from({ length: rowCount }, (_, index) => (
+              <tr key={index}>
+                <td>{index + 1}</td>
+                <td>
+                  <input
+                    style={styles.detailInput}
+                    value={deceaseds[index] ?? ""}
+                    disabled={disabled}
+                    onChange={(event) => updateCell("deceaseds", index, event.target.value)}
+                  />
+                </td>
+                <td>
+                  <input
+                    style={styles.detailInput}
+                    value={relations[index] ?? ""}
+                    disabled={disabled}
+                    onChange={(event) => updateCell("relations", index, event.target.value)}
+                  />
+                </td>
+                <td className="paiwei-rows-action">
+                  <button
+                    type="button"
+                    style={styles.listRemoveButton}
+                    disabled={disabled || rowCount <= 1}
+                    onClick={() => removeRow(index)}
+                    aria-label="删除这一行"
+                  >
+                    ×
+                  </button>
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+      <button type="button" style={styles.listAddButton} disabled={disabled} onClick={addRow}>
+        + 添加一行
+      </button>
+    </div>
+  );
+}
+
+
+function itemFieldValues(item: YlpOrderItem, key: string): string[] {
+  return (item.item_form_data?.[key] || []).map((entry) => String(entry.val ?? "").trim()).filter(Boolean);
+}
+
+function YlpItemModal({
+  orderId,
+  item,
+  onClose,
+  onSaved,
+}: {
+  orderId: number;
+  item: YlpOrderItem | null;
+  onClose: () => void;
+  onSaved: () => void;
+}) {
+  const isEdit = item != null;
+  const [draft, setDraft] = useState<PaiweiDraft>(() => {
+    if (!item) {
+      return createDraft("A1");
+    }
+    const code = PAIWEI_TEMPLATES.some((tpl) => tpl.code === item.code) ? (item.code as PaiweiCode) : "A1";
+    const base = createDraft(code);
+    const first = (key: string) => itemFieldValues(item, key)[0] || "";
+    return {
+      ...base,
+      surname: first("surname"),
+      suffix: first("suffix") || base.suffix,
+      father: first("father"),
+      mother: first("mother"),
+      quantity: first("quantity") || base.quantity,
+      note: first("note"),
+    };
+  });
+  const seedList = (key: string) => {
+    const values = item ? itemFieldValues(item, key) : [];
+    return values.length ? values : [""];
+  };
+  const [owners, setOwners] = useState<string[]>(() => seedList("owner"));
+  const [deceaseds, setDeceaseds] = useState<string[]>(() => seedList("deceased"));
+  const [relations, setRelations] = useState<string[]>(() => seedList("relation"));
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState("");
+  const template = getTemplate(draft.code);
+
+  function setField(field: keyof PaiweiDraft, value: string) {
+    setError("");
+    setDraft((prev) => ({ ...prev, [field]: value }));
+  }
+
+  function changeCode(code: PaiweiCode) {
+    const next = getTemplate(code);
+    setError("");
+    setDraft((prev) => ({
+      ...prev,
+      code,
+      suffix: next.defaultSuffix || prev.suffix,
+      quantity: next.fields.quantity ? prev.quantity || "1" : "",
+    }));
+  }
+
+  function buildDraft(): PaiweiDraft {
+    return {
+      ...draft,
+      owner: owners.join("\n"),
+      deceased: deceaseds.join("\n"),
+      relation: relations.join("\n"),
+    };
+  }
+
+  async function submit() {
+    const effective = buildDraft();
+    const message = validateDraft(effective);
+    if (message) {
+      setError(message);
+      return;
+    }
+    setSaving(true);
+    setError("");
+    try {
+      const payload = buildItemPayload(effective);
+      if (isEdit && item) {
+        await updateYlpOrderItem(orderId, item.id, payload);
+      } else {
+        await createYlpOrderItem(orderId, payload);
+      }
+      onSaved();
+    } catch (saveError) {
+      setError(saveError instanceof Error ? saveError.message : isEdit ? "保存失败" : "添加失败");
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  const textField = (field: keyof PaiweiDraft) => (
+    <label style={styles.addItemField}>
+      <span style={styles.addItemLabel}>{PAIWEI_FIELD_LABELS[field as string] || String(field)}</span>
+      <input
+        style={styles.detailInput}
+        value={String(draft[field] || "")}
+        disabled={saving}
+        onChange={(event) => setField(field, event.target.value)}
+      />
+    </label>
+  );
+
+  return (
+    <div style={styles.itemModalOverlay} onClick={onClose}>
+      <div style={styles.itemModalContent} onClick={(event) => event.stopPropagation()}>
+        <div style={styles.addItemHeader}>
+          <span style={styles.detailSectionTitle}>{isEdit ? "编辑项目" : "添加项目"}</span>
+          <button type="button" style={styles.addItemCancel} onClick={onClose}>
+            关闭
+          </button>
+        </div>
+
+        {error ? <div style={styles.addItemError}>{error}</div> : null}
+
+        <div style={styles.addItemGrid}>
+          <label style={styles.addItemField}>
+            <span style={styles.addItemLabel}>牌位类型</span>
+            <select
+              style={styles.selectInput}
+              value={draft.code}
+              disabled={saving}
+              onChange={(event) => changeCode(event.target.value as PaiweiCode)}
+            >
+              {PAIWEI_TEMPLATES.map((tpl) => (
+                <option key={tpl.code} value={tpl.code}>
+                  {`${tpl.code} · ${tpl.title} · RM ${tpl.price}`}
+                </option>
+              ))}
+            </select>
+          </label>
+
+          {template.fields.owner ? (
+            <ListInput label={PAIWEI_FIELD_LABELS.owner} values={owners} disabled={saving} onChange={setOwners} />
+          ) : null}
+          {template.fields.deceased && template.fields.relation ? (
+            <PaiweiRowsTable
+              deceaseds={deceaseds}
+              relations={relations}
+              deceasedLabel={paiweiDeceasedLabel(draft.code)}
+              disabled={saving}
+              onChange={(next) => {
+                setDeceaseds(next.deceaseds);
+                setRelations(next.relations);
+              }}
+            />
+          ) : template.fields.deceased ? (
+            <ListInput
+              label={paiweiDeceasedLabel(draft.code)}
+              values={deceaseds}
+              disabled={saving}
+              onChange={setDeceaseds}
+            />
+          ) : null}
+          {template.fields.surname ? textField("surname") : null}
+          {template.fields.suffix ? textField("suffix") : null}
+          {template.fields.father ? textField("father") : null}
+          {template.fields.mother ? textField("mother") : null}
+          {template.fields.quantity ? textField("quantity") : null}
+        </div>
+
+        <div style={styles.addItemFooter}>
+          <span style={styles.addItemHint}>{`合计 RM ${getDraftTotalPrice(buildDraft())}`}</span>
+          <button
+            type="button"
+            style={{ ...styles.primaryAction, ...(saving ? styles.pageButtonDisabled : null) }}
+            disabled={saving}
+            onClick={() => void submit()}
+          >
+            {saving ? "保存中…" : isEdit ? "保存修改" : "添加项目"}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function ylpItemLocationText(item: YlpOrderItem): string {
+  return (item.item_location || [])
+    .map((location) => {
+      const boards = (location.boards || [])
+        .map((board) => (board.board_name ? `${board.board_name}${board.location ? ` #${board.location}` : ""}` : null))
+        .filter(Boolean)
+        .join("、");
+      return `PDF ${location.print_pdf?.id || "-"}${boards ? ` · ${boards}` : ""}`;
+    })
+    .join("；");
+}
+
+function ylpStatusChipStyle(status?: string | null): CSSProperties {
+  const normalized = String(status || "").toLowerCase();
+  const tone: "success" | "danger" | "warning" | "muted" =
+    normalized === "approved" || normalized === "paid"
+      ? "success"
+      : normalized === "rejected" || normalized === "cancelled" || normalized === "canceled" || normalized === "void"
+        ? "danger"
+        : normalized === "none" || normalized === ""
+          ? "muted"
+          : "warning";
+  const palette =
+    tone === "success"
+      ? { background: "var(--x-color-success-soft)", color: "var(--x-color-success)" }
+      : tone === "danger"
+        ? { background: "var(--x-color-danger-soft)", color: "var(--x-color-danger)" }
+        : tone === "muted"
+          ? { background: "var(--x-color-panel-alt)", color: "var(--x-color-ink-muted)" }
+          : { background: "var(--x-color-warning-soft)", color: "var(--x-color-warning)" };
+  return {
+    display: "inline-flex",
+    alignItems: "center",
+    padding: "4px 10px",
+    borderRadius: "6px",
+    fontSize: "12px",
+    fontWeight: 700,
+    whiteSpace: "nowrap",
+    ...palette,
+  };
+}
+
 const styles = {
   page: {
     minHeight: "100%",
     display: "grid",
     gap: "10px",
+    padding: "12px",
+    borderRadius: "10px",
+    border: "1px solid var(--x-color-line-soft)",
+    background: "var(--x-color-panel)",
     color: "var(--x-color-ink)",
     fontFamily: '"PingFang SC","Microsoft YaHei",var(--x-font-sans)',
   },
@@ -1397,15 +2146,10 @@ const styles = {
   workspaceCard: {
     display: "grid",
     gap: "8px",
-    padding: "10px",
-    borderRadius: "8px",
-    border: "1px solid var(--x-color-line-soft)",
-    background: "var(--x-color-panel)",
-    boxShadow: "none",
   },
-  workspaceHeader: (isMobile: boolean) => ({
+  workspaceHeader: (isMobile: boolean, isDetail: boolean) => ({
     display: "grid",
-    gridTemplateColumns: isMobile ? "1fr" : "auto minmax(0,1fr)",
+    gridTemplateColumns: isMobile || !isDetail ? "1fr" : "auto minmax(0,1fr)",
     gap: "8px",
     alignItems: "start",
   }),
@@ -1426,11 +2170,12 @@ const styles = {
     display: "grid",
     gap: "6px",
   },
-  workspaceActions: {
+  workspaceBar: {
     display: "flex",
     flexWrap: "wrap" as const,
-    gap: "6px",
-    marginTop: "2px",
+    gap: "8px",
+    alignItems: "center",
+    justifyContent: "space-between",
   },
   workspaceEyebrow: {
     margin: 0,
@@ -1483,9 +2228,9 @@ const styles = {
     gap: "8px",
     alignItems: "center",
   }),
-  orderToolbar: (isMobile: boolean) => ({
-    display: "grid",
-    gridTemplateColumns: isMobile ? "1fr" : "160px minmax(0,1fr) auto auto",
+  orderToolbar: (_isMobile: boolean) => ({
+    display: "flex",
+    flexWrap: "wrap" as const,
     gap: "8px",
     alignItems: "center",
   }),
@@ -1540,6 +2285,7 @@ const styles = {
     display: "flex",
     gap: "8px",
     flexWrap: "wrap" as const,
+    alignItems: "center" as const,
   },
   pageButton: {
     minWidth: "40px",
@@ -1556,10 +2302,37 @@ const styles = {
     border: "1px solid var(--x-color-accent)",
     color: "white",
   },
+  pageButtonDisabled: {
+    opacity: 0.5,
+    cursor: "not-allowed" as const,
+  },
+  pageIndicator: {
+    display: "inline-flex",
+    alignItems: "center",
+    padding: "0 4px",
+    color: "var(--x-color-ink-muted)",
+    fontSize: "13px",
+    fontWeight: 700,
+  },
   grid: {
     display: "grid",
     gridTemplateColumns: "repeat(auto-fill,minmax(220px,1fr))",
     gap: "8px",
+  },
+  tableWrap: {
+    width: "100%",
+    overflowX: "auto" as const,
+    borderRadius: "8px",
+    border: "1px solid var(--x-color-line-soft)",
+  },
+  cellStrong: {
+    fontWeight: 700,
+    lineHeight: 1.4,
+  },
+  cellMono: {
+    fontFamily: "var(--x-font-mono)",
+    fontSize: "12.5px",
+    whiteSpace: "nowrap" as const,
   },
   card: {
     display: "grid",
@@ -1680,10 +2453,258 @@ const styles = {
     color: "var(--x-color-ink-muted)",
   },
   detailActions: (isMobile: boolean) => ({
-    display: "grid",
-    gridTemplateColumns: isMobile ? "1fr" : "repeat(2, minmax(140px,auto))",
+    display: "flex",
+    flexWrap: "wrap" as const,
+    flexDirection: isMobile ? ("column" as const) : ("row" as const),
     gap: "10px",
   }),
+  statusEditRow: {
+    display: "flex",
+    flexWrap: "wrap" as const,
+    gap: "8px",
+    alignItems: "center",
+  },
+  statusEditLabel: {
+    fontSize: "12px",
+    fontWeight: 800,
+    color: "var(--x-color-ink-muted)",
+  },
+  detailInput: {
+    width: "100%",
+    minWidth: "160px",
+    padding: "6px 8px",
+    borderRadius: "6px",
+    border: "1px solid var(--x-color-line)",
+    background: "var(--x-color-panel)",
+    color: "var(--x-color-ink)",
+    boxSizing: "border-box" as const,
+    fontSize: "13px",
+  },
+  itemFieldList: {
+    display: "grid",
+    gap: "4px",
+    minWidth: "180px",
+  },
+  itemFieldRow: {
+    display: "flex",
+    gap: "6px",
+    alignItems: "flex-start",
+    flexWrap: "wrap" as const,
+  },
+  itemFieldLabel: {
+    fontSize: "11px",
+    fontWeight: 800,
+    color: "var(--x-color-ink-muted)",
+    minWidth: "34px",
+    paddingTop: "2px",
+  },
+  itemFieldValues: {
+    display: "flex",
+    gap: "4px",
+    flexWrap: "wrap" as const,
+  },
+  itemFieldChip: {
+    display: "inline-flex",
+    alignItems: "center",
+    padding: "2px 8px",
+    borderRadius: "6px",
+    background: "var(--x-color-panel-alt)",
+    border: "1px solid var(--x-color-line-soft)",
+    color: "var(--x-color-ink)",
+    fontSize: "12px",
+    fontWeight: 600,
+  },
+  itemFieldEmpty: {
+    color: "var(--x-color-ink-muted)",
+    fontSize: "12px",
+  },
+  itemDeleteButton: {
+    padding: "4px 10px",
+    borderRadius: "6px",
+    border: "1px solid var(--x-color-danger-border)",
+    background: "var(--x-color-danger-soft)",
+    color: "var(--x-color-danger)",
+    fontWeight: 700,
+    fontSize: "12px",
+    cursor: "pointer",
+    whiteSpace: "nowrap" as const,
+  },
+  itemActionCell: {
+    display: "flex",
+    gap: "6px",
+    flexWrap: "wrap" as const,
+  },
+  itemEditButton: {
+    padding: "4px 10px",
+    borderRadius: "6px",
+    border: "1px solid var(--x-color-line)",
+    background: "var(--x-color-panel)",
+    color: "var(--x-color-ink)",
+    fontWeight: 700,
+    fontSize: "12px",
+    cursor: "pointer",
+    whiteSpace: "nowrap" as const,
+  },
+  itemEditor: {
+    display: "grid",
+    gap: "10px",
+    padding: "10px",
+  },
+  listInputWrap: {
+    display: "grid",
+    gap: "6px",
+  },
+  listInputRow: {
+    display: "flex",
+    gap: "6px",
+    alignItems: "center",
+  },
+  listRemoveButton: {
+    width: "30px",
+    height: "30px",
+    flexShrink: 0,
+    borderRadius: "6px",
+    border: "1px solid var(--x-color-line)",
+    background: "var(--x-color-panel)",
+    color: "var(--x-color-ink-muted)",
+    fontSize: "16px",
+    lineHeight: 1,
+    cursor: "pointer",
+  },
+  listAddButton: {
+    width: "fit-content",
+    padding: "4px 10px",
+    borderRadius: "6px",
+    border: "1px dashed var(--x-color-line)",
+    background: "var(--x-color-panel)",
+    color: "var(--x-color-ink-muted)",
+    fontWeight: 700,
+    fontSize: "12px",
+    cursor: "pointer",
+  },
+  addItemToggle: {
+    width: "fit-content",
+    padding: "6px 12px",
+    borderRadius: "6px",
+    border: "1px dashed var(--x-color-accent-border)",
+    background: "var(--x-color-accent-soft)",
+    color: "var(--x-color-accent-strong)",
+    fontWeight: 800,
+    fontSize: "13px",
+    cursor: "pointer",
+  },
+  addItemForm: {
+    display: "grid",
+    gap: "10px",
+    padding: "12px",
+    borderRadius: "8px",
+    border: "1px solid var(--x-color-accent-border)",
+    background: "var(--x-color-panel-alt)",
+  },
+  itemModalOverlay: {
+    position: "fixed" as const,
+    inset: 0,
+    zIndex: 1000,
+    display: "flex",
+    alignItems: "center",
+    justifyContent: "center",
+    padding: "16px",
+    background: "rgba(15, 23, 42, 0.55)",
+  },
+  itemModalContent: {
+    width: "min(720px, 100%)",
+    maxHeight: "90vh",
+    overflowY: "auto" as const,
+    display: "grid",
+    gap: "12px",
+    padding: "16px",
+    borderRadius: "12px",
+    border: "1px solid var(--x-color-line)",
+    background: "var(--x-color-panel)",
+    boxShadow: "0 24px 60px var(--x-color-shadow)",
+  },
+  pdfModalContent: {
+    width: "min(900px, 100%)",
+    height: "90vh",
+    display: "grid",
+    gridTemplateRows: "auto 1fr",
+    gap: "10px",
+    padding: "14px",
+    borderRadius: "12px",
+    border: "1px solid var(--x-color-line)",
+    background: "var(--x-color-panel)",
+    boxShadow: "0 24px 60px var(--x-color-shadow)",
+  },
+  pdfFrame: {
+    width: "100%",
+    height: "100%",
+    border: "1px solid var(--x-color-line-soft)",
+    borderRadius: "8px",
+    background: "var(--x-color-panel-alt)",
+  },
+  addItemHeader: {
+    display: "flex",
+    justifyContent: "space-between",
+    alignItems: "center",
+    gap: "8px",
+  },
+  addItemCancel: {
+    padding: "4px 10px",
+    borderRadius: "6px",
+    border: "1px solid var(--x-color-line)",
+    background: "var(--x-color-panel)",
+    color: "var(--x-color-ink-muted)",
+    fontWeight: 700,
+    fontSize: "12px",
+    cursor: "pointer",
+  },
+  addItemError: {
+    padding: "6px 10px",
+    borderRadius: "6px",
+    border: "1px solid var(--x-color-danger-border)",
+    background: "var(--x-color-danger-soft)",
+    color: "var(--x-color-danger)",
+    fontSize: "12px",
+    fontWeight: 700,
+  },
+  addItemGrid: {
+    display: "grid",
+    gridTemplateColumns: "repeat(auto-fit, minmax(200px, 1fr))",
+    gap: "8px",
+  },
+  addItemField: {
+    display: "grid",
+    gap: "4px",
+  },
+  addItemLabel: {
+    fontSize: "11px",
+    fontWeight: 800,
+    color: "var(--x-color-ink-muted)",
+  },
+  addItemTextarea: {
+    width: "100%",
+    minHeight: "60px",
+    padding: "6px 8px",
+    borderRadius: "6px",
+    border: "1px solid var(--x-color-line)",
+    background: "var(--x-color-panel)",
+    color: "var(--x-color-ink)",
+    boxSizing: "border-box" as const,
+    fontSize: "13px",
+    resize: "vertical" as const,
+  },
+  addItemFooter: {
+    display: "flex",
+    justifyContent: "space-between",
+    alignItems: "center",
+    gap: "10px",
+    flexWrap: "wrap" as const,
+  },
+  addItemHint: {
+    fontSize: "13px",
+    fontWeight: 800,
+    color: "var(--x-color-ink)",
+  },
   primaryAction: {
     padding: "7px 10px",
     borderRadius: "6px",

@@ -184,6 +184,7 @@ def serialize_stock_document(document: AssetStockDocument, include_children=True
         "invoice_file_name": os.path.basename(invoice_file_path) if invoice_file_path else None,
         "reference_type": document.reference_type,
         "reference_id": document.reference_id,
+        "finance_payment_status": document.finance_payment_status,
         "note": document.note,
         "created_by": document.created_by,
         "created_by_name": _user_label(document.creator),

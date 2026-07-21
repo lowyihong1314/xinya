@@ -232,6 +232,8 @@ class AssetStockDocument(db.Model):
     invoice_file_path = db.Column(db.String(255), nullable=True)
     reference_type = db.Column(db.String(50), nullable=True)
     reference_id = db.Column(db.Integer, nullable=True)
+    # 销售单据 POST 到「收款审核」后的收款状态：None=未推送，process/checked/fail=收款审核状态。
+    finance_payment_status = db.Column(db.String(20), nullable=True, index=True)
     note = db.Column(db.Text, nullable=True)
     created_by = db.Column(
         db.Integer,

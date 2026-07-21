@@ -1,4 +1,9 @@
-export function parseDobFromNric(nricRaw) {
+// Ported to TS from static/js/form/payment/age.js.
+// Note: the backend (_calc_age_from_nric) uses birth-YEAR-only age; this
+// client helper is only for instant display while typing — the server age
+// returned by the quote endpoint is authoritative.
+
+export function parseDobFromNric(nricRaw: string): Date | null {
   const digits = String(nricRaw || "").replace(/\D/g, "");
   if (digits.length < 6) {
     return null;
@@ -26,7 +31,7 @@ export function parseDobFromNric(nricRaw) {
   return dob;
 }
 
-export function calcAgeFromDob(dob) {
+export function calcAgeFromDob(dob: Date | null): number | null {
   if (!dob) {
     return null;
   }
@@ -46,6 +51,6 @@ export function calcAgeFromDob(dob) {
   return age;
 }
 
-export function calcAgeFromNric(nricRaw) {
+export function calcAgeFromNric(nricRaw: string): number | null {
   return calcAgeFromDob(parseDobFromNric(nricRaw));
 }

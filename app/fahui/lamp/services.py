@@ -72,7 +72,7 @@ def create_registration(data):
             address=data.get("address"),
             phone=data.get("phone"),
             total_amount=Decimal("0.00"),
-            status="submitted",
+            status="draft",
         )
         db.session.add(registration)
         db.session.flush()
@@ -131,7 +131,7 @@ def update_registration(data):
         if "phone" in data:
             registration.phone = data.get("phone")
         if "status" in data:
-            if data["status"] not in ("submitted", "paid", "canceled"):
+            if data["status"] not in ("draft", "confirm", "cancel"):
                 return jsonify({"status": "error", "message": "不合法的状态"}), 400
             registration.status = data["status"]
 

@@ -374,6 +374,18 @@ export async function confirmAssetStockDocument(documentId: number) {
   return data.data;
 }
 
+export async function postAssetStockDocumentToFinance(documentId: number) {
+  const response = await apiFetch(`/api/asset/stock-documents/${documentId}/post-to-finance`, {
+    method: "POST",
+    credentials: "include",
+  });
+  const data = await parseJson<{ data?: AssetStockDocumentRecord }>(response);
+  if (!data.data) {
+    throw new Error("推送收款审核结果缺失");
+  }
+  return data.data;
+}
+
 export async function cancelAssetStockDocument(documentId: number) {
   const response = await apiFetch(`/api/asset/stock-documents/${documentId}/cancel`, {
     method: "POST",

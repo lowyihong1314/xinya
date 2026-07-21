@@ -88,5 +88,9 @@ def latest_payment(order: FahuiOrder) -> FahuiPayment | None:
 
 
 def order_payment_status(order: FahuiOrder) -> str:
-    payment = latest_payment(order)
-    return normalize_fahui_payment_status(payment.status) if payment else "not-ready"
+    payments = list(order.payments or [])
+    if not payments:
+        return "none"
+    if any(normalize_fahui_payment_status(payment.status) == "approved" for payment in payments):
+        return "paid"
+    return "pending"

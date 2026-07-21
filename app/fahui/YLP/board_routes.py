@@ -21,7 +21,9 @@ from .board_services import (
     quick_search_orders,
     reorder_board_entry,
     update_order_customer,
+    update_order_item_fields,
     update_order_item_form_value,
+    update_order_status,
 )
 
 
@@ -103,6 +105,13 @@ def update_order_customer_route(order_id):
     return jsonify(payload), status_code
 
 
+@board_router_bp.route("/orders/<int:order_id>/status", methods=["POST"])
+@permission_required_any("account_edit")
+def update_order_status_route(order_id):
+    payload, status_code = update_order_status(order_id, request.get_json(silent=True) or {})
+    return jsonify(payload), status_code
+
+
 @board_router_bp.route("/orders/detail", methods=["GET"])
 @board_router_bp.route("/get_order_detail", methods=["GET"])
 def get_order_detail_route():
@@ -127,6 +136,13 @@ def quick_search_orders_route():
 @board_router_bp.route("/add_paiwei/<int:order_id>", methods=["POST"])
 def create_order_item_route(order_id):
     payload, status_code = create_order_item(order_id, request.get_json(silent=True) or {})
+    return jsonify(payload), status_code
+
+
+@board_router_bp.route("/orders/<int:order_id>/items/<int:item_id>", methods=["POST"])
+def update_order_item_route(order_id, item_id):
+    del order_id
+    payload, status_code = update_order_item_fields(item_id, request.get_json(silent=True) or {})
     return jsonify(payload), status_code
 
 

@@ -193,10 +193,9 @@ def get_payment_detail(payment_id: int, *, payment_type: str | None = None):
 
 
 def _refresh_registration_status(registration: LampRegistration) -> None:
-    if registration.status == "canceled":
-        return
-    has_approved_payment = any(is_payment_approved(payment) for payment in registration.payments.all())
-    registration.status = "paid" if has_approved_payment else "submitted"
+    # 点灯登记的工作流状态（draft / confirm / cancel）已与付款解绑，
+    # 不再由付款审核联动修改；付款审核只影响 FahuiPayment 本身的状态。
+    return
 
 
 def _refresh_order_status(order: FahuiOrder | None) -> None:

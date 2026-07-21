@@ -144,6 +144,7 @@ export type AssetStockDocumentRecord = {
   invoice_file_name?: string | null;
   reference_type?: string | null;
   reference_id?: number | null;
+  finance_payment_status?: string | null;
   note?: string | null;
   created_by?: number | null;
   created_by_name?: string | null;

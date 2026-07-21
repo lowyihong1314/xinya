@@ -208,19 +208,23 @@ def generate_paiwei_using_order_item_ids(order_item_ids, need_barcode=False):
     if not filtered_data:
         return None
 
+    # pypdf 3+ 移除了 PdfMerger，用 PdfWriter 代替（支持 append / write）。
     try:
-        from pypdf import PdfMerger
-    except ModuleNotFoundError:
+        from pypdf import PdfWriter as _PdfMerger
+    except ImportError:
         try:
-            from PyPDF2 import PdfMerger
-        except ModuleNotFoundError:
-            return _generate_simple_paiwei_pdf("preview", filtered_data, need_barcode=need_barcode)
+            from pypdf import PdfMerger as _PdfMerger
+        except ImportError:
+            try:
+                from PyPDF2 import PdfMerger as _PdfMerger
+            except ImportError:
+                return _generate_simple_paiwei_pdf("preview", filtered_data, need_barcode=need_barcode)
 
     grouped_data = defaultdict(list)
     for item in filtered_data:
         grouped_data[item.get("code")].append(item)
 
-    merger = PdfMerger()
+    merger = _PdfMerger()
     for code, grouped_items in grouped_data.items():
         point_data, source_name = get_point_data(code)
         if point_data:

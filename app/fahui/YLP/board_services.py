@@ -363,6 +363,20 @@ def update_order_customer(order_id: int, data: dict) -> tuple[dict, int]:
     return {"success": True, "message": "Customer info updated"}, 200
 
 
+def update_order_status(order_id: int, data: dict) -> tuple[dict, int]:
+    order = FahuiOrder.query.get(order_id)
+    if not order:
+        return {"success": False, "message": f"Order {order_id} not found"}, 404
+
+    status = str(data.get("status") or "").strip()
+    if not status:
+        return {"success": False, "message": "缺少 status"}, 400
+
+    order.status = status
+    db.session.commit()
+    return {"success": True, "message": "订单状态已更新", "status": order.status}, 200
+
+
 def get_board_order_detail(order_id: int | None) -> tuple[dict, int]:
     if not order_id:
         return {"error": "Missing 'id' parameter"}, 400
@@ -473,17 +487,10 @@ def quick_search_orders(keyword: str | None) -> dict:
     return {"success": True, "results": results}
 
 
-def create_order_item(order_id: int, data: dict) -> tuple[dict, int]:
-    order = FahuiOrder.query.get(order_id)
-    denied = _require_order_access(order)
-    if denied:
-        return denied
-
-    owner = data.get("owner")
-    deceased = data.get("deceased")
-    code = (data.get("form-group") or data.get("code") or "").strip()
+def _validate_item_payload(code: str, owner, deceased) -> str | None:
+    """Return an error message when the item payload is invalid, else None."""
     if not code:
-        return {"success": False, "message": "缺少 form-group/code"}, 400
+        return "缺少 form-group/code"
 
     has_valid_owner = isinstance(owner, list) and any((name or "").strip() for name in owner)
     if not has_valid_owner and isinstance(owner, str):
@@ -498,12 +505,46 @@ def create_order_item(order_id: int, data: dict) -> tuple[dict, int]:
     if isinstance(owner, list):
         for name in owner:
             if name and len(name.strip()) > 50:
-                return {"success": False, "message": f"施主姓名“{name}”不能超过 50 个字"}, 400
+                return f"施主姓名“{name}”不能超过 50 个字"
 
     if code in {"A2", "B2"} and not (has_valid_owner and has_valid_deceased):
-        return {"success": False, "message": "A2/B2 表单必须同时填写 owner 和 deceased"}, 400
+        return "A2/B2 表单必须同时填写 owner 和 deceased"
     if code != "D1" and not (has_valid_owner or has_valid_deceased):
-        return {"success": False, "message": "必须填写 owner 或 deceased 至少一项"}, 400
+        return "必须填写 owner 或 deceased 至少一项"
+
+    return None
+
+
+_ITEM_FORM_SKIP_KEYS = {"form_code", "form-group", "code", "item_name", "price"}
+
+
+def _write_item_form_data(item_id: int, data: dict) -> None:
+    for key, value in data.items():
+        if key in _ITEM_FORM_SKIP_KEYS:
+            continue
+        values = value if isinstance(value, list) else [value]
+        for raw_value in values:
+            if raw_value is None or str(raw_value).strip() == "":
+                continue
+            db.session.add(
+                FahuiItemFormData(
+                    item_id=item_id,
+                    field_name=key,
+                    field_value=str(raw_value).strip(),
+                )
+            )
+
+
+def create_order_item(order_id: int, data: dict) -> tuple[dict, int]:
+    order = FahuiOrder.query.get(order_id)
+    denied = _require_order_access(order)
+    if denied:
+        return denied
+
+    code = (data.get("form-group") or data.get("code") or "").strip()
+    error = _validate_item_payload(code, data.get("owner"), data.get("deceased"))
+    if error:
+        return {"success": False, "message": error}, 400
 
     order_item = FahuiOrderItem(
         order_id=order_id,
@@ -514,24 +555,38 @@ def create_order_item(order_id: int, data: dict) -> tuple[dict, int]:
     db.session.add(order_item)
     db.session.flush()
 
-    skip_keys = {"form_code", "form-group", "code", "item_name", "price"}
-    for key, value in data.items():
-        if key in skip_keys:
-            continue
-        values = value if isinstance(value, list) else [value]
-        for raw_value in values:
-            if raw_value is None or str(raw_value).strip() == "":
-                continue
-            db.session.add(
-                FahuiItemFormData(
-                    item_id=order_item.id,
-                    field_name=key,
-                    field_value=str(raw_value).strip(),
-                )
-            )
+    _write_item_form_data(order_item.id, data)
 
     db.session.commit()
     return {"success": True, "message": "已保存", "item_id": order_item.id}, 200
+
+
+def update_order_item_fields(item_id: int, data: dict) -> tuple[dict, int]:
+    item = FahuiOrderItem.query.get(item_id)
+    if not item:
+        return {"success": False, "message": "未找到该订单项"}, 404
+
+    denied = _require_order_access(item.order)
+    if denied:
+        return denied
+
+    code = (data.get("form-group") or data.get("code") or item.code or "").strip()
+    error = _validate_item_payload(code, data.get("owner"), data.get("deceased"))
+    if error:
+        return {"success": False, "message": error}, 400
+
+    item.code = code
+    if data.get("item_name") is not None:
+        item.item_name = data.get("item_name")
+    if data.get("price") is not None:
+        item.price = data.get("price")
+
+    # Replace form-data rows in place; the item row + its board/PDF links are kept.
+    FahuiItemFormData.query.filter_by(item_id=item.id).delete()
+    _write_item_form_data(item.id, data)
+
+    db.session.commit()
+    return {"success": True, "message": "已更新", "item_id": item.id}, 200
 
 
 def delete_order_item(item_id: int, order_id: int) -> tuple[dict, int]:

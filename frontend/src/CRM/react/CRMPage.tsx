@@ -652,25 +652,24 @@ export function getSidebarChildren(
     return [
       {
         key: "ylp",
-        title: "盂兰盆",
+        title: "盂兰盆法会",
         icon: "fa-solid fa-table-list",
-        description: "盂兰盆订单查询与付款审核。",
+        description: "盂兰盆订单查询与管理。",
         to: buildPathWithParams(fahuiPath, {
           fahui_view: "workspace",
           fahui_workspace: "ylp",
           fahui_section: "orders",
         }),
-        active: moduleActive && (workspace === "ylp" || view === "ylp_order"),
+        active: moduleActive && (workspace !== "lamp" || view === "ylp_order"),
       },
       {
         key: "lamp",
-        title: "点灯",
+        title: "点灯法会",
         icon: "fa-solid fa-lightbulb",
-        description: "点灯付款审核。",
+        description: "点灯登记管理。",
         to: buildPathWithParams(fahuiPath, {
           fahui_view: "workspace",
           fahui_workspace: "lamp",
-          fahui_section: "payments",
         }),
         active: moduleActive && workspace === "lamp",
       },

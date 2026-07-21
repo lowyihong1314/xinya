@@ -54,6 +54,12 @@ function registrationPath(payment: FinancePayment): string | null {
   if (payment.source_scope === "youth_class") {
     return `/crm/permanent_registration?registration_section=youth_class&entry_id=${payment.registration_id}`;
   }
+  if (payment.source_scope === "fahui_ylp") {
+    return `/crm/dharma_event?fahui_view=ylp_order&fahui_workspace=ylp&fahui_order_id=${payment.registration_id}`;
+  }
+  if (payment.source_scope === "sales") {
+    return `/crm/finance?account_router=sales_income`;
+  }
   return null;
 }
 
@@ -354,98 +360,102 @@ export function RegisterWorkspace() {
             <div style={emptyStyle}>{loading ? "加载中…" : "找不到这笔付款，可能已被移除或数据已刷新。"}</div>
           ) : (
             <div style={bodyStyle}>
-              <div style={factGridStyle}>
-                <Fact label="来源" value={selected.source_scope_label || "-"} />
-                <Fact label="关联" value={selected.source_label || "-"} />
-                <Fact label="付款人" value={selected.name || "-"} />
-                <Fact label="NRIC" value={selected.nric || "-"} />
-                <Fact label="电话" value={selected.phone || "-"} />
-                <Fact label="金额" value={formatAmount(selected.amount ?? selected.price)} />
-                <Fact label="付款方式" value={selected.payment_mode || "-"} />
-                <Fact label="柜台" value={selected.counter || "-"} />
-                <Fact label="日期" value={selected.date || "-"} />
-                <Fact label="时间" value={selected.time || "-"} />
-                <Fact label="提交时间" value={submittedAt(selected)} />
-              </div>
-
-              {canEdit ? (
-                <div style={sectionStyle}>
-                  <div style={sectionTitleStyle}>切换状态</div>
-                  <div style={rowStyle}>
-                    {(["process", "checked", "fail"] as const).map((s) => (
-                      <button
-                        key={s}
-                        type="button"
-                        className={`fin-btn${s === "checked" ? " fin-btn--go" : s === "fail" ? " fin-btn--danger" : ""}`}
-                        style={{ width: "auto", padding: "8px 16px" }}
-                        disabled={busy}
-                        onClick={() => void handleStatus(selected.id, s)}
-                      >
-                        {busyId === selected.id ? "更新中…" : paymentStatusLabel(s)}
-                      </button>
-                    ))}
+              <div style={detailTwoColStyle(isMobile)}>
+                <div style={detailInfoColStyle}>
+                  <div style={factGridStyle}>
+                    <Fact label="来源" value={selected.source_scope_label || "-"} />
+                    <Fact label="关联" value={selected.source_label || "-"} />
+                    <Fact label="付款人" value={selected.name || "-"} />
+                    <Fact label="NRIC" value={selected.nric || "-"} />
+                    <Fact label="电话" value={selected.phone || "-"} />
+                    <Fact label="金额" value={formatAmount(selected.amount ?? selected.price)} />
+                    <Fact label="付款方式" value={selected.payment_mode || "-"} />
+                    <Fact label="柜台" value={selected.counter || "-"} />
+                    <Fact label="日期" value={selected.date || "-"} />
+                    <Fact label="时间" value={selected.time || "-"} />
+                    <Fact label="提交时间" value={submittedAt(selected)} />
                   </div>
+
+                  {canEdit ? (
+                    <div style={sectionStyle}>
+                      <div style={sectionTitleStyle}>切换状态</div>
+                      <div style={rowStyle}>
+                        {(["process", "checked", "fail"] as const).map((s) => (
+                          <button
+                            key={s}
+                            type="button"
+                            className={`fin-btn${s === "checked" ? " fin-btn--go" : s === "fail" ? " fin-btn--danger" : ""}`}
+                            style={{ width: "auto", padding: "8px 16px" }}
+                            disabled={busy}
+                            onClick={() => void handleStatus(selected.id, s)}
+                          >
+                            {busyId === selected.id ? "更新中…" : paymentStatusLabel(s)}
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+                  ) : null}
+
+                  {canEdit && isForm ? (
+                    <div style={rowStyle}>
+                      {selected.status === "process" ? (
+                        <>
+                          <input
+                            ref={proofInputRef}
+                            type="file"
+                            accept="image/png,image/jpeg,image/jpg,image/heic,image/heif"
+                            style={{ display: "none" }}
+                            onChange={(event) => void handleReplaceProof(event)}
+                          />
+                          <button
+                            type="button"
+                            className="fin-btn"
+                            style={{ width: "auto", padding: "8px 16px" }}
+                            disabled={busy}
+                            onClick={() => proofInputRef.current?.click()}
+                          >
+                            {replacing ? "替换中…" : proofUrl ? "替换付款截图" : "上传付款截图"}
+                          </button>
+                        </>
+                      ) : null}
+                      {selected.status === "fail" ? (
+                        <button
+                          type="button"
+                          className="fin-btn fin-btn--danger"
+                          style={{ width: "auto", padding: "8px 16px" }}
+                          disabled={busy}
+                          onClick={() => void handleRemove()}
+                        >
+                          {removing ? "移除中…" : "移除记录"}
+                        </button>
+                      ) : null}
+                    </div>
+                  ) : null}
+                  {!isForm ? (
+                    <div style={mutedStyle}>会员 / 青少年佛学班 / 法会 / 销售 的付款截图请在对应模块管理，这里做收款状态审核（确认 = 批准）。</div>
+                  ) : null}
                 </div>
-              ) : null}
 
-              <div style={sectionStyle}>
-                <div style={sectionTitleStyle}>付款截图</div>
-                {proofSrc ? (
-                  <>
-                    <a href={proofSrc} target="_blank" rel="noreferrer" style={linkStyle}>
-                      查看原图
-                    </a>
-                    <CachedImage
-                      src={proofSrc}
-                      cacheKey={`finance-payment-proof:${selected.id}`}
-                      refreshKey={proofVersion || proofUrl}
-                      alt={`payment-proof-${selected.id}`}
-                      style={proofImageStyle}
-                    />
-                  </>
-                ) : (
-                  <div style={emptyInlineStyle}>这笔付款没有上传截图。</div>
-                )}
-              </div>
-
-              {canEdit && isForm ? (
-                <div style={rowStyle}>
-                  {selected.status === "process" ? (
+                <div style={detailProofColStyle}>
+                  <div style={sectionTitleStyle}>付款截图</div>
+                  {proofSrc ? (
                     <>
-                      <input
-                        ref={proofInputRef}
-                        type="file"
-                        accept="image/png,image/jpeg,image/jpg,image/heic,image/heif"
-                        style={{ display: "none" }}
-                        onChange={(event) => void handleReplaceProof(event)}
-                      />
-                      <button
-                        type="button"
-                        className="fin-btn"
-                        style={{ width: "auto", padding: "8px 16px" }}
-                        disabled={busy}
-                        onClick={() => proofInputRef.current?.click()}
-                      >
-                        {replacing ? "替换中…" : proofUrl ? "替换付款截图" : "上传付款截图"}
-                      </button>
+                      <a href={proofSrc} target="_blank" rel="noreferrer" style={linkStyle}>查看原图</a>
+                      <div style={proofFrameStyle}>
+                        <CachedImage
+                          src={proofSrc}
+                          cacheKey={`finance-payment-proof:${selected.id}`}
+                          refreshKey={proofVersion || proofUrl}
+                          alt={`payment-proof-${selected.id}`}
+                          style={proofImageFillStyle}
+                        />
+                      </div>
                     </>
-                  ) : null}
-                  {selected.status === "fail" ? (
-                    <button
-                      type="button"
-                      className="fin-btn fin-btn--danger"
-                      style={{ width: "auto", padding: "8px 16px" }}
-                      disabled={busy}
-                      onClick={() => void handleRemove()}
-                    >
-                      {removing ? "移除中…" : "移除记录"}
-                    </button>
-                  ) : null}
+                  ) : (
+                    <div style={emptyInlineStyle}>这笔付款没有上传截图。</div>
+                  )}
                 </div>
-              ) : null}
-              {!isForm ? (
-                <div style={mutedStyle}>会员 / 青少年佛学班的付款截图与记录请在对应模块管理，这里只做收款状态审核。</div>
-              ) : null}
+              </div>
             </div>
           )}
         </section>
@@ -983,13 +993,31 @@ const linkStyle: CSSProperties = {
   width: "fit-content",
 };
 
-const proofImageStyle: CSSProperties = {
+function detailTwoColStyle(isMobile: boolean): CSSProperties {
+  return {
+    display: "grid",
+    gridTemplateColumns: isMobile ? "1fr" : "minmax(0, 1fr) minmax(0, 1.1fr)",
+    gap: "16px",
+    alignItems: "start",
+  };
+}
+const detailInfoColStyle: CSSProperties = { display: "grid", gap: "14px", minWidth: 0 };
+const detailProofColStyle: CSSProperties = { display: "grid", gap: "8px", minWidth: 0 };
+const proofFrameStyle: CSSProperties = {
   width: "100%",
-  maxHeight: "440px",
-  objectFit: "contain",
-  borderRadius: "8px",
+  height: "min(72vh, 600px)",
+  borderRadius: "10px",
   border: "1px solid var(--x-color-line)",
-  background: "var(--x-color-panel)",
+  background: "var(--x-color-panel-alt)",
+  overflow: "hidden",
+  display: "flex",
+  alignItems: "center",
+  justifyContent: "center",
+};
+const proofImageFillStyle: CSSProperties = {
+  maxWidth: "100%",
+  maxHeight: "100%",
+  objectFit: "contain",
 };
 
 const scopeChipStyle: CSSProperties = {

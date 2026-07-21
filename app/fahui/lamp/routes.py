@@ -34,6 +34,7 @@ def create_registration_route():
 @lamp_registration_bp.route("/registrations/<int:registration_id>", methods=["PATCH"])
 @lamp_registration_bp.route("/registrations/update", methods=["POST"])
 @lamp_registration_bp.route("/edit", methods=["POST"])
+@permission_required_any("account_edit")
 def update_registration_route(registration_id=None):
     return services.update_registration(_payload_with_optional_id(registration_id))
 
@@ -41,6 +42,7 @@ def update_registration_route(registration_id=None):
 @lamp_registration_bp.route("/registrations/<int:registration_id>", methods=["DELETE"])
 @lamp_registration_bp.route("/registrations/delete", methods=["POST"])
 @lamp_registration_bp.route("/delete", methods=["POST"])
+@permission_required_any("account_edit")
 def delete_registration_route(registration_id=None):
     return services.delete_registration(_payload_with_optional_id(registration_id))
 

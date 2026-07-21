@@ -164,6 +164,19 @@ export async function deleteYlpOrderItem(orderId: number, itemId: number) {
   return parseJson<YlpOrderItemMutationResponse>(response);
 }
 
+export async function updateYlpOrderItem(orderId: number, itemId: number, payload: Record<string, unknown>) {
+  const response = await apiFetch(`/api/board_router/orders/${orderId}/items/${itemId}`, {
+    method: "POST",
+    credentials: "include",
+    headers: {
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify(payload),
+  });
+
+  return parseJson<YlpOrderItemMutationResponse>(response);
+}
+
 export async function updateYlpOrderCustomer(
   orderId: number,
   payload: {
@@ -184,6 +197,19 @@ export async function updateYlpOrderCustomer(
   return parseJson<{ success?: boolean; message?: string }>(response);
 }
 
+export async function updateYlpOrderStatus(orderId: number, status: string) {
+  const response = await apiFetch(`/api/board_router/orders/${orderId}/status`, {
+    method: "POST",
+    credentials: "include",
+    headers: {
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({ status }),
+  });
+
+  return parseJson<{ success?: boolean; message?: string; status?: string }>(response);
+}
+
 export async function fetchYlpPayments(orderId: number) {
   const response = await apiFetch(`/api/payment/orders/${orderId}/payments`, {
     credentials: "include",
@@ -195,6 +221,19 @@ export async function fetchYlpPayments(orderId: number) {
 
   const payload = await parseJson<{ data?: YlpPaymentRecord[] }>(response);
   return payload.data || [];
+}
+
+export async function previewYlpPaiwei(orderId: number) {
+  const response = await apiFetch(`/api/print_paiwei/orders/${orderId}/preview`, {
+    credentials: "include",
+  });
+
+  if (!response.ok) {
+    const payload = (await response.json().catch(() => ({}))) as { message?: string; error?: string };
+    throw new Error(payload.error || payload.message || "预览牌位失败");
+  }
+
+  return response.blob();
 }
 
 export async function downloadYlpPaiwei(orderId: number) {

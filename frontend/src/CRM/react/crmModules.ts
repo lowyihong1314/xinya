@@ -50,7 +50,7 @@ export const CRM_MODULES: CRMModuleSpec[] = [
     key: 'dharma_event',
     title: '法会',
     icon: 'fas fa-praying-hands',
-    description: '点灯付款审核与盂兰盆订单工作台。',
+    description: 'YLP 盂兰盆法会与 LAMP 点灯法会管理。',
     Component: FahuiPage,
   },
   {

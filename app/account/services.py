@@ -901,9 +901,173 @@ FINANCE_SCOPE_LABELS = {
     "form": "报名表单",
     "membership": "会员",
     "youth_class": "青少年佛学班",
+    "fahui_ylp": "法会 YLP",
+    "fahui_lamp": "法会 Lamp",
+    "sales": "销售收入",
 }
 _FINANCE_PAYMENT_SCOPES = ("form", "membership", "youth_class")
 _FINANCE_PAYMENT_STATUSES = ("process", "checked", "fail")
+
+# 销售单据（AssetStockDocument, sale_out/sale_return）POST 到收款审核后并入聚合列表。
+# 用大偏移量与 RegisPayment / FahuiPayment 的 id 空间区分。
+SALES_FINANCE_ID_OFFSET = 2_000_000_000
+
+
+def _sales_document_amount(document):
+    total = 0.0
+    for line in document.lines or []:
+        if line.line_amount is not None:
+            total += float(line.line_amount)
+        elif line.unit_price is not None:
+            total += float(line.unit_price) * int(line.quantity or 0)
+    return total
+
+
+def _serialize_sales_finance_payment(document):
+    created = document.confirmed_at or document.created_at
+    amount = _sales_document_amount(document)
+    status = document.finance_payment_status if document.finance_payment_status in _FINANCE_PAYMENT_STATUSES else "process"
+    return {
+        "id": SALES_FINANCE_ID_OFFSET + document.id,
+        "payment_scope": "sales",
+        "regis_form_id": None,
+        "membership_registration_id": None,
+        "youth_class_registration_id": None,
+        "nric_asset_id": None,
+        "nric": None,
+        "nric_snapshot": None,
+        "name": document.counterparty_name or "-",
+        "phone": None,
+        "payment_mode": "销售出库" if document.document_type == "sale_out" else "销售退回",
+        "price": amount,
+        "amount": amount,
+        "created_at": created.isoformat() if created else None,
+        "date": created.date().isoformat() if created else None,
+        "time": created.time().isoformat() if created else None,
+        "status": status,
+        "counter": document.taken_by_name,
+        "proof_image_path": None,
+        "proof_image_url": None,
+        "source_scope": "sales",
+        "source_scope_label": FINANCE_SCOPE_LABELS["sales"],
+        "source_label": document.document_no,
+        "registration_id": document.id,
+    }
+
+
+def _list_sales_finance_payments(status=None):
+    from models.asset import AssetStockDocument
+
+    query = AssetStockDocument.query.filter(
+        AssetStockDocument.finance_payment_status.isnot(None),
+        AssetStockDocument.status != "cancelled",
+    )
+    if status in _FINANCE_PAYMENT_STATUSES:
+        query = query.filter(AssetStockDocument.finance_payment_status == status)
+    documents = query.order_by(AssetStockDocument.confirmed_at.desc(), AssetStockDocument.id.desc()).all()
+    return [_serialize_sales_finance_payment(document) for document in documents]
+
+
+def _update_sales_finance_payment_status(payment_id, data):
+    from flask import jsonify
+
+    from models.asset import AssetStockDocument
+
+    real_id = payment_id - SALES_FINANCE_ID_OFFSET
+    document = AssetStockDocument.query.get(real_id)
+    if document is None or not document.finance_payment_status:
+        raise NotFound("收款记录不存在")
+
+    status = str((data or {}).get("status") or "").strip()
+    if status not in _FINANCE_PAYMENT_STATUSES:
+        raise ValidationError("付款状态无效")
+
+    document.finance_payment_status = status
+    db.session.commit()
+    return jsonify(
+        {
+            "status": "success",
+            "message": "付款状态已更新",
+            "payment": _serialize_sales_finance_payment(document),
+        }
+    )
+
+# 法会付款（FahuiPayment）统一并入财政收款审核。法会付款的 id 与 RegisPayment
+# 分属不同表、会冲突，这里给法会付款加一个大偏移量做命名空间。
+FAHUI_FINANCE_ID_OFFSET = 1_000_000_000
+_FAHUI_FINANCE_SCOPES = {"fahui_ylp": "ylp", "fahui_lamp": "lamp"}
+# 法会状态 pending/approved/rejected <-> 财政状态 process/checked/fail
+_FAHUI_STATUS_TO_FINANCE = {"approved": "checked", "rejected": "fail", "pending": "process"}
+_FINANCE_STATUS_TO_FAHUI = {"checked": "approved", "fail": "rejected", "process": "pending"}
+
+
+def _serialize_fahui_finance_payment(payment):
+    from app.fahui.common.payment import normalize_fahui_payment_status
+
+    order = getattr(payment, "order", None)
+    scope = "fahui_lamp" if payment.payment_type == "lamp" else "fahui_ylp"
+    finance_status = _FAHUI_STATUS_TO_FINANCE.get(
+        normalize_fahui_payment_status(payment.status), "process"
+    )
+    amount = float(payment.total_price or 0)
+    created = payment.created_at
+    proof = f"/api/payment/payments/{payment.id}/document" if payment.document else None
+
+    if scope == "fahui_lamp":
+        regs = list(getattr(payment, "lamp_registrations", None) or [])
+        source_label = regs[0].devotee_name if regs else None
+        registration_id = regs[0].id if regs else None
+        phone_fallback = regs[0].phone if regs else None
+    else:
+        source_label = (
+            (order.customer_name or order.name or f"订单 #{order.id}") if order else None
+        )
+        registration_id = order.id if order else None
+        phone_fallback = order.phone if order else None
+
+    return {
+        "id": FAHUI_FINANCE_ID_OFFSET + payment.id,
+        "payment_scope": scope,
+        "regis_form_id": None,
+        "membership_registration_id": None,
+        "youth_class_registration_id": None,
+        "nric_asset_id": None,
+        "nric": None,
+        "nric_snapshot": None,
+        "name": payment.payer_name or source_label,
+        "phone": payment.phone or phone_fallback,
+        "payment_mode": payment.payment_mode,
+        "price": amount,
+        "amount": amount,
+        "created_at": created.isoformat() if created else None,
+        "date": created.date().isoformat() if created else None,
+        "time": created.time().isoformat() if created else None,
+        "status": finance_status,
+        "counter": payment.valid_by,
+        "proof_image_path": proof,
+        "proof_image_url": proof,
+        "source_scope": scope,
+        "source_scope_label": FINANCE_SCOPE_LABELS.get(scope, scope),
+        "source_label": source_label,
+        "registration_id": registration_id,
+    }
+
+
+def _list_fahui_finance_payments(scope=None, status=None):
+    from models.fahui import FahuiPayment
+
+    payment_types = None
+    if scope in _FAHUI_FINANCE_SCOPES:
+        payment_types = [_FAHUI_FINANCE_SCOPES[scope]]
+    else:
+        payment_types = list(_FAHUI_FINANCE_SCOPES.values())
+
+    query = FahuiPayment.query.filter(FahuiPayment.payment_type.in_(payment_types))
+    if status in _FINANCE_PAYMENT_STATUSES:
+        fahui_status = _FINANCE_STATUS_TO_FAHUI[status]
+        query = query.filter(FahuiPayment.status == fahui_status)
+    payments = query.order_by(FahuiPayment.created_at.desc(), FahuiPayment.id.desc()).all()
+    return [_serialize_fahui_finance_payment(payment) for payment in payments]
 
 
 def _finance_payment_source(payment, form_titles):
@@ -943,21 +1107,37 @@ def _serialize_finance_payment(payment, form_titles):
 
 
 def list_finance_payments(scope=None, status=None):
-    """列出所有报名付款（跨 form / membership / youth_class），可按 scope / status 过滤。"""
-    query = RegisPayment.query
-    if scope in _FINANCE_PAYMENT_SCOPES:
-        query = query.filter(RegisPayment.payment_scope == scope)
-    if status in _FINANCE_PAYMENT_STATUSES:
-        query = query.filter(RegisPayment.status == status)
-    payments = query.order_by(RegisPayment.created_at.desc(), RegisPayment.id.desc()).all()
+    """列出所有付款审核记录（报名 form/membership/youth_class + 法会 ylp/lamp + 销售 sales）。"""
+    results = []
 
-    form_ids = {p.regis_form_id for p in payments if p.regis_form_id}
-    form_titles = {}
-    if form_ids:
-        for form in RegisForm.query.filter(RegisForm.id.in_(form_ids)).all():
-            form_titles[form.id] = getattr(form, "title", None)
+    include_regis = scope in _FINANCE_PAYMENT_SCOPES or scope in (None, "", "all")
+    include_fahui = scope in _FAHUI_FINANCE_SCOPES or scope in (None, "", "all")
+    include_sales = scope == "sales" or scope in (None, "", "all")
 
-    return [_serialize_finance_payment(payment, form_titles) for payment in payments]
+    if include_regis:
+        query = RegisPayment.query
+        if scope in _FINANCE_PAYMENT_SCOPES:
+            query = query.filter(RegisPayment.payment_scope == scope)
+        if status in _FINANCE_PAYMENT_STATUSES:
+            query = query.filter(RegisPayment.status == status)
+        payments = query.order_by(RegisPayment.created_at.desc(), RegisPayment.id.desc()).all()
+
+        form_ids = {p.regis_form_id for p in payments if p.regis_form_id}
+        form_titles = {}
+        if form_ids:
+            for form in RegisForm.query.filter(RegisForm.id.in_(form_ids)).all():
+                form_titles[form.id] = getattr(form, "title", None)
+
+        results.extend(_serialize_finance_payment(payment, form_titles) for payment in payments)
+
+    if include_fahui:
+        results.extend(_list_fahui_finance_payments(scope=scope, status=status))
+
+    if include_sales:
+        results.extend(_list_sales_finance_payments(status=status))
+
+    results.sort(key=lambda item: (item.get("created_at") or "", item.get("id") or 0), reverse=True)
+    return results
 
 
 def build_payment_report_context(payment_ids, user=None):
@@ -972,7 +1152,13 @@ def build_payment_report_context(payment_ids, user=None):
 
 
 def update_finance_payment_status(payment_id, data):
-    """按 scope 分发到对应的付款状态更新流程，保留会员 / 青少年的生效副作用。"""
+    """按 scope 分发到对应的付款状态更新流程，保留会员 / 青少年 / 法会 / 销售 的生效副作用。"""
+    # 销售偏移量 (2e9) 大于法会偏移量 (1e9)，必须先判销售。
+    if payment_id >= SALES_FINANCE_ID_OFFSET:
+        return _update_sales_finance_payment_status(payment_id, data)
+    if payment_id >= FAHUI_FINANCE_ID_OFFSET:
+        return _update_fahui_finance_payment_status(payment_id, data)
+
     payment = RegisPayment.query.get(payment_id)
     if payment is None:
         raise NotFound("付款记录不存在")
@@ -990,3 +1176,35 @@ def update_finance_payment_status(payment_id, data):
     from app.form import services as form_services
 
     return form_services.update_payment_status(payment_id, data)
+
+
+def _update_fahui_finance_payment_status(payment_id, data):
+    from flask import jsonify
+    from flask_login import current_user
+
+    from app.fahui.common.payment_review import get_payment_or_404, set_payment_review_status
+
+    real_id = payment_id - FAHUI_FINANCE_ID_OFFSET
+    payment = get_payment_or_404(real_id)
+    if payment is None:
+        raise NotFound("付款记录不存在")
+
+    finance_status = str((data or {}).get("status") or "").strip()
+    fahui_status = _FINANCE_STATUS_TO_FAHUI.get(finance_status)
+    if not fahui_status:
+        raise ValidationError("付款状态无效")
+
+    try:
+        set_payment_review_status(payment, status=fahui_status, reviewer_user=current_user)
+        db.session.commit()
+    except Exception:
+        db.session.rollback()
+        raise
+
+    return jsonify(
+        {
+            "status": "success",
+            "message": "付款状态已更新",
+            "payment": _serialize_fahui_finance_payment(payment),
+        }
+    )

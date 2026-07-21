@@ -60,7 +60,7 @@ export default defineConfig(({ command, mode }) => {
             input: {
               app: path.resolve(__dirname, "./main.tsx"),
               changyouRoom: path.resolve(__dirname, "./changyouRoomMain.tsx"),
-              formPayment: path.resolve(__dirname, "./formPaymentMain.js"),
+              formPayment: path.resolve(__dirname, "./formPayRegisterMain.tsx"),
               formPublic: path.resolve(__dirname, "./formPublicMain.js"),
               musicPortal: path.resolve(__dirname, "./musicPortalMain.tsx"),
               parentalSign: path.resolve(__dirname, "./parentalSignMain.js"),

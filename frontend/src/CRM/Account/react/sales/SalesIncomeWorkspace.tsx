@@ -2,13 +2,16 @@ import { useEffect, useMemo, useState } from "react";
 import type { CSSProperties, FormEvent } from "react";
 
 import { useUserState } from "../../../../app/UserState";
+import { showConfirmDialog } from "../../../../js/dialogs";
 import { select_counterparty_modal, select_single_user_modal } from "../../../select_users_modal";
 import { TablePagination, usePagedRows } from "../../../shared/TablePagination";
 import {
+  cancelAssetStockDocument,
   confirmAssetStockDocument,
   createAssetStockDocument,
   deleteAssetStockDocument,
   fetchAssetDashboard,
+  postAssetStockDocumentToFinance,
 } from "../asset/api";
 import type {
   AssetDashboardPayload,
@@ -17,7 +20,7 @@ import type {
 } from "../asset/types";
 
 type SalesActionType = "sale_out" | "sale_return";
-type SalesViewMode = "overview" | "form";
+type SalesViewMode = "overview" | "form" | "detail";
 type SalesTypeFilter = "all" | "sale_out" | "sale_return";
 
 type SalesPermissionUser = {
@@ -248,6 +251,7 @@ export function SalesIncomeWorkspace() {
   const [loading, setLoading] = useState(true);
   const [submitting, setSubmitting] = useState(false);
   const [viewMode, setViewMode] = useState<SalesViewMode>("overview");
+  const [selectedDocId, setSelectedDocId] = useState<number | null>(null);
   const [form, setForm] = useState<SalesFormState>(INITIAL_FORM);
   const [searchQuery, setSearchQuery] = useState("");
   const [typeFilter, setTypeFilter] = useState<SalesTypeFilter>("all");
@@ -368,6 +372,79 @@ export function SalesIncomeWorkspace() {
   function closeForm() {
     setForm(INITIAL_FORM);
     setViewMode("overview");
+  }
+
+  function openDetail(documentId: number) {
+    setSelectedDocId(documentId);
+    setViewMode("detail");
+  }
+
+  function closeDetail() {
+    setSelectedDocId(null);
+    setViewMode("overview");
+  }
+
+  async function handleConfirm(documentId: number) {
+    setSubmitting(true);
+    setError(null);
+    try {
+      await confirmAssetStockDocument(documentId);
+      setMessage("销售已确认并扣减库存，可以推送到收款审核了。");
+      await loadDashboard();
+    } catch (nextError) {
+      setError(nextError instanceof Error ? nextError.message : "确认失败");
+    } finally {
+      setSubmitting(false);
+    }
+  }
+
+  async function handlePostToFinance(documentId: number) {
+    setSubmitting(true);
+    setError(null);
+    try {
+      await postAssetStockDocumentToFinance(documentId);
+      setMessage("已推送到收款审核，财务可在「收款审核」里确认收款。");
+      await loadDashboard();
+    } catch (nextError) {
+      setError(nextError instanceof Error ? nextError.message : "推送收款审核失败");
+    } finally {
+      setSubmitting(false);
+    }
+  }
+
+  async function handleCancelDocument(documentId: number) {
+    if (!(await showConfirmDialog({ message: "确认作废这笔销售单据？已确认的会回滚库存。", tone: "danger" }))) {
+      return;
+    }
+    setSubmitting(true);
+    setError(null);
+    try {
+      await cancelAssetStockDocument(documentId);
+      setMessage("销售单据已作废。");
+      await loadDashboard();
+    } catch (nextError) {
+      setError(nextError instanceof Error ? nextError.message : "作废失败");
+    } finally {
+      setSubmitting(false);
+    }
+  }
+
+  async function handleDeleteDocument(documentId: number) {
+    if (!(await showConfirmDialog({ message: "确认删除这个草稿单据？", tone: "danger" }))) {
+      return;
+    }
+    setSubmitting(true);
+    setError(null);
+    try {
+      await deleteAssetStockDocument(documentId);
+      setMessage("草稿单据已删除。");
+      closeDetail();
+      await loadDashboard();
+    } catch (nextError) {
+      setError(nextError instanceof Error ? nextError.message : "删除失败");
+    } finally {
+      setSubmitting(false);
+    }
   }
 
   function handleWarehouseChange(warehouseId: string) {
@@ -516,7 +593,7 @@ export function SalesIncomeWorkspace() {
 
     setSubmitting(true);
     try {
-      const created = await createAssetStockDocument({
+      await createAssetStockDocument({
         document_type: form.actionType,
         source_warehouse_id: form.actionType === "sale_out" ? Number(form.warehouseId) : null,
         target_warehouse_id: form.actionType === "sale_return" ? Number(form.warehouseId) : null,
@@ -535,22 +612,7 @@ export function SalesIncomeWorkspace() {
         })),
       });
 
-      try {
-        await confirmAssetStockDocument(created.id);
-      } catch (nextError) {
-        try {
-          await deleteAssetStockDocument(created.id);
-          throw new Error(
-            `${nextError instanceof Error ? nextError.message : "销售单据确认失败"}，系统已自动清掉 draft 单据`,
-          );
-        } catch (cleanupError) {
-          throw cleanupError instanceof Error
-            ? cleanupError
-            : new Error("销售单据确认失败，请到资产库存里检查 draft 单据");
-        }
-      }
-
-      setMessage(form.actionType === "sale_out" ? "销售记录已入账并扣减库存" : "销售退回已入账并回补库存");
+      setMessage("销售草稿已保存，进入详情后确认扣库存，再推送到收款审核。");
       setViewMode("overview");
       setForm(INITIAL_FORM);
       await loadDashboard();
@@ -583,15 +645,13 @@ export function SalesIncomeWorkspace() {
           <div style={mutedStyle}>
             {viewMode === "form"
               ? getSalesActionHint(form.actionType)
-              : `共 ${salesDocuments.length} 笔销售单据 · 仅显示销售出库与销售退回`}
+              : viewMode === "detail"
+                ? "草稿 → 确认(扣库存) → 推送到收款审核"
+                : `共 ${salesDocuments.length} 笔销售单据 · 仅显示销售出库与销售退回`}
           </div>
         </div>
         <div style={rowStyle}>
-          {viewMode === "form" ? (
-            <button type="button" style={btnStyle} onClick={closeForm}>
-              返回销售列表
-            </button>
-          ) : (
+          {viewMode === "overview" ? (
             <>
               <button type="button" style={btnStyle} onClick={() => void loadDashboard()} disabled={loading}>
                 {loading ? "刷新中…" : "刷新"}
@@ -603,6 +663,10 @@ export function SalesIncomeWorkspace() {
                 销售退回
               </button>
             </>
+          ) : (
+            <button type="button" style={btnStyle} onClick={viewMode === "form" ? closeForm : closeDetail}>
+              返回销售列表
+            </button>
           )}
         </div>
       </div>
@@ -657,7 +721,7 @@ export function SalesIncomeWorkspace() {
                     {pageRows.map((document) => {
                       const totalAmount = getDocumentTotal(document);
                       return (
-                        <tr key={document.id} className="sales-row">
+                        <tr key={document.id} className="sales-row" style={{ cursor: "pointer" }} onClick={() => openDetail(document.id)}>
                           <td style={monoCellStyle}>{document.document_no}</td>
                           <td>
                             <span style={typeChipStyle(document.document_type)}>{getDocumentLabel(document.document_type)}</span>
@@ -697,6 +761,102 @@ export function SalesIncomeWorkspace() {
             </div>
           )}
         </>
+      ) : viewMode === "detail" ? (
+        (() => {
+          const doc =
+            salesDocuments.find((d) => d.id === selectedDocId) ||
+            (dashboard?.documents || []).find((d) => d.id === selectedDocId) ||
+            null;
+          if (!doc) {
+            return <div style={emptyStyle}>找不到这个销售单据，可能已被删除。</div>;
+          }
+          const total = getDocumentTotal(doc);
+          const posted = Boolean(doc.finance_payment_status);
+          const financeLabel =
+            doc.finance_payment_status === "checked"
+              ? "已确认收款"
+              : doc.finance_payment_status === "fail"
+                ? "收款失败"
+                : "收款审核中";
+          return (
+            <div style={{ display: "grid", gap: "14px", padding: "14px" }}>
+              <div style={editorHeaderCardStyle}>
+                <div style={{ display: "flex", gap: "8px", alignItems: "center", flexWrap: "wrap" }}>
+                  <span style={monoCellStyle}>{doc.document_no}</span>
+                  <span style={typeChipStyle(doc.document_type)}>{getDocumentLabel(doc.document_type)}</span>
+                  <span style={statusChipStyle(doc.status)}>{doc.status}</span>
+                  {posted ? <span style={financeChipStyle(doc.finance_payment_status)}>{financeLabel}</span> : null}
+                </div>
+                <div style={{ ...mutedStyle, marginTop: "8px" }}>
+                  客户 {doc.counterparty_name || "—"} · 仓库 {getDocumentWarehouse(doc)} · 经手 {doc.taken_by_name || "—"} ·
+                  金额 {total > 0 ? `RM ${formatMoney(total)}` : "—"} · {formatDateTime(doc.created_at)}
+                </div>
+                {doc.note ? <div style={{ ...mutedStyle, marginTop: "4px" }}>备注：{doc.note}</div> : null}
+              </div>
+
+              {canEdit ? (
+                <div style={rowStyle}>
+                  {doc.status === "draft" ? (
+                    <>
+                      <button type="button" style={disabledBtn(primaryButtonStyle, submitting)} disabled={submitting} onClick={() => void handleConfirm(doc.id)}>
+                        确认（扣库存）
+                      </button>
+                      <button type="button" style={disabledBtn(dangerButtonStyle, submitting)} disabled={submitting} onClick={() => void handleDeleteDocument(doc.id)}>
+                        删除草稿
+                      </button>
+                    </>
+                  ) : null}
+                  {doc.status === "confirmed" && !posted ? (
+                    <>
+                      <button type="button" style={disabledBtn(primaryButtonStyle, submitting)} disabled={submitting} onClick={() => void handlePostToFinance(doc.id)}>
+                        POST 到收款审核
+                      </button>
+                      <button type="button" style={disabledBtn(dangerButtonStyle, submitting)} disabled={submitting} onClick={() => void handleCancelDocument(doc.id)}>
+                        作废（回滚库存）
+                      </button>
+                    </>
+                  ) : null}
+                  {doc.status === "confirmed" && posted ? (
+                    <>
+                      <span style={mutedStyle}>已推送到收款审核，请到「财务 · 收款审核」确认收款。</span>
+                      <button type="button" style={disabledBtn(dangerButtonStyle, submitting)} disabled={submitting} onClick={() => void handleCancelDocument(doc.id)}>
+                        作废（回滚库存）
+                      </button>
+                    </>
+                  ) : null}
+                  {doc.status === "cancelled" ? <span style={mutedStyle}>单据已作废。</span> : null}
+                </div>
+              ) : null}
+
+              <div style={tableWrapStyle}>
+                <table className="sales-table">
+                  <thead>
+                    <tr>
+                      <th>项目</th>
+                      <th>规格</th>
+                      <th style={{ textAlign: "right" }}>数量</th>
+                      <th style={{ textAlign: "right" }}>单价</th>
+                      <th style={{ textAlign: "right" }}>金额</th>
+                      <th>备注</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {(doc.lines || []).map((line) => (
+                      <tr key={line.id}>
+                        <td style={cellStrongStyle}>{line.item_name || "未命名 item"}</td>
+                        <td>{line.size || "—"}</td>
+                        <td style={{ textAlign: "right" }}>{line.quantity}</td>
+                        <td style={{ textAlign: "right" }}>{line.unit_price != null ? `RM ${line.unit_price}` : "—"}</td>
+                        <td style={{ textAlign: "right", whiteSpace: "nowrap" }}>{line.line_amount != null ? `RM ${formatMoney(Number(line.line_amount))}` : "—"}</td>
+                        <td>{line.remark || "—"}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          );
+        })()
       ) : (
         <form onSubmit={handleSubmit} style={formStyle}>
           <div style={editorHeaderCardStyle}>
@@ -937,6 +1097,17 @@ const primaryButtonStyle: CSSProperties = {
   cursor: "pointer",
   whiteSpace: "nowrap",
 };
+const dangerButtonStyle: CSSProperties = {
+  padding: "8px 14px",
+  borderRadius: "8px",
+  border: "1px solid var(--x-color-danger-border)",
+  background: "var(--x-color-danger-soft)",
+  color: "var(--x-color-danger)",
+  fontWeight: 700,
+  fontSize: "13px",
+  cursor: "pointer",
+  whiteSpace: "nowrap",
+};
 const ghostButtonStyle: CSSProperties = {
   padding: "7px 12px",
   borderRadius: "8px",
@@ -1009,6 +1180,25 @@ function statusChipStyle(status: string): CSSProperties {
       ? { background: "var(--x-color-success-soft)", color: "var(--x-color-success)" }
       : status === "draft"
         ? { background: "var(--x-color-info-soft)", color: "var(--x-color-info)" }
+        : { background: "var(--x-color-warning-soft)", color: "var(--x-color-warning)" };
+  return {
+    display: "inline-flex",
+    alignItems: "center",
+    padding: "4px 10px",
+    borderRadius: "6px",
+    fontSize: "12px",
+    fontWeight: 700,
+    whiteSpace: "nowrap",
+    ...palette,
+  };
+}
+
+function financeChipStyle(status?: string | null): CSSProperties {
+  const palette =
+    status === "checked"
+      ? { background: "var(--x-color-success-soft)", color: "var(--x-color-success)" }
+      : status === "fail"
+        ? { background: "var(--x-color-danger-soft)", color: "var(--x-color-danger)" }
         : { background: "var(--x-color-warning-soft)", color: "var(--x-color-warning)" };
   return {
     display: "inline-flex",

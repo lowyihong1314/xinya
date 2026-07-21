@@ -1,7 +1,7 @@
 import type { FormPayment, FormRecord } from "../../../form/react/types";
 
 export type RegisterPaymentStatus = "process" | "checked" | "fail" | "all";
-export type FinanceScope = "form" | "membership" | "youth_class";
+export type FinanceScope = "form" | "membership" | "youth_class" | "fahui_ylp" | "fahui_lamp" | "sales";
 
 export type RegisterPaymentForm = FormRecord & {
   payments?: FormPayment[];
@@ -40,6 +40,9 @@ export const SCOPE_FILTERS: { key: FinanceScope | "all"; label: string }[] = [
   { key: "form", label: "报名表单" },
   { key: "membership", label: "会员" },
   { key: "youth_class", label: "青少年佛学班" },
+  { key: "fahui_ylp", label: "法会 YLP" },
+  { key: "fahui_lamp", label: "法会 Lamp" },
+  { key: "sales", label: "销售收入" },
 ];
 
 export const STATUS_FILTERS: { key: RegisterPaymentStatus; label: string }[] = [

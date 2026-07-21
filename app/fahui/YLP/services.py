@@ -143,6 +143,7 @@ def serialize_order(order: FahuiOrder, include_items: bool = False, full_items: 
     data = {
         "id": order.id,
         "status": payment_status(order),
+        "order_status": order.status,
         "name": order.name,
         "email": order.email,
         "customer_name": order.customer_name,
@@ -201,6 +202,7 @@ def search_orders(version: object, value: str, page_num: int = 1, per_page: int 
         .outerjoin(FahuiOrderItem, FahuiOrderItem.order_id == FahuiOrder.id)
         .outerjoin(FahuiItemFormData, FahuiItemFormData.item_id == FahuiOrderItem.id)
         .filter(FahuiOrder.version == normalized_version)
+        .filter(or_(FahuiOrder.status.is_(None), FahuiOrder.status != "delete"))
         .distinct()
     )
 

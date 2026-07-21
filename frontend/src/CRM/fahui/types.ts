@@ -77,6 +77,7 @@ export type YlpPagination = {
 export type YlpOrderSummary = {
   id: number;
   status?: string | null;
+  order_status?: string | null;
   name?: string | null;
   email?: string | null;
   customer_name?: string | null;

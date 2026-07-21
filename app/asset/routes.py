@@ -13,6 +13,7 @@ from app.asset.serializers import (
 from app.asset.services import (
     cancel_stock_document,
     confirm_stock_document,
+    post_document_to_finance,
     create_item,
     create_partner,
     create_stock_document,
@@ -403,6 +404,27 @@ def confirm_stock_document_route(document_id):
             {
                 "status": "success",
                 "message": "库存单据已确认",
+                "data": serialize_stock_document(document, include_children=True),
+            }
+        )
+    except AssetError as exc:
+        return _error_response(exc)
+    except Exception as exc:
+        from models import db
+
+        db.session.rollback()
+        return jsonify({"status": "error", "message": str(exc)}), 500
+
+
+@asset_bp.post("/stock-documents/<int:document_id>/post-to-finance")
+def post_stock_document_to_finance_route(document_id):
+    try:
+        user = require_asset_edit_permission()
+        document = post_document_to_finance(document_id, user)
+        return jsonify(
+            {
+                "status": "success",
+                "message": "已推送到收款审核",
                 "data": serialize_stock_document(document, include_children=True),
             }
         )

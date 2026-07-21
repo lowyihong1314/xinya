@@ -21,10 +21,11 @@
     </style>
   </head>
   <body>
-    <div class="container"></div>
-    <script>
-      window.form_data = {{ form | tojson }};
-    </script>
+    <div
+      id="root"
+      data-form-id="{{ form.id }}"
+      data-form-title="{{ form.title|e }}"
+    ></div>
     <script src="/static/vite/form-payment.js" type="module"></script>
   </body>
 </html>

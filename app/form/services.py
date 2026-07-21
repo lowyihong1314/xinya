@@ -1111,50 +1111,24 @@ def get_payment_quote(form_id, nric):
     except ValueError as exc:
         return jsonify({"status": "error", "message": str(exc)}), 400
 
-    current_form_fees = _sorted_fees_for_form(form)
-    current_fee_match = _pick_fee_for_age(current_form_fees, age)
-    current_matching_fees = [
-        _serialize_fee_candidate(fee, form) for fee in current_form_fees if _fee_matches_age(fee, age)
+    # 只返回「本表单」且符合年龄的收费项——和 create_payment 实际能接受的保持一致，
+    # 避免推荐了跨表单/不符年龄的费用却在提交时被拒。
+    fees = [
+        _serialize_fee_candidate(fee, form)
+        for fee in _sorted_fees_for_form(form)
+        if _fee_matches_age(fee, age)
     ]
 
     member = NRIC_Asset.query.filter_by(nric=nric).first()
-    related_fee_match = None
-    related_fee_candidates = []
-    related_matching_fees = []
-
-    if member:
-        related_forms = sorted(
-            list(member.forms or []),
-            key=lambda item: (item.created_at or datetime.min, item.id or 0),
-            reverse=True,
-        )
-        for related_form in related_forms:
-            for fee in _sorted_fees_for_form(related_form):
-                serialized = _serialize_fee_candidate(fee, related_form)
-                related_fee_candidates.append(serialized)
-                if _fee_matches_age(fee, age):
-                    related_matching_fees.append(serialized)
-                if related_fee_match is None and _fee_matches_age(fee, age):
-                    related_fee_match = serialized
-
-    selected_fee = related_fee_match
-    if selected_fee is None and current_fee_match is not None:
-        selected_fee = _serialize_fee_candidate(current_fee_match, form)
-    if selected_fee is None and related_fee_candidates:
-        selected_fee = related_fee_candidates[0]
-    if selected_fee is None and current_form_fees:
-        selected_fee = _serialize_fee_candidate(current_form_fees[0], form)
 
     return jsonify(
         {
             "status": "success",
             "nric": nric,
             "age": age,
+            "is_member": member is not None,
             "member": member.to_dict() if member else None,
-            "selected_fee": selected_fee,
-            "current_form_fee": _serialize_fee_candidate(current_fee_match, form) if current_fee_match else None,
-            "matching_fees": related_matching_fees + current_matching_fees,
-            "related_fee_candidates": related_fee_candidates,
+            "fees": fees,
         }
     )
 
