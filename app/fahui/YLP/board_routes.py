@@ -20,10 +20,13 @@ from .board_services import (
     check_duplicate_owner_fields,
     clear_print_pdf_records,
     clone_order_to_version,
+    create_board,
     create_order_item,
     delete_board_entry,
+    delete_board_header,
     delete_order_batch,
     delete_order_item,
+    update_board,
     get_board_order_detail,
     get_print_pdf_data,
     list_all_boards,
@@ -63,6 +66,27 @@ def delete_board_entry_route(board_data_id):
 @login_required
 def list_boards_route():
     return jsonify(list_all_boards())
+
+
+@board_router_bp.route("/boards", methods=["POST"])
+@permission_required_any("account_edit")
+def create_board_route():
+    payload, status_code = create_board(request.get_json(silent=True) or {})
+    return jsonify(payload), status_code
+
+
+@board_router_bp.route("/boards/<int:board_id>", methods=["POST"])
+@permission_required_any("account_edit")
+def update_board_route(board_id):
+    payload, status_code = update_board(board_id, request.get_json(silent=True) or {})
+    return jsonify(payload), status_code
+
+
+@board_router_bp.route("/boards/<int:board_id>", methods=["DELETE"])
+@permission_required_any("account_edit")
+def delete_board_header_route(board_id):
+    payload, status_code = delete_board_header(board_id)
+    return jsonify(payload), status_code
 
 
 @board_router_bp.route("/boards/entries/reorder", methods=["POST"])

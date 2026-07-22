@@ -176,6 +176,55 @@ def list_all_boards() -> dict:
     return {"all_board": _get_all_boards_with_orders()}
 
 
+def create_board(data: dict) -> tuple[dict, int]:
+    """新建一块空的大板（board_header）。"""
+    name = (data.get("board_name") or "").strip()
+    header = FahuiBoardHeader(
+        board_name=name or "未命名板",
+        board_width=_coerce_int(data.get("board_width")),
+        board_height=_coerce_int(data.get("board_height")),
+    )
+    db.session.add(header)
+    db.session.commit()
+    return {
+        "success": True,
+        "board_id": header.id,
+        "board_name": header.board_name,
+        "all_board": _get_all_boards_with_orders(),
+    }, 200
+
+
+def update_board(board_id: int, data: dict) -> tuple[dict, int]:
+    """改大板名字/尺寸。"""
+    header = FahuiBoardHeader.query.get(board_id)
+    if not header:
+        return {"error": f"board_id={board_id} 不存在"}, 404
+    if "board_name" in data:
+        name = (data.get("board_name") or "").strip()
+        if name:
+            header.board_name = name
+    if data.get("board_width") is not None:
+        header.board_width = _coerce_int(data.get("board_width"))
+    if data.get("board_height") is not None:
+        header.board_height = _coerce_int(data.get("board_height"))
+    db.session.commit()
+    return {"success": True, "all_board": _get_all_boards_with_orders()}, 200
+
+
+def delete_board_header(board_id: int) -> tuple[dict, int]:
+    """删除整块大板（连同板上所有位置 board_data；print_pdf 本身保留，只是解除贴板）。"""
+    header = FahuiBoardHeader.query.get(board_id)
+    if not header:
+        return {"error": f"board_id={board_id} 不存在"}, 404
+    db.session.delete(header)  # FK ondelete=CASCADE + passive_deletes 自动清 board_data
+    db.session.commit()
+    return {
+        "success": True,
+        "message": f"board {board_id} 已删除",
+        "all_board": _get_all_boards_with_orders(),
+    }, 200
+
+
 def reorder_board_entry(data: dict) -> tuple[dict, int]:
     board_id = _coerce_int(data.get("board_id"))
     pdf_id = _coerce_int(data.get("pdf_id"))

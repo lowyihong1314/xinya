@@ -67,6 +67,17 @@ def serialize_print_pdf(pdf: FahuiPrintPdf, include_pages: bool = True) -> dict:
         "created_at": format_datetime(pdf.created_at),
         "width": pdf.width,
         "height": pdf.height,
+        # 这张打印页（单号=id）目前贴在哪块板的哪个位置——扫条码/输单号查板用。
+        "boards": [
+            {
+                "board_id": entry.board.id,
+                "board_name": entry.board.board_name,
+                "location": entry.location,
+                "board_data_id": entry.id,
+            }
+            for entry in (pdf.board_entries or [])
+            if entry.board
+        ],
     }
     if include_pages:
         data["page_data"] = [serialize_pdf_page(page) for page in (pdf.pages or [])]
