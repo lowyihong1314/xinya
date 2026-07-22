@@ -1,36 +1,25 @@
 # CCTV Module
 
-Shared CCTV functionality lives here.
+Single-camera (`cam1`) live view + PTZ + playback for the CRM. Access is gated by the `cctv` permission.
 
 ## Files
 
-- `CCTVPage.tsx`: CRM CCTV workspace page.
-- `showCCTVModal.tsx`: shared React-hosted CCTV player modal launcher.
+- `CCTVPage.tsx`: the whole page — tabs 直播 (live) / 回放 (playback), PTZ d-pad/zoom, permission gate.
+- `vendor/video-rtc.js`: vendored go2rtc `VideoRTC` web component (upstream, plain JS).
+- `vendor/videoRtcElement.ts`: registers it as `<video-rtc-cctv>` + JSX types.
 
-## What it does
+## Streaming architecture (infra lives on the prod box, not in git)
 
-- exposes a simple CRM entry page with a default HLS stream
-- opens a modal player backed by `hls.js`
-- sends PTZ move and stop commands directly from modal controls
+- **Live** = go2rtc restreamer → **MSE over WebSocket**, ~1s latency. Frontend forces `mode="mse"` and connects to `wss://<host>/cctv_go2rtc/api/ws?src=cam1` (nginx proxies to `127.0.0.1:1984`, service `go2rtc.service`, config `/etc/go2rtc.yaml`).
+- **Playback** = saved mp4 segments. `GET /api/move_camera/recordings` lists completed clips; nginx serves `/cctv_rec/cam1/` (range-enabled). Recording by ffmpeg `cctv-cam1.service` → `/srv/cctv/rec/cam1/`, pruned to 16GB by `cctv-cleanup.timer`.
+- **PTZ** = ONVIF. `POST /api/move_camera/ptz/move` `{x,y,z}` and `/ptz/stop`.
 
-## Backend and stream integrations
+## Permission gate
 
-- default HLS source: `/cctv_rdsp_converd/cam1/live.m3u8`
-- PTZ move: `/api/move_camera/ptz/move`
-- PTZ stop: `/api/move_camera/ptz/stop`
+- Frontend: `hasUserPermission(user, "cctv")` → otherwise 权限不足.
+- API: `@permission_required("cctv")`.
+- Video streams (go2rtc WS + rec mp4): nginx `auth_request /cctv_authz` → `/api/move_camera/authz` (session cookie).
 
-## Usage
+## Notes
 
-- CRM should use `CCTVPage` directly from React routing/modules.
-- Other pages should import `showCCTVModal()` from this directory instead of keeping private copies.
-
-## Upgrade notes
-
-- `showCCTVModal()` mounts directly to `document.body`, so cleanup must stay reliable.
-- If more cameras are introduced, the page likely needs a stream selector instead of the current single hardcoded URL.
-
-## React Router Migration Track
-
-- Follow the phased migration plan in `frontend/Agent_todo.md`; that file is the source of truth for the full React + React Router upgrade and legacy-removal sequence.
-- End-state for this directory is React components, route params or nested routes, shared hooks/context, and React portals instead of query-string routers, `window` bridges, `window.app`, or DOM-built overlays.
-- Do not add new legacy mounts, `createRoot(document.body)` helpers, or new UI imports from `static/js/*`; when this area is touched, migrate existing legacy control flow out instead of extending it.
+- Single hardcoded camera (`cam1`). More cameras would need a stream selector + per-stream go2rtc config.
