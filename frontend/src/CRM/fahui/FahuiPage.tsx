@@ -1302,11 +1302,16 @@ export function FahuiPage() {
 
   useEffect(() => stopPaiweiPoll, []);
 
-  async function downloadPaiweiJobResult(jobId: string) {
+  async function downloadPaiweiJobResult(jobId: string, template: string) {
     try {
       const blob = await downloadYlpPaiweiJob(jobId);
       const url = URL.createObjectURL(blob);
-      window.open(url, "_blank", "noopener,noreferrer");
+      const anchor = document.createElement("a");
+      anchor.href = url;
+      anchor.download = `牌位_${template}_${jobId.slice(0, 8)}.pdf`;
+      document.body.appendChild(anchor);
+      anchor.click();
+      anchor.remove();
       window.setTimeout(() => URL.revokeObjectURL(url), 60000);
     } catch (downloadError) {
       show_alert("error", downloadError instanceof Error ? downloadError.message : "下载失败");
@@ -1346,7 +1351,7 @@ export function FahuiPage() {
           const percent = Number(data.progress || 0);
           if (jobStatus === "done") {
             setPaiweiJob({ percent: 100, status: "done" });
-            void downloadPaiweiJobResult(jobId);
+            void downloadPaiweiJobResult(jobId, template);
             return;
           }
           if (jobStatus === "error") {
@@ -2032,7 +2037,7 @@ export function FahuiPage() {
           <div style={styles.jobCard}>
             <p style={styles.jobTitle}>
               {paiweiJob.status === "done"
-                ? "生成完成，正在打开…"
+                ? "生成完成，开始下载…"
                 : paiweiJob.status === "error"
                   ? "生成失败"
                   : "正在生成牌位…"}
@@ -2050,7 +2055,7 @@ export function FahuiPage() {
                   <div style={{ ...styles.jobBarFill, width: `${paiweiJob.percent}%` }} />
                 </div>
                 <p style={styles.jobPercent}>{paiweiJob.percent}%</p>
-                <p style={styles.jobHint}>请勿关闭页面，完成后会自动打开 PDF。</p>
+                <p style={styles.jobHint}>请勿关闭页面，完成后会自动下载 PDF。</p>
               </>
             )}
           </div>

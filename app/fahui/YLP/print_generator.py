@@ -278,6 +278,29 @@ def generate_paiwei_using_order_ids(order_ids, need_barcode=False):
     )
 
 
+def _compress_pdf(pdf_bytes: bytes) -> bytes:
+    """用 PyMuPDF 的 garbage=4 去重相同对象（重复的牌位底图）+ deflate 压缩。
+
+    底图 PDF 在逐页 merge 时被重复嵌入，去重后体积通常可缩小数倍。
+    PyMuPDF 不可用或压缩失败时原样返回。
+    """
+    if not pdf_bytes:
+        return pdf_bytes
+    try:
+        import fitz  # PyMuPDF
+    except Exception:  # noqa: BLE001
+        return pdf_bytes
+    try:
+        doc = fitz.open(stream=pdf_bytes, filetype="pdf")
+        buffer = io.BytesIO()
+        doc.save(buffer, garbage=4, deflate=True, deflate_images=True, deflate_fonts=True, clean=True)
+        doc.close()
+        compressed = buffer.getvalue()
+        return compressed if compressed and len(compressed) < len(pdf_bytes) else pdf_bytes
+    except Exception:  # noqa: BLE001
+        return pdf_bytes
+
+
 def group_source_items(order_ids, source_name):
     """挑出属于某牌位模板的 items，按 code 分组。返回 (grouped_dict, total_item_count)。"""
     source_name = str(source_name or "").strip()
@@ -334,8 +357,7 @@ def generate_paiwei_pdf_by_source(order_ids, source_name, need_barcode=False, pr
     output = io.BytesIO()
     merger.write(output)
     merger.close()
-    output.seek(0)
-    return output
+    return io.BytesIO(_compress_pdf(output.getvalue()))
 
 
 def generate_paiwei(paiwei_type, fahui_data, point_data, source_name, need_barcode=False, progress_cb=None):
