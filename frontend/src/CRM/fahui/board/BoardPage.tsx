@@ -1,5 +1,6 @@
-import { useEffect, useMemo, useState, type CSSProperties } from "react";
+import { useEffect, useMemo, useState, type CSSProperties, type DragEvent } from "react";
 
+import { API_BASE } from "../../../js/apiBase";
 import { useUserState } from "../../../app/UserState";
 import { getUserPermissionNames } from "../../../app/permissions";
 import { showConfirmDialog } from "../../../js/dialogs";
@@ -39,6 +40,8 @@ export function BoardPage() {
   const [newName, setNewName] = useState("");
   const [newRow, setNewRow] = useState("10"); // 每行张数
   const [newForm, setNewForm] = useState(false);
+
+  const [dragging, setDragging] = useState<{ boardId: number; pdfId: number } | null>(null);
 
   const [keyword, setKeyword] = useState("");
   const [searchResults, setSearchResults] = useState<BoardSearchOrder[] | null>(null);
@@ -117,9 +120,23 @@ export function BoardPage() {
     await run(() => attachPdfToBoard({ board_id: board.board_id, pdf_id: pdfId }), `已贴到「${board.board_name}」`);
   }
 
-  async function handleReorder(board: Board, pdfId: number | null | undefined, location: number) {
-    if (!pdfId) return;
-    await run(() => reorderBoardEntry({ board_id: board.board_id, pdf_id: pdfId, location }));
+  function previewUrl(pdfId: number): string {
+    const path = `/api/print_paiwei/print-pdfs/${pdfId}/preview-image`;
+    return API_BASE ? `${API_BASE}${path}` : path;
+  }
+
+  function onSlotDragStart(board: Board, pdfId: number | null | undefined) {
+    if (!canEdit || !pdfId) return;
+    setDragging({ boardId: board.board_id, pdfId });
+  }
+
+  async function onSlotDrop(board: Board, targetLocation: number | null) {
+    const src = dragging;
+    setDragging(null);
+    if (!src || src.boardId !== board.board_id || !targetLocation) return;
+    const from = board.board_data.find((s) => s.print_pdf_id === src.pdfId);
+    if (!from || from.location === targetLocation) return;
+    await run(() => reorderBoardEntry({ board_id: board.board_id, pdf_id: src.pdfId, location: targetLocation }));
   }
 
   async function handleRemoveSlot(sideId: number) {
@@ -249,42 +266,46 @@ export function BoardPage() {
               }
             >
               {board.board_data.length ? (
-                board.board_data.map((slot) => (
-                  <div key={slot.side_id} style={styles.slot}>
-                    <span style={styles.slotNo}>{slot.location ?? "-"}</span>
-                    <div style={styles.slotBody}>
-                      {slot.orders.length ? (
-                        slot.orders.map((o) => (
-                          <span key={o.order_item_id ?? o.order_id} style={styles.slotOrder}>
-                            {o.customer_name || `订单 #${o.order_id}`}
-                            {o.owner_or_deceased ? ` · ${o.owner_or_deceased}` : ""}
-                          </span>
-                        ))
+                board.board_data.map((slot) => {
+                  const caption = slot.orders.length
+                    ? slot.orders
+                        .map((o) => (o.customer_name || `#${o.order_id}`) + (o.owner_or_deceased ? ` · ${o.owner_or_deceased}` : ""))
+                        .join("；")
+                    : "空位";
+                  const isDragged = dragging?.pdfId === slot.print_pdf_id && dragging?.boardId === board.board_id;
+                  return (
+                    <div
+                      key={slot.side_id}
+                      style={{ ...styles.slot, ...(isDragged ? styles.slotDragging : {}) }}
+                      draggable={canEdit && !!slot.print_pdf_id}
+                      onDragStart={() => onSlotDragStart(board, slot.print_pdf_id)}
+                      onDragEnd={() => setDragging(null)}
+                      onDragOver={(e: DragEvent) => {
+                        if (dragging && dragging.boardId === board.board_id) e.preventDefault();
+                      }}
+                      onDrop={() => void onSlotDrop(board, slot.location)}
+                      title={caption}
+                    >
+                      <span style={styles.slotNo}>{slot.location ?? "-"}</span>
+                      {canEdit ? (
+                        <button
+                          type="button"
+                          style={styles.slotRemove}
+                          onClick={() => void handleRemoveSlot(slot.side_id)}
+                          aria-label="移除"
+                        >
+                          ✕
+                        </button>
+                      ) : null}
+                      {slot.print_pdf_id ? (
+                        <img src={previewUrl(slot.print_pdf_id)} alt={`单号 ${slot.print_pdf_id}`} style={styles.slotImg} loading="lazy" draggable={false} />
                       ) : (
-                        <span style={styles.muted}>空位</span>
+                        <div style={styles.slotEmpty}>空位</div>
                       )}
-                      <span style={styles.slotPdf}>单号 #{slot.print_pdf_id ?? "-"}</span>
+                      <span style={styles.slotCap}>{caption}</span>
                     </div>
-                    {canEdit ? (
-                      <div style={styles.slotActions}>
-                        <input
-                          style={styles.locInput}
-                          type="number"
-                          min={1}
-                          defaultValue={slot.location ?? undefined}
-                          title="移动到第几位"
-                          onKeyDown={(e) => {
-                            if (e.key === "Enter") {
-                              const v = Number((e.target as HTMLInputElement).value);
-                              if (Number.isFinite(v) && v > 0) void handleReorder(board, slot.print_pdf_id, v);
-                            }
-                          }}
-                        />
-                        <button type="button" style={styles.tinyDanger} onClick={() => void handleRemoveSlot(slot.side_id)}>移除</button>
-                      </div>
-                    ) : null}
-                  </div>
-                ))
+                  );
+                })
               ) : (
                 <p style={styles.muted}>这块板还没有贴牌位。</p>
               )}
@@ -346,12 +367,12 @@ const styles: Record<string, CSSProperties> = {
   tinyBtn: { padding: "4px 9px", fontSize: "12px", fontWeight: 600, borderRadius: "6px", border: "1px solid var(--x-color-line)", background: "var(--x-color-panel)", color: "var(--x-color-ink)", cursor: "pointer" },
   tinyDanger: { padding: "4px 9px", fontSize: "12px", fontWeight: 600, borderRadius: "6px", border: "1px solid var(--x-color-danger-border)", background: "var(--x-color-danger-soft)", color: "var(--x-color-danger)", cursor: "pointer" },
   slotList: { display: "flex", flexDirection: "column", gap: "6px" },
-  slot: { display: "flex", flexDirection: "column", gap: "4px", padding: "8px", borderRadius: "8px", background: "var(--x-color-panel-alt)", border: "1px solid var(--x-color-line-soft)", minWidth: 0 },
-  slotNo: { width: 24, height: 24, flexShrink: 0, borderRadius: "50%", display: "flex", alignItems: "center", justifyContent: "center", fontSize: "12px", fontWeight: 800, background: "var(--x-color-accent)", color: "#fff" },
-  slotBody: { display: "flex", flexDirection: "column", gap: "1px", minWidth: 0 },
-  slotOrder: { fontSize: "12px", fontWeight: 600, color: "var(--x-color-ink)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" },
-  slotPdf: { fontSize: "10.5px", color: "var(--x-color-ink-muted)", fontFamily: "var(--x-font-mono)" },
-  slotActions: { display: "flex", alignItems: "center", gap: "6px" },
-  locInput: { width: 48, boxSizing: "border-box", padding: "5px 6px", fontSize: "12px", borderRadius: "6px", border: "1px solid var(--x-color-line)", textAlign: "center" },
+  slot: { position: "relative", display: "flex", flexDirection: "column", gap: "4px", padding: "6px", borderRadius: "8px", background: "var(--x-color-panel-alt)", border: "1px solid var(--x-color-line-soft)", minWidth: 0, cursor: "grab" },
+  slotDragging: { opacity: 0.4 },
+  slotNo: { position: "absolute", top: "5px", left: "5px", zIndex: 2, minWidth: 18, height: 18, padding: "0 5px", borderRadius: "999px", display: "flex", alignItems: "center", justifyContent: "center", fontSize: "11px", fontWeight: 800, background: "rgba(15,118,110,0.92)", color: "#fff" },
+  slotRemove: { position: "absolute", top: "5px", right: "5px", zIndex: 2, width: 18, height: 18, borderRadius: "50%", border: "none", background: "rgba(194,65,12,0.92)", color: "#fff", cursor: "pointer", fontSize: "11px", lineHeight: 1, display: "flex", alignItems: "center", justifyContent: "center" },
+  slotImg: { width: "100%", height: "auto", display: "block", borderRadius: "4px", background: "#fff", aspectRatio: "3 / 4", objectFit: "contain" },
+  slotEmpty: { width: "100%", aspectRatio: "3 / 4", display: "flex", alignItems: "center", justifyContent: "center", borderRadius: "4px", background: "var(--x-color-panel)", color: "var(--x-color-ink-muted)", fontSize: "12px", border: "1px dashed var(--x-color-line)" },
+  slotCap: { fontSize: "10.5px", color: "var(--x-color-ink-muted)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" },
   attachRow: { display: "flex", gap: "8px" },
 };

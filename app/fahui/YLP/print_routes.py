@@ -158,20 +158,22 @@ def preview_print_pdf_image_route(print_pdf_id):
         return jsonify({"status": "error", "message": "生成 PDF 失败"}), 500
 
     cache_dir = preferred_dir("paiwei_result", "paiweicache")
-    cache_file = cache_dir / f"{print_pdf_id}.jpeg"
+    cache_file = cache_dir / f"{print_pdf_id}.png"
 
     if not cache_file.exists():
         try:
-            from pdf2image import convert_from_bytes
+            import fitz  # PyMuPDF：渲染 PDF 首页为图片，无需 poppler
 
-            images = convert_from_bytes(buffer.getvalue(), first_page=1, last_page=1, fmt="jpeg")
-            if not images:
-                return jsonify({"status": "error", "message": "PDF 转换失败"}), 500
-            images[0].save(cache_file, "JPEG")
+            doc = fitz.open(stream=buffer.getvalue(), filetype="pdf")
+            if doc.page_count == 0:
+                return jsonify({"status": "error", "message": "PDF 无内容"}), 500
+            pix = doc.load_page(0).get_pixmap(dpi=110)
+            pix.save(str(cache_file))
+            doc.close()
         except Exception as exc:
             return jsonify({"status": "error", "message": str(exc)}), 500
 
-    return send_file(cache_file, mimetype="image/jpeg")
+    return send_file(cache_file, mimetype="image/png")
 
 
 @print_paiwei_bp.route("/preview/test", methods=["POST"])
