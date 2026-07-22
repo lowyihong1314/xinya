@@ -3,6 +3,8 @@ import Hls from "hls.js";
 
 import { apiFetch } from "../../js/apiFetch";
 import { useEnsureDesignTokens } from "../../theme/designTokens";
+import { useUserState } from "../../app/UserState";
+import { hasUserPermission } from "../../app/permissions";
 
 const HLS_URL = "/cctv_rdsp_converd/cam1/live.m3u8";
 
@@ -29,7 +31,25 @@ function ptzStop() {
 
 export function CCTVPage() {
   useEnsureDesignTokens();
+  const { user } = useUserState();
   const [mode, setMode] = useState<Mode>("live");
+
+  if (!hasUserPermission(user, "cctv")) {
+    return (
+      <section style={styles.page}>
+        <header style={styles.head}>
+          <div>
+            <p style={styles.eyebrow}>CCTV</p>
+            <h2 style={styles.title}>监控</h2>
+          </div>
+        </header>
+        <div style={styles.denied}>
+          <p style={styles.deniedTitle}>权限不足</p>
+          <p style={styles.deniedText}>你没有「监控 CCTV」权限，无法查看此页面。请联系管理员开通。</p>
+        </div>
+      </section>
+    );
+  }
 
   return (
     <section style={styles.page}>
@@ -272,4 +292,7 @@ const styles: Record<string, CSSProperties> = {
   recItemOn: { background: "var(--x-color-accent-soft)", border: "1px solid var(--x-color-accent)" },
   recTime: { fontWeight: 600 },
   recSize: { fontSize: "12px", color: "var(--x-color-ink-muted)" },
+  denied: { display: "flex", flexDirection: "column", gap: "8px", alignItems: "center", justifyContent: "center", textAlign: "center", padding: "48px 24px", borderRadius: "var(--x-radius-md)", background: "var(--x-color-panel)", border: "1px solid var(--x-color-line-soft)" },
+  deniedTitle: { margin: 0, fontSize: "18px", fontWeight: 800, color: "var(--x-color-danger)" },
+  deniedText: { margin: 0, fontSize: "14px", color: "var(--x-color-ink-muted)", maxWidth: 420 },
 };

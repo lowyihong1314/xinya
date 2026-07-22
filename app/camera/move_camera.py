@@ -67,6 +67,22 @@ def ping():
     return "pong"
 
 
+@move_camera_bp.get("/authz")
+def api_authz():
+    """供 nginx auth_request 使用：有 cctv 权限返回 204，否则 401/403。"""
+    from app.auth import get_current_user_permissions
+
+    if not current_user.is_authenticated:
+        return "", 401
+    try:
+        perms = get_current_user_permissions(current_user)
+    except Exception:
+        return "", 403
+    if "cctv" not in perms:
+        return "", 403
+    return "", 204
+
+
 import os
 
 REC_DIR = "/srv/cctv/rec/cam1"
@@ -74,6 +90,7 @@ REC_PUBLIC_BASE = "/cctv_rec/cam1"
 
 
 @move_camera_bp.get("/recordings")
+@permission_required("cctv")
 def api_recordings():
     """回放：列出已保存、可播放的录像片段（排除正在写入的最新一段）。"""
     try:
@@ -110,6 +127,7 @@ def api_recordings():
         return jsonify(ok=False, error=str(exc)), 500
 
 @move_camera_bp.post("/ptz/move")
+@permission_required("cctv")
 def api_ptz_move():
     try:
         data = request.json or {}
@@ -125,6 +143,7 @@ def api_ptz_move():
 
 
 @move_camera_bp.post("/ptz/stop")
+@permission_required("cctv")
 def api_ptz_stop():
     try:
         ptz_stop()
