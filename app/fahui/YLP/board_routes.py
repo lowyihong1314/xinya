@@ -65,7 +65,7 @@ def delete_board_entry_route(board_data_id):
 @board_router_bp.route("/list_all", methods=["GET"])
 @login_required
 def list_boards_route():
-    return jsonify(list_all_boards())
+    return jsonify(list_all_boards(request.args.get("version", type=str) or None))
 
 
 @board_router_bp.route("/boards", methods=["POST"])

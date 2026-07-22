@@ -6,6 +6,7 @@ import { getUserPermissionNames } from "../../../app/permissions";
 import { showConfirmDialog } from "../../../js/dialogs";
 import { show_alert } from "../../../js/show_alert";
 import { useEnsureDesignTokens } from "../../../theme/designTokens";
+import { fetchYlpVersions } from "../api";
 import {
   attachPdfToBoard,
   createBoard,
@@ -32,6 +33,10 @@ export function BoardPage() {
   const { user } = useUserState();
   const canEdit = useMemo(() => getUserPermissionNames(user).has("account_edit"), [user]);
 
+  const CURRENT_VERSION = `${new Date().getFullYear()}_YLP`;
+  const [versions, setVersions] = useState<string[]>([]);
+  const [version, setVersion] = useState<string>(CURRENT_VERSION);
+
   const [boards, setBoards] = useState<Board[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
@@ -52,7 +57,7 @@ export function BoardPage() {
     setLoading(true);
     setError("");
     try {
-      const res = await listBoards();
+      const res = await listBoards(version);
       setBoards(res.all_board || []);
     } catch (e) {
       setError(e instanceof Error ? e.message : "加载失败");
@@ -61,20 +66,30 @@ export function BoardPage() {
     }
   }
 
+  // 版本列表（含当前年份，即使还没订单也可选）
   useEffect(() => {
-    void reload();
+    fetchYlpVersions()
+      .then((res) => {
+        const list = (res.data || []).filter(Boolean).filter((v) => v !== "DELETE");
+        const merged = Array.from(new Set([CURRENT_VERSION, ...list]));
+        setVersions(merged);
+      })
+      .catch(() => setVersions([CURRENT_VERSION]));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  function applyResult(all: Board[] | undefined) {
-    if (all) setBoards(all);
-  }
+  // 版本切换即重载
+  useEffect(() => {
+    void reload();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [version]);
 
-  async function run(action: () => Promise<{ all_board?: Board[] } | void>, okMsg?: string) {
+  async function run(action: () => Promise<unknown>, okMsg?: string) {
     setBusy(true);
     setError("");
     try {
-      const res = (await action()) as { all_board?: Board[] } | undefined;
-      applyResult(res?.all_board);
+      await action();
+      await reload(); // 返回的 all_board 未按版本过滤，统一按当前版本重载
       if (okMsg) show_alert("success", okMsg);
     } catch (e) {
       show_alert("error", e instanceof Error ? e.message : "操作失败");
@@ -87,7 +102,7 @@ export function BoardPage() {
     const name = newName.trim();
     if (!name) return;
     const perRow = Number(String(newRow).replace(/\D/g, "")) || null;
-    await run(() => createBoard({ board_name: name, board_width: perRow }), "已新建看板");
+    await run(() => createBoard({ board_name: name, board_width: perRow, version }), "已新建看板");
     setNewName("");
     setNewForm(false);
   }
@@ -178,6 +193,13 @@ export function BoardPage() {
           <h2 style={styles.title}>看板 · 牌位位置维护</h2>
         </div>
         <div style={styles.headActions}>
+          <select style={styles.versionSelect} value={version} onChange={(e) => setVersion(e.target.value)} title="版本（年份）">
+            {versions.map((v) => (
+              <option key={v} value={v}>
+                {v.replace("_YLP", "")} 年
+              </option>
+            ))}
+          </select>
           <button type="button" style={styles.ghost} onClick={() => void reload()} disabled={busy}>刷新</button>
           {canEdit ? (
             <button type="button" style={styles.primary} onClick={() => setNewForm((v) => !v)}>+ 新建看板</button>
@@ -340,7 +362,8 @@ const styles: Record<string, CSSProperties> = {
   head: { display: "flex", alignItems: "center", justifyContent: "space-between", gap: "12px", flexWrap: "wrap" },
   eyebrow: { margin: 0, fontSize: "12px", fontWeight: 700, letterSpacing: "1px", color: "var(--x-color-accent)" },
   title: { margin: "3px 0 0", fontSize: "20px", fontWeight: 800 },
-  headActions: { display: "flex", gap: "8px" },
+  headActions: { display: "flex", gap: "8px", alignItems: "center", flexWrap: "wrap" as const },
+  versionSelect: { padding: "8px 12px", borderRadius: "8px", border: "1px solid var(--x-color-line)", background: "var(--x-color-panel)", color: "var(--x-color-ink)", fontWeight: 700, fontSize: "13px", cursor: "pointer" },
   primary: { padding: "8px 14px", borderRadius: "8px", border: "none", background: "var(--x-color-accent)", color: "#fff", fontWeight: 700, fontSize: "13px", cursor: "pointer", whiteSpace: "nowrap" },
   ghost: { padding: "8px 14px", borderRadius: "8px", border: "1px solid var(--x-color-line)", background: "var(--x-color-panel)", color: "var(--x-color-ink)", fontWeight: 600, fontSize: "13px", cursor: "pointer" },
   errorBox: { padding: "10px 14px", borderRadius: "8px", background: "var(--x-color-danger-soft)", color: "var(--x-color-danger)", fontSize: "13px" },

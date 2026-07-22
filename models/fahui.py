@@ -253,6 +253,7 @@ class FahuiBoardHeader(db.Model):
     board_name = db.Column(db.String(255), nullable=False)
     board_width = db.Column(db.Integer, nullable=True)
     board_height = db.Column(db.Integer, nullable=True)
+    version = db.Column(db.String(50), nullable=True, index=True)
 
     board_entries = db.relationship(
         "FahuiBoardData",

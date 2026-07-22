@@ -59,8 +59,8 @@ def _board_owner_or_deceased(item: FahuiOrderItem) -> str | None:
     return deceased_value
 
 
-def _get_all_boards_with_orders() -> list[dict]:
-    headers = (
+def _get_all_boards_with_orders(version: str | None = None) -> list[dict]:
+    query = (
         db.session.query(FahuiBoardHeader)
         .options(
             selectinload(FahuiBoardHeader.board_entries)
@@ -75,8 +75,10 @@ def _get_all_boards_with_orders() -> list[dict]:
             .selectinload(FahuiOrderItem.form_data),
         )
         .order_by(FahuiBoardHeader.id.asc())
-        .all()
     )
+    if version:
+        query = query.filter(FahuiBoardHeader.version == version)
+    headers = query.all()
 
     result = []
     for header in headers:
@@ -123,6 +125,7 @@ def _get_all_boards_with_orders() -> list[dict]:
                 "board_name": header.board_name,
                 "board_width": header.board_width,
                 "board_height": header.board_height,
+                "version": header.version,
                 "board_data": grouped,
             }
         )
@@ -172,17 +175,19 @@ def delete_board_entry(board_data_id: int) -> tuple[dict, int]:
     }, 200
 
 
-def list_all_boards() -> dict:
-    return {"all_board": _get_all_boards_with_orders()}
+def list_all_boards(version: str | None = None) -> dict:
+    return {"all_board": _get_all_boards_with_orders(version)}
 
 
 def create_board(data: dict) -> tuple[dict, int]:
-    """新建一块空的大板（board_header）。"""
+    """新建一块空的大板（board_header），归属某个版本（年份）。"""
     name = (data.get("board_name") or "").strip()
+    version = (data.get("version") or "").strip() or None
     header = FahuiBoardHeader(
         board_name=name or "未命名板",
         board_width=_coerce_int(data.get("board_width")),
         board_height=_coerce_int(data.get("board_height")),
+        version=version,
     )
     db.session.add(header)
     db.session.commit()
@@ -190,7 +195,7 @@ def create_board(data: dict) -> tuple[dict, int]:
         "success": True,
         "board_id": header.id,
         "board_name": header.board_name,
-        "all_board": _get_all_boards_with_orders(),
+        "all_board": _get_all_boards_with_orders(version),
     }, 200
 
 

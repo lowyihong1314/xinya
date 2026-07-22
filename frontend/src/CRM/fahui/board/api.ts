@@ -20,6 +20,7 @@ export type Board = {
   board_name: string;
   board_width?: number | null;
   board_height?: number | null;
+  version?: string | null;
   board_data: BoardSlot[];
 };
 
@@ -38,12 +39,13 @@ async function readJson<T>(response: Response): Promise<T> {
   return data as T;
 }
 
-export async function listBoards() {
-  const res = await apiFetch("/api/board_router/boards", { credentials: "include" });
+export async function listBoards(version?: string) {
+  const q = version ? `?version=${encodeURIComponent(version)}` : "";
+  const res = await apiFetch(`/api/board_router/boards${q}`, { credentials: "include" });
   return readJson<{ all_board: Board[] }>(res);
 }
 
-export async function createBoard(payload: { board_name: string; board_width?: number | null; board_height?: number | null }) {
+export async function createBoard(payload: { board_name: string; board_width?: number | null; board_height?: number | null; version?: string }) {
   const res = await apiFetch("/api/board_router/boards", {
     method: "POST",
     credentials: "include",
