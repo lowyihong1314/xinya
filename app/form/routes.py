@@ -84,6 +84,11 @@ def register_member(form_id):
     return services.register_member(form_id, request.get_json(silent=True) or {})
 
 
+@form_bp.route("/parental/complete/<int:form_id>", methods=["POST"])
+def complete_parental_consent(form_id):
+    return services.complete_parental_consent(form_id, request.get_json(silent=True) or {})
+
+
 @form_bp.route("/get_form/<int:form_id>", methods=["GET"])
 @permission_required_any(*FORM_READ_PERMISSION_NAMES)
 def get_form_detail(form_id):

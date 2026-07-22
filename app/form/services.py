@@ -1126,6 +1126,42 @@ def register_member(form_id, data):
         return jsonify({"status": "error", "message": str(exc)}), 500
 
 
+def complete_parental_consent(form_id, data):
+    """公开：为「已报名但家长同意书待完成」的登记补签同意书（按 NRIC 定位最新一版）。"""
+    form = RegisForm.query.get_or_404(form_id)
+
+    raw_nric = (data or {}).get("nric")
+    parental_payload = (data or {}).get("parental_payload")
+    if not isinstance(parental_payload, dict) or not parental_payload:
+        return jsonify({"status": "error", "message": "缺少家长同意书资料"}), 400
+
+    try:
+        normalized_nric = _normalize_member_nric(raw_nric)
+    except ValueError as exc:
+        return jsonify({"status": "error", "message": str(exc)}), 400
+
+    member = NRIC_Asset.query.filter_by(nric=normalized_nric).first()
+    if not member:
+        return jsonify({"status": "error", "message": "未找到报名记录"}), 404
+    if form not in (member.forms or []):
+        return jsonify({"status": "error", "message": "该 NRIC 未报名此活动"}), 400
+
+    latest = member.latest_data()
+    if not latest:
+        return jsonify({"status": "error", "message": "报名资料不存在"}), 400
+
+    try:
+        _upsert_parental_data(latest, parental_payload)
+        db.session.commit()
+        return jsonify({"status": "success", "message": "家长同意书已提交"})
+    except ValueError as exc:
+        db.session.rollback()
+        return jsonify({"status": "error", "message": str(exc)}), 400
+    except Exception as exc:
+        db.session.rollback()
+        return jsonify({"status": "error", "message": str(exc)}), 500
+
+
 def get_form_detail(form_id):
     form = RegisForm.query.get_or_404(form_id)
     return jsonify({"status": "success", "form": form.to_dict_event()})

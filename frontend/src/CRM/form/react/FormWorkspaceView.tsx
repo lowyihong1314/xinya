@@ -136,6 +136,16 @@ function memberPaymentMeta(member: FormMember) {
   return { label: "处理中", tone: "warning" as const };
 }
 
+// 家长同意书状态：需要（未成年 + 表单启用）而未完成 → 待完成；否则 不需要 / 已完成。
+function memberParentalMeta(member: FormMember, parentalEnabled: boolean) {
+  const age = calcAgeFromNric(member.nric);
+  const required = parentalEnabled && age != null && age < 19;
+  if (!required) return { label: "不需要", tone: "muted" as const };
+  return member.parental_data
+    ? { label: "已完成", tone: "success" as const }
+    : { label: "待完成", tone: "danger" as const };
+}
+
 function formatRegDatetime(value?: string | null) {
   if (!value) return "—";
   const date = new Date(value);
@@ -160,6 +170,11 @@ function getMemberSortValue(member: FormMember, key: string): number | string | 
     }
     case "pay":
       return memberPaymentMeta(member).label;
+    case "parental": {
+      if (member.parental_data) return 2;
+      const age = calcAgeFromNric(member.nric);
+      return age != null && age < 19 ? 1 : 0;
+    }
     case "registered_at":
       return member.registered_at || "";
     default:
@@ -479,6 +494,9 @@ function MembersTab({
                 <th style={sortableThStyle} onClick={() => setSort((s) => toggleSort(s, "nric"))}>NRIC{sortArrow(sort, "nric")}</th>
                 <th style={sortableThStyle} onClick={() => setSort((s) => toggleSort(s, "age"))}>年龄{sortArrow(sort, "age")}</th>
                 <th style={sortableThStyle} onClick={() => setSort((s) => toggleSort(s, "pay"))}>付款状态{sortArrow(sort, "pay")}</th>
+                {parentalFormEnabled ? (
+                  <th style={sortableThStyle} onClick={() => setSort((s) => toggleSort(s, "parental"))}>家长同意书{sortArrow(sort, "parental")}</th>
+                ) : null}
                 <th style={sortableThStyle} onClick={() => setSort((s) => toggleSort(s, "registered_at"))}>报名时间{sortArrow(sort, "registered_at")}</th>
                 <th style={{ width: isMobile ? 150 : 200 }}>操作</th>
               </tr>
@@ -486,6 +504,7 @@ function MembersTab({
             <tbody>
               {paged.pageRows.map((member) => {
                 const pay = memberPaymentMeta(member);
+                const parental = memberParentalMeta(member, parentalFormEnabled);
                 return (
                   <tr key={member.id} className="fw-row" onClick={() => onShowMemberDetail(member)}>
                     <td>
@@ -497,6 +516,9 @@ function MembersTab({
                     <td style={monoCellStyle}>{String(member.nric || "—")}</td>
                     <td style={monoCellStyle}>{calcAgeFromNric(member.nric) ?? "—"}</td>
                     <td><span style={chipStyle(pay.tone)}>{pay.label}</span></td>
+                    {parentalFormEnabled ? (
+                      <td><span style={chipStyle(parental.tone)}>{parental.label}</span></td>
+                    ) : null}
                     <td style={monoCellStyle}>{formatRegDatetime(member.registered_at)}</td>
                     <td onClick={(e) => e.stopPropagation()}>
                       <div style={actionsCellStyle}>

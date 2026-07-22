@@ -27,8 +27,8 @@
   </head>
 
   <body>
-    <!-- JS 接管渲染 -->
-    <div class="container"></div>
+    <!-- React 接管渲染 -->
+    <div id="root" data-form-id="{{ form.id }}" data-form-title="{{ form.title|e }}"></div>
     <script>
       window.form_data = {{ form | tojson }};
     </script>
