@@ -1,12 +1,24 @@
 import { useCallback, useEffect, useRef, useState, type CSSProperties } from "react";
-import Hls from "hls.js";
 
 import { apiFetch } from "../../js/apiFetch";
+import { API_BASE } from "../../js/apiBase";
 import { useEnsureDesignTokens } from "../../theme/designTokens";
 import { useUserState } from "../../app/UserState";
 import { hasUserPermission } from "../../app/permissions";
+import "./vendor/videoRtcElement";
 
-const HLS_URL = "/cctv_rdsp_converd/cam1/live.m3u8";
+// go2rtc low-latency stream (MSE over WebSocket, ~1s). Same-origin behind nginx auth.
+function buildStreamWsUrl(): string {
+  const base = API_BASE || window.location.origin;
+  return base.replace(/^http/, "ws") + "/cctv_go2rtc/api/ws?src=cam1";
+}
+
+type VideoRtcEl = HTMLElement & {
+  src: string;
+  mode: string;
+  background: boolean;
+  video?: HTMLVideoElement | null;
+};
 
 type Mode = "live" | "playback";
 
@@ -82,44 +94,54 @@ export function CCTVPage() {
 }
 
 function LiveView() {
-  const videoRef = useRef<HTMLVideoElement | null>(null);
+  const elRef = useRef<VideoRtcEl | null>(null);
   const [status, setStatus] = useState<"loading" | "live" | "error">("loading");
 
   useEffect(() => {
-    const video = videoRef.current;
-    if (!video) return;
-    let hls: Hls | null = null;
+    const el = elRef.current;
+    if (!el) return;
+    el.background = false;
+    el.mode = "mse"; // 强制 MSE：走 443 WebSocket，无需 UDP/ICE
+    el.src = buildStreamWsUrl();
 
-    if (Hls.isSupported()) {
-      hls = new Hls({ lowLatencyMode: true, liveSyncDuration: 4, manifestLoadingMaxRetry: 8 });
-      hls.loadSource(HLS_URL);
-      hls.attachMedia(video);
-      hls.on(Hls.Events.MANIFEST_PARSED, () => {
-        setStatus("live");
-        void video.play().catch(() => {});
-      });
-      hls.on(Hls.Events.ERROR, (_e, data) => {
-        if (data.fatal) setStatus("error");
-      });
-    } else if (video.canPlayType("application/vnd.apple.mpegurl")) {
-      video.src = HLS_URL;
-      video.addEventListener("loadedmetadata", () => setStatus("live"));
-      video.addEventListener("error", () => setStatus("error"));
-    } else {
-      setStatus("error");
-    }
+    let raf = 0;
+    let detach: (() => void) | null = null;
+    const attach = () => {
+      const v = el.video;
+      if (!v) {
+        raf = requestAnimationFrame(attach);
+        return;
+      }
+      const onPlaying = () => setStatus("live");
+      const onWaiting = () => setStatus((s) => (s === "live" ? s : "loading"));
+      const onError = () => setStatus("error");
+      v.addEventListener("playing", onPlaying);
+      v.addEventListener("waiting", onWaiting);
+      v.addEventListener("error", onError);
+      if (!v.paused && v.readyState >= 2) setStatus("live");
+      detach = () => {
+        v.removeEventListener("playing", onPlaying);
+        v.removeEventListener("waiting", onWaiting);
+        v.removeEventListener("error", onError);
+      };
+    };
+    attach();
 
     return () => {
-      hls?.destroy();
-      video.pause();
+      cancelAnimationFrame(raf);
+      detach?.();
+      try {
+        el.src = "";
+      } catch {
+        /* noop */
+      }
     };
   }, []);
 
   return (
     <>
       <div style={styles.playerWrap}>
-        {/* eslint-disable-next-line jsx-a11y/media-has-caption */}
-        <video ref={videoRef} style={styles.video} autoPlay muted playsInline controls />
+        <video-rtc-cctv ref={elRef} style={styles.video} />
         <span
           style={{
             ...styles.badge,
