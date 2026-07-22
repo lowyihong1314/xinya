@@ -1,6 +1,7 @@
 import { CCTVPage } from '../CCTV/CCTVPage';
 import { EventTablePage } from '../event/react/EventTablePage';
 import { FahuiPage } from '../fahui/FahuiPage';
+import { BoardPage } from '../fahui/board/BoardPage';
 import { FormWorkspacePage } from '../form/react/FormWorkspacePage';
 import { LongOpenRegistrationFormPage } from '../long_open_registration_form/react/LongOpenRegistrationFormPage';
 import { UserControlPage } from '../user_control/react/UserControlPage';
@@ -23,6 +24,7 @@ export type CRMModuleKey =
   | 'files'
   | 'songbook'
   | 'permanent_registration'
+  | 'ylp_board'
   | 'manual';
 
 export type CRMModuleSpec = {
@@ -54,6 +56,13 @@ export const CRM_MODULES: CRMModuleSpec[] = [
     icon: 'fas fa-praying-hands',
     description: 'YLP 盂兰盆法会与 LAMP 点灯法会管理。',
     Component: FahuiPage,
+  },
+  {
+    key: 'ylp_board',
+    title: '盂兰盆法会看板',
+    icon: 'fas fa-border-all',
+    description: '维护牌位贴在哪块大板的哪个位置，支持输单号查板。',
+    Component: BoardPage,
   },
   {
     key: 'finance',
