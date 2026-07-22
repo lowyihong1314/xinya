@@ -221,12 +221,49 @@ def delete_board_header(board_id: int) -> tuple[dict, int]:
     header = FahuiBoardHeader.query.get(board_id)
     if not header:
         return {"error": f"board_id={board_id} 不存在"}, 404
+    ver = header.version
     db.session.delete(header)  # FK ondelete=CASCADE + passive_deletes 自动清 board_data
     db.session.commit()
     return {
         "success": True,
         "message": f"board {board_id} 已删除",
-        "all_board": _get_all_boards_with_orders(),
+        "all_board": _get_all_boards_with_orders(ver),
+    }, 200
+
+
+def reset_year_barcodes(version: str | None) -> tuple[dict, int]:
+    """重置某年份的条码/二维码：删除该版本订单的所有 print_pdf（连带板上摆放）。
+    只允许重置「当前年份」，往年不可重置。"""
+    version = (version or "").strip()
+    if not version:
+        return {"error": "缺少 version"}, 400
+    current = active_order_version()
+    if version != current:
+        return {"error": f"只能重置当前年份（{current}）的条码，{version} 不可重置"}, 400
+
+    pdf_ids = [
+        pid
+        for (pid,) in (
+            db.session.query(FahuiPdfPageData.print_pdf_id)
+            .join(FahuiOrderItem, FahuiPdfPageData.order_item_id == FahuiOrderItem.id)
+            .join(FahuiOrder, FahuiOrderItem.order_id == FahuiOrder.id)
+            .filter(FahuiOrder.version == version)
+            .distinct()
+            .all()
+        )
+        if pid is not None
+    ]
+
+    removed = 0
+    if pdf_ids:
+        # 先删板上摆放（board_data），再删 print_pdf（DB 级联清 pdf_page_data）
+        FahuiBoardData.query.filter(FahuiBoardData.print_pdf_id.in_(pdf_ids)).delete(synchronize_session=False)
+        removed = FahuiPrintPdf.query.filter(FahuiPrintPdf.id.in_(pdf_ids)).delete(synchronize_session=False)
+    db.session.commit()
+    return {
+        "success": True,
+        "message": f"已重置 {version} 的条码（清除 {removed} 张）",
+        "all_board": _get_all_boards_with_orders(version),
     }, 200
 
 

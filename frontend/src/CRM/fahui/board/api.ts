@@ -70,6 +70,16 @@ export async function deleteBoard(boardId: number) {
   return readJson<{ success?: boolean; all_board: Board[] }>(res);
 }
 
+export async function resetYearBarcodes(version: string) {
+  const res = await apiFetch("/api/board_router/print-pdfs/reset", {
+    method: "POST",
+    credentials: "include",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ version }),
+  });
+  return readJson<{ success?: boolean; message?: string; all_board: Board[] }>(res);
+}
+
 export async function attachPdfToBoard(payload: { board_id: number; pdf_id: number }) {
   const res = await apiFetch("/api/board_router/boards/entries", {
     method: "POST",

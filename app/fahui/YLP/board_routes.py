@@ -26,6 +26,7 @@ from .board_services import (
     delete_board_header,
     delete_order_batch,
     delete_order_item,
+    reset_year_barcodes,
     update_board,
     get_board_order_detail,
     get_print_pdf_data,
@@ -86,6 +87,13 @@ def update_board_route(board_id):
 @permission_required_any("account_edit")
 def delete_board_header_route(board_id):
     payload, status_code = delete_board_header(board_id)
+    return jsonify(payload), status_code
+
+
+@board_router_bp.route("/print-pdfs/reset", methods=["POST"])
+@permission_required_any("account_edit")
+def reset_year_barcodes_route():
+    payload, status_code = reset_year_barcodes((request.get_json(silent=True) or {}).get("version"))
     return jsonify(payload), status_code
 
 

@@ -26,7 +26,6 @@ import {
   listYlpOrdersForExport,
   listYlpRelationOptions,
   previewYlpPaiwei,
-  printYlpPaiweiByTemplate,
   startYlpPaiweiJob,
   removePayment,
   revokePayment,
@@ -396,7 +395,6 @@ export function FahuiPage() {
   const [ylpSelected, setYlpSelected] = useState<number[]>([]);
   const [ylpSelectAllPages, setYlpSelectAllPages] = useState(false);
   const [ylpBulkBusy, setYlpBulkBusy] = useState(false);
-  const [printMenuOpen, setPrintMenuOpen] = useState(false);
   const [printPlusMenuOpen, setPrintPlusMenuOpen] = useState(false);
   const [paiweiJob, setPaiweiJob] = useState<{ percent: number; status: "running" | "done" | "error"; message?: string } | null>(null);
   const paiweiPollRef = useRef<number | null>(null);
@@ -1197,7 +1195,6 @@ export function FahuiPage() {
   useEffect(() => {
     setYlpSelected([]);
     setYlpSelectAllPages(false);
-    setPrintMenuOpen(false);
   }, [ylpVersion, ylpQuery]);
 
   function toggleYlpRow(id: number) {
@@ -1220,7 +1217,6 @@ export function FahuiPage() {
   function clearYlpSelection() {
     setYlpSelected([]);
     setYlpSelectAllPages(false);
-    setPrintMenuOpen(false);
   }
 
   async function resolveYlpSelectedIds(): Promise<number[]> {
@@ -1273,26 +1269,6 @@ export function FahuiPage() {
     }
   }
 
-  async function handleYlpPrint(template: string) {
-    setPrintMenuOpen(false);
-    setYlpBulkBusy(true);
-    try {
-      const ids = await resolveYlpSelectedIds();
-      if (!ids.length) {
-        show_alert("error", "请选择订单");
-        return;
-      }
-      const blob = await printYlpPaiweiByTemplate(ids, template);
-      const url = URL.createObjectURL(blob);
-      window.open(url, "_blank", "noopener,noreferrer");
-      window.setTimeout(() => URL.revokeObjectURL(url), 60000);
-    } catch (printError) {
-      show_alert("error", printError instanceof Error ? printError.message : "生成牌位失败");
-    } finally {
-      setYlpBulkBusy(false);
-    }
-  }
-
   function stopPaiweiPoll() {
     if (paiweiPollRef.current !== null) {
       window.clearTimeout(paiweiPollRef.current);
@@ -1333,10 +1309,16 @@ export function FahuiPage() {
       show_alert("error", "请选择订单");
       return;
     }
+    // 询问是否注册条码/二维码（贴板需要）
+    const needBarcode = await showConfirmDialog({
+      message: "打印时是否注册条码 / 二维码？注册后每张牌位会盖上单号，可在「看板」贴板追踪；不注册则只出图。",
+      confirmText: "注册条码",
+      cancelText: "不注册",
+    });
     stopPaiweiPoll();
     setPaiweiJob({ percent: 0, status: "running" });
     try {
-      const res = await startYlpPaiweiJob(ids, template);
+      const res = await startYlpPaiweiJob(ids, template, needBarcode);
       if (res.status !== "success" || !res.job_id) {
         setPaiweiJob({ percent: 0, status: "error", message: res.message || "启动任务失败" });
         return;
@@ -1545,29 +1527,6 @@ export function FahuiPage() {
               >
                 导出 xlsx
               </button>
-              <div style={styles.printMenuWrap}>
-                <button
-                  type="button"
-                  style={{ ...styles.bulkButton, ...(ylpBulkBusy ? styles.pageButtonDisabled : null) }}
-                  disabled={ylpBulkBusy}
-                  onClick={() => setPrintMenuOpen((open) => !open)}
-                >
-                  打印牌位 ▾
-                </button>
-                {printMenuOpen ? (
-                  <div style={styles.printMenu}>
-                    <button type="button" style={styles.printMenuItem} onClick={() => void handleYlpPrint("paiwei_1")}>
-                      大牌位
-                    </button>
-                    <button type="button" style={styles.printMenuItem} onClick={() => void handleYlpPrint("paiwei_5")}>
-                      小牌位
-                    </button>
-                    <button type="button" style={styles.printMenuItem} onClick={() => void handleYlpPrint("paiwei_10")}>
-                      冤亲债主
-                    </button>
-                  </div>
-                ) : null}
-              </div>
               <div style={styles.printMenuWrap}>
                 <button
                   type="button"

@@ -278,7 +278,7 @@ def start_paiwei_job_route():
     if not order_ids:
         return jsonify({"status": "error", "message": "请选择订单"}), 400
 
-    job_id = start_paiwei_job(order_ids, source_name)
+    job_id = start_paiwei_job(order_ids, source_name, need_barcode=bool(data.get("need_barcode")))
     return jsonify({"status": "success", "job_id": job_id, "room": f"paiwei_job:{job_id}"})
 
 

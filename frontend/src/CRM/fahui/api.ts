@@ -371,12 +371,12 @@ export async function printYlpPaiweiByTemplate(orderIds: number[], template: str
   return response.blob();
 }
 
-export async function startYlpPaiweiJob(orderIds: number[], template: string) {
+export async function startYlpPaiweiJob(orderIds: number[], template: string, needBarcode = false) {
   const response = await apiFetch("/api/print_paiwei/jobs/by-template", {
     method: "POST",
     credentials: "include",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ order_ids: orderIds, template }),
+    body: JSON.stringify({ order_ids: orderIds, template, need_barcode: needBarcode }),
   });
   return parseJson<{ status?: string; job_id?: string; room?: string; message?: string }>(response);
 }

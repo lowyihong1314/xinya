@@ -16,6 +16,7 @@ import {
   listBoards,
   quickSearchBoards,
   reorderBoardEntry,
+  resetYearBarcodes,
   updateBoard,
   type Board,
   type BoardSearchItem,
@@ -160,6 +161,18 @@ export function BoardPage() {
     await run(() => deleteBoardEntry(sideId));
   }
 
+  const isCurrentYear = version === CURRENT_VERSION;
+
+  async function handleResetYear() {
+    const ok = await showConfirmDialog({
+      message: `确认重置 ${version.replace("_YLP", "")} 年的所有条码/二维码？会清除该年已登记的牌位单号及其贴板位置（往年无法重置）。`,
+      tone: "danger",
+      confirmText: "重置",
+    });
+    if (!ok) return;
+    await run(() => resetYearBarcodes(version), "已重置本年条码");
+  }
+
   async function handleSearch() {
     const kw = keyword.trim();
     setSearchResults(null);
@@ -201,6 +214,11 @@ export function BoardPage() {
             ))}
           </select>
           <button type="button" style={styles.ghost} onClick={() => void reload()} disabled={busy}>刷新</button>
+          {canEdit && isCurrentYear ? (
+            <button type="button" style={styles.danger} onClick={() => void handleResetYear()} disabled={busy} title="只能重置当前年份">
+              重置本年条码
+            </button>
+          ) : null}
           {canEdit ? (
             <button type="button" style={styles.primary} onClick={() => setNewForm((v) => !v)}>+ 新建看板</button>
           ) : null}
@@ -366,6 +384,7 @@ const styles: Record<string, CSSProperties> = {
   versionSelect: { padding: "8px 12px", borderRadius: "8px", border: "1px solid var(--x-color-line)", background: "var(--x-color-panel)", color: "var(--x-color-ink)", fontWeight: 700, fontSize: "13px", cursor: "pointer" },
   primary: { padding: "8px 14px", borderRadius: "8px", border: "none", background: "var(--x-color-accent)", color: "#fff", fontWeight: 700, fontSize: "13px", cursor: "pointer", whiteSpace: "nowrap" },
   ghost: { padding: "8px 14px", borderRadius: "8px", border: "1px solid var(--x-color-line)", background: "var(--x-color-panel)", color: "var(--x-color-ink)", fontWeight: 600, fontSize: "13px", cursor: "pointer" },
+  danger: { padding: "8px 14px", borderRadius: "8px", border: "1px solid var(--x-color-danger-border)", background: "var(--x-color-danger-soft)", color: "var(--x-color-danger)", fontWeight: 700, fontSize: "13px", cursor: "pointer", whiteSpace: "nowrap" },
   errorBox: { padding: "10px 14px", borderRadius: "8px", background: "var(--x-color-danger-soft)", color: "var(--x-color-danger)", fontSize: "13px" },
   hintBox: { padding: "8px 12px", borderRadius: "8px", background: "var(--x-color-panel-alt)", color: "var(--x-color-ink-muted)", fontSize: "12px" },
   card: { background: "var(--x-color-panel)", borderRadius: "var(--x-radius-md)", border: "1px solid var(--x-color-line-soft)", padding: "14px", display: "flex", flexDirection: "column", gap: "10px" },

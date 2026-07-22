@@ -56,7 +56,7 @@ def get_job_state(job_id: str) -> dict:
     return redis_client.hgetall(_job_key(job_id)) or {}
 
 
-def start_paiwei_job(order_ids, source_name) -> str:
+def start_paiwei_job(order_ids, source_name, need_barcode=False) -> str:
     job_id = uuid.uuid4().hex
     _set_state(job_id, status="pending", progress=0, done=0, total=0, message="")
     app = current_app._get_current_object()
@@ -64,14 +64,14 @@ def start_paiwei_job(order_ids, source_name) -> str:
     # 会因 socketio.server 为 None 而报错。线程 + Redis 状态 + 磁盘落盘可跨 worker 读取。
     thread = threading.Thread(
         target=_run_job,
-        args=(app, job_id, list(order_ids or []), source_name),
+        args=(app, job_id, list(order_ids or []), source_name, bool(need_barcode)),
         daemon=True,
     )
     thread.start()
     return job_id
 
 
-def _run_job(app, job_id: str, order_ids, source_name):
+def _run_job(app, job_id: str, order_ids, source_name, need_barcode=False):
     with app.app_context():
         try:
             _, total = group_source_items(order_ids, source_name)
@@ -98,7 +98,9 @@ def _run_job(app, job_id: str, order_ids, source_name):
                     if getattr(socketio, "server", None) is not None:
                         socketio.sleep(0)  # 让出协程，保证进度事件及时下发
 
-            output = generate_paiwei_pdf_by_source(order_ids, source_name, progress_cb=progress_cb)
+            output = generate_paiwei_pdf_by_source(
+                order_ids, source_name, need_barcode=need_barcode, progress_cb=progress_cb
+            )
             if output is None:
                 _set_state(job_id, status="error", message="生成失败")
                 _emit("paiwei:error", {"job_id": job_id, "message": "生成失败"})
