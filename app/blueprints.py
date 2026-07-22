@@ -29,6 +29,7 @@ BLUEPRINT_SPECS = [
     ("app.changyou_room", "changyou_room_bp", "/changyou_room", "api"),
     ("app.permission_mgmt", "permission_bp", "/permission", "api"),
     ("app.fahui.lamp.routes", "lamp_registration_bp", "/lampRegistration_API", "api"),
+    ("app.camera", "move_camera_bp", "/move_camera", "api"),
 ]
 
 def _register_spec_blueprint(app, api_prefix, module_path, attr_name, suffix, scope):

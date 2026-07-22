@@ -1,10 +1,19 @@
-import { useEffect, useRef, useState, type CSSProperties } from "react";
+import { useCallback, useEffect, useRef, useState, type CSSProperties } from "react";
 import Hls from "hls.js";
 
 import { apiFetch } from "../../js/apiFetch";
 import { useEnsureDesignTokens } from "../../theme/designTokens";
 
 const HLS_URL = "/cctv_rdsp_converd/cam1/live.m3u8";
+
+type Mode = "live" | "playback";
+
+type Recording = {
+  name: string;
+  start: string | null;
+  size: number;
+  url: string;
+};
 
 function ptzMove(x: number, y: number, z = 0) {
   void apiFetch("/api/move_camera/ptz/move", {
@@ -20,6 +29,39 @@ function ptzStop() {
 
 export function CCTVPage() {
   useEnsureDesignTokens();
+  const [mode, setMode] = useState<Mode>("live");
+
+  return (
+    <section style={styles.page}>
+      <header style={styles.head}>
+        <div>
+          <p style={styles.eyebrow}>CCTV</p>
+          <h2 style={styles.title}>监控</h2>
+        </div>
+        <div style={styles.tabs}>
+          <button
+            type="button"
+            style={{ ...styles.tab, ...(mode === "live" ? styles.tabOn : {}) }}
+            onClick={() => setMode("live")}
+          >
+            直播
+          </button>
+          <button
+            type="button"
+            style={{ ...styles.tab, ...(mode === "playback" ? styles.tabOn : {}) }}
+            onClick={() => setMode("playback")}
+          >
+            回放
+          </button>
+        </div>
+      </header>
+
+      {mode === "live" ? <LiveView /> : <PlaybackView />}
+    </section>
+  );
+}
+
+function LiveView() {
   const videoRef = useRef<HTMLVideoElement | null>(null);
   const [status, setStatus] = useState<"loading" | "live" | "error">("loading");
 
@@ -54,12 +96,10 @@ export function CCTVPage() {
   }, []);
 
   return (
-    <section style={styles.page}>
-      <header style={styles.head}>
-        <div>
-          <p style={styles.eyebrow}>CCTV</p>
-          <h2 style={styles.title}>监控</h2>
-        </div>
+    <>
+      <div style={styles.playerWrap}>
+        {/* eslint-disable-next-line jsx-a11y/media-has-caption */}
+        <video ref={videoRef} style={styles.video} autoPlay muted playsInline controls />
         <span
           style={{
             ...styles.badge,
@@ -68,11 +108,6 @@ export function CCTVPage() {
         >
           {status === "live" ? "● 直播中" : status === "error" ? "连接失败" : "连接中…"}
         </span>
-      </header>
-
-      <div style={styles.playerWrap}>
-        {/* eslint-disable-next-line jsx-a11y/media-has-caption */}
-        <video ref={videoRef} style={styles.video} autoPlay muted playsInline controls />
         {status === "error" ? (
           <div style={styles.overlayMsg}>无法连接直播流，请稍后重试或检查转流服务。</div>
         ) : null}
@@ -98,8 +133,89 @@ export function CCTVPage() {
           </div>
         </div>
       </div>
-    </section>
+    </>
   );
+}
+
+function PlaybackView() {
+  const [items, setItems] = useState<Recording[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  const [current, setCurrent] = useState<Recording | null>(null);
+
+  const load = useCallback(async () => {
+    setLoading(true);
+    setError(null);
+    try {
+      const res = await apiFetch("/api/move_camera/recordings");
+      const data = await res.json();
+      if (!data.ok) throw new Error(data.error || "加载失败");
+      const list: Recording[] = data.items || [];
+      setItems(list);
+      setCurrent((prev) => prev ?? list[0] ?? null);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "加载失败");
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    void load();
+  }, [load]);
+
+  return (
+    <div style={styles.playbackWrap}>
+      <div style={styles.playbackMain}>
+        <div style={styles.playerWrap}>
+          {current ? (
+            // eslint-disable-next-line jsx-a11y/media-has-caption
+            <video key={current.name} src={current.url} style={styles.video} controls autoPlay playsInline />
+          ) : (
+            <div style={styles.overlayMsg}>{loading ? "加载录像…" : "暂无录像"}</div>
+          )}
+        </div>
+        {current ? <p style={styles.nowPlaying}>正在回放：{fmtLabel(current)}</p> : null}
+      </div>
+
+      <aside style={styles.recList}>
+        <div style={styles.recListHead}>
+          <span style={styles.controlsTitle}>录像片段</span>
+          <button type="button" style={styles.refreshBtn} onClick={() => void load()}>
+            刷新
+          </button>
+        </div>
+        {error ? <p style={styles.recError}>{error}</p> : null}
+        {!error && !loading && items.length === 0 ? <p style={styles.recEmpty}>暂无已保存的录像</p> : null}
+        <div style={styles.recScroll}>
+          {items.map((r) => (
+            <button
+              type="button"
+              key={r.name}
+              style={{ ...styles.recItem, ...(current?.name === r.name ? styles.recItemOn : {}) }}
+              onClick={() => setCurrent(r)}
+            >
+              <span style={styles.recTime}>{fmtLabel(r)}</span>
+              <span style={styles.recSize}>{fmtSize(r.size)}</span>
+            </button>
+          ))}
+        </div>
+      </aside>
+    </div>
+  );
+}
+
+function fmtLabel(r: Recording): string {
+  if (!r.start) return r.name;
+  const d = new Date(r.start);
+  if (Number.isNaN(d.getTime())) return r.name;
+  const p = (n: number) => String(n).padStart(2, "0");
+  return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())} ${p(d.getHours())}:${p(d.getMinutes())}`;
+}
+
+function fmtSize(bytes: number): string {
+  if (bytes >= 1024 * 1024 * 1024) return `${(bytes / 1024 / 1024 / 1024).toFixed(1)} GB`;
+  return `${Math.round(bytes / 1024 / 1024)} MB`;
 }
 
 function PtzButton({ label, onPress, wide }: { label: string; onPress: () => void; wide?: boolean }) {
@@ -123,14 +239,17 @@ function PtzButton({ label, onPress, wide }: { label: string; onPress: () => voi
 
 const styles: Record<string, CSSProperties> = {
   page: { display: "flex", flexDirection: "column", gap: "14px", fontFamily: "var(--x-font-sans)", color: "var(--x-color-ink)" },
-  head: { display: "flex", alignItems: "center", justifyContent: "space-between", gap: "12px" },
+  head: { display: "flex", alignItems: "center", justifyContent: "space-between", gap: "12px", flexWrap: "wrap" },
   eyebrow: { margin: 0, fontSize: "12px", letterSpacing: "1px", fontWeight: 700, color: "var(--x-color-accent)" },
   title: { margin: "3px 0 0", fontSize: "20px", fontWeight: 800 },
-  badge: { fontSize: "12px", fontWeight: 700, padding: "4px 12px", borderRadius: "999px" },
+  tabs: { display: "flex", gap: "6px", background: "var(--x-color-panel-alt)", padding: "4px", borderRadius: "999px" },
+  tab: { border: "none", background: "transparent", color: "var(--x-color-ink-muted)", fontSize: "14px", fontWeight: 700, padding: "6px 18px", borderRadius: "999px", cursor: "pointer" },
+  tabOn: { background: "var(--x-color-accent)", color: "#fff" },
+  badge: { position: "absolute", top: "10px", left: "10px", fontSize: "12px", fontWeight: 700, padding: "4px 12px", borderRadius: "999px" },
   badgeLive: { background: "var(--x-color-success-soft)", color: "var(--x-color-success)" },
   badgeErr: { background: "var(--x-color-danger-soft)", color: "var(--x-color-danger)" },
   badgeLoad: { background: "var(--x-color-panel-alt)", color: "var(--x-color-ink-muted)" },
-  playerWrap: { position: "relative", width: "100%", maxWidth: 960, aspectRatio: "16 / 9", background: "#000", borderRadius: "var(--x-radius-md)", overflow: "hidden", boxShadow: "0 16px 40px var(--x-color-shadow)" },
+  playerWrap: { position: "relative", width: "100%", aspectRatio: "16 / 9", background: "#000", borderRadius: "var(--x-radius-md)", overflow: "hidden", boxShadow: "0 16px 40px var(--x-color-shadow)" },
   video: { width: "100%", height: "100%", objectFit: "contain", background: "#000", display: "block" },
   overlayMsg: { position: "absolute", inset: 0, display: "flex", alignItems: "center", justifyContent: "center", color: "#fff", fontSize: "14px", textAlign: "center", padding: "16px" },
   controls: { display: "flex", flexDirection: "column", gap: "10px", padding: "16px", borderRadius: "var(--x-radius-md)", background: "var(--x-color-panel)", border: "1px solid var(--x-color-line-soft)", maxWidth: 960 },
@@ -140,4 +259,17 @@ const styles: Record<string, CSSProperties> = {
   zoomCol: { display: "flex", flexDirection: "column", gap: "6px" },
   ptzBtn: { display: "flex", alignItems: "center", justifyContent: "center", borderRadius: "10px", border: "1px solid var(--x-color-line)", background: "var(--x-color-panel-alt)", color: "var(--x-color-ink)", fontSize: "18px", fontWeight: 700, cursor: "pointer", userSelect: "none", WebkitUserSelect: "none" },
   ptzWide: { padding: "12px 18px", fontSize: "14px", whiteSpace: "nowrap" },
+  playbackWrap: { display: "flex", gap: "16px", alignItems: "flex-start", flexWrap: "wrap" },
+  playbackMain: { flex: "1 1 520px", minWidth: 0, display: "flex", flexDirection: "column", gap: "8px" },
+  nowPlaying: { margin: 0, fontSize: "13px", color: "var(--x-color-ink-muted)", fontWeight: 600 },
+  recList: { flex: "0 1 300px", minWidth: 240, display: "flex", flexDirection: "column", gap: "10px", padding: "14px", borderRadius: "var(--x-radius-md)", background: "var(--x-color-panel)", border: "1px solid var(--x-color-line-soft)", maxHeight: 520 },
+  recListHead: { display: "flex", alignItems: "center", justifyContent: "space-between" },
+  refreshBtn: { border: "1px solid var(--x-color-line)", background: "var(--x-color-panel-alt)", color: "var(--x-color-ink)", fontSize: "12px", fontWeight: 700, padding: "4px 12px", borderRadius: "8px", cursor: "pointer" },
+  recError: { margin: 0, fontSize: "13px", color: "var(--x-color-danger)" },
+  recEmpty: { margin: 0, fontSize: "13px", color: "var(--x-color-ink-muted)" },
+  recScroll: { display: "flex", flexDirection: "column", gap: "4px", overflowY: "auto" },
+  recItem: { display: "flex", alignItems: "center", justifyContent: "space-between", gap: "8px", textAlign: "left", border: "1px solid transparent", background: "transparent", color: "var(--x-color-ink)", fontSize: "13px", padding: "8px 10px", borderRadius: "8px", cursor: "pointer" },
+  recItemOn: { background: "var(--x-color-accent-soft)", border: "1px solid var(--x-color-accent)" },
+  recTime: { fontWeight: 600 },
+  recSize: { fontSize: "12px", color: "var(--x-color-ink-muted)" },
 };

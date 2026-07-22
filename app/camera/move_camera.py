@@ -66,6 +66,49 @@ def ptz_stop():
 def ping():
     return "pong"
 
+
+import os
+
+REC_DIR = "/srv/cctv/rec/cam1"
+REC_PUBLIC_BASE = "/cctv_rec/cam1"
+
+
+@move_camera_bp.get("/recordings")
+def api_recordings():
+    """回放：列出已保存、可播放的录像片段（排除正在写入的最新一段）。"""
+    try:
+        items = []
+        try:
+            names = sorted(n for n in os.listdir(REC_DIR) if n.endswith(".mp4"))
+        except FileNotFoundError:
+            names = []
+        # 最新一段正在写入，moov 未落盘、无法播放，排除
+        playable = names[:-1] if len(names) >= 1 else []
+        for name in playable:
+            path = os.path.join(REC_DIR, name)
+            try:
+                size = os.path.getsize(path)
+            except OSError:
+                continue
+            if size <= 0:
+                continue
+            start = None
+            try:
+                start = datetime.strptime(name[: len("2026-07-22_15-20-36")],
+                                          "%Y-%m-%d_%H-%M-%S").isoformat()
+            except ValueError:
+                pass
+            items.append({
+                "name": name,
+                "start": start,
+                "size": size,
+                "url": f"{REC_PUBLIC_BASE}/{name}",
+            })
+        items.reverse()  # 最新在前
+        return jsonify(ok=True, items=items)
+    except Exception as exc:
+        return jsonify(ok=False, error=str(exc)), 500
+
 @move_camera_bp.post("/ptz/move")
 def api_ptz_move():
     try:
