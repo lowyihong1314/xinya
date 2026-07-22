@@ -1,6 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import type { CSSProperties, ReactNode } from "react";
-import type { Socket } from "socket.io-client";
 import { useLocation, useNavigate } from "react-router-dom";
 
 import { useEnsureDesignTokens } from "../../theme/designTokens";
@@ -13,7 +12,6 @@ import { LAMP_META } from "../../lamp/lampMeta";
 import { LampWorkspacePage } from "../lamp/react/LampWorkspacePage";
 import { PaymentChannelModal } from "./PaymentChannelModal";
 import { RelationOptionModal } from "./RelationOptionModal";
-import { connectFahuiSocket } from "./fahuiSocket";
 import {
   approvePayment,
   createYlpOrderItem,
@@ -24,6 +22,7 @@ import {
   fetchYlpPayments,
   fetchYlpVersions,
   downloadYlpPaiweiJob,
+  getYlpPaiweiJobStatus,
   listYlpOrdersForExport,
   listYlpRelationOptions,
   previewYlpPaiwei,
@@ -400,7 +399,7 @@ export function FahuiPage() {
   const [printMenuOpen, setPrintMenuOpen] = useState(false);
   const [printPlusMenuOpen, setPrintPlusMenuOpen] = useState(false);
   const [paiweiJob, setPaiweiJob] = useState<{ percent: number; status: "running" | "done" | "error"; message?: string } | null>(null);
-  const paiweiSocketRef = useRef<Socket | null>(null);
+  const paiweiPollRef = useRef<number | null>(null);
   const [ylpPagination, setYlpPagination] = useState<YlpPagination | null>(null);
   const [ylpDetail, setYlpDetail] = useState<YlpDetailState | null>(null);
   const [orderForm, setOrderForm] = useState({ customer_name: "", phone: "", email: "" });
@@ -1294,14 +1293,27 @@ export function FahuiPage() {
     }
   }
 
-  function cleanupPaiweiSocket() {
-    if (paiweiSocketRef.current) {
-      paiweiSocketRef.current.disconnect();
-      paiweiSocketRef.current = null;
+  function stopPaiweiPoll() {
+    if (paiweiPollRef.current !== null) {
+      window.clearTimeout(paiweiPollRef.current);
+      paiweiPollRef.current = null;
     }
   }
 
-  useEffect(() => cleanupPaiweiSocket, []);
+  useEffect(() => stopPaiweiPoll, []);
+
+  async function downloadPaiweiJobResult(jobId: string) {
+    try {
+      const blob = await downloadYlpPaiweiJob(jobId);
+      const url = URL.createObjectURL(blob);
+      window.open(url, "_blank", "noopener,noreferrer");
+      window.setTimeout(() => URL.revokeObjectURL(url), 60000);
+    } catch (downloadError) {
+      show_alert("error", downloadError instanceof Error ? downloadError.message : "下载失败");
+    } finally {
+      window.setTimeout(() => setPaiweiJob(null), 1500);
+    }
+  }
 
   async function handleYlpPrintPlus(template: string) {
     setPrintPlusMenuOpen(false);
@@ -1316,7 +1328,7 @@ export function FahuiPage() {
       show_alert("error", "请选择订单");
       return;
     }
-    cleanupPaiweiSocket();
+    stopPaiweiPoll();
     setPaiweiJob({ percent: 0, status: "running" });
     try {
       const res = await startYlpPaiweiJob(ids, template);
@@ -1325,37 +1337,31 @@ export function FahuiPage() {
         return;
       }
       const jobId = res.job_id;
-      const socket = connectFahuiSocket();
-      paiweiSocketRef.current = socket;
-      socket.on("connect", () => socket.emit("join_room", { room: res.room || `paiwei_job:${jobId}` }));
-      socket.on("paiwei:progress", (payload: { job_id?: string; percent?: number }) => {
-        if (payload.job_id === jobId) {
-          setPaiweiJob({ percent: payload.percent || 0, status: "running" });
-        }
-      });
-      socket.on("paiwei:error", (payload: { job_id?: string; message?: string }) => {
-        if (payload.job_id !== jobId) return;
-        setPaiweiJob({ percent: 0, status: "error", message: payload.message || "生成失败" });
-        cleanupPaiweiSocket();
-      });
-      socket.on("paiwei:done", async (payload: { job_id?: string }) => {
-        if (payload.job_id !== jobId) return;
-        setPaiweiJob({ percent: 100, status: "done" });
+      // 生产是 sync gunicorn（无 socket 服务），用轮询获取进度。
+      const poll = async () => {
         try {
-          const blob = await downloadYlpPaiweiJob(jobId);
-          const url = URL.createObjectURL(blob);
-          window.open(url, "_blank", "noopener,noreferrer");
-          window.setTimeout(() => URL.revokeObjectURL(url), 60000);
-        } catch (downloadError) {
-          show_alert("error", downloadError instanceof Error ? downloadError.message : "下载失败");
-        } finally {
-          cleanupPaiweiSocket();
-          window.setTimeout(() => setPaiweiJob(null), 1500);
+          const statusRes = await getYlpPaiweiJobStatus(jobId);
+          const data = statusRes.data || {};
+          const jobStatus = data.status;
+          const percent = Number(data.progress || 0);
+          if (jobStatus === "done") {
+            setPaiweiJob({ percent: 100, status: "done" });
+            void downloadPaiweiJobResult(jobId);
+            return;
+          }
+          if (jobStatus === "error") {
+            setPaiweiJob({ percent: 0, status: "error", message: data.message || "生成失败" });
+            return;
+          }
+          setPaiweiJob({ percent, status: "running" });
+          paiweiPollRef.current = window.setTimeout(() => void poll(), 800);
+        } catch {
+          setPaiweiJob({ percent: 0, status: "error", message: "查询进度失败" });
         }
-      });
+      };
+      paiweiPollRef.current = window.setTimeout(() => void poll(), 600);
     } catch (startError) {
       setPaiweiJob({ percent: 0, status: "error", message: startError instanceof Error ? startError.message : "启动失败" });
-      cleanupPaiweiSocket();
     }
   }
 

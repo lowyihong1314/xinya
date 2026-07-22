@@ -389,3 +389,12 @@ export async function downloadYlpPaiweiJob(jobId: string) {
   }
   return response.blob();
 }
+
+export async function getYlpPaiweiJobStatus(jobId: string) {
+  const response = await apiFetch(`/api/print_paiwei/jobs/${jobId}`, { credentials: "include" });
+  return parseJson<{
+    status?: string;
+    message?: string;
+    data?: { status?: string; progress?: string; total?: string; done?: string; message?: string };
+  }>(response);
+}

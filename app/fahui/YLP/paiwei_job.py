@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import threading
 import uuid
 
 from flask import current_app
@@ -36,8 +37,13 @@ def job_room(job_id: str) -> str:
 
 
 def _emit(event: str, payload: dict):
-    emitter = socketio if getattr(socketio, "server", None) is not None else socket_broker
-    emitter.emit(event, payload, to=job_room(payload.get("job_id")))
+    # 尽力而为：生产用 sync gunicorn（socketio.server 为 None）时走 socket_broker
+    # 的 Redis 消息队列；即便没有 socket 服务消费也不影响主流程（前端有轮询兜底）。
+    try:
+        emitter = socketio if getattr(socketio, "server", None) is not None else socket_broker
+        emitter.emit(event, payload, to=job_room(payload.get("job_id")))
+    except Exception:  # noqa: BLE001
+        pass
 
 
 def _set_state(job_id: str, **fields):
@@ -54,7 +60,14 @@ def start_paiwei_job(order_ids, source_name) -> str:
     job_id = uuid.uuid4().hex
     _set_state(job_id, status="pending", progress=0, done=0, total=0, message="")
     app = current_app._get_current_object()
-    socketio.start_background_task(_run_job, app, job_id, list(order_ids or []), source_name)
+    # 用普通后台线程：生产是 sync gunicorn（无 eventlet），socketio.start_background_task
+    # 会因 socketio.server 为 None 而报错。线程 + Redis 状态 + 磁盘落盘可跨 worker 读取。
+    thread = threading.Thread(
+        target=_run_job,
+        args=(app, job_id, list(order_ids or []), source_name),
+        daemon=True,
+    )
+    thread.start()
     return job_id
 
 
