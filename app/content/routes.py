@@ -327,3 +327,45 @@ def handle_tree_hole_message_detail(message_id):
     except Exception as exc:
         db.session.rollback()
         return jsonify({"error": f"更新失败: {str(exc)}"}), 500
+
+
+# ---- 使用说明（用户手册）----
+from pathlib import Path as _Path
+
+from flask_login import login_required as _login_required
+
+_MANUAL_DIR = _Path(__file__).resolve().parent.parent.parent / "docs" / "user_manual"
+
+
+def _manual_title(text, fallback):
+    for line in text.splitlines():
+        stripped = line.strip()
+        if stripped.startswith("# "):
+            return stripped[2:].strip()
+    return fallback
+
+
+@info_bp.get("/manual")
+@_login_required
+def list_manual_docs():
+    docs = []
+    if _MANUAL_DIR.is_dir():
+        for path in sorted(_MANUAL_DIR.glob("*.md")):
+            try:
+                text = path.read_text(encoding="utf-8")
+            except OSError:
+                continue
+            docs.append({"name": path.stem, "title": _manual_title(text, path.stem)})
+    # README 置顶作为总览
+    docs.sort(key=lambda item: (item["name"] != "README", item["name"]))
+    return jsonify({"status": "success", "docs": docs})
+
+
+@info_bp.get("/manual/<name>")
+@_login_required
+def get_manual_doc(name):
+    safe = os.path.basename(str(name))  # 防路径穿越
+    path = _MANUAL_DIR / f"{safe}.md"
+    if not path.is_file():
+        return jsonify({"status": "error", "message": "文档不存在"}), 404
+    return jsonify({"status": "success", "name": safe, "content": path.read_text(encoding="utf-8")})
