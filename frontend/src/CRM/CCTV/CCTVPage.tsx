@@ -8,9 +8,11 @@ import { hasUserPermission } from "../../app/permissions";
 import "./vendor/videoRtcElement";
 
 // go2rtc low-latency stream (MSE over WebSocket, ~1s). Same-origin behind nginx auth.
+// src=cam1_ll is a transcoded 720p variant with regular keyframes (GOP ~2s); the raw
+// camera stream sends keyframes too rarely for MSE, causing play/stall cycling.
 function buildStreamWsUrl(): string {
   const base = API_BASE || window.location.origin;
-  return base.replace(/^http/, "ws") + "/cctv_go2rtc/api/ws?src=cam1";
+  return base.replace(/^http/, "ws") + "/cctv_go2rtc/api/ws?src=cam1_ll";
 }
 
 type VideoRtcEl = HTMLElement & {
