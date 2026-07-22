@@ -7,12 +7,12 @@ import { useUserState } from "../../app/UserState";
 import { hasUserPermission } from "../../app/permissions";
 import "./vendor/videoRtcElement";
 
-// go2rtc low-latency stream (MSE over WebSocket, ~1s). Same-origin behind nginx auth.
-// src=cam1_ll is a transcoded 720p variant with regular keyframes (GOP ~2s); the raw
-// camera stream sends keyframes too rarely for MSE, causing play/stall cycling.
+// go2rtc stream. WebRTC plays the raw (un-transcoded) H264 directly and tolerates the
+// camera's long keyframe interval, unlike MSE. Signaling rides this WS (behind nginx
+// auth); media flows over the go2rtc WebRTC port (8555).
 function buildStreamWsUrl(): string {
   const base = API_BASE || window.location.origin;
-  return base.replace(/^http/, "ws") + "/cctv_go2rtc/api/ws?src=cam1_ll";
+  return base.replace(/^http/, "ws") + "/cctv_go2rtc/api/ws?src=cam1";
 }
 
 type VideoRtcEl = HTMLElement & {
@@ -103,7 +103,7 @@ function LiveView() {
     const el = elRef.current;
     if (!el) return;
     el.background = false;
-    el.mode = "mse"; // 强制 MSE：走 443 WebSocket，无需 UDP/ICE
+    el.mode = "webrtc"; // 原始流直连，不转码；媒体走 8555 (UDP，回退 TCP)
     el.src = buildStreamWsUrl();
 
     let raf = 0;
