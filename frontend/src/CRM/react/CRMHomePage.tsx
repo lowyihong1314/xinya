@@ -27,7 +27,11 @@ export function CRMHomePage() {
 
       <section style={moduleListStyle}>
         {CRM_MODULES.map((module) => {
-          const children = getSidebarChildren(module.key, searchParams, false);
+          // 「看板」并入「法会」分组，首页不单独列。
+          if (module.key === "ylp_board") {
+            return null;
+          }
+          const children = getSidebarChildren(module.key, searchParams, false, location.pathname);
           const hasChildren = children.length > 0;
           const expanded = expandedModuleKey === module.key;
 

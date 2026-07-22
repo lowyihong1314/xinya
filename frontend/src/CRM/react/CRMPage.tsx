@@ -49,8 +49,8 @@ export function CRMPage() {
             <span style={navHeaderTitleStyle}>CRM 工作台</span>
           </div>
           {CRM_MODULES.map((module) => {
-            // 「报名表格」并入下面的「特别活动」分组，这里不单独渲染。
-            if (module.key === "register") {
+            // 「报名表格」并入「特别活动」分组；「看板」并入「法会」分组，这里不单独渲染。
+            if (module.key === "register" || module.key === "ylp_board") {
               return null;
             }
 
@@ -60,10 +60,11 @@ export function CRMPage() {
             const groupIcon = isSpecialEvent ? "fas fa-star" : module.icon;
             const active = isSpecialEvent
               ? SPECIAL_EVENT_MODULE_KEYS.some((key) => isModulePathActive(location.pathname, key))
-              : isModulePathActive(location.pathname, module.key);
+              : isModulePathActive(location.pathname, module.key) ||
+                (module.key === "dharma_event" && isModulePathActive(location.pathname, "ylp_board"));
             const children = isSpecialEvent
               ? getSpecialEventChildren(location.pathname)
-              : getSidebarChildren(module.key, searchParams, active);
+              : getSidebarChildren(module.key, searchParams, active, location.pathname);
             const hasChildren = children.length > 0;
             const expanded = hasChildren && (active || Boolean(expandedGroups[groupKey]));
 
@@ -644,11 +645,13 @@ export function getSidebarChildren(
   moduleKey: CRMModuleKey,
   searchParams: URLSearchParams,
   moduleActive: boolean,
+  pathname: string,
 ): SidebarChild[] {
   if (moduleKey === "dharma_event") {
     const workspace = searchParams.get("fahui_workspace");
     const view = searchParams.get("fahui_view");
     const fahuiPath = buildCRMModulePath("dharma_event");
+    const onBoard = isModulePathActive(pathname, "ylp_board");
     return [
       {
         key: "ylp",
@@ -660,7 +663,7 @@ export function getSidebarChildren(
           fahui_workspace: "ylp",
           fahui_section: "orders",
         }),
-        active: moduleActive && (workspace !== "lamp" || view === "ylp_order"),
+        active: moduleActive && !onBoard && (workspace !== "lamp" || view === "ylp_order"),
       },
       {
         key: "lamp",
@@ -671,7 +674,15 @@ export function getSidebarChildren(
           fahui_view: "workspace",
           fahui_workspace: "lamp",
         }),
-        active: moduleActive && workspace === "lamp",
+        active: moduleActive && !onBoard && workspace === "lamp",
+      },
+      {
+        key: "ylp_board",
+        title: "看板",
+        icon: "fa-solid fa-border-all",
+        description: "维护牌位贴板位置。",
+        to: buildCRMModulePath("ylp_board"),
+        active: onBoard,
       },
     ];
   }

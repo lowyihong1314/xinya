@@ -37,6 +37,7 @@ export function BoardPage() {
   const [busy, setBusy] = useState(false);
 
   const [newName, setNewName] = useState("");
+  const [newRow, setNewRow] = useState("10"); // 每行张数
   const [newForm, setNewForm] = useState(false);
 
   const [keyword, setKeyword] = useState("");
@@ -82,7 +83,8 @@ export function BoardPage() {
   async function handleCreate() {
     const name = newName.trim();
     if (!name) return;
-    await run(() => createBoard({ board_name: name }), "已新建看板");
+    const perRow = Number(String(newRow).replace(/\D/g, "")) || null;
+    await run(() => createBoard({ board_name: name, board_width: perRow }), "已新建看板");
     setNewName("");
     setNewForm(false);
   }
@@ -91,6 +93,13 @@ export function BoardPage() {
     const name = window.prompt("看板名称", board.board_name);
     if (name == null) return;
     await run(() => updateBoard(board.board_id, { board_name: name.trim() }));
+  }
+
+  async function handleSetPerRow(board: Board) {
+    const raw = window.prompt("每行张数（一行贴几张牌位）", String(board.board_width ?? ""));
+    if (raw == null) return;
+    const perRow = Number(String(raw).replace(/\D/g, ""));
+    await run(() => updateBoard(board.board_id, { board_width: perRow > 0 ? perRow : null }));
   }
 
   async function handleDeleteBoard(board: Board) {
@@ -166,6 +175,7 @@ export function BoardPage() {
         <div style={styles.card}>
           <div style={styles.inlineRow}>
             <input style={styles.input} placeholder="看板名称，如 RM15 冤亲债主_A" value={newName} onChange={(e) => setNewName(e.target.value)} onKeyDown={(e) => { if (e.key === "Enter") void handleCreate(); }} />
+            <input style={styles.numInput} type="number" min={1} placeholder="每行张数" value={newRow} onChange={(e) => setNewRow(e.target.value)} title="每行张数（一行贴几张）" />
             <button type="button" style={styles.primary} onClick={() => void handleCreate()} disabled={busy || !newName.trim()}>创建</button>
           </div>
         </div>
@@ -219,19 +229,25 @@ export function BoardPage() {
               <div>
                 <span style={styles.boardName}>{board.board_name}</span>
                 <span style={styles.boardMeta}>
-                  #{board.board_id} · {board.board_data.length} 位
-                  {board.board_width || board.board_height ? ` · ${board.board_width || "?"}×${board.board_height || "?"}` : ""}
+                  #{board.board_id} · {board.board_data.length} 位 · 每行 {board.board_width || "—"} 张
                 </span>
               </div>
               {canEdit ? (
                 <div style={styles.boardActions}>
                   <button type="button" style={styles.tinyBtn} onClick={() => void handleRename(board)}>改名</button>
+                  <button type="button" style={styles.tinyBtn} onClick={() => void handleSetPerRow(board)}>每行</button>
                   <button type="button" style={styles.tinyDanger} onClick={() => void handleDeleteBoard(board)}>删板</button>
                 </div>
               ) : null}
             </div>
 
-            <div style={styles.slotList}>
+            <div
+              style={
+                board.board_width && board.board_width > 0
+                  ? { ...styles.slotList, display: "grid", gridTemplateColumns: `repeat(${board.board_width}, minmax(0, 1fr))` }
+                  : styles.slotList
+              }
+            >
               {board.board_data.length ? (
                 board.board_data.map((slot) => (
                   <div key={slot.side_id} style={styles.slot}>
@@ -312,6 +328,7 @@ const styles: Record<string, CSSProperties> = {
   cardTitle: { margin: 0, fontSize: "14px", fontWeight: 800 },
   inlineRow: { display: "flex", gap: "8px" },
   input: { flex: 1, boxSizing: "border-box", padding: "10px 12px", fontSize: "14px", borderRadius: "8px", border: "1px solid var(--x-color-line)", background: "var(--x-color-panel)", color: "var(--x-color-ink)", outline: "none" },
+  numInput: { width: 96, boxSizing: "border-box", padding: "10px 12px", fontSize: "14px", borderRadius: "8px", border: "1px solid var(--x-color-line)", background: "var(--x-color-panel)", color: "var(--x-color-ink)", outline: "none" },
   stack: { display: "flex", flexDirection: "column", gap: "8px" },
   muted: { margin: 0, fontSize: "12.5px", color: "var(--x-color-ink-muted)" },
   searchHit: { padding: "8px 12px", borderRadius: "8px", background: "var(--x-color-accent-soft)", color: "var(--x-color-accent-strong)", fontSize: "13px", fontWeight: 600 },
@@ -320,7 +337,7 @@ const styles: Record<string, CSSProperties> = {
   searchItem: { display: "flex", alignItems: "center", justifyContent: "space-between", gap: "10px", fontSize: "12.5px" },
   locOn: { color: "var(--x-color-success)", fontWeight: 700, whiteSpace: "nowrap" },
   locOff: { color: "var(--x-color-ink-muted)", whiteSpace: "nowrap" },
-  boardGrid: { display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(300px, 1fr))", gap: "14px" },
+  boardGrid: { display: "flex", flexDirection: "column", gap: "14px" },
   boardCard: { background: "var(--x-color-panel)", borderRadius: "var(--x-radius-md)", border: "1px solid var(--x-color-line-soft)", boxShadow: "0 12px 30px var(--x-color-shadow-soft)", padding: "14px", display: "flex", flexDirection: "column", gap: "10px" },
   boardHead: { display: "flex", alignItems: "flex-start", justifyContent: "space-between", gap: "8px" },
   boardName: { fontSize: "15px", fontWeight: 800, color: "var(--x-color-ink)" },
@@ -329,12 +346,12 @@ const styles: Record<string, CSSProperties> = {
   tinyBtn: { padding: "4px 9px", fontSize: "12px", fontWeight: 600, borderRadius: "6px", border: "1px solid var(--x-color-line)", background: "var(--x-color-panel)", color: "var(--x-color-ink)", cursor: "pointer" },
   tinyDanger: { padding: "4px 9px", fontSize: "12px", fontWeight: 600, borderRadius: "6px", border: "1px solid var(--x-color-danger-border)", background: "var(--x-color-danger-soft)", color: "var(--x-color-danger)", cursor: "pointer" },
   slotList: { display: "flex", flexDirection: "column", gap: "6px" },
-  slot: { display: "flex", alignItems: "center", gap: "10px", padding: "8px 10px", borderRadius: "8px", background: "var(--x-color-panel-alt)" },
-  slotNo: { width: 26, height: 26, flexShrink: 0, borderRadius: "50%", display: "flex", alignItems: "center", justifyContent: "center", fontSize: "12px", fontWeight: 800, background: "var(--x-color-accent)", color: "#fff" },
-  slotBody: { display: "flex", flexDirection: "column", gap: "1px", minWidth: 0, flex: 1 },
-  slotOrder: { fontSize: "12.5px", fontWeight: 600, color: "var(--x-color-ink)" },
-  slotPdf: { fontSize: "11px", color: "var(--x-color-ink-muted)", fontFamily: "var(--x-font-mono)" },
-  slotActions: { display: "flex", alignItems: "center", gap: "6px", flexShrink: 0 },
+  slot: { display: "flex", flexDirection: "column", gap: "4px", padding: "8px", borderRadius: "8px", background: "var(--x-color-panel-alt)", border: "1px solid var(--x-color-line-soft)", minWidth: 0 },
+  slotNo: { width: 24, height: 24, flexShrink: 0, borderRadius: "50%", display: "flex", alignItems: "center", justifyContent: "center", fontSize: "12px", fontWeight: 800, background: "var(--x-color-accent)", color: "#fff" },
+  slotBody: { display: "flex", flexDirection: "column", gap: "1px", minWidth: 0 },
+  slotOrder: { fontSize: "12px", fontWeight: 600, color: "var(--x-color-ink)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" },
+  slotPdf: { fontSize: "10.5px", color: "var(--x-color-ink-muted)", fontFamily: "var(--x-font-mono)" },
+  slotActions: { display: "flex", alignItems: "center", gap: "6px" },
   locInput: { width: 48, boxSizing: "border-box", padding: "5px 6px", fontSize: "12px", borderRadius: "6px", border: "1px solid var(--x-color-line)", textAlign: "center" },
   attachRow: { display: "flex", gap: "8px" },
 };
