@@ -144,6 +144,13 @@ def upload_template_route():
 @print_paiwei_bp.route("/print-pdfs/<int:print_pdf_id>/preview-image", methods=["GET"])
 @print_paiwei_bp.route("/print_paiwei_order_item/<int:print_pdf_id>", methods=["GET"])
 def preview_print_pdf_image_route(print_pdf_id):
+    cache_dir = preferred_dir("paiwei_result", "paiweicache")
+    cache_file = cache_dir / f"{print_pdf_id}.png"
+
+    # 命中缓存：直接返回，不再重新生成 PDF / 渲染（浏览器也缓存 30 天）。
+    if cache_file.exists():
+        return send_file(cache_file, mimetype="image/png", max_age=2592000)
+
     pdf_obj = FahuiPrintPdf.query.get(print_pdf_id)
     if not pdf_obj:
         return jsonify({"status": "error", "message": f"PrintPDF {print_pdf_id} 不存在"}), 404
@@ -157,23 +164,19 @@ def preview_print_pdf_image_route(print_pdf_id):
     if not buffer:
         return jsonify({"status": "error", "message": "生成 PDF 失败"}), 500
 
-    cache_dir = preferred_dir("paiwei_result", "paiweicache")
-    cache_file = cache_dir / f"{print_pdf_id}.png"
+    try:
+        import fitz  # PyMuPDF：渲染 PDF 首页为图片，无需 poppler
 
-    if not cache_file.exists():
-        try:
-            import fitz  # PyMuPDF：渲染 PDF 首页为图片，无需 poppler
+        doc = fitz.open(stream=buffer.getvalue(), filetype="pdf")
+        if doc.page_count == 0:
+            return jsonify({"status": "error", "message": "PDF 无内容"}), 500
+        pix = doc.load_page(0).get_pixmap(dpi=110)
+        pix.save(str(cache_file))
+        doc.close()
+    except Exception as exc:
+        return jsonify({"status": "error", "message": str(exc)}), 500
 
-            doc = fitz.open(stream=buffer.getvalue(), filetype="pdf")
-            if doc.page_count == 0:
-                return jsonify({"status": "error", "message": "PDF 无内容"}), 500
-            pix = doc.load_page(0).get_pixmap(dpi=110)
-            pix.save(str(cache_file))
-            doc.close()
-        except Exception as exc:
-            return jsonify({"status": "error", "message": str(exc)}), 500
-
-    return send_file(cache_file, mimetype="image/png")
+    return send_file(cache_file, mimetype="image/png", max_age=2592000)
 
 
 @print_paiwei_bp.route("/preview/test", methods=["POST"])
