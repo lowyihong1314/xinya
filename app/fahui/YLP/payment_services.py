@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 from datetime import datetime
 from decimal import Decimal
 from io import BytesIO
@@ -31,6 +32,7 @@ from .shared import (
     active_order_version,
     item_price_decimal,
     latest_payment,
+    order_payment_state,
     order_total_amount,
 )
 
@@ -133,6 +135,108 @@ def create_payment_record(order_id: int):
                 "message": "支付记录已保存",
                 "payment_id": payment.id,
                 "payment": serialize_payment(payment, include_order=True),
+            }
+        )
+    except Exception as exc:
+        db.session.rollback()
+        return jsonify({"success": False, "message": str(exc)}), 500
+
+
+def _parse_order_ids(payload) -> list[int]:
+    raw = payload.get("order_ids")
+    ids: list[int] = []
+    if raw:
+        parsed = raw
+        if isinstance(raw, str):
+            try:
+                parsed = json.loads(raw)
+            except (ValueError, TypeError):
+                parsed = [chunk for chunk in raw.replace(",", " ").split() if chunk]
+        if isinstance(parsed, (list, tuple)):
+            for value in parsed:
+                try:
+                    ids.append(int(value))
+                except (TypeError, ValueError):
+                    continue
+    if not ids and hasattr(payload, "getlist"):
+        for value in payload.getlist("order_ids"):
+            if str(value).strip().isdigit():
+                ids.append(int(value))
+    # 去重保序
+    seen: set[int] = set()
+    unique: list[int] = []
+    for oid in ids:
+        if oid not in seen:
+            seen.add(oid)
+            unique.append(oid)
+    return unique
+
+
+def create_group_payment():
+    """一次付款覆盖多张订单（多条订单 → 单条付款记录）。"""
+    payload = request.form if request.form else (request.get_json(silent=True) or {})
+    payment_mode = (payload.get("payment_mode") or payload.get("method") or "").strip()
+    upload = request.files.get("file")
+    order_ids = _parse_order_ids(payload)
+
+    if not order_ids:
+        return jsonify({"success": False, "message": "请选择要付款的订单"}), 400
+    if not payment_mode:
+        return jsonify({"success": False, "message": "缺少付款方式"}), 400
+
+    active_version = active_order_version()
+    orders = []
+    for oid in order_ids:
+        order = FahuiOrder.query.get(oid)
+        if not order:
+            return jsonify({"success": False, "message": f"订单 #{oid} 不存在"}), 404
+        if order.version != active_version:
+            return jsonify({"success": False, "message": f"订单 #{oid} 版本已过期"}), 400
+        if not user_can_view_order(order):
+            return jsonify({"success": False, "message": f"没有权限为订单 #{oid} 付款"}), 403
+        if order_payment_state(order) not in ("none", "rejected"):
+            return jsonify({"success": False, "message": f"订单 #{oid} 已付款或审核中，无法重复付款"}), 400
+        orders.append(order)
+
+    if not current_user.is_authenticated and payment_mode.lower() in {"bank", "qr"}:
+        if not upload:
+            return jsonify({"success": False, "message": "请上传付款凭证"}), 400
+        if not is_allowed_upload(upload.filename):
+            return jsonify({"success": False, "message": "文件类型不允许"}), 400
+    if upload and not is_allowed_upload(upload.filename):
+        return jsonify({"success": False, "message": "文件类型不允许"}), 400
+
+    try:
+        total = sum((order_total_amount(order) for order in orders), Decimal("0"))
+        first = orders[0]
+        payment = FahuiPayment(
+            payment_type=PAYMENT_TYPE_YLP,
+            order_id=None,
+            total_price=total,
+            payment_mode=payment_mode,
+            status="pending",
+            payer_name=first.customer_name or first.name,
+            phone=first.phone,
+            note="合并付款：订单 " + "、".join(f"#{order.id}" for order in orders),
+            created_at=datetime.utcnow(),
+        )
+        if current_user.is_authenticated:
+            payment.submitter_id = current_user.id
+        payment.grouped_orders = orders
+        db.session.add(payment)
+        db.session.flush()
+
+        if upload:
+            payment.document = save_payment_upload(payment.id, upload)
+
+        db.session.commit()
+        return jsonify(
+            {
+                "success": True,
+                "message": "付款资料已提交，等待核对",
+                "payment_id": payment.id,
+                "total_price": float(total),
+                "order_ids": [order.id for order in orders],
             }
         )
     except Exception as exc:

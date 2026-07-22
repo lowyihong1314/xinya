@@ -4,6 +4,7 @@ from app.form.permissions import permission_required_any
 
 from .payment_services import (
     calculate_order_amount,
+    create_group_payment,
     create_payment_record,
     download_order_quotation,
     list_order_payment_data,
@@ -18,6 +19,11 @@ payment_bp = Blueprint("payment", __name__)
 @payment_bp.route("/make_payment/<int:order_id>", methods=["POST"])
 def create_order_payment_route(order_id):
     return create_payment_record(order_id)
+
+
+@payment_bp.route("/orders/group-payment", methods=["POST"])
+def create_group_payment_route():
+    return create_group_payment()
 
 
 @payment_bp.route("/orders/<int:order_id>/payments", methods=["GET"])

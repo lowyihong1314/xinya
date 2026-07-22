@@ -1,5 +1,6 @@
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import type { CSSProperties, ReactNode } from "react";
+import type { Socket } from "socket.io-client";
 import { useLocation, useNavigate } from "react-router-dom";
 
 import { useEnsureDesignTokens } from "../../theme/designTokens";
@@ -10,6 +11,9 @@ import { downloadBlobOrShare, downloadUrlOrShare } from "../../js/browserActions
 import { show_alert } from "../../js/show_alert";
 import { LAMP_META } from "../../lamp/lampMeta";
 import { LampWorkspacePage } from "../lamp/react/LampWorkspacePage";
+import { PaymentChannelModal } from "./PaymentChannelModal";
+import { RelationOptionModal } from "./RelationOptionModal";
+import { connectFahuiSocket } from "./fahuiSocket";
 import {
   approvePayment,
   createYlpOrderItem,
@@ -19,7 +23,12 @@ import {
   fetchYlpOrderDetail,
   fetchYlpPayments,
   fetchYlpVersions,
+  downloadYlpPaiweiJob,
+  listYlpOrdersForExport,
+  listYlpRelationOptions,
   previewYlpPaiwei,
+  printYlpPaiweiByTemplate,
+  startYlpPaiweiJob,
   removePayment,
   revokePayment,
   searchYlpOrders,
@@ -328,6 +337,36 @@ function buildFahuiSearchParams(
   return params;
 }
 
+type YlpSortKey = "status" | "id" | "customer" | "phone" | "version" | "created_at";
+
+const YLP_ORDER_COLUMNS: { key: YlpSortKey; label: string }[] = [
+  { key: "status", label: "状态" },
+  { key: "id", label: "单号" },
+  { key: "customer", label: "功德主" },
+  { key: "phone", label: "电话" },
+  { key: "version", label: "版本" },
+  { key: "created_at", label: "创建时间" },
+];
+
+function ylpSortValue(order: YlpOrderSummary, key: YlpSortKey): string | number {
+  switch (key) {
+    case "id":
+      return order.id ?? 0;
+    case "customer":
+      return (order.customer_name || order.name || "").toLowerCase();
+    case "status":
+      return (order.status || "").toLowerCase();
+    case "phone":
+      return order.phone || "";
+    case "version":
+      return order.version || "";
+    case "created_at":
+      return order.created_at || "";
+    default:
+      return "";
+  }
+}
+
 export function FahuiPage() {
   useEnsureDesignTokens();
 
@@ -354,6 +393,14 @@ export function FahuiPage() {
   const [ylpLoading, setYlpLoading] = useState(false);
   const [ylpError, setYlpError] = useState("");
   const [ylpOrders, setYlpOrders] = useState<YlpOrderSummary[]>([]);
+  const [ylpSort, setYlpSort] = useState<{ key: YlpSortKey; dir: "asc" | "desc" } | null>(null);
+  const [ylpSelected, setYlpSelected] = useState<number[]>([]);
+  const [ylpSelectAllPages, setYlpSelectAllPages] = useState(false);
+  const [ylpBulkBusy, setYlpBulkBusy] = useState(false);
+  const [printMenuOpen, setPrintMenuOpen] = useState(false);
+  const [printPlusMenuOpen, setPrintPlusMenuOpen] = useState(false);
+  const [paiweiJob, setPaiweiJob] = useState<{ percent: number; status: "running" | "done" | "error"; message?: string } | null>(null);
+  const paiweiSocketRef = useRef<Socket | null>(null);
   const [ylpPagination, setYlpPagination] = useState<YlpPagination | null>(null);
   const [ylpDetail, setYlpDetail] = useState<YlpDetailState | null>(null);
   const [orderForm, setOrderForm] = useState({ customer_name: "", phone: "", email: "" });
@@ -363,6 +410,9 @@ export function FahuiPage() {
   const [paiweiPreviewUrl, setPaiweiPreviewUrl] = useState<string | null>(null);
   const [paiweiPreviewLoading, setPaiweiPreviewLoading] = useState(false);
   const [intakeDrawerOpen, setIntakeDrawerOpen] = useState(false);
+  const [paymentConfigOpen, setPaymentConfigOpen] = useState(false);
+  const [relationConfigOpen, setRelationConfigOpen] = useState(false);
+  const [relationOptions, setRelationOptions] = useState<string[]>([]);
 
   const currentWorkspace =
     screen.kind === "workspace" || screen.kind === "payment-detail" ? screen.workspace : screen.kind === "ylp-order-detail" ? "ylp" : null;
@@ -449,6 +499,16 @@ export function FahuiPage() {
   useEffect(() => {
     void loadYlpVersions();
   }, []);
+
+  // 加载超度亡灵关系选项（关闭配置弹窗后刷新，保证新增/移除即时生效）。
+  useEffect(() => {
+    if (relationConfigOpen) {
+      return;
+    }
+    listYlpRelationOptions()
+      .then((res) => setRelationOptions((res.data || []).map((option) => option.label)))
+      .catch(() => setRelationOptions([]));
+  }, [relationConfigOpen]);
 
   useEffect(() => {
     if (screen.kind !== "workspace" || screen.workspace !== "ylp" || screen.section !== "orders" || !ylpVersion) {
@@ -926,9 +986,17 @@ export function FahuiPage() {
         </section>
 
         {currentWorkspace === "ylp" ? (
-          <button type="button" style={styles.secondaryActionCompact} onClick={openYlpIntakePage}>
-            打开牌位填写页
-          </button>
+          <div style={styles.workspaceBarActions}>
+            <button type="button" style={styles.secondaryActionCompact} onClick={() => setPaymentConfigOpen(true)}>
+              配置支付路径
+            </button>
+            <button type="button" style={styles.secondaryActionCompact} onClick={() => setRelationConfigOpen(true)}>
+              超度亡灵关系配置
+            </button>
+            <button type="button" style={styles.secondaryActionCompact} onClick={openYlpIntakePage}>
+              打开牌位填写页
+            </button>
+          </div>
         ) : null}
       </section>
     );
@@ -1096,6 +1164,201 @@ export function FahuiPage() {
     );
   }
 
+  const sortedYlpOrders = useMemo(() => {
+    if (!ylpSort) {
+      return ylpOrders;
+    }
+    const sorted = [...ylpOrders].sort((a, b) => {
+      const av = ylpSortValue(a, ylpSort.key);
+      const bv = ylpSortValue(b, ylpSort.key);
+      if (typeof av === "number" && typeof bv === "number") {
+        return av - bv;
+      }
+      return String(av).localeCompare(String(bv), "zh-Hans-u-kn-true");
+    });
+    return ylpSort.dir === "desc" ? sorted.reverse() : sorted;
+  }, [ylpOrders, ylpSort]);
+
+  function toggleYlpSort(key: YlpSortKey) {
+    setYlpSort((current) =>
+      current && current.key === key
+        ? { key, dir: current.dir === "asc" ? "desc" : "asc" }
+        : { key, dir: "asc" },
+    );
+  }
+
+  // ---- 多选 / 批量操作 ----
+  const ylpPageIds = sortedYlpOrders.map((order) => order.id);
+  const ylpTotal = ylpPagination?.total ?? ylpOrders.length;
+  const ylpAllPageSelected = ylpPageIds.length > 0 && ylpPageIds.every((id) => ylpSelected.includes(id));
+  const ylpSelectionCount = ylpSelectAllPages ? ylpTotal : ylpSelected.length;
+  const ylpSelectionActive = ylpSelectAllPages || ylpSelected.length > 0;
+  const ylpCanSelectAllPages = ylpAllPageSelected && !ylpSelectAllPages && ylpTotal > ylpPageIds.length;
+
+  useEffect(() => {
+    setYlpSelected([]);
+    setYlpSelectAllPages(false);
+    setPrintMenuOpen(false);
+  }, [ylpVersion, ylpQuery]);
+
+  function toggleYlpRow(id: number) {
+    setYlpSelectAllPages(false);
+    setYlpSelected((current) => (current.includes(id) ? current.filter((x) => x !== id) : [...current, id]));
+  }
+
+  function toggleYlpPageSelect() {
+    setYlpSelectAllPages(false);
+    setYlpSelected((current) => {
+      if (ylpPageIds.every((id) => current.includes(id))) {
+        return current.filter((id) => !ylpPageIds.includes(id));
+      }
+      const merged = new Set(current);
+      ylpPageIds.forEach((id) => merged.add(id));
+      return Array.from(merged);
+    });
+  }
+
+  function clearYlpSelection() {
+    setYlpSelected([]);
+    setYlpSelectAllPages(false);
+    setPrintMenuOpen(false);
+  }
+
+  async function resolveYlpSelectedIds(): Promise<number[]> {
+    if (!ylpSelectAllPages) {
+      return ylpSelected;
+    }
+    const res = await listYlpOrdersForExport(ylpVersion, ylpQuery);
+    return (res.data?.items || []).map((order) => order.id);
+  }
+
+  async function handleYlpExportXlsx() {
+    setYlpBulkBusy(true);
+    try {
+      const res = await listYlpOrdersForExport(ylpVersion, ylpQuery);
+      const all = res.data?.items || [];
+      const rows = ylpSelectAllPages ? all : all.filter((order) => ylpSelected.includes(order.id));
+      if (!rows.length) {
+        show_alert("error", "没有可导出的订单");
+        return;
+      }
+      const XLSX = await import("xlsx");
+      const data = rows.map((order) => ({
+        单号: order.id,
+        付款状态: order.status || "",
+        功德主: order.customer_name || order.name || "",
+        联络人: order.name || "",
+        电话: order.phone || "",
+        版本: order.version || "",
+        创建时间: order.created_at || "",
+      }));
+      const workbook = XLSX.utils.book_new();
+      const sheet = XLSX.utils.json_to_sheet(data);
+      XLSX.utils.book_append_sheet(workbook, sheet, "YLP订单");
+      const workbookArray = XLSX.write(workbook, { bookType: "xlsx", type: "array" }) as ArrayBuffer;
+      const blob = new Blob([workbookArray], {
+        type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+      });
+      const url = URL.createObjectURL(blob);
+      const anchor = document.createElement("a");
+      anchor.href = url;
+      anchor.download = `YLP订单_${ylpVersion}_${rows.length}条.xlsx`;
+      document.body.appendChild(anchor);
+      anchor.click();
+      anchor.remove();
+      URL.revokeObjectURL(url);
+    } catch (exportError) {
+      show_alert("error", exportError instanceof Error ? exportError.message : "导出失败");
+    } finally {
+      setYlpBulkBusy(false);
+    }
+  }
+
+  async function handleYlpPrint(template: string) {
+    setPrintMenuOpen(false);
+    setYlpBulkBusy(true);
+    try {
+      const ids = await resolveYlpSelectedIds();
+      if (!ids.length) {
+        show_alert("error", "请选择订单");
+        return;
+      }
+      const blob = await printYlpPaiweiByTemplate(ids, template);
+      const url = URL.createObjectURL(blob);
+      window.open(url, "_blank", "noopener,noreferrer");
+      window.setTimeout(() => URL.revokeObjectURL(url), 60000);
+    } catch (printError) {
+      show_alert("error", printError instanceof Error ? printError.message : "生成牌位失败");
+    } finally {
+      setYlpBulkBusy(false);
+    }
+  }
+
+  function cleanupPaiweiSocket() {
+    if (paiweiSocketRef.current) {
+      paiweiSocketRef.current.disconnect();
+      paiweiSocketRef.current = null;
+    }
+  }
+
+  useEffect(() => cleanupPaiweiSocket, []);
+
+  async function handleYlpPrintPlus(template: string) {
+    setPrintPlusMenuOpen(false);
+    let ids: number[];
+    try {
+      ids = await resolveYlpSelectedIds();
+    } catch {
+      show_alert("error", "获取订单失败");
+      return;
+    }
+    if (!ids.length) {
+      show_alert("error", "请选择订单");
+      return;
+    }
+    cleanupPaiweiSocket();
+    setPaiweiJob({ percent: 0, status: "running" });
+    try {
+      const res = await startYlpPaiweiJob(ids, template);
+      if (res.status !== "success" || !res.job_id) {
+        setPaiweiJob({ percent: 0, status: "error", message: res.message || "启动任务失败" });
+        return;
+      }
+      const jobId = res.job_id;
+      const socket = connectFahuiSocket();
+      paiweiSocketRef.current = socket;
+      socket.on("connect", () => socket.emit("join_room", { room: res.room || `paiwei_job:${jobId}` }));
+      socket.on("paiwei:progress", (payload: { job_id?: string; percent?: number }) => {
+        if (payload.job_id === jobId) {
+          setPaiweiJob({ percent: payload.percent || 0, status: "running" });
+        }
+      });
+      socket.on("paiwei:error", (payload: { job_id?: string; message?: string }) => {
+        if (payload.job_id !== jobId) return;
+        setPaiweiJob({ percent: 0, status: "error", message: payload.message || "生成失败" });
+        cleanupPaiweiSocket();
+      });
+      socket.on("paiwei:done", async (payload: { job_id?: string }) => {
+        if (payload.job_id !== jobId) return;
+        setPaiweiJob({ percent: 100, status: "done" });
+        try {
+          const blob = await downloadYlpPaiweiJob(jobId);
+          const url = URL.createObjectURL(blob);
+          window.open(url, "_blank", "noopener,noreferrer");
+          window.setTimeout(() => URL.revokeObjectURL(url), 60000);
+        } catch (downloadError) {
+          show_alert("error", downloadError instanceof Error ? downloadError.message : "下载失败");
+        } finally {
+          cleanupPaiweiSocket();
+          window.setTimeout(() => setPaiweiJob(null), 1500);
+        }
+      });
+    } catch (startError) {
+      setPaiweiJob({ percent: 0, status: "error", message: startError instanceof Error ? startError.message : "启动失败" });
+      cleanupPaiweiSocket();
+    }
+  }
+
   function renderYlpOrderList() {
     return (
       <>
@@ -1175,26 +1438,74 @@ export function FahuiPage() {
 
         {!ylpLoading && !ylpError ? (
           <>
+            {ylpCanSelectAllPages || ylpSelectAllPages ? (
+              <div style={styles.selectAllBanner}>
+                {ylpSelectAllPages ? (
+                  <>
+                    <span>已选择全部 {ylpTotal} 条记录</span>
+                    <button type="button" style={styles.selectAllLink} onClick={clearYlpSelection}>
+                      清除选择
+                    </button>
+                  </>
+                ) : (
+                  <>
+                    <span>已选中本页 {ylpPageIds.length} 条</span>
+                    <button
+                      type="button"
+                      style={styles.selectAllLink}
+                      onClick={() => setYlpSelectAllPages(true)}
+                    >
+                      选择全部 {ylpTotal} 条记录
+                    </button>
+                  </>
+                )}
+              </div>
+            ) : null}
             <div style={styles.tableWrap}>
               <style>{YLP_ORDER_TABLE_CSS}</style>
               <table className="ylp-order-table">
                 <thead>
                   <tr>
-                    <th>状态</th>
-                    <th>单号</th>
-                    <th>功德主</th>
-                    <th>电话</th>
-                    <th>版本</th>
-                    <th>创建时间</th>
+                    <th className="ylp-check-col">
+                      <input
+                        type="checkbox"
+                        checked={ylpAllPageSelected}
+                        ref={(el) => {
+                          if (el) el.indeterminate = !ylpAllPageSelected && ylpPageIds.some((id) => ylpSelected.includes(id));
+                        }}
+                        onChange={toggleYlpPageSelect}
+                        aria-label="当页全选"
+                      />
+                    </th>
+                    {YLP_ORDER_COLUMNS.map((col) => (
+                      <th
+                        key={col.key}
+                        className="ylp-sortable"
+                        onClick={() => toggleYlpSort(col.key)}
+                      >
+                        {col.label}
+                        <span className="ylp-sort-arrow">
+                          {ylpSort?.key === col.key ? (ylpSort.dir === "asc" ? " ▲" : " ▼") : ""}
+                        </span>
+                      </th>
+                    ))}
                   </tr>
                 </thead>
                 <tbody>
-                  {ylpOrders.map((order) => (
+                  {sortedYlpOrders.map((order) => (
                     <tr
                       key={order.id}
                       className="ylp-order-row"
                       onClick={() => void openYlpDetail(order.id)}
                     >
+                      <td className="ylp-check-col" onClick={(event) => event.stopPropagation()}>
+                        <input
+                          type="checkbox"
+                          checked={ylpSelectAllPages || ylpSelected.includes(order.id)}
+                          onChange={() => toggleYlpRow(order.id)}
+                          aria-label={`选择订单 ${order.id}`}
+                        />
+                      </td>
                       <td>
                         <span style={ylpStatusChipStyle(order.status)}>{order.status || "-"}</span>
                       </td>
@@ -1209,6 +1520,71 @@ export function FahuiPage() {
               </table>
             </div>
           </>
+        ) : null}
+
+        {ylpSelectionActive ? (
+          <div style={styles.bulkBar}>
+            <span style={styles.bulkCount}>已选 {ylpSelectionCount} 条</span>
+            <div style={styles.bulkActions}>
+              <button
+                type="button"
+                style={{ ...styles.bulkButton, ...(ylpBulkBusy ? styles.pageButtonDisabled : null) }}
+                disabled={ylpBulkBusy}
+                onClick={() => void handleYlpExportXlsx()}
+              >
+                导出 xlsx
+              </button>
+              <div style={styles.printMenuWrap}>
+                <button
+                  type="button"
+                  style={{ ...styles.bulkButton, ...(ylpBulkBusy ? styles.pageButtonDisabled : null) }}
+                  disabled={ylpBulkBusy}
+                  onClick={() => setPrintMenuOpen((open) => !open)}
+                >
+                  打印牌位 ▾
+                </button>
+                {printMenuOpen ? (
+                  <div style={styles.printMenu}>
+                    <button type="button" style={styles.printMenuItem} onClick={() => void handleYlpPrint("paiwei_1")}>
+                      大牌位
+                    </button>
+                    <button type="button" style={styles.printMenuItem} onClick={() => void handleYlpPrint("paiwei_5")}>
+                      小牌位
+                    </button>
+                    <button type="button" style={styles.printMenuItem} onClick={() => void handleYlpPrint("paiwei_10")}>
+                      冤亲债主
+                    </button>
+                  </div>
+                ) : null}
+              </div>
+              <div style={styles.printMenuWrap}>
+                <button
+                  type="button"
+                  style={{ ...styles.bulkButtonPrimary, ...(ylpBulkBusy ? styles.pageButtonDisabled : null) }}
+                  disabled={ylpBulkBusy}
+                  onClick={() => setPrintPlusMenuOpen((open) => !open)}
+                >
+                  打印牌位 PLUS ▾
+                </button>
+                {printPlusMenuOpen ? (
+                  <div style={styles.printMenu}>
+                    <button type="button" style={styles.printMenuItem} onClick={() => void handleYlpPrintPlus("paiwei_1")}>
+                      大牌位
+                    </button>
+                    <button type="button" style={styles.printMenuItem} onClick={() => void handleYlpPrintPlus("paiwei_5")}>
+                      小牌位
+                    </button>
+                    <button type="button" style={styles.printMenuItem} onClick={() => void handleYlpPrintPlus("paiwei_10")}>
+                      冤亲债主
+                    </button>
+                  </div>
+                ) : null}
+              </div>
+              <button type="button" style={styles.bulkCancel} onClick={clearYlpSelection}>
+                取消
+              </button>
+            </div>
+          </div>
         ) : null}
       </>
     );
@@ -1277,14 +1653,24 @@ export function FahuiPage() {
               <span style={styles.statusEditLabel}>订单状态</span>
               <span style={ylpStatusChipStyle(orderStatus)}>{orderStatus}</span>
               {orderStatus === "Draft" ? (
-                <button
-                  type="button"
-                  style={{ ...styles.primaryAction, ...(statusSaving ? styles.pageButtonDisabled : null) }}
-                  disabled={statusSaving}
-                  onClick={() => void handleSetOrderStatus(ylpDetail.orderId, "confirm")}
-                >
-                  确认 (Confirm)
-                </button>
+                <>
+                  <button
+                    type="button"
+                    style={{ ...styles.primaryAction, ...(statusSaving ? styles.pageButtonDisabled : null) }}
+                    disabled={statusSaving}
+                    onClick={() => void handleSetOrderStatus(ylpDetail.orderId, "confirm")}
+                  >
+                    确认 (Confirm)
+                  </button>
+                  <button
+                    type="button"
+                    style={{ ...styles.dangerAction, ...(statusSaving ? styles.pageButtonDisabled : null) }}
+                    disabled={statusSaving}
+                    onClick={() => void handleSetOrderStatus(ylpDetail.orderId, "cancel")}
+                  >
+                    取消订单 (Cancel)
+                  </button>
+                </>
               ) : null}
               {orderStatus === "confirm" ? (
                 <>
@@ -1512,6 +1898,7 @@ export function FahuiPage() {
           <YlpItemModal
             orderId={ylpDetail?.orderId ?? 0}
             item={itemModal.item}
+            relationOptions={relationOptions}
             onClose={() => setItemModal(null)}
             onSaved={() => {
               setItemModal(null);
@@ -1627,6 +2014,42 @@ export function FahuiPage() {
           </aside>
         ) : null}
       </div>
+
+      {paymentConfigOpen ? (
+        <PaymentChannelModal version={ylpVersion} onClose={() => setPaymentConfigOpen(false)} />
+      ) : null}
+
+      {relationConfigOpen ? <RelationOptionModal onClose={() => setRelationConfigOpen(false)} /> : null}
+
+      {paiweiJob ? (
+        <div style={styles.jobOverlay}>
+          <div style={styles.jobCard}>
+            <p style={styles.jobTitle}>
+              {paiweiJob.status === "done"
+                ? "生成完成，正在打开…"
+                : paiweiJob.status === "error"
+                  ? "生成失败"
+                  : "正在生成牌位…"}
+            </p>
+            {paiweiJob.status === "error" ? (
+              <>
+                <p style={styles.jobError}>{paiweiJob.message || "请稍后再试"}</p>
+                <button type="button" style={styles.jobCloseButton} onClick={() => setPaiweiJob(null)}>
+                  关闭
+                </button>
+              </>
+            ) : (
+              <>
+                <div style={styles.jobBarTrack}>
+                  <div style={{ ...styles.jobBarFill, width: `${paiweiJob.percent}%` }} />
+                </div>
+                <p style={styles.jobPercent}>{paiweiJob.percent}%</p>
+                <p style={styles.jobHint}>请勿关闭页面，完成后会自动打开 PDF。</p>
+              </>
+            )}
+          </div>
+        </div>
+      ) : null}
     </section>
   );
 }
@@ -1663,6 +2086,11 @@ const YLP_ORDER_TABLE_CSS = `
 .ylp-order-table tbody td { padding: 10px 12px; border-bottom: 1px solid var(--x-color-line-soft); vertical-align: middle; color: var(--x-color-ink); }
 .ylp-order-table tbody tr.ylp-order-row { cursor: pointer; }
 .ylp-order-table tbody tr.ylp-order-row:hover td { background: var(--x-color-accent-tint); }
+.ylp-order-table thead th.ylp-sortable { cursor: pointer; user-select: none; }
+.ylp-order-table thead th.ylp-sortable:hover { color: var(--x-color-accent-strong); background: var(--x-color-accent-tint); }
+.ylp-order-table thead th .ylp-sort-arrow { color: var(--x-color-accent-strong); }
+.ylp-order-table .ylp-check-col { width: 40px; text-align: center; cursor: default; }
+.ylp-order-table .ylp-check-col input { cursor: pointer; width: 16px; height: 16px; }
 `;
 
 const YLP_DETAIL_TABLE_CSS = `
@@ -1789,12 +2217,14 @@ function paiweiDeceasedLabel(code?: string | null): string {
 function PaiweiRowsTable({
   deceaseds,
   relations,
+  relationOptions,
   deceasedLabel,
   disabled,
   onChange,
 }: {
   deceaseds: string[];
   relations: string[];
+  relationOptions: string[];
   deceasedLabel: string;
   disabled: boolean;
   onChange: (next: { deceaseds: string[]; relations: string[] }) => void;
@@ -1848,12 +2278,22 @@ function PaiweiRowsTable({
                   />
                 </td>
                 <td>
-                  <input
+                  <select
                     style={styles.detailInput}
                     value={relations[index] ?? ""}
                     disabled={disabled}
                     onChange={(event) => updateCell("relations", index, event.target.value)}
-                  />
+                  >
+                    <option value="">选择关系…</option>
+                    {relations[index] && !relationOptions.includes(relations[index]) ? (
+                      <option value={relations[index]}>{relations[index]}</option>
+                    ) : null}
+                    {relationOptions.map((label) => (
+                      <option key={label} value={label}>
+                        {label}
+                      </option>
+                    ))}
+                  </select>
                 </td>
                 <td className="paiwei-rows-action">
                   <button
@@ -1886,11 +2326,13 @@ function itemFieldValues(item: YlpOrderItem, key: string): string[] {
 function YlpItemModal({
   orderId,
   item,
+  relationOptions,
   onClose,
   onSaved,
 }: {
   orderId: number;
   item: YlpOrderItem | null;
+  relationOptions: string[];
   onClose: () => void;
   onSaved: () => void;
 }) {
@@ -2020,6 +2462,7 @@ function YlpItemModal({
             <PaiweiRowsTable
               deceaseds={deceaseds}
               relations={relations}
+              relationOptions={relationOptions}
               deceasedLabel={paiweiDeceasedLabel(draft.code)}
               disabled={saving}
               onChange={(next) => {
@@ -2871,6 +3314,155 @@ const styles = {
     fontWeight: 800,
     cursor: "pointer",
     whiteSpace: "nowrap" as const,
+  },
+  workspaceBarActions: {
+    display: "flex",
+    gap: "8px",
+    flexWrap: "wrap" as const,
+  },
+  selectAllBanner: {
+    display: "flex",
+    alignItems: "center",
+    gap: "12px",
+    padding: "8px 14px",
+    borderRadius: "8px",
+    background: "var(--x-color-accent-soft)",
+    border: "1px solid var(--x-color-accent-border)",
+    color: "var(--x-color-accent-strong)",
+    fontSize: "13px",
+    fontWeight: 600,
+  },
+  selectAllLink: {
+    background: "transparent",
+    border: "none",
+    color: "var(--x-color-accent-strong)",
+    fontWeight: 800,
+    fontSize: "13px",
+    cursor: "pointer",
+    textDecoration: "underline",
+  },
+  bulkBar: {
+    position: "fixed" as const,
+    left: "50%",
+    bottom: "20px",
+    transform: "translateX(-50%)",
+    zIndex: 1100,
+    display: "flex",
+    alignItems: "center",
+    gap: "16px",
+    padding: "10px 16px",
+    borderRadius: "999px",
+    background: "var(--x-color-ink)",
+    color: "#fff",
+    boxShadow: "0 18px 44px rgba(15,23,42,0.35)",
+  },
+  bulkButtonPrimary: {
+    padding: "8px 14px",
+    borderRadius: "999px",
+    border: "none",
+    background: "var(--x-color-accent)",
+    color: "#fff",
+    fontWeight: 800,
+    fontSize: "13px",
+    cursor: "pointer",
+    whiteSpace: "nowrap" as const,
+  },
+  bulkCount: { fontSize: "13px", fontWeight: 700, whiteSpace: "nowrap" as const },
+  jobOverlay: {
+    position: "fixed" as const,
+    inset: 0,
+    zIndex: 1300,
+    display: "flex",
+    alignItems: "center",
+    justifyContent: "center",
+    background: "rgba(15, 23, 42, 0.55)",
+    padding: "16px",
+  },
+  jobCard: {
+    width: "min(360px, 100%)",
+    display: "flex",
+    flexDirection: "column" as const,
+    gap: "12px",
+    padding: "22px",
+    borderRadius: "16px",
+    background: "var(--x-color-panel)",
+    boxShadow: "0 24px 60px var(--x-color-shadow)",
+    textAlign: "center" as const,
+  },
+  jobTitle: { margin: 0, fontSize: "15px", fontWeight: 800, color: "var(--x-color-ink)" },
+  jobBarTrack: {
+    width: "100%",
+    height: "10px",
+    borderRadius: "999px",
+    background: "var(--x-color-panel-alt)",
+    overflow: "hidden" as const,
+  },
+  jobBarFill: {
+    height: "100%",
+    borderRadius: "999px",
+    background: "var(--x-color-accent)",
+    transition: "width 0.25s ease",
+  },
+  jobPercent: { margin: 0, fontSize: "20px", fontWeight: 800, color: "var(--x-color-accent-strong)" },
+  jobHint: { margin: 0, fontSize: "12px", color: "var(--x-color-ink-muted)" },
+  jobError: { margin: 0, fontSize: "13px", color: "var(--x-color-danger)" },
+  jobCloseButton: {
+    padding: "9px 16px",
+    borderRadius: "8px",
+    border: "1px solid var(--x-color-line)",
+    background: "var(--x-color-panel)",
+    color: "var(--x-color-ink)",
+    fontWeight: 700,
+    fontSize: "13px",
+    cursor: "pointer",
+  },
+  bulkActions: { display: "flex", alignItems: "center", gap: "8px" },
+  bulkButton: {
+    padding: "8px 14px",
+    borderRadius: "999px",
+    border: "none",
+    background: "rgba(255,255,255,0.16)",
+    color: "#fff",
+    fontWeight: 700,
+    fontSize: "13px",
+    cursor: "pointer",
+    whiteSpace: "nowrap" as const,
+  },
+  bulkCancel: {
+    padding: "8px 12px",
+    borderRadius: "999px",
+    border: "none",
+    background: "transparent",
+    color: "rgba(255,255,255,0.75)",
+    fontWeight: 600,
+    fontSize: "13px",
+    cursor: "pointer",
+  },
+  printMenuWrap: { position: "relative" as const },
+  printMenu: {
+    position: "absolute" as const,
+    bottom: "calc(100% + 8px)",
+    left: "50%",
+    transform: "translateX(-50%)",
+    display: "flex",
+    flexDirection: "column" as const,
+    minWidth: "132px",
+    padding: "6px",
+    borderRadius: "12px",
+    background: "var(--x-color-panel)",
+    border: "1px solid var(--x-color-line)",
+    boxShadow: "0 18px 44px rgba(15,23,42,0.25)",
+  },
+  printMenuItem: {
+    padding: "9px 12px",
+    borderRadius: "8px",
+    border: "none",
+    background: "transparent",
+    color: "var(--x-color-ink)",
+    fontWeight: 600,
+    fontSize: "13px",
+    textAlign: "left" as const,
+    cursor: "pointer",
   },
   dangerAction: {
     padding: "7px 10px",

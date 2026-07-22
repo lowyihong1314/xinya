@@ -1019,11 +1019,21 @@ def _serialize_fahui_finance_payment(payment):
         registration_id = regs[0].id if regs else None
         phone_fallback = regs[0].phone if regs else None
     else:
-        source_label = (
-            (order.customer_name or order.name or f"订单 #{order.id}") if order else None
-        )
-        registration_id = order.id if order else None
-        phone_fallback = order.phone if order else None
+        grouped = list(getattr(payment, "grouped_orders", None) or [])
+        if order:
+            source_label = order.customer_name or order.name or f"订单 #{order.id}"
+            registration_id = order.id
+            phone_fallback = order.phone
+        elif grouped:
+            first = grouped[0]
+            base = first.customer_name or first.name or f"订单 #{first.id}"
+            source_label = base + (f" 等 {len(grouped)} 张订单" if len(grouped) > 1 else "")
+            registration_id = first.id
+            phone_fallback = first.phone
+        else:
+            source_label = None
+            registration_id = None
+            phone_fallback = None
 
     return {
         "id": FAHUI_FINANCE_ID_OFFSET + payment.id,

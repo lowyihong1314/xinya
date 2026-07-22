@@ -1,10 +1,12 @@
 from flask import Blueprint, jsonify, request
+from flask_login import login_required
 
 from .services import (
     create_order_shell,
     get_order_detail,
     get_orders_by_phone,
     list_available_versions,
+    list_orders_for_export,
     search_orders,
 )
 
@@ -31,6 +33,20 @@ def search_orders_route():
     except ValueError as exc:
         return jsonify({"status": "error", "message": str(exc)}), 400
 
+    return jsonify({"status": "success", "data": result})
+
+
+@fahui_bp.route("/orders/export", methods=["GET"])
+@login_required
+def export_orders_route():
+    version = request.args.get("version", type=str)
+    value = request.args.get("value", default="", type=str)
+    if version is None:
+        return jsonify({"status": "error", "message": "version is required"}), 400
+    try:
+        result = list_orders_for_export(version=version, value=value)
+    except ValueError as exc:
+        return jsonify({"status": "error", "message": str(exc)}), 400
     return jsonify({"status": "success", "data": result})
 
 

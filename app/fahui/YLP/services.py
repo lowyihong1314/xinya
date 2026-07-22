@@ -23,6 +23,7 @@ from .shared import (
     latest_payment as shared_latest_payment,
     mask_phone,
     normalize_version,
+    order_payment_state,
     order_payment_status,
 )
 
@@ -143,6 +144,7 @@ def serialize_order(order: FahuiOrder, include_items: bool = False, full_items: 
     data = {
         "id": order.id,
         "status": payment_status(order),
+        "payment_state": order_payment_state(order),
         "order_status": order.status,
         "name": order.name,
         "email": order.email,
@@ -236,6 +238,38 @@ def search_orders(version: object, value: str, page_num: int = 1, per_page: int 
             "has_prev": page_num > 1,
         },
     }
+
+
+def list_orders_for_export(version: object, value: str = "") -> dict:
+    """返回某版本 + 搜索条件下的「全部」订单（不分页），供全页全选导出/打印使用。"""
+    normalized_version = normalize_version(version)
+    if not normalized_version:
+        raise ValueError("version is required")
+
+    value = (value or "").strip()
+    query = (
+        db.session.query(FahuiOrder)
+        .options(selectinload(FahuiOrder.payments))
+        .outerjoin(FahuiOrderItem, FahuiOrderItem.order_id == FahuiOrder.id)
+        .outerjoin(FahuiItemFormData, FahuiItemFormData.item_id == FahuiOrderItem.id)
+        .filter(FahuiOrder.version == normalized_version)
+        .filter(or_(FahuiOrder.status.is_(None), FahuiOrder.status != "delete"))
+        .distinct()
+    )
+
+    if value:
+        like_value = f"%{value}%"
+        query = query.filter(
+            or_(
+                FahuiOrder.name.ilike(like_value),
+                FahuiOrder.customer_name.ilike(like_value),
+                FahuiOrder.phone.ilike(like_value),
+                FahuiItemFormData.field_value.ilike(like_value),
+            )
+        )
+
+    orders = query.order_by(FahuiOrder.created_at.desc(), FahuiOrder.id.desc()).all()
+    return {"items": [serialize_order(order) for order in orders], "total": len(orders)}
 
 
 def get_order_detail(order_id: int) -> tuple[dict, int]:

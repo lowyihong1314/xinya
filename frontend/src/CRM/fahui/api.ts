@@ -5,8 +5,12 @@ import type {
   YlpOrderDetailResponse,
   YlpOrderItemMutationResponse,
   YlpOrderListResponse,
+  YlpOrderSummary,
   YlpOrdersByPhoneResponse,
+  YlpPaymentChannelListResponse,
+  YlpPaymentChannelMutationResponse,
   YlpPaymentRecord,
+  YlpRelationOptionListResponse,
   YlpVersionResponse,
 } from "./types";
 import { apiFetch } from "../../js/apiFetch";
@@ -261,4 +265,127 @@ export async function downloadYlpPaiwei(orderId: number) {
     blob: await response.blob(),
     filename: getDownloadFilename(response, `order_${orderId}_paiwei.zip`),
   };
+}
+
+export async function listYlpPaymentChannels(version: string) {
+  const response = await apiFetch(
+    `/api/board_router/payment-channels?version=${encodeURIComponent(version)}`,
+    { credentials: "include" },
+  );
+  return parseJson<YlpPaymentChannelListResponse>(response);
+}
+
+export async function createYlpPaymentChannel(formData: FormData) {
+  const response = await apiFetch("/api/board_router/payment-channels", {
+    method: "POST",
+    credentials: "include",
+    body: formData,
+  });
+  return parseJson<YlpPaymentChannelMutationResponse>(response);
+}
+
+export async function updateYlpPaymentChannel(channelId: number, formData: FormData) {
+  const response = await apiFetch(`/api/board_router/payment-channels/${channelId}`, {
+    method: "POST",
+    credentials: "include",
+    body: formData,
+  });
+  return parseJson<YlpPaymentChannelMutationResponse>(response);
+}
+
+export async function deleteYlpPaymentChannel(channelId: number) {
+  const response = await apiFetch(`/api/board_router/payment-channels/${channelId}`, {
+    method: "DELETE",
+    credentials: "include",
+  });
+  return parseJson<{ status?: string; message?: string }>(response);
+}
+
+export async function createYlpGroupPayment(formData: FormData) {
+  const response = await apiFetch("/api/payment/orders/group-payment", {
+    method: "POST",
+    credentials: "include",
+    body: formData,
+  });
+  return parseJson<{
+    success?: boolean;
+    message?: string;
+    payment_id?: number;
+    total_price?: number;
+    order_ids?: number[];
+  }>(response);
+}
+
+export async function listYlpRelationOptions() {
+  const response = await apiFetch("/api/board_router/relation-options", { credentials: "include" });
+  return parseJson<YlpRelationOptionListResponse>(response);
+}
+
+export async function createYlpRelationOption(label: string) {
+  const response = await apiFetch("/api/board_router/relation-options", {
+    method: "POST",
+    credentials: "include",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ label }),
+  });
+  return parseJson<{ status?: string; message?: string }>(response);
+}
+
+export async function importYlpRelationOptions() {
+  const response = await apiFetch("/api/board_router/relation-options/import", {
+    method: "POST",
+    credentials: "include",
+  });
+  return parseJson<YlpRelationOptionListResponse>(response);
+}
+
+export async function deleteYlpRelationOption(optionId: number) {
+  const response = await apiFetch(`/api/board_router/relation-options/${optionId}`, {
+    method: "DELETE",
+    credentials: "include",
+  });
+  return parseJson<{ status?: string; message?: string }>(response);
+}
+
+export async function listYlpOrdersForExport(version: string, value = "") {
+  const search = new URLSearchParams();
+  search.set("version", version);
+  if (value) search.set("value", value);
+  const response = await apiFetch(`/api/fahui_router/orders/export?${search.toString()}`, {
+    credentials: "include",
+  });
+  return parseJson<{ status?: string; data?: { items: YlpOrderSummary[]; total: number } }>(response);
+}
+
+export async function printYlpPaiweiByTemplate(orderIds: number[], template: string) {
+  const response = await apiFetch("/api/print_paiwei/preview/by-template", {
+    method: "POST",
+    credentials: "include",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ order_ids: orderIds, template, need_barcode: false }),
+  });
+  if (!response.ok) {
+    const payload = (await response.json().catch(() => ({}))) as { message?: string; error?: string };
+    throw new Error(payload.error || payload.message || "生成牌位失败");
+  }
+  return response.blob();
+}
+
+export async function startYlpPaiweiJob(orderIds: number[], template: string) {
+  const response = await apiFetch("/api/print_paiwei/jobs/by-template", {
+    method: "POST",
+    credentials: "include",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ order_ids: orderIds, template }),
+  });
+  return parseJson<{ status?: string; job_id?: string; room?: string; message?: string }>(response);
+}
+
+export async function downloadYlpPaiweiJob(jobId: string) {
+  const response = await apiFetch(`/api/print_paiwei/jobs/${jobId}/download`, { credentials: "include" });
+  if (!response.ok) {
+    const payload = (await response.json().catch(() => ({}))) as { message?: string };
+    throw new Error(payload.message || "下载失败");
+  }
+  return response.blob();
 }

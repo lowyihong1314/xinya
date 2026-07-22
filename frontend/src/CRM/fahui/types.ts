@@ -77,6 +77,7 @@ export type YlpPagination = {
 export type YlpOrderSummary = {
   id: number;
   status?: string | null;
+  payment_state?: string | null;
   order_status?: string | null;
   name?: string | null;
   email?: string | null;
@@ -172,6 +173,46 @@ export type YlpOrderCreateResponse = {
   message?: string;
   duplicated?: boolean;
   order?: YlpOrderSummary | null;
+};
+
+export type YlpPaymentChannel = {
+  id: number;
+  version: string;
+  channel_type: "qr" | "bank";
+  label?: string | null;
+  qr_image_path?: string | null;
+  bank_name?: string | null;
+  bank_account_no?: string | null;
+  bank_account_name?: string | null;
+  note?: string | null;
+  sort_order?: number;
+  is_active?: boolean;
+  created_at?: string | null;
+};
+
+export type YlpPaymentChannelListResponse = {
+  status?: string;
+  message?: string;
+  data?: YlpPaymentChannel[];
+};
+
+export type YlpPaymentChannelMutationResponse = {
+  status?: string;
+  message?: string;
+  data?: YlpPaymentChannel;
+};
+
+export type YlpRelationOption = {
+  id: number;
+  label: string;
+  sort_order?: number;
+  is_active?: boolean;
+};
+
+export type YlpRelationOptionListResponse = {
+  status?: string;
+  message?: string;
+  data?: YlpRelationOption[];
 };
 
 export type YlpOrderItemMutationResponse = {

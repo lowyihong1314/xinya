@@ -11,7 +11,12 @@ from app.paths import PROJECT_ROOT, TEMPLATE_ROOT
 from models.fahui import FahuiOrder, FahuiOrderItem, FahuiPdfPageData, FahuiPrintPdf
 
 from ..common.ylp_storage import preferred_dir, resolve_existing_path
-from .print_generator import generate_paiwei_using_order_ids, generate_paiwei_using_order_item_ids
+from .paiwei_job import get_job_state, resolve_template, start_paiwei_job
+from .print_generator import (
+    generate_paiwei_pdf_by_source,
+    generate_paiwei_using_order_ids,
+    generate_paiwei_using_order_item_ids,
+)
 from .print_points import load_point_json, save_point_json
 
 
@@ -214,6 +219,87 @@ def generate_preview_by_orders_route():
     return generate_paiwei_using_order_ids(
         data.get("order_ids", []),
         need_barcode=data.get("need_barcode", False),
+    )
+
+
+# 牌位类型 → 模板文件名
+_PAIWEI_TEMPLATE_ALIASES = {
+    "large": "paiwei_1",
+    "big": "paiwei_1",
+    "paiwei_1": "paiwei_1",
+    "small": "paiwei_5",
+    "paiwei_5": "paiwei_5",
+    "creditor": "paiwei_10",
+    "yuanqin": "paiwei_10",
+    "paiwei_10": "paiwei_10",
+}
+
+
+@print_paiwei_bp.route("/preview/by-template", methods=["POST"])
+@login_required
+def generate_preview_by_template_route():
+    data = request.get_json(silent=True) or {}
+    order_ids = data.get("order_ids", []) or []
+    source_name = _PAIWEI_TEMPLATE_ALIASES.get(str(data.get("template") or "").strip())
+    if not source_name:
+        return jsonify({"status": "error", "message": "无效的牌位类型"}), 400
+    if not order_ids:
+        return jsonify({"status": "error", "message": "请选择订单"}), 400
+
+    output = generate_paiwei_pdf_by_source(
+        order_ids,
+        source_name,
+        need_barcode=data.get("need_barcode", False),
+    )
+    if output is None:
+        return jsonify({"status": "error", "message": "所选订单没有该类型的牌位"}), 400
+
+    return send_file(
+        output,
+        mimetype="application/pdf",
+        as_attachment=False,
+        download_name=f"{source_name}.pdf",
+    )
+
+
+@print_paiwei_bp.route("/jobs/by-template", methods=["POST"])
+@login_required
+def start_paiwei_job_route():
+    data = request.get_json(silent=True) or {}
+    order_ids = data.get("order_ids", []) or []
+    source_name = resolve_template(data.get("template"))
+    if not source_name:
+        return jsonify({"status": "error", "message": "无效的牌位类型"}), 400
+    if not order_ids:
+        return jsonify({"status": "error", "message": "请选择订单"}), 400
+
+    job_id = start_paiwei_job(order_ids, source_name)
+    return jsonify({"status": "success", "job_id": job_id, "room": f"paiwei_job:{job_id}"})
+
+
+@print_paiwei_bp.route("/jobs/<job_id>", methods=["GET"])
+@login_required
+def paiwei_job_status_route(job_id):
+    state = get_job_state(job_id)
+    if not state:
+        return jsonify({"status": "error", "message": "任务不存在或已过期"}), 404
+    return jsonify({"status": "success", "data": state})
+
+
+@print_paiwei_bp.route("/jobs/<job_id>/download", methods=["GET"])
+@login_required
+def download_paiwei_job_route(job_id):
+    state = get_job_state(job_id)
+    if not state or state.get("status") != "done":
+        return jsonify({"status": "error", "message": "任务未完成"}), 404
+    file_path = resolve_existing_path("paiwei_result", f"job_{job_id}.pdf")
+    if not file_path or not file_path.exists():
+        return jsonify({"status": "error", "message": "文件不存在或已过期"}), 404
+    return send_file(
+        file_path,
+        mimetype="application/pdf",
+        as_attachment=False,
+        download_name=f"paiwei_{job_id}.pdf",
     )
 
 

@@ -3,6 +3,18 @@ from flask_login import login_required
 
 from app.form.permissions import permission_required_any
 
+from .payment_channel_services import (
+    create_payment_channel,
+    delete_payment_channel,
+    list_payment_channels,
+    update_payment_channel,
+)
+from .relation_option_services import (
+    create_relation_option,
+    delete_relation_option,
+    import_relation_options_from_history,
+    list_relation_options,
+)
 from .board_services import (
     attach_pdf_to_board,
     check_duplicate_owner_fields,
@@ -109,6 +121,62 @@ def update_order_customer_route(order_id):
 @permission_required_any("account_edit")
 def update_order_status_route(order_id):
     payload, status_code = update_order_status(order_id, request.get_json(silent=True) or {})
+    return jsonify(payload), status_code
+
+
+@board_router_bp.route("/payment-channels", methods=["GET"])
+def list_payment_channels_route():
+    # 公开可读：付款页需要向报名者展示收款方式（扫码/银行）。
+    payload, status_code = list_payment_channels(request.args.get("version", type=str))
+    return jsonify(payload), status_code
+
+
+@board_router_bp.route("/payment-channels", methods=["POST"])
+@permission_required_any("account_edit")
+def create_payment_channel_route():
+    payload, status_code = create_payment_channel(request.form, request.files)
+    return jsonify(payload), status_code
+
+
+@board_router_bp.route("/payment-channels/<int:channel_id>", methods=["POST"])
+@permission_required_any("account_edit")
+def update_payment_channel_route(channel_id):
+    payload, status_code = update_payment_channel(channel_id, request.form, request.files)
+    return jsonify(payload), status_code
+
+
+@board_router_bp.route("/payment-channels/<int:channel_id>", methods=["DELETE"])
+@permission_required_any("account_edit")
+def delete_payment_channel_route(channel_id):
+    payload, status_code = delete_payment_channel(channel_id)
+    return jsonify(payload), status_code
+
+
+@board_router_bp.route("/relation-options", methods=["GET"])
+def list_relation_options_route():
+    # 公开可读：填写牌位时需要下拉选择超度亡灵的关系。
+    payload, status_code = list_relation_options()
+    return jsonify(payload), status_code
+
+
+@board_router_bp.route("/relation-options", methods=["POST"])
+@permission_required_any("account_edit")
+def create_relation_option_route():
+    payload, status_code = create_relation_option(request.get_json(silent=True) or {})
+    return jsonify(payload), status_code
+
+
+@board_router_bp.route("/relation-options/import", methods=["POST"])
+@permission_required_any("account_edit")
+def import_relation_options_route():
+    payload, status_code = import_relation_options_from_history()
+    return jsonify(payload), status_code
+
+
+@board_router_bp.route("/relation-options/<int:option_id>", methods=["DELETE"])
+@permission_required_any("account_edit")
+def delete_relation_option_route(option_id):
+    payload, status_code = delete_relation_option(option_id)
     return jsonify(payload), status_code
 
 

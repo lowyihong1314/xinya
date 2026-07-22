@@ -49,7 +49,7 @@ export const PAIWEI_TEMPLATES: PaiweiTemplate[] = [
     code: "A1",
     title: "大牌位_超度历代祖先",
     price: 100,
-    hint: "适合祖先牌位，常用姓氏、堂号、父母名与阳上姓名。",
+    hint: "超度历代祖先：填写姓氏、堂号、显考（先父）、显妣（先母）与阳上姓名。",
     defaultSuffix: "门堂上历代祖先",
     fields: { owner: true, surname: true, suffix: true, father: true, mother: true },
   },
@@ -106,10 +106,20 @@ export const PAIWEI_TEMPLATES: PaiweiTemplate[] = [
 ];
 
 function splitLines(value: string) {
+  // 只按换行拆分（不再按逗号）——名字里带逗号不会被误拆成两个人。
   return value
-    .split(/\r?\n|,/)
+    .split(/\r?\n/)
     .map((entry) => entry.trim())
     .filter(Boolean);
+}
+
+// 供牌位编辑器用：多人字段在 draft 里用换行拼接，UI 用数组维护。
+export function linesToArray(value: string): string[] {
+  return splitLines(value);
+}
+
+export function arrayToLines(values: string[]): string {
+  return values.map((entry) => entry.trim()).filter(Boolean).join("\n");
 }
 
 function toSingleOrArray(values: string[]) {

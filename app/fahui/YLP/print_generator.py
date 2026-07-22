@@ -14,6 +14,7 @@ from models.fahui import FahuiOrder, FahuiOrderItem, FahuiPdfPageData, FahuiPrin
 
 from ..common.ylp_storage import preferred_dir, resolve_existing_path
 from .print_points import (
+    SOURCE_NAME_BY_PAIWEI_TYPE,
     get_deceased_point,
     get_owner_point,
     get_point_data,
@@ -277,7 +278,67 @@ def generate_paiwei_using_order_ids(order_ids, need_barcode=False):
     )
 
 
-def generate_paiwei(paiwei_type, fahui_data, point_data, source_name, need_barcode=False):
+def group_source_items(order_ids, source_name):
+    """挑出属于某牌位模板的 items，按 code 分组。返回 (grouped_dict, total_item_count)。"""
+    source_name = str(source_name or "").strip()
+    if source_name not in {"paiwei_1", "paiwei_5", "paiwei_10"}:
+        return {}, 0
+
+    items = FahuiOrderItem.query.join(FahuiOrder).filter(FahuiOrder.id.in_(order_ids)).all()
+    if not items:
+        return {}, 0
+
+    filtered_data = filter_fahui_data(items)
+    grouped_data = defaultdict(list)
+    for item in filtered_data:
+        code = str(item.get("code") or "")
+        if SOURCE_NAME_BY_PAIWEI_TYPE.get(code) == source_name:
+            grouped_data[code].append(item)
+
+    total = sum(len(items) for items in grouped_data.values())
+    return grouped_data, total
+
+
+def generate_paiwei_pdf_by_source(order_ids, source_name, need_barcode=False, progress_cb=None):
+    """按牌位模板分组（paiwei_1 大 / paiwei_5 小 / paiwei_10 冤亲债主）生成单个合并 PDF。
+
+    复用既有的定位配置（location_json / point.json），只挑出属于该模板的 code。
+    progress_cb(n) 会在渲染过程中被调用（n=本次新增的已处理项数），用于进度上报。
+    """
+    grouped_data, _total = group_source_items(order_ids, source_name)
+    if not grouped_data:
+        return None
+
+    try:
+        from pypdf import PdfWriter as _PdfMerger
+    except ImportError:
+        try:
+            from pypdf import PdfMerger as _PdfMerger
+        except ImportError:
+            from PyPDF2 import PdfMerger as _PdfMerger
+
+    merger = _PdfMerger()
+    for code, grouped_items in grouped_data.items():
+        point_data, resolved_source = get_point_data(code)
+        if point_data:
+            buffer = generate_paiwei(
+                code, grouped_items, point_data, resolved_source, need_barcode=need_barcode, progress_cb=progress_cb
+            )
+        else:
+            buffer = _generate_simple_paiwei_pdf(code, grouped_items, need_barcode=need_barcode)
+            if progress_cb:
+                progress_cb(len(grouped_items))
+        buffer.seek(0)
+        merger.append(buffer)
+
+    output = io.BytesIO()
+    merger.write(output)
+    merger.close()
+    output.seek(0)
+    return output
+
+
+def generate_paiwei(paiwei_type, fahui_data, point_data, source_name, need_barcode=False, progress_cb=None):
     from reportlab.lib import colors
     from reportlab.lib.pagesizes import A4, landscape
     from reportlab.pdfgen import canvas
@@ -447,6 +508,9 @@ def generate_paiwei(paiwei_type, fahui_data, point_data, source_name, need_barco
 
         if drew_on_page:
             c.showPage()
+
+        if progress_cb:
+            progress_cb(min(items_per_page, total_items - page_start))
 
     db.session.commit()
     c.save()

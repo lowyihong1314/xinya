@@ -80,17 +80,42 @@ def order_total_amount(order: FahuiOrder) -> Decimal:
     return total.quantize(Decimal("0.01"))
 
 
+def order_all_payments(order: FahuiOrder) -> list[FahuiPayment]:
+    # 直接付款（order_id）+ 合并付款（join 表）去重。
+    seen: dict[int, FahuiPayment] = {}
+    for payment in list(order.payments or []):
+        if payment.id is not None:
+            seen[payment.id] = payment
+    for payment in list(getattr(order, "grouped_payments", None) or []):
+        if payment.id is not None:
+            seen[payment.id] = payment
+    return list(seen.values())
+
+
 def latest_payment(order: FahuiOrder) -> FahuiPayment | None:
-    payments = list(order.payments or [])
+    payments = order_all_payments(order)
     if not payments:
         return None
     return max(payments, key=lambda item: (item.created_at or datetime.min, item.id or 0))
 
 
 def order_payment_status(order: FahuiOrder) -> str:
-    payments = list(order.payments or [])
+    payments = order_all_payments(order)
     if not payments:
         return "none"
     if any(normalize_fahui_payment_status(payment.status) == "approved" for payment in payments):
         return "paid"
     return "pending"
+
+
+def order_payment_state(order: FahuiOrder) -> str:
+    # 精确状态（含合并付款），用于「我要付款」时判断订单能否被选：
+    # none/rejected → 可选；pending/paid → 不可选（除非失败=rejected）。
+    statuses = [normalize_fahui_payment_status(p.status) for p in order_all_payments(order)]
+    if not statuses:
+        return "none"
+    if "approved" in statuses:
+        return "paid"
+    if any(status != "rejected" for status in statuses):
+        return "pending"
+    return "rejected"
