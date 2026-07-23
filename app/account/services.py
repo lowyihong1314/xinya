@@ -14,6 +14,7 @@ from flask import request
 
 from app.account.exceptions import NotFound, PermissionDenied, ValidationError
 from app.account.permissions import resolve_user_permissions, user_can_manage_claims, user_can_read_all_claims
+from app.email.service import env_value
 from app.account.serializers import serialize_request_data
 from app.paths import DATA_ROOT
 from models import db
@@ -42,6 +43,13 @@ READ_BILL_IMAGE_EXTENSIONS = {".jpg", ".jpeg", ".png", ".webp", ".bmp", ".tif", 
 
 class ReadBillAuthError(ValidationError):
     """远程 AI fillin 服务返回 401（未授权）时抛出，用于触发本地 OCR 回退。"""
+
+
+def _read_bill_auth_headers():
+    # read_bill_api 网关要求 Authorization: Bearer <READ_BILL_ADMIN_TOKEN>。
+    # 调用时读取（先进程环境变量，再兜底 .flaskenv），适配 gunicorn 启动。
+    token = env_value("READ_BILL_ADMIN_TOKEN")
+    return {"Authorization": f"Bearer {token}"} if token else {}
 CLAIM_EDIT_FIELD_LABELS = {
     "applicant_name": "申请人",
     "request_date": "日期",
@@ -170,15 +178,17 @@ def _request_read_bill_upload(filename, mimetype, content, form_fields):
             }
         },
     )
+    upload_headers = {
+        "Accept": "application/json",
+        "Content-Type": f"multipart/form-data; boundary={boundary}",
+        "User-Agent": "Mozilla/5.0 XinyaClaimAI/1.0",
+    }
+    upload_headers.update(_read_bill_auth_headers())
     request_obj = urllib.request.Request(
         READ_BILL_UPLOAD_URL,
         data=body,
         method="POST",
-        headers={
-            "Accept": "application/json",
-            "Content-Type": f"multipart/form-data; boundary={boundary}",
-            "User-Agent": "Mozilla/5.0 XinyaClaimAI/1.0",
-        },
+        headers=upload_headers,
     )
 
     try:
@@ -213,15 +223,17 @@ def _request_read_bill_parse_text(text, form_fields):
     json_fields = dict(form_fields)
     json_fields["text"] = text
     body = json.dumps(json_fields, ensure_ascii=False).encode("utf-8")
+    parse_headers = {
+        "Accept": "application/json",
+        "Content-Type": "application/json",
+        "User-Agent": "Mozilla/5.0 XinyaClaimAI/1.0",
+    }
+    parse_headers.update(_read_bill_auth_headers())
     request_obj = urllib.request.Request(
         READ_BILL_PARSE_TEXT_URL,
         data=body,
         method="POST",
-        headers={
-            "Accept": "application/json",
-            "Content-Type": "application/json",
-            "User-Agent": "Mozilla/5.0 XinyaClaimAI/1.0",
-        },
+        headers=parse_headers,
     )
 
     try:
