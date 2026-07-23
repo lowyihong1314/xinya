@@ -47,6 +47,19 @@ function posterUrl(formId: number): string {
   return API_BASE ? `${API_BASE}${path}` : path;
 }
 
+// 多人报名：新家人默认沿用上一位填的紧急联络人（一家人通常相同），仍可逐位手动修改。
+function personWithInheritedContact(prev?: Person): Person {
+  const base = emptyPerson();
+  if (!prev) return base;
+  return {
+    ...base,
+    parent_1: prev.parent_1,
+    parent_1_phone: prev.parent_1_phone,
+    parent_2: prev.parent_2,
+    parent_2_phone: prev.parent_2_phone,
+  };
+}
+
 export function RegisterPage({ formId }: { formId: number }) {
   useEnsureDesignTokens();
   const form = (typeof window !== "undefined" && window.form_data) || ({ id: formId } as PublicForm);
@@ -274,7 +287,7 @@ export function RegisterPage({ formId }: { formId: number }) {
               />
             ))}
             {path === "family" ? (
-              <button type="button" style={styles.addButton} onClick={() => setPeople((cur) => [...cur, emptyPerson()])}>
+              <button type="button" style={styles.addButton} onClick={() => setPeople((cur) => [...cur, personWithInheritedContact(cur[cur.length - 1])])}>
                 + 添加一位家人
               </button>
             ) : null}
