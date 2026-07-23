@@ -564,6 +564,16 @@ function MembersTab({
   );
 }
 
+// 自动命名：取现有「小组N」里最大的 N + 1（重命名过的组不影响编号）。
+function nextGroupName(groups: FormGroup[]): string {
+  let max = 0;
+  for (const g of groups) {
+    const m = /^小组(\d+)$/.exec((g.name || "").trim());
+    if (m) max = Math.max(max, Number(m[1]));
+  }
+  return `小组${max + 1}`;
+}
+
 function GroupsTab({
   form,
   groups,
@@ -585,7 +595,6 @@ function GroupsTab({
   onDeleteGroup: (groupId: number) => void;
   onAssignMemberGroup: (memberId: number, groupId: number | null) => void;
 }) {
-  const [newName, setNewName] = useState("");
   const [dragOver, setDragOver] = useState<number | "ungrouped" | null>(null);
   const members = form.members || [];
 
@@ -611,13 +620,6 @@ function GroupsTab({
     return <div style={emptyInlineStyle}>需要 member_detail 或 form_edit 权限才能查看和管理分组。</div>;
   }
 
-  function submitNew() {
-    const name = newName.trim();
-    if (!name) return;
-    onCreateGroup(name);
-    setNewName("");
-  }
-
   function handleDrop(groupId: number | null, e: DragEvent) {
     e.preventDefault();
     setDragOver(null);
@@ -637,15 +639,9 @@ function GroupsTab({
     <div style={sectionBodyStyle}>
       {canEdit ? (
         <div style={memberToolbarStyle}>
-          <input
-            type="text"
-            placeholder="新建小组名称，例如 第一组 / 红队"
-            value={newName}
-            onChange={(e) => setNewName(e.target.value)}
-            onKeyDown={(e) => { if (e.key === "Enter") submitNew(); }}
-            style={searchInputStyle}
-          />
-          <button type="button" style={primaryButtonStyle} disabled={!newName.trim()} onClick={submitNew}>新建小组</button>
+          <button type="button" style={primaryButtonStyle} onClick={() => onCreateGroup(nextGroupName(sortedGroups))}>
+            + 新建小组
+          </button>
         </div>
       ) : null}
 
