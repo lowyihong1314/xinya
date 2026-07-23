@@ -2772,10 +2772,46 @@ def member_portal_detail(nric, form_id):
     latest = member.latest_data()
     flows = sorted(event.event_flows or [], key=lambda f: (f.no or 0, f.minutes or 0, f.id))
     flow = [{"no": f.no, "minutes": f.minutes, "title": f.title, "detail": f.detail} for f in flows]
+
+    # 成员自己的报名资料（本人凭 NRIC 进入，展示自己的信息）。
+    member_data = None
+    if latest:
+        ld = latest.to_dict()
+        link = db.session.execute(
+            regis_form_member.select().where(
+                regis_form_member.c.form_id == form.id,
+                regis_form_member.c.member_id == member.id,
+            )
+        ).first()
+        gid = getattr(link, "group_id", None) if link else None
+        group_name = None
+        if gid:
+            grp = RegisFormGroup.query.get(gid)
+            group_name = grp.name if grp else None
+        member_data = {
+            "name_cn": ld.get("name_cn"),
+            "name": ld.get("name"),
+            "nric": member.nric,
+            "gender": ld.get("gender"),
+            "phone": ld.get("phone"),
+            "email": ld.get("email"),
+            "address": ld.get("address"),
+            "medical": ld.get("medical"),
+            "allergy": ld.get("allergy"),
+            "other_remark": ld.get("other_remark"),
+            "parent_1": ld.get("parent_1"),
+            "parent_1_phone": ld.get("parent_1_phone"),
+            "parent_2": ld.get("parent_2"),
+            "parent_2_phone": ld.get("parent_2_phone"),
+            "group": group_name,
+            "extra_fields": ld.get("extra_fields", []),
+        }
+
     return jsonify({
         "status": "success",
         "member_name": (latest.name_cn or latest.name) if latest else None,
         "form_title": form.title,
         "event": _portal_event_dict(event),
         "flow": flow,
+        "member_data": member_data,
     })

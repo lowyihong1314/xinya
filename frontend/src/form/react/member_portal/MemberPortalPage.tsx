@@ -16,6 +16,15 @@ type PortalEvent = {
 };
 type ParticipatedEvent = PortalEvent & { accessible: boolean; state: string; state_message?: string | null; forms: PortalForm[] };
 type FlowItem = { no?: number; minutes?: number | null; title?: string | null; detail?: string | null };
+type MemberExtraField = { label?: string | null; field_value?: unknown };
+type MemberData = {
+  name_cn?: string | null; name?: string | null; nric?: string | null; gender?: string | null;
+  phone?: string | null; email?: string | null; address?: string | null;
+  medical?: string | null; allergy?: string | null; other_remark?: string | null;
+  parent_1?: string | null; parent_1_phone?: string | null; parent_2?: string | null; parent_2_phone?: string | null;
+  group?: string | null;
+  extra_fields?: MemberExtraField[];
+};
 type DetailResponse = {
   status: string;
   message?: string;
@@ -24,7 +33,36 @@ type DetailResponse = {
   event?: PortalEvent;
   event_name?: string | null;
   flow?: FlowItem[];
+  member_data?: MemberData | null;
 };
+
+function fmtVal(v: unknown): string {
+  if (v == null || v === "") return "";
+  if (typeof v === "boolean") return v ? "是" : "否";
+  if (Array.isArray(v)) return v.join("、");
+  return String(v);
+}
+function buildMemberFacts(md: MemberData): { label: string; value: string }[] {
+  const contact = (name?: string | null, phone?: string | null) =>
+    name && phone ? `${name}（${phone}）` : (name || phone || "");
+  const raw: [string, string][] = [
+    ["中文名", md.name_cn || ""],
+    ["英文名", md.name || ""],
+    ["NRIC", md.nric || ""],
+    ["性别", md.gender || ""],
+    ["电话", md.phone || ""],
+    ["Email", md.email || ""],
+    ["居住地址", md.address || ""],
+    ["小组", md.group || ""],
+    ["紧急联络人 1", contact(md.parent_1, md.parent_1_phone)],
+    ["紧急联络人 2", contact(md.parent_2, md.parent_2_phone)],
+    ["医疗备注", md.medical || ""],
+    ["过敏", md.allergy || ""],
+    ["其他备注", md.other_remark || ""],
+    ...(md.extra_fields || []).map((f) => [f.label || "字段", fmtVal(f.field_value)] as [string, string]),
+  ];
+  return raw.filter(([, v]) => v).map(([label, value]) => ({ label, value }));
+}
 
 const pad = (n: number) => String(n).padStart(2, "0");
 function fmtDateTime(v?: string | null): string {
@@ -215,40 +253,54 @@ function PortalView({ nric, formId }: { nric: string; formId: number }) {
     );
   }
 
+  const memberFacts = data.member_data ? buildMemberFacts(data.member_data) : [];
+
   return (
-    <section style={cardStyle}>
-      <div style={headRowStyle}>
-        <div>
-          <div style={eyebrowStyle}>{data.member_name || ""}</div>
-          <h1 style={titleStyle}>{ev?.event_name || data.form_title || "活动"}</h1>
+    <>
+      <div style={portalHeadStyle}>
+        <div style={eyebrowStyle}>{data.member_name || ""}</div>
+        <h1 style={titleStyle}>{ev?.event_name || data.form_title || "活动"}</h1>
+      </div>
+
+      <section style={cardStyle}>
+        <h2 style={sectionTitleStyle}>活动信息</h2>
+        <div style={factGridStyle}>
+          {ev?.datetime ? <Fact label="时间" value={`${fmtDateTime(ev.datetime)}${ev.end_datetime ? ` — ${fmtDateTime(ev.end_datetime)}` : ""}`} /> : null}
+          {ev?.location ? <Fact label="地点" value={ev.location} /> : null}
+          {ev?.target ? <Fact label="对象" value={ev.target} /> : null}
+          {ev?.type ? <Fact label="类型" value={ev.type} /> : null}
         </div>
-      </div>
+        {ev?.purpose ? <div style={purposeStyle}>{ev.purpose}</div> : null}
+      </section>
 
-      <div style={factGridStyle}>
-        {ev?.datetime ? <Fact label="时间" value={`${fmtDateTime(ev.datetime)}${ev.end_datetime ? ` — ${fmtDateTime(ev.end_datetime)}` : ""}`} /> : null}
-        {ev?.location ? <Fact label="地点" value={ev.location} /> : null}
-        {ev?.target ? <Fact label="对象" value={ev.target} /> : null}
-        {ev?.type ? <Fact label="类型" value={ev.type} /> : null}
-      </div>
-      {ev?.purpose ? <div style={purposeStyle}>{ev.purpose}</div> : null}
-
-      <h2 style={sectionTitleStyle}>流程</h2>
-      {!flowRows.length ? <div style={hintStyle}>暂无流程。</div> : null}
-      <div style={{ display: "grid", gap: 8 }}>
-        {flowRows.map(({ start, end, item }, i) => (
-          <div key={i} style={flowRowStyle}>
-            <div style={timeBadgeStyle}>
-              <span style={{ fontWeight: 800 }}>{clock(start)}</span>
-              <span style={{ fontSize: 11, opacity: 0.7 }}>{clock(end)}</span>
-            </div>
-            <div style={{ minWidth: 0 }}>
-              <div style={{ fontWeight: 700 }}>{item.title || "（环节）"}</div>
-              {item.detail ? <div style={mutedStyle}>{item.detail}</div> : null}
-            </div>
+      {memberFacts.length ? (
+        <section style={cardStyle}>
+          <h2 style={sectionTitleStyle}>我的报名资料</h2>
+          <div style={factGridStyle}>
+            {memberFacts.map((f) => <Fact key={f.label} label={f.label} value={f.value} />)}
           </div>
-        ))}
-      </div>
-    </section>
+        </section>
+      ) : null}
+
+      <section style={cardStyle}>
+        <h2 style={sectionTitleStyle}>流程</h2>
+        {!flowRows.length ? <div style={hintStyle}>暂无流程。</div> : null}
+        <div style={{ display: "grid", gap: 8 }}>
+          {flowRows.map(({ start, end, item }, i) => (
+            <div key={i} style={flowRowStyle}>
+              <div style={timeBadgeStyle}>
+                <span style={{ fontWeight: 800 }}>{clock(start)}</span>
+                <span style={{ fontSize: 11, opacity: 0.7 }}>{clock(end)}</span>
+              </div>
+              <div style={{ minWidth: 0 }}>
+                <div style={{ fontWeight: 700 }}>{item.title || "（环节）"}</div>
+                {item.detail ? <div style={mutedStyle}>{item.detail}</div> : null}
+              </div>
+            </div>
+          ))}
+        </div>
+      </section>
+    </>
   );
 }
 
@@ -274,6 +326,7 @@ const brandStyle: CSSProperties = { fontSize: 13, fontWeight: 800, letterSpacing
 const cardStyle: CSSProperties = { background: "rgba(255,255,255,0.92)", border: "1px solid #e5e7eb", borderRadius: 16, padding: "20px", boxShadow: "0 12px 40px rgba(30,41,59,0.10)", display: "grid", gap: 12 };
 const headRowStyle: CSSProperties = { display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: 10 };
 const titleStyle: CSSProperties = { margin: 0, fontSize: 22, fontWeight: 800 };
+const portalHeadStyle: CSSProperties = { padding: "2px 4px", display: "grid", gap: 2 };
 const eyebrowStyle: CSSProperties = { fontSize: 12, fontWeight: 700, color: "#6366f1", letterSpacing: "0.08em" };
 const mutedStyle: CSSProperties = { fontSize: 13, color: "#6b7280", lineHeight: 1.5 };
 const inputStyle: CSSProperties = { width: "100%", padding: "12px 14px", borderRadius: 12, border: "1px solid #d1d5db", fontSize: 16, boxSizing: "border-box", letterSpacing: "0.04em" };
