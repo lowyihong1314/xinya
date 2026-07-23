@@ -2786,9 +2786,12 @@ def member_portal_detail(nric, form_id):
         ).first()
         gid = getattr(link, "group_id", None) if link else None
         group_name = None
+        group_score = None
         if gid:
             grp = RegisFormGroup.query.get(gid)
-            group_name = grp.name if grp else None
+            if grp:
+                group_name = grp.name
+                group_score = grp.score or 0
         member_data = {
             "name_cn": ld.get("name_cn"),
             "name": ld.get("name"),
@@ -2805,6 +2808,7 @@ def member_portal_detail(nric, form_id):
             "parent_2": ld.get("parent_2"),
             "parent_2_phone": ld.get("parent_2_phone"),
             "group": group_name,
+            "group_score": group_score,
             "extra_fields": ld.get("extra_fields", []),
         }
 

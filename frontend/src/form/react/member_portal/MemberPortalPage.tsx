@@ -23,6 +23,7 @@ type MemberData = {
   medical?: string | null; allergy?: string | null; other_remark?: string | null;
   parent_1?: string | null; parent_1_phone?: string | null; parent_2?: string | null; parent_2_phone?: string | null;
   group?: string | null;
+  group_score?: number | null;
   extra_fields?: MemberExtraField[];
 };
 type DetailResponse = {
@@ -55,6 +56,7 @@ function buildMemberFacts(md: MemberData): { label: string; value: string }[] {
     ["Email", md.email || ""],
     ["居住地址", md.address || ""],
     ["小组", md.group || ""],
+    ["小组积分", md.group != null && md.group_score != null ? `${md.group_score} 分` : ""],
     ["紧急联络人 1", contact(md.parent_1, md.parent_1_phone)],
     ["紧急联络人 2", contact(md.parent_2, md.parent_2_phone)],
     ["医疗备注", md.medical || ""],
@@ -271,7 +273,12 @@ function PortalView({ nric, formId }: { nric: string; formId: number }) {
       <div style={portalHeadStyle}>
         <div style={memberLineStyle}>
           <span style={memberNameStyle}>{data.member_name || "成员"}</span>
-          {data.member_data?.group ? <span style={groupChipStyle}>{data.member_data.group}</span> : null}
+          {data.member_data?.group ? (
+            <span style={groupChipStyle}>
+              {data.member_data.group}
+              {data.member_data.group_score != null ? ` · ${data.member_data.group_score} 分` : ""}
+            </span>
+          ) : null}
         </div>
         <h1 style={titleStyle}>{ev?.event_name || data.form_title || "活动"}</h1>
       </div>
