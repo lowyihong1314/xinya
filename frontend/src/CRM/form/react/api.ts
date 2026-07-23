@@ -1,4 +1,5 @@
 import type {
+  AttendanceRosterEntry,
   AttendanceSnapshot,
   ExtraFieldConfig,
   FormCreatePayload,
@@ -308,7 +309,13 @@ export async function markAttendance(attendanceId: number, memberId: number, pre
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ member_id: memberId, present }),
   });
-  return parseJson<{ status?: string; attendance?: AttendanceSnapshot; message?: string }>(response);
+  return parseJson<{
+    status?: string;
+    member?: AttendanceRosterEntry;
+    present_count?: number;
+    total_count?: number;
+    message?: string;
+  }>(response);
 }
 
 export async function deleteAttendance(attendanceId: number) {

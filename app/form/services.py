@@ -2671,23 +2671,24 @@ def create_form_attendance(form_id, data):
     )
     db.session.add(att)
     db.session.commit()
-    emit_form_event(form.id, "attendance_update", {"attendance_id": att.id})
+    emit_form_event(form.id, "attendance_create", {"attendance_id": att.id})
     return jsonify({"status": "success", "attendance": att.to_dict(include_roster=True)})
 
 
 def update_form_attendance(attendance_id, data):
-    """改这条点名记录的名字（remark）。"""
+    """改这条点名记录的名字（remark）。只广播改动本身，前端补丁即可。"""
     att = RegisFormAttendance.query.get_or_404(attendance_id)
     data = data or {}
     if "remark" in data:
         att.remark = str(data.get("remark") or "").strip()[:255] or "新建点名"
     db.session.commit()
-    emit_form_event(att.form_id, "attendance_update", {"attendance_id": att.id})
+    emit_form_event(att.form_id, "attendance_rename", {"attendance_id": att.id, "remark": att.remark})
     return jsonify({"status": "success", "attendance": att.to_dict(include_roster=True)})
 
 
 def mark_form_attendance_member(attendance_id, data):
-    """切换单个成员的报到状态；报到时盖上更新时间（checked_at），取消则清空。"""
+    """切换单个成员的报到状态；报到时盖上更新时间（checked_at），取消则清空。
+    只返回并广播这一条变动（成员 + 计数），前端据此补丁单行，不整表覆盖。"""
     att = RegisFormAttendance.query.get_or_404(attendance_id)
     data = data or {}
     try:
@@ -2699,14 +2700,14 @@ def mark_form_attendance_member(attendance_id, data):
     snap = att.snapshot_json if isinstance(att.snapshot_json, dict) else {}
     roster = list(snap.get("roster") or [])
     now_iso = malaysia_now_naive().isoformat()
-    found = False
+    entry_out = None
     for entry in roster:
         if entry.get("id") == member_id:
             entry["present"] = present
             entry["checked_at"] = now_iso if present else None
-            found = True
+            entry_out = entry
             break
-    if not found:
+    if entry_out is None:
         return jsonify({"status": "error", "message": "该成员不在此点名名单内"}), 404
 
     # 重新赋一个新 dict，确保 SQLAlchemy 侦测到 JSON 变更。
@@ -2714,8 +2715,20 @@ def mark_form_attendance_member(attendance_id, data):
     att.present_count = sum(1 for e in roster if e.get("present"))
     att.total_count = len(roster)
     db.session.commit()
-    emit_form_event(att.form_id, "attendance_update", {"attendance_id": att.id})
-    return jsonify({"status": "success", "attendance": att.to_dict(include_roster=True)})
+
+    delta = {
+        "attendance_id": att.id,
+        "member_id": member_id,
+        "present": present,
+        "checked_at": entry_out.get("checked_at"),
+        "present_count": att.present_count,
+        "total_count": att.total_count,
+    }
+    # 广播里就带着刚写入的权威值，收到的客户端直接补丁这一行 —— 不再回读，
+    # 避免多 worker 下读到提交前旧值把刚点亮的状态盖回去。
+    emit_form_event(att.form_id, "attendance_mark", delta)
+    return jsonify({"status": "success", "member": entry_out,
+                    "present_count": att.present_count, "total_count": att.total_count})
 
 
 def delete_form_attendance(attendance_id):
@@ -2723,7 +2736,7 @@ def delete_form_attendance(attendance_id):
     form_id = att.form_id
     db.session.delete(att)
     db.session.commit()
-    emit_form_event(form_id, "attendance_update", {"attendance_id": attendance_id, "deleted": True})
+    emit_form_event(form_id, "attendance_delete", {"attendance_id": attendance_id})
     return jsonify({"status": "success"})
 
 

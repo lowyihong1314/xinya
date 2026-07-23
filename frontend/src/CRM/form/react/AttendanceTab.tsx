@@ -40,6 +40,26 @@ function applyPresentLocal(snap: AttendanceSnapshot, memberId: number, present: 
   return { ...snap, roster, present_count: roster.filter((e) => e.present).length };
 }
 
+// 单行补丁：只改动这一个成员（present + 报到时间），其余行原样保留。
+function patchEntry(
+  snap: AttendanceSnapshot,
+  memberId: number,
+  present: boolean,
+  checkedAt: string | null | undefined,
+  presentCount?: number,
+  totalCount?: number,
+): AttendanceSnapshot {
+  const roster = (snap.roster || []).map((e) =>
+    e.id === memberId ? { ...e, present, checked_at: checkedAt ?? null } : e,
+  );
+  return {
+    ...snap,
+    roster,
+    present_count: presentCount ?? roster.filter((e) => e.present).length,
+    total_count: totalCount ?? snap.total_count,
+  };
+}
+
 export function AttendanceTab({
   formId,
   isMobile,
@@ -101,26 +121,68 @@ export function AttendanceTab({
     socket.on("connect", join);
     if (socket.connected) join();
 
-    const handler = (payload: { form_id?: number; event?: string; attendance_id?: number; deleted?: boolean }) => {
-      if (payload?.event !== "attendance_update") return;
+    const handler = (payload: {
+      form_id?: number;
+      event?: string;
+      attendance_id?: number;
+      member_id?: number;
+      present?: boolean;
+      checked_at?: string | null;
+      present_count?: number;
+      total_count?: number;
+      remark?: string;
+    }) => {
       if (payload?.form_id != null && Number(payload.form_id) !== Number(formId)) return;
-      // 后台静默刷新列表计数。
-      listAttendance(formId)
-        .then((res) => setSnapshots(res.attendances || []))
-        .catch(() => {});
+      const ev = payload?.event;
+      const attId = payload?.attendance_id;
       const openId = editingIdRef.current;
-      if (payload.attendance_id && openId === payload.attendance_id) {
-        if (payload.deleted) {
-          setEditing(null);
-          setMode("list");
-          setToast({ type: "error", text: "这条点名已被删除" });
-        } else {
-          getAttendance(payload.attendance_id)
-            .then((res) => {
-              if (res.attendance && editingIdRef.current === payload.attendance_id) setEditing(res.attendance);
-            })
-            .catch(() => {});
+
+      if (ev === "attendance_mark") {
+        // 只补丁这一个成员，绝不回读整表。广播里带的就是刚写入的权威值。
+        if (attId && payload.member_id != null) {
+          if (openId === attId) {
+            setEditing((cur) =>
+              cur && cur.id === attId
+                ? patchEntry(cur, payload.member_id!, !!payload.present, payload.checked_at, payload.present_count, payload.total_count)
+                : cur,
+            );
+          }
+          setSnapshots((cur) =>
+            cur.map((s) =>
+              s.id === attId
+                ? { ...s, present_count: payload.present_count ?? s.present_count, total_count: payload.total_count ?? s.total_count }
+                : s,
+            ),
+          );
         }
+        return;
+      }
+
+      if (ev === "attendance_rename") {
+        if (attId) {
+          if (openId === attId) setEditing((cur) => (cur && cur.id === attId ? { ...cur, remark: payload.remark ?? cur.remark } : cur));
+          setSnapshots((cur) => cur.map((s) => (s.id === attId ? { ...s, remark: payload.remark ?? s.remark } : s)));
+        }
+        return;
+      }
+
+      if (ev === "attendance_delete") {
+        if (attId) {
+          setSnapshots((cur) => cur.filter((s) => s.id !== attId));
+          if (openId === attId) {
+            setEditing(null);
+            setMode("list");
+            setToast({ type: "error", text: "这条点名已被删除" });
+          }
+        }
+        return;
+      }
+
+      if (ev === "attendance_create") {
+        // 别人新建了一条：静默补进列表，不动当前编辑态。
+        listAttendance(formId)
+          .then((res) => setSnapshots(res.attendances || []))
+          .catch(() => {});
       }
     };
     socket.on("new_register", handler);
@@ -184,18 +246,27 @@ export function AttendanceTab({
     if (!editing) return;
     const attId = editing.id;
     setMarking((cur) => ({ ...cur, [memberId]: true }));
+    // 先乐观翻转这一行。
     setEditing((cur) => (cur ? applyPresentLocal(cur, memberId, present) : cur));
     try {
       const res = await markAttendance(attId, memberId, present);
-      if (res.attendance && editingIdRef.current === attId) setEditing(res.attendance);
+      // 只用返回的这一条结果补丁本行（拿到真实报到时间），不整表覆盖。
+      if (res.member && editingIdRef.current === attId) {
+        setEditing((cur) =>
+          cur && cur.id === attId
+            ? patchEntry(cur, res.member!.id, !!res.member!.present, res.member!.checked_at, res.present_count, res.total_count)
+            : cur,
+        );
+        setSnapshots((cur) =>
+          cur.map((s) =>
+            s.id === attId ? { ...s, present_count: res.present_count ?? s.present_count, total_count: res.total_count ?? s.total_count } : s,
+          ),
+        );
+      }
     } catch (err) {
       setToast({ type: "error", text: err instanceof Error ? err.message : "更新失败" });
-      try {
-        const r = await getAttendance(attId);
-        if (r.attendance && editingIdRef.current === attId) setEditing(r.attendance);
-      } catch {
-        /* ignore */
-      }
+      // 失败：把这一行翻回去，别的行不动。
+      setEditing((cur) => (cur && cur.id === attId ? applyPresentLocal(cur, memberId, !present) : cur));
     } finally {
       setMarking((cur) => {
         const next = { ...cur };
@@ -211,9 +282,9 @@ export function AttendanceTab({
     if (next === (editing.remark || "")) return;
     const attId = editing.id;
     setEditing((cur) => (cur ? { ...cur, remark: next } : cur));
+    setSnapshots((cur) => cur.map((s) => (s.id === attId ? { ...s, remark: next } : s)));
     try {
       await updateAttendance(attId, next);
-      await refreshList();
     } catch (err) {
       setToast({ type: "error", text: err instanceof Error ? err.message : "改名失败" });
     }
