@@ -46,6 +46,22 @@ def form_index(form_id):
     return services.form_index_response(form_id)
 
 
+# -------- 成员通道 Portal（公开）--------
+@form_bp.route("/member", methods=["GET"])
+def member_portal_page():
+    return services.member_portal_page()
+
+
+@form_bp.route("/member/participated", methods=["GET"])
+def member_portal_participated():
+    return services.member_portal_participated(request.args.get("nric"))
+
+
+@form_bp.route("/member/detail", methods=["GET"])
+def member_portal_detail():
+    return services.member_portal_detail(request.args.get("nric"), request.args.get("form_id", type=int))
+
+
 @form_bp.route("/pay_register/<form_id>", methods=["GET"])
 def pay_register_page(form_id):
     return services.pay_register_page_response(form_id)

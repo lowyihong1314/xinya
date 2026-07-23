@@ -11,7 +11,7 @@ from flask import abort, jsonify, render_template, request, send_file
 from flask_login import current_user
 from werkzeug.utils import secure_filename
 
-from app.timezone import malaysia_now
+from app.timezone import malaysia_now, malaysia_now_naive
 from app.paths import DATA_ROOT, PROJECT_ROOT, STATIC_ROOT
 from app.redis_client import redis_client
 from .pdf import merge_html_files_to_pdf
@@ -2671,3 +2671,111 @@ def delete_form_attendance(attendance_id):
     db.session.delete(att)
     db.session.commit()
     return jsonify({"status": "success"})
+
+
+# =========================
+# 成员通道 Portal（公开，按 NRIC；以活动结束时间为闸，不留后门）
+# =========================
+def _member_portal_event_state(event):
+    # 可用要求：活动设置了结束时间，且尚未结束。没设结束时间 = 不开放。
+    if event is None:
+        return "no_event", "该报名表未关联活动，通道未开放。"
+    if not event.end_datetime:
+        return "no_end", "此活动未设置结束时间，通道未开放。"
+    if malaysia_now_naive() > event.end_datetime:
+        return "ended", "活动已结束，通道已关闭。"
+    return "open", None
+
+
+def _portal_event_dict(event):
+    return {
+        "id": event.id,
+        "event_name": event.event_name,
+        "type": event.type,
+        "datetime": event.datetime.isoformat() if event.datetime else None,
+        "end_datetime": event.end_datetime.isoformat() if event.end_datetime else None,
+        "location": event.location,
+        "target": event.target,
+        "purpose": event.purpose,
+    }
+
+
+def _portal_form_event(form):
+    events = form.events or []
+    return events[0] if events else None
+
+
+def member_portal_page():
+    return render_template("form/member_portal.html")
+
+
+def member_portal_participated(nric):
+    try:
+        normalized = _normalize_member_nric(nric)
+    except ValueError as exc:
+        return jsonify({"status": "error", "message": str(exc)}), 400
+
+    member = NRIC_Asset.query.filter_by(nric=normalized).first()
+    if not member:
+        return jsonify({"status": "success", "member_name": None, "events": []})
+
+    latest = member.latest_data()
+    events_map = {}
+    for form in (member.forms or []):
+        for ev in (form.events or []):
+            entry = events_map.setdefault(ev.id, {"event": ev, "forms": []})
+            entry["forms"].append(form)
+
+    events = []
+    for entry in events_map.values():
+        ev = entry["event"]
+        state, msg = _member_portal_event_state(ev)
+        events.append({
+            **_portal_event_dict(ev),
+            "accessible": state == "open",
+            "state": state,
+            "state_message": msg,
+            "forms": [{"form_id": f.id, "title": f.title} for f in entry["forms"]],
+        })
+    events.sort(key=lambda e: (e.get("datetime") or ""), reverse=True)
+    return jsonify({
+        "status": "success",
+        "member_name": (latest.name_cn or latest.name) if latest else None,
+        "events": events,
+    })
+
+
+def member_portal_detail(nric, form_id):
+    try:
+        normalized = _normalize_member_nric(nric)
+    except ValueError as exc:
+        return jsonify({"status": "error", "message": str(exc)}), 400
+
+    member = NRIC_Asset.query.filter_by(nric=normalized).first()
+    if not member:
+        return jsonify({"status": "error", "message": "未找到该 NRIC 的报名记录。"}), 404
+
+    form = RegisForm.query.get(form_id) if form_id else None
+    if not form or form not in (member.forms or []):
+        return jsonify({"status": "error", "message": "该 NRIC 未报名此活动。"}), 403
+
+    event = _portal_form_event(form)
+    state, msg = _member_portal_event_state(event)
+    if state != "open":
+        return jsonify({
+            "status": "closed",
+            "message": msg,
+            "form_title": form.title,
+            "event_name": event.event_name if event else None,
+        })
+
+    latest = member.latest_data()
+    flows = sorted(event.event_flows or [], key=lambda f: (f.no or 0, f.minutes or 0, f.id))
+    flow = [{"no": f.no, "minutes": f.minutes, "title": f.title, "detail": f.detail} for f in flows]
+    return jsonify({
+        "status": "success",
+        "member_name": (latest.name_cn or latest.name) if latest else None,
+        "form_title": form.title,
+        "event": _portal_event_dict(event),
+        "flow": flow,
+    })

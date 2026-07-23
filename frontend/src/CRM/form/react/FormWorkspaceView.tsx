@@ -499,6 +499,7 @@ function MembersTab({
 }) {
   const [query, setQuery] = useState("");
   const [sort, setSort] = useState<SortState>(null);
+  const [portalMember, setPortalMember] = useState<FormMember | null>(null);
   const members = form.members || [];
   const parentalFormEnabled = Boolean(form.field_switches?.parental_form ?? form.parental_form);
 
@@ -574,6 +575,9 @@ function MembersTab({
                     <td style={monoCellStyle}>{formatRegDatetime(member.registered_at)}</td>
                     <td onClick={(e) => e.stopPropagation()}>
                       <div style={actionsCellStyle}>
+                        {member.nric ? (
+                          <button type="button" className="fw-btn" onClick={() => setPortalMember(member)} title="成员通道预览">通道</button>
+                        ) : null}
                         {parentalFormEnabled || member.parental_data ? (
                           <button type="button" className="fw-btn" onClick={() => onOpenParental(member)}>
                             {member.parental_data ? "家长书" : "发家长"}
@@ -592,6 +596,38 @@ function MembersTab({
         </div>
         </>
       ) : null}
+      {portalMember ? (
+        <MemberPortalPreviewModal formId={form.id} member={portalMember} isMobile={isMobile} onClose={() => setPortalMember(null)} />
+      ) : null}
+    </div>
+  );
+}
+
+function MemberPortalPreviewModal({ formId, member, isMobile, onClose }: { formId: number; member: FormMember; isMobile: boolean; onClose: () => void }) {
+  const url = `${PUBLIC_ORIGIN}/api/form/member?form_id=${formId}&nric=${encodeURIComponent(String(member.nric || ""))}`;
+  const [copied, setCopied] = useState("");
+  async function copy() {
+    const ok = await copyToClipboard(url);
+    setCopied(ok ? "链接已复制" : "复制失败，请手动复制");
+    window.setTimeout(() => setCopied(""), 2000);
+  }
+  return (
+    <div style={modalOverlayStyle} onClick={onClose}>
+      <div style={{ ...modalStyle, width: "min(440px, 100%)" }} onClick={(e) => e.stopPropagation()}>
+        <div style={publicHeadStyle}>
+          <div style={{ minWidth: 0 }}>
+            <h4 style={panelTitleStyle}>{member.name_cn || member.name || `成员 #${member.id}`} · 成员通道</h4>
+            <div style={mutedStyle}>手机预览，或复制链接发给该成员</div>
+          </div>
+          <div style={{ display: "flex", gap: 8, flexShrink: 0 }}>
+            <button type="button" style={primaryButtonStyle} onClick={() => void copy()}>复制链接</button>
+            <button type="button" style={btnStyle} onClick={onClose}>关闭</button>
+          </div>
+        </div>
+        {copied ? <div style={successStyle}>{copied}</div> : null}
+        <div style={urlBoxStyle}>{url}</div>
+        <PhoneFrame src={url} title="成员通道预览" />
+      </div>
     </div>
   );
 }
