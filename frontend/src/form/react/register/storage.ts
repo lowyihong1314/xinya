@@ -11,6 +11,9 @@ export type DraftPerson = {
   // 紧急联络人（家长同意书里家长通常就是紧急联络人，用来预填）。
   parent_1?: string;
   parent_1_phone?: string;
+  // 家长英文名 / NRIC：填完一张同意书后回填给其他同意书（也保回草稿，方便同设备继续）。
+  parent_en?: string;
+  parent_nric?: string;
 };
 
 export type RegisterDraft = {

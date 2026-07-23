@@ -6,7 +6,7 @@ import { completeParental, registerPerson } from "./api";
 import { calcAgeFromIc } from "./nric";
 import { collectParentalConsent } from "./parentalBridge";
 import { computeEventFlowSlots, slotsToPayload, type FlowSlot } from "./slots";
-import { clearDraft, loadDraft, pendingConsentPeople, saveDraft, type DraftPerson } from "./storage";
+import { clearDraft, loadDraft, pendingConsentPeople, saveDraft, type DraftPerson, type RegisterDraft } from "./storage";
 import { emptyPerson, type Person, type PublicExtraFieldConfig, type PublicForm } from "./types";
 
 type Step = "detail" | "choose" | "form" | "consent" | "done";
@@ -18,6 +18,9 @@ type ConsentItem = {
   done: boolean;
   parent_1?: string;
   parent_1_phone?: string;
+  // 家长英文名 / NRIC：报名时没收集，填完第一张同意书后回填到其余空白的同意书。
+  parent_en?: string;
+  parent_nric?: string;
 };
 
 declare global {
@@ -187,11 +190,38 @@ export function RegisterPage({ formId }: { formId: number }) {
     }
   }
 
-  function markConsentDone(nric: string) {
-    setConsentQueue((cur) => cur.map((c) => (c.nric === nric ? { ...c, done: true } : c)));
+  function markConsentDone(nric: string, propagate?: { parent_en?: string; parent_nric?: string }) {
+    const en = propagate?.parent_en?.trim() || "";
+    const nr = propagate?.parent_nric?.trim() || "";
+
+    // 队列：当前这张标记完成；其他「未完成、且该项为空」的补上家长英文名/NRIC（非空跳过）。
+    setConsentQueue((cur) =>
+      cur.map((c) => {
+        if (c.nric === nric) return { ...c, done: true };
+        if (c.done) return c;
+        return {
+          ...c,
+          parent_en: c.parent_en || en || undefined,
+          parent_nric: c.parent_nric || nr || undefined,
+        };
+      }),
+    );
+
+    // 草稿：同步 consentDone，并把家长英文名/NRIC 回填给其他未完成的人（同设备续填时也预填）。
     const draft = loadDraft(formId);
     if (draft) {
-      const next = { ...draft, people: draft.people.map((p) => (p.nric === nric ? { ...p, consentDone: true } : p)) };
+      const next: RegisterDraft = {
+        ...draft,
+        people: draft.people.map((p) => {
+          if (p.nric === nric) return { ...p, consentDone: true };
+          if (p.consentDone) return p;
+          return {
+            ...p,
+            parent_en: p.parent_en || en || undefined,
+            parent_nric: p.parent_nric || nr || undefined,
+          };
+        }),
+      };
       saveDraft(formId, next);
     }
   }
@@ -203,11 +233,17 @@ export function RegisterPage({ formId }: { formId: number }) {
     const prefill: Record<string, unknown> = { child_cn: item.name_cn, child_en: item.name, child_nric: item.nric, child_phone: item.phone };
     if (item.parent_1) prefill.parent_cn = item.parent_1;
     if (item.parent_1_phone) prefill.parent_phone = item.parent_1_phone;
+    if (item.parent_en) prefill.parent_en = item.parent_en;
+    if (item.parent_nric) prefill.parent_nric = item.parent_nric;
     try {
       const parental = await collectParentalConsent(form, person, prefill);
       if (!parental) return; // 用户取消
       await completeParental(formId, item.nric, parental);
-      markConsentDone(item.nric);
+      // 提交后：把这张同意书填的家长英文名/NRIC 回填给其他空白的同意书。
+      markConsentDone(item.nric, {
+        parent_en: typeof parental.parent_en === "string" ? parental.parent_en : "",
+        parent_nric: typeof parental.parent_nric === "string" ? parental.parent_nric : "",
+      });
     } catch (err) {
       setError(err instanceof Error ? err.message : "同意书提交失败");
     }
@@ -222,6 +258,8 @@ export function RegisterPage({ formId }: { formId: number }) {
         phone: d.phone,
         parent_1: d.parent_1,
         parent_1_phone: d.parent_1_phone,
+        parent_en: d.parent_en,
+        parent_nric: d.parent_nric,
         done: false,
       })),
     );
