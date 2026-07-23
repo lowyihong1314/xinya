@@ -4,6 +4,7 @@ import { io, type Socket } from "socket.io-client";
 
 import { API_BASE } from "../../../js/apiBase";
 import { apiFetch } from "../../../js/apiFetch";
+import { LogoQrBadge } from "../../../components/LogoQrBadge";
 
 type GroupMember = { name: string; age: number | null; gender: string; is_leader?: boolean };
 type Group = { id: number; name: string; score: number; color?: string | null; members?: GroupMember[] };
@@ -106,6 +107,7 @@ export function ScorePanelPage() {
 
   return (
     <div style={pageStyle}>
+      <LogoQrBadge />
       <header style={headerStyle}>
         <div style={eyebrowStyle}>积分控制面板</div>
         <div style={controllerStyle}>控制者：{data?.creator_name || "—"}</div>

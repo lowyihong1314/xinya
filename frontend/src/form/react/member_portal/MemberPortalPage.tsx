@@ -4,6 +4,7 @@ import { io, type Socket } from "socket.io-client";
 
 import { API_BASE } from "../../../js/apiBase";
 import { apiFetch } from "../../../js/apiFetch";
+import { LogoQrBadge } from "../../../components/LogoQrBadge";
 
 type PortalForm = { form_id: number; title: string };
 type PortalEvent = {
@@ -99,6 +100,7 @@ export function MemberPortalPage() {
 
   return (
     <div style={pageStyle}>
+      <LogoQrBadge />
       <div style={shellStyle}>
         <div style={brandStyle}>成员终端</div>
         {!nric ? (

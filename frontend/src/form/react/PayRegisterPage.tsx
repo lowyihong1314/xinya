@@ -1,5 +1,6 @@
 import { useMemo, useState } from "react";
 
+import { LogoQrBadge } from "../../components/LogoQrBadge";
 import { useEnsureDesignTokens } from "../../theme/designTokens";
 import type { FormFee } from "../../CRM/form/react/types";
 import { calcAgeFromNric } from "./nric";
@@ -157,6 +158,7 @@ export function PayRegisterPage({ formId, formTitle }: PayRegisterPageProps) {
 
   return (
     <div style={styles.page}>
+      <LogoQrBadge />
       {posterUrl ? (
         <div
           style={{ ...styles.poster, backgroundImage: `url(${posterUrl})` }}

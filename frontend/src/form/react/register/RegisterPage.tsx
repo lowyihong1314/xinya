@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState, type CSSProperties } from "react";
 
 import { API_BASE } from "../../../js/apiBase";
+import { LogoQrBadge } from "../../../components/LogoQrBadge";
 import { useEnsureDesignTokens } from "../../../theme/designTokens";
 import { completeParental, registerPerson } from "./api";
 import { calcAgeFromIc } from "./nric";
@@ -281,6 +282,7 @@ export function RegisterPage({ formId }: { formId: number }) {
 
   return (
     <div style={styles.page}>
+      <LogoQrBadge />
       <div style={styles.poster} aria-hidden>
         <div style={{ ...styles.posterImg, backgroundImage: `url(${posterUrl(formId)})` }} />
         <div style={styles.posterOverlay} />

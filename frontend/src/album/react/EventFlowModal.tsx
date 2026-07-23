@@ -481,7 +481,6 @@ const dragHandleStyle: CSSProperties = {
 };
 
 const timeBoxStyle: CSSProperties = {
-  border: "none",
   borderRadius: 0,
   padding: "10px 12px",
   background: "linear-gradient(135deg, rgba(14,165,233,0.78), rgba(125,211,252,0.62))",
