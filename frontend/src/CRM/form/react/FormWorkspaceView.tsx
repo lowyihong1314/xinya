@@ -1001,6 +1001,7 @@ function PublicTab({ formId, isMobile }: { formId: number; isMobile: boolean }) 
   const registerUrl = `${PUBLIC_ORIGIN}/api/form/index/${formId}`;
   const forceRegisterUrl = `${registerUrl}?force=true`;
   const payUrl = `${PUBLIC_ORIGIN}/api/form/pay_register/${formId}`;
+  const memberUrl = `${PUBLIC_ORIGIN}/api/form/member?form_id=${formId}`;
   const [copied, setCopied] = useState("");
   async function copy(url: string, label: string) {
     const ok = await copyToClipboard(url);
@@ -1032,6 +1033,14 @@ function PublicTab({ formId, isMobile }: { formId: number; isMobile: boolean }) 
           </div>
           <div style={urlBoxStyle}>{payUrl}</div>
           <PhoneFrame src={payUrl} title="公开付款页" />
+
+          <div style={publicHeadStyle}>
+            <span style={sectionTitleStyle}>成员终端（公共入口）</span>
+            <button type="button" style={btnStyle} onClick={() => void copy(memberUrl, "成员终端")}>复制链接</button>
+          </div>
+          <div style={urlBoxStyle}>{memberUrl}</div>
+          <div style={mutedStyle}>报名者凭 NRIC 进入，查看自己的报名资料与活动流程。仅在活动结束时间之前开放。</div>
+          <PhoneFrame src={memberUrl} title="成员终端" />
         </div>
       </div>
     </div>

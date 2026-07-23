@@ -106,6 +106,8 @@ export function MemberPortalPage() {
 
 function NricGate() {
   const [value, setValue] = useState("");
+  const formId = new URLSearchParams(window.location.search).get("form_id") || undefined;
+  const submit = () => { if (value.trim()) setQuery({ nric: value.trim(), form_id: formId }); };
   return (
     <section style={cardStyle}>
       <h1 style={titleStyle}>请输入 NRIC</h1>
@@ -115,10 +117,10 @@ function NricGate() {
         placeholder="例如 010203040506"
         value={value}
         onChange={(e) => setValue(e.target.value)}
-        onKeyDown={(e) => { if (e.key === "Enter" && value.trim()) setQuery({ nric: value.trim() }); }}
+        onKeyDown={(e) => { if (e.key === "Enter") submit(); }}
         autoFocus
       />
-      <button type="button" style={{ ...primaryStyle, ...(value.trim() ? {} : disabledStyle) }} disabled={!value.trim()} onClick={() => setQuery({ nric: value.trim() })}>
+      <button type="button" style={{ ...primaryStyle, ...(value.trim() ? {} : disabledStyle) }} disabled={!value.trim()} onClick={submit}>
         进入
       </button>
     </section>
