@@ -103,6 +103,7 @@ export function FormWorkspacePage() {
       onRenameGroup={(groupId, name) => void actions.handleRenameGroup(groupId, name)}
       onDeleteGroup={(groupId) => void actions.handleDeleteGroup(groupId)}
       onAssignMemberGroup={(memberId, groupId) => void actions.handleAssignMemberGroup(memberId, groupId)}
+      onAdjustGroupScore={(groupId, delta) => void actions.handleAdjustGroupScore(groupId, delta)}
       onAiChat={actions.handleAiChat}
       onApplyAiPlan={(plan) => actions.handleApplyAiPlan(plan)}
       onShowMemberDetail={(member) => actions.handleShowMemberDetail(member)}

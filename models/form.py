@@ -289,6 +289,7 @@ class RegisFormGroup(db.Model):
     )
     name = db.Column(db.String(255), nullable=False)
     order = db.Column(db.Integer, nullable=False, default=0)
+    score = db.Column(db.Integer, nullable=False, default=0)  # 小组积分（可加可扣，可为负）
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
 
     form = db.relationship("RegisForm", back_populates="groups")
@@ -299,6 +300,7 @@ class RegisFormGroup(db.Model):
             "form_id": self.form_id,
             "name": self.name,
             "order": self.order,
+            "score": self.score or 0,
             "created_at": self.created_at.isoformat() if self.created_at else None,
         }
 

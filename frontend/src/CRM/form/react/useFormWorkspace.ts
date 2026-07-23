@@ -10,6 +10,7 @@ import {
   addEventToForm,
   addExtraField,
   addFee,
+  adjustGroupScore,
   aiGroupChat,
   applyGroupPlan,
   assignMemberGroup,
@@ -466,6 +467,17 @@ export function useFormWorkspace(options?: {
     }
   }
 
+  async function handleAdjustGroupScore(groupId: number, delta: number) {
+    // 乐观更新积分，失败回滚为服务器真值。
+    setGroups((prev) => prev.map((g) => (g.id === groupId ? { ...g, score: (g.score ?? 0) + delta } : g)));
+    try {
+      await adjustGroupScore(groupId, delta);
+    } catch (err) {
+      setToast({ type: "error", text: getErrorMessage(err, "改分失败") });
+      if (selectedFormId) void openForm(selectedFormId);
+    }
+  }
+
   async function handleAiChat(messages: GroupChatMessage[]) {
     if (!selectedFormId) throw new Error("未选择表单");
     return aiGroupChat(selectedFormId, messages);
@@ -584,6 +596,7 @@ export function useFormWorkspace(options?: {
       handleRenameGroup,
       handleDeleteGroup,
       handleAssignMemberGroup,
+      handleAdjustGroupScore,
       handleAiChat,
       handleApplyAiPlan,
       handleEditMemberField,

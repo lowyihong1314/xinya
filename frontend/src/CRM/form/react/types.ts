@@ -80,6 +80,7 @@ export type FormGroup = {
   form_id?: number;
   name: string;
   order?: number;
+  score?: number;
   created_at?: string | null;
 };
 

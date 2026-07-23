@@ -266,6 +266,12 @@ def assign_member_group():
     return services.assign_member_group(request.get_json(silent=True) or {})
 
 
+@form_bp.route("/group/score/<int:group_id>", methods=["POST"])
+@permission_required_any(*FORM_EDIT_PERMISSION_NAMES)
+def adjust_form_group_score(group_id):
+    return services.adjust_form_group_score(group_id, request.get_json(silent=True) or {})
+
+
 @form_bp.route("/group/ai_chat/<int:form_id>", methods=["POST"])
 @permission_required_any(*FORM_MEMBER_DETAIL_PERMISSION_NAMES)
 def group_ai_chat(form_id):

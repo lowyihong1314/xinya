@@ -217,6 +217,15 @@ export async function deleteGroup(groupId: number) {
   return parseJson<{ status?: string; message?: string }>(response);
 }
 
+export async function adjustGroupScore(groupId: number, delta: number) {
+  const response = await apiFetch(`/api/form/group/score/${groupId}`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ delta }),
+  });
+  return parseJson<{ status?: string; group?: FormGroup; message?: string }>(response);
+}
+
 export async function aiGroupChat(formId: number, messages: GroupChatMessage[]) {
   const response = await apiFetch(`/api/form/group/ai_chat/${formId}`, {
     method: "POST",

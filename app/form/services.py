@@ -2820,3 +2820,24 @@ def member_portal_detail(nric, form_id):
         "flow": flow,
         "member_data": member_data,
     })
+
+
+def adjust_form_group_score(group_id, data):
+    group = RegisFormGroup.query.get_or_404(group_id)
+    data = data or {}
+    if "delta" in data:
+        try:
+            group.score = (group.score or 0) + int(data.get("delta") or 0)
+        except (TypeError, ValueError):
+            return jsonify({"status": "error", "message": "加减分需为整数"}), 400
+    elif "score" in data:
+        try:
+            group.score = int(data.get("score") or 0)
+        except (TypeError, ValueError):
+            return jsonify({"status": "error", "message": "分数需为整数"}), 400
+    else:
+        return jsonify({"status": "error", "message": "缺少 delta 或 score"}), 400
+
+    db.session.commit()
+    _emit_form_update(group.form_id)
+    return jsonify({"status": "success", "group": group.to_dict()})

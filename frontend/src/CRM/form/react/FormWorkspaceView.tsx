@@ -237,6 +237,7 @@ export function FormWorkspaceView(props: {
   onRenameGroup: (groupId: number, name: string) => void;
   onDeleteGroup: (groupId: number) => void;
   onAssignMemberGroup: (memberId: number, groupId: number | null) => void;
+  onAdjustGroupScore: (groupId: number, delta: number) => void;
   onAiChat: (messages: GroupChatMessage[]) => Promise<{ job_id?: string; room?: string }>;
   onApplyAiPlan: (plan: GroupPlan) => void;
   onShowMemberDetail: (member: FormMember) => void;
@@ -324,6 +325,7 @@ export function FormWorkspaceView(props: {
                   onRenameGroup={props.onRenameGroup}
                   onDeleteGroup={props.onDeleteGroup}
                   onAssignMemberGroup={props.onAssignMemberGroup}
+                  onAdjustGroupScore={props.onAdjustGroupScore}
                   onAiChat={props.onAiChat}
                   onApplyAiPlan={props.onApplyAiPlan}
                 />
@@ -676,6 +678,7 @@ function GroupsTab({
   onRenameGroup,
   onDeleteGroup,
   onAssignMemberGroup,
+  onAdjustGroupScore,
   onAiChat,
   onApplyAiPlan,
 }: {
@@ -688,6 +691,7 @@ function GroupsTab({
   onRenameGroup: (groupId: number, name: string) => void;
   onDeleteGroup: (groupId: number) => void;
   onAssignMemberGroup: (memberId: number, groupId: number | null) => void;
+  onAdjustGroupScore: (groupId: number, delta: number) => void;
   onAiChat: (messages: GroupChatMessage[]) => Promise<{ job_id?: string; room?: string }>;
   onApplyAiPlan: (plan: GroupPlan) => void;
 }) {
@@ -726,9 +730,9 @@ function GroupsTab({
     onAssignMemberGroup(memberId, groupId);
   }
 
-  const columns: { key: number | "ungrouped"; id: number | null; title: string }[] = [
+  const columns: { key: number | "ungrouped"; id: number | null; title: string; score?: number }[] = [
     { key: "ungrouped", id: null, title: "未分组" },
-    ...sortedGroups.map((g) => ({ key: g.id, id: g.id, title: g.name })),
+    ...sortedGroups.map((g) => ({ key: g.id, id: g.id, title: g.name, score: g.score ?? 0 })),
   ];
 
   return (
@@ -766,6 +770,23 @@ function GroupsTab({
                 onRename={onRenameGroup}
                 onDelete={onDeleteGroup}
               />
+              {col.id != null ? (
+                <div style={scoreBarStyle}>
+                  {canEdit ? (
+                    <button type="button" style={scoreBtnStyle} title="扣 5 分" onClick={() => onAdjustGroupScore(col.id as number, -5)}>−5</button>
+                  ) : null}
+                  {canEdit ? (
+                    <button type="button" style={scoreBtnStyle} title="扣 1 分" onClick={() => onAdjustGroupScore(col.id as number, -1)}>−1</button>
+                  ) : null}
+                  <span style={scoreValueStyle} title="小组积分">{col.score ?? 0}<span style={scoreUnitStyle}>分</span></span>
+                  {canEdit ? (
+                    <button type="button" style={scoreBtnStyle} title="加 1 分" onClick={() => onAdjustGroupScore(col.id as number, 1)}>＋1</button>
+                  ) : null}
+                  {canEdit ? (
+                    <button type="button" style={scoreBtnStyle} title="加 5 分" onClick={() => onAdjustGroupScore(col.id as number, 5)}>＋5</button>
+                  ) : null}
+                </div>
+              ) : null}
               <div style={groupColBodyStyle}>
                 {!list.length ? (
                   <div style={groupEmptyStyle}>{col.id == null ? "全部已分组" : canEdit ? "拖成员到这里" : "暂无成员"}</div>
@@ -1327,6 +1348,10 @@ const groupColHoverStyle: CSSProperties = { border: "1px dashed var(--x-color-ac
 const groupHeadStyle: CSSProperties = { display: "flex", alignItems: "center", justifyContent: "space-between", gap: "6px", padding: "8px 10px", borderBottom: "1px solid var(--x-color-line-soft)" };
 const groupTitleStyle: CSSProperties = { display: "inline-flex", alignItems: "center", gap: "6px", fontWeight: 700, fontSize: "13px", minWidth: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" };
 const groupCountStyle: CSSProperties = { display: "inline-flex", alignItems: "center", justifyContent: "center", minWidth: "20px", height: "18px", padding: "0 6px", borderRadius: "999px", background: "var(--x-color-panel)", border: "1px solid var(--x-color-line)", fontSize: "11px", fontWeight: 700, color: "var(--x-color-ink-muted)" };
+const scoreBarStyle: CSSProperties = { display: "flex", alignItems: "center", justifyContent: "center", gap: "6px", padding: "6px 8px", borderBottom: "1px solid var(--x-color-line-soft)", background: "var(--x-color-panel)", flexWrap: "wrap" };
+const scoreBtnStyle: CSSProperties = { minWidth: "30px", padding: "4px 7px", borderRadius: "6px", border: "1px solid var(--x-color-line)", background: "var(--x-color-panel-alt)", color: "var(--x-color-ink)", fontWeight: 800, fontSize: "13px", cursor: "pointer", lineHeight: 1 };
+const scoreValueStyle: CSSProperties = { minWidth: "44px", textAlign: "center", fontWeight: 800, fontSize: "18px", color: "var(--x-color-accent-strong)" };
+const scoreUnitStyle: CSSProperties = { fontSize: "11px", fontWeight: 700, color: "var(--x-color-ink-muted)", marginLeft: "2px" };
 const groupColBodyStyle: CSSProperties = { display: "grid", gap: "6px", padding: "8px", alignContent: "start" };
 const groupEmptyStyle: CSSProperties = { padding: "14px 8px", borderRadius: "8px", border: "1px dashed var(--x-color-line)", textAlign: "center", fontSize: "12px", color: "var(--x-color-ink-muted)" };
 const memberCardStyle: CSSProperties = { display: "grid", gap: "6px", padding: "8px 10px", borderRadius: "8px", background: "var(--x-color-panel)", border: "1px solid var(--x-color-line)", boxShadow: "0 1px 2px var(--x-color-shadow-soft)" };
