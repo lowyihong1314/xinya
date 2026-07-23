@@ -61,16 +61,17 @@ function patchEntry(
   };
 }
 
-// 与「报名成员」页（FormWorkspaceView）一致的判定逻辑，保持口径统一。
 type StatusTone = "success" | "danger" | "warning" | "muted";
+// 点名场景的付款配色（刻意与「报名成员」页不同）：只分「已收到钱」绿 / 「没收到」红。
+// 未付款 → 红；处理中(process) → 绿（视同已交，等对账）；已付款 → 绿；付款失败 → 红。
 function memberPaymentMeta(member?: FormMember): { label: string; tone: StatusTone } {
   if (!member) return { label: "—", tone: "muted" };
   const payments = Array.isArray(member.payments) ? member.payments : [];
   const latest = payments[0]; // payments 按 id 倒序，[0] 为最新
-  if (!latest) return { label: "未付款", tone: "muted" };
+  if (!latest) return { label: "未付款", tone: "danger" };
   if (latest.status === "checked") return { label: "已付款", tone: "success" };
   if (latest.status === "fail") return { label: "付款失败", tone: "danger" };
-  return { label: "处理中", tone: "warning" };
+  return { label: "处理中", tone: "success" };
 }
 function memberParentalMeta(member: FormMember | undefined, parentalEnabled: boolean): { label: string; tone: StatusTone } {
   if (!member) return { label: "—", tone: "muted" };
