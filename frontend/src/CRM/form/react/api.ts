@@ -231,6 +231,15 @@ export async function setGroupColor(groupId: number, color: string | null) {
   return parseJson<{ status?: string; group?: FormGroup; message?: string }>(response);
 }
 
+export async function setGroupLeader(groupId: number, memberId: number | null) {
+  const response = await apiFetch(`/api/form/group/leader/${groupId}`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ member_id: memberId }),
+  });
+  return parseJson<{ status?: string; group?: FormGroup; message?: string }>(response);
+}
+
 export type GroupScoreLogEntry = { id: number; group_id: number | null; group_name?: string | null; delta: number; actor_name?: string | null; created_at?: string | null };
 export async function fetchGroupScoreLog(groupId: number) {
   const response = await apiFetch(`/api/form/group/score_log/${groupId}`, { credentials: "include" });

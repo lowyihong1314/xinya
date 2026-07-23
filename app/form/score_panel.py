@@ -13,7 +13,9 @@ from flask_login import current_user
 from app.extensions import socket_broker
 from app.redis_client import redis_client
 from models import db
-from models.form import RegisForm, RegisFormGroup, RegisFormGroupScoreLog
+from models.form import RegisForm, RegisFormGroup, RegisFormGroupScoreLog, regis_form_member
+
+from .services import _calc_age_from_nric
 
 PANEL_PREFIX = "form:score_panel:"
 PANEL_TTL = 24 * 60 * 60
@@ -53,7 +55,10 @@ def _emit_group(form_id, group):
     try:
         socket_broker.emit(
             "group_score",
-            {"form_id": form_id, "group_id": group.id, "score": group.score or 0, "color": group.color, "name": group.name},
+            {
+                "form_id": form_id, "group_id": group.id, "score": group.score or 0,
+                "color": group.color, "name": group.name, "leader_member_id": group.leader_member_id,
+            },
             room=_score_room(form_id),
         )
     except Exception as exc:  # noqa: BLE001
@@ -99,13 +104,46 @@ def score_panel_data(token):
     if not form:
         return jsonify({"status": "error", "message": "表单不存在。"}), 404
     groups = sorted(form.groups or [], key=lambda g: (g.order or 0, g.id))
+
+    # 每组成员（仅 姓名/年龄/性别）
+    links = db.session.execute(
+        regis_form_member.select().where(regis_form_member.c.form_id == form.id)
+    ).fetchall()
+    group_of = {row.member_id: row.group_id for row in links}
+    leader_of = {g.id: g.leader_member_id for g in groups}
+    members_by_gid = {}
+    for member in (form.members or []):
+        gid = group_of.get(member.id)
+        if gid is None:
+            continue
+        latest = member.latest_data()
+        try:
+            age = _calc_age_from_nric(member.nric)
+        except Exception:  # noqa: BLE001
+            age = None
+        members_by_gid.setdefault(gid, []).append({
+            "name": (latest.name_cn or latest.name) if latest else "",
+            "age": age,
+            "gender": (latest.gender if latest else "") or "",
+            "is_leader": leader_of.get(gid) == member.id,
+        })
+    # 组长排在最前
+    for rows in members_by_gid.values():
+        rows.sort(key=lambda r: (0 if r.get("is_leader") else 1))
+
+    groups_out = []
+    for g in groups:
+        gd = g.to_dict()
+        gd["members"] = members_by_gid.get(g.id, [])
+        groups_out.append(gd)
+
     return jsonify({
         "status": "success",
         "creator_name": panel.get("creator_name"),
         "form_id": form.id,
         "form_title": form.title,
         "palette": PALETTE,
-        "groups": [g.to_dict() for g in groups],
+        "groups": groups_out,
     })
 
 
@@ -164,6 +202,30 @@ def set_group_color(group_id, data):
     if color is not None and color not in PALETTE:
         return jsonify({"status": "error", "message": "颜色无效。"}), 400
     group.color = color
+    db.session.commit()
+    _emit_group(group.form_id, group)
+    return jsonify({"status": "success", "group": group.to_dict()})
+
+
+def set_group_leader(group_id, data):
+    group = RegisFormGroup.query.get_or_404(group_id)
+    mid = (data or {}).get("member_id")
+    if mid in (None, "", 0, "0"):
+        group.leader_member_id = None
+    else:
+        try:
+            mid = int(mid)
+        except (TypeError, ValueError):
+            return jsonify({"status": "error", "message": "member_id 无效。"}), 400
+        link = db.session.execute(
+            regis_form_member.select().where(
+                regis_form_member.c.form_id == group.form_id,
+                regis_form_member.c.member_id == mid,
+            )
+        ).first()
+        if not link:
+            return jsonify({"status": "error", "message": "该成员未报名此表单。"}), 400
+        group.leader_member_id = mid
     db.session.commit()
     _emit_group(group.form_id, group)
     return jsonify({"status": "success", "group": group.to_dict()})

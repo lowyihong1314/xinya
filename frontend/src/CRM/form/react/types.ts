@@ -82,6 +82,7 @@ export type FormGroup = {
   order?: number;
   score?: number;
   color?: string | null;
+  leader_member_id?: number | null;
   created_at?: string | null;
 };
 

@@ -20,6 +20,7 @@ import {
   createGroup,
   createScorePanel,
   setGroupColor,
+  setGroupLeader,
   deleteExtraField,
   deleteFee,
   deleteGroup,
@@ -184,9 +185,9 @@ export function useFormWorkspace(options?: {
     const join = () => socket.emit("join_room", { room });
     socket.on("connect", join);
     if (socket.connected) join();
-    socket.on("group_score", (p: { form_id?: number; group_id?: number; score?: number; color?: string | null }) => {
+    socket.on("group_score", (p: { form_id?: number; group_id?: number; score?: number; color?: string | null; leader_member_id?: number | null }) => {
       if (p.form_id !== selectedFormId || p.group_id == null) return;
-      setGroups((cur) => cur.map((g) => (g.id === p.group_id ? { ...g, score: p.score ?? g.score, color: p.color ?? g.color } : g)));
+      setGroups((cur) => cur.map((g) => (g.id === p.group_id ? { ...g, score: p.score ?? g.score, color: p.color ?? g.color, leader_member_id: p.leader_member_id !== undefined ? p.leader_member_id : g.leader_member_id } : g)));
     });
     return () => { socket.off("group_score"); socket.off("connect", join); socket.disconnect(); };
   }, [enabled, selectedFormId]);
@@ -508,6 +509,16 @@ export function useFormWorkspace(options?: {
     }
   }
 
+  async function handleSetGroupLeader(groupId: number, memberId: number | null) {
+    setGroups((prev) => prev.map((g) => (g.id === groupId ? { ...g, leader_member_id: memberId } : g)));
+    try {
+      await setGroupLeader(groupId, memberId);
+    } catch (err) {
+      setToast({ type: "error", text: getErrorMessage(err, "设置组长失败") });
+      if (selectedFormId) void openForm(selectedFormId);
+    }
+  }
+
   async function handleAdjustGroupScore(groupId: number, delta: number) {
     // 乐观更新积分，失败回滚为服务器真值。
     setGroups((prev) => prev.map((g) => (g.id === groupId ? { ...g, score: (g.score ?? 0) + delta } : g)));
@@ -640,6 +651,7 @@ export function useFormWorkspace(options?: {
       handleAdjustGroupScore,
       handleCreateScorePanel,
       handleSetGroupColor,
+      handleSetGroupLeader,
       handleAiChat,
       handleApplyAiPlan,
       handleEditMemberField,

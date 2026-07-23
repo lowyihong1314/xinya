@@ -241,6 +241,7 @@ export function FormWorkspaceView(props: {
   onAdjustGroupScore: (groupId: number, delta: number) => void;
   onCreateScorePanel: () => Promise<string | null>;
   onSetGroupColor: (groupId: number, color: string | null) => void;
+  onSetGroupLeader: (groupId: number, memberId: number | null) => void;
   onAiChat: (messages: GroupChatMessage[]) => Promise<{ job_id?: string; room?: string }>;
   onApplyAiPlan: (plan: GroupPlan) => void;
   onShowMemberDetail: (member: FormMember) => void;
@@ -331,6 +332,7 @@ export function FormWorkspaceView(props: {
                   onAdjustGroupScore={props.onAdjustGroupScore}
                   onCreateScorePanel={props.onCreateScorePanel}
                   onSetGroupColor={props.onSetGroupColor}
+                  onSetGroupLeader={props.onSetGroupLeader}
                   onAiChat={props.onAiChat}
                   onApplyAiPlan={props.onApplyAiPlan}
                 />
@@ -686,6 +688,7 @@ function GroupsTab({
   onAdjustGroupScore,
   onCreateScorePanel,
   onSetGroupColor,
+  onSetGroupLeader,
   onAiChat,
   onApplyAiPlan,
 }: {
@@ -701,6 +704,7 @@ function GroupsTab({
   onAdjustGroupScore: (groupId: number, delta: number) => void;
   onCreateScorePanel: () => Promise<string | null>;
   onSetGroupColor: (groupId: number, color: string | null) => void;
+  onSetGroupLeader: (groupId: number, memberId: number | null) => void;
   onAiChat: (messages: GroupChatMessage[]) => Promise<{ job_id?: string; room?: string }>;
   onApplyAiPlan: (plan: GroupPlan) => void;
 }) {
@@ -741,9 +745,9 @@ function GroupsTab({
     onAssignMemberGroup(memberId, groupId);
   }
 
-  const columns: { key: number | "ungrouped"; id: number | null; title: string; score?: number; color?: string | null }[] = [
+  const columns: { key: number | "ungrouped"; id: number | null; title: string; score?: number; color?: string | null; leaderId?: number | null }[] = [
     { key: "ungrouped", id: null, title: "未分组" },
-    ...sortedGroups.map((g) => ({ key: g.id, id: g.id, title: g.name, score: g.score ?? 0, color: g.color ?? null })),
+    ...sortedGroups.map((g) => ({ key: g.id, id: g.id, title: g.name, score: g.score ?? 0, color: g.color ?? null, leaderId: g.leader_member_id ?? null })),
   ];
 
   return (
@@ -826,6 +830,8 @@ function GroupsTab({
                     currentGroupId={col.id}
                     groups={sortedGroups}
                     onMove={onAssignMemberGroup}
+                    isLeader={col.id != null && col.leaderId === m.id}
+                    onSetLeader={col.id != null ? () => onSetGroupLeader(col.id as number, col.leaderId === m.id ? null : m.id) : undefined}
                   />
                 ))}
               </div>
@@ -965,6 +971,8 @@ function MemberChipCard({
   currentGroupId,
   groups,
   onMove,
+  isLeader,
+  onSetLeader,
 }: {
   member: FormMember;
   canEdit: boolean;
@@ -972,6 +980,8 @@ function MemberChipCard({
   currentGroupId: number | null;
   groups: FormGroup[];
   onMove: (memberId: number, groupId: number | null) => void;
+  isLeader?: boolean;
+  onSetLeader?: () => void;
 }) {
   const age = calcAgeFromNric(member.nric);
   const gender = String(member.gender || "");
@@ -979,7 +989,7 @@ function MemberChipCard({
   const draggable = canEdit && !isMobile;
   return (
     <div
-      style={{ ...memberCardStyle, cursor: draggable ? "grab" : "default" }}
+      style={{ ...memberCardStyle, cursor: draggable ? "grab" : "default", ...(isLeader ? memberLeaderCardStyle : {}) }}
       draggable={draggable}
       onDragStart={(e) => {
         e.dataTransfer.setData("text/plain", String(member.id));
@@ -987,8 +997,23 @@ function MemberChipCard({
       }}
     >
       <div style={memberCardMainStyle}>
-        <span style={memberCardNameStyle}>{name}</span>
-        <span style={memberCardMetaStyle}>{age != null ? `${age}岁` : "—"}{gender ? ` · ${gender}` : ""}</span>
+        <span style={memberCardNameStyle}>
+          {isLeader ? <span style={leaderBadgeStyle} title="组长">👑 组长</span> : null}
+          {name}
+        </span>
+        <span style={{ display: "inline-flex", alignItems: "center", gap: 6 }}>
+          {onSetLeader ? (
+            <button
+              type="button"
+              style={{ ...leaderStarStyle, ...(isLeader ? leaderStarActiveStyle : {}) }}
+              title={isLeader ? "取消组长" : "设为组长"}
+              onClick={(e) => { e.stopPropagation(); onSetLeader(); }}
+            >
+              {isLeader ? "★" : "☆"}
+            </button>
+          ) : null}
+          <span style={memberCardMetaStyle}>{age != null ? `${age}岁` : "—"}{gender ? ` · ${gender}` : ""}</span>
+        </span>
       </div>
       {canEdit && isMobile ? (
         <select
@@ -1458,6 +1483,10 @@ const scoreUnitStyle: CSSProperties = { fontSize: "11px", fontWeight: 700, color
 const groupColBodyStyle: CSSProperties = { display: "grid", gap: "6px", padding: "8px", alignContent: "start" };
 const groupEmptyStyle: CSSProperties = { padding: "14px 8px", borderRadius: "8px", border: "1px dashed var(--x-color-line)", textAlign: "center", fontSize: "12px", color: "var(--x-color-ink-muted)" };
 const memberCardStyle: CSSProperties = { display: "grid", gap: "6px", padding: "8px 10px", borderRadius: "8px", background: "var(--x-color-panel)", border: "1px solid var(--x-color-line)", boxShadow: "0 1px 2px var(--x-color-shadow-soft)" };
+const memberLeaderCardStyle: CSSProperties = { border: "1px solid var(--x-color-accent-border)", boxShadow: "inset 0 0 0 1px var(--x-color-accent-tint)" };
+const leaderBadgeStyle: CSSProperties = { display: "inline-block", marginRight: 6, padding: "1px 6px", borderRadius: 999, background: "var(--x-color-accent-tint)", color: "var(--x-color-accent-strong)", fontSize: 10.5, fontWeight: 800, verticalAlign: "middle" };
+const leaderStarStyle: CSSProperties = { border: "none", background: "transparent", color: "var(--x-color-ink-muted)", cursor: "pointer", fontSize: 15, lineHeight: 1, padding: 0 };
+const leaderStarActiveStyle: CSSProperties = { color: "#f59e0b" };
 const memberCardMainStyle: CSSProperties = { display: "flex", alignItems: "baseline", justifyContent: "space-between", gap: "8px", minWidth: 0 };
 const memberCardNameStyle: CSSProperties = { fontWeight: 700, fontSize: "13px", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" };
 const memberCardMetaStyle: CSSProperties = { fontSize: "12px", color: "var(--x-color-ink-muted)", whiteSpace: "nowrap", flexShrink: 0 };

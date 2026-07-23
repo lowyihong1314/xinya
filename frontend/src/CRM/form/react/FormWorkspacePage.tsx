@@ -106,6 +106,7 @@ export function FormWorkspacePage() {
       onAdjustGroupScore={(groupId, delta) => void actions.handleAdjustGroupScore(groupId, delta)}
       onCreateScorePanel={() => actions.handleCreateScorePanel()}
       onSetGroupColor={(groupId, color) => void actions.handleSetGroupColor(groupId, color)}
+      onSetGroupLeader={(groupId, memberId) => void actions.handleSetGroupLeader(groupId, memberId)}
       onAiChat={actions.handleAiChat}
       onApplyAiPlan={(plan) => actions.handleApplyAiPlan(plan)}
       onShowMemberDetail={(member) => actions.handleShowMemberDetail(member)}

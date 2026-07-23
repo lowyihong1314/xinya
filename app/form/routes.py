@@ -278,6 +278,12 @@ def set_form_group_color(group_id):
     return score_panel.set_group_color(group_id, request.get_json(silent=True) or {})
 
 
+@form_bp.route("/group/leader/<int:group_id>", methods=["POST"])
+@permission_required_any(*FORM_EDIT_PERMISSION_NAMES)
+def set_form_group_leader(group_id):
+    return score_panel.set_group_leader(group_id, request.get_json(silent=True) or {})
+
+
 @form_bp.route("/group/score_log/<int:group_id>", methods=["GET"])
 @permission_required_any(*FORM_MEMBER_DETAIL_PERMISSION_NAMES)
 def form_group_score_log(group_id):

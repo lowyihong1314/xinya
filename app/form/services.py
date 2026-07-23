@@ -2787,11 +2787,14 @@ def member_portal_detail(nric, form_id):
         gid = getattr(link, "group_id", None) if link else None
         group_name = None
         group_score = None
+        is_leader = False
+        grp = None
         if gid:
             grp = RegisFormGroup.query.get(gid)
             if grp:
                 group_name = grp.name
                 group_score = grp.score or 0
+                is_leader = grp.leader_member_id == member.id
         member_data = {
             "name_cn": ld.get("name_cn"),
             "name": ld.get("name"),
@@ -2810,8 +2813,33 @@ def member_portal_detail(nric, form_id):
             "group": group_name,
             "group_id": gid,
             "group_score": group_score,
+            "is_leader": is_leader,
             "extra_fields": ld.get("extra_fields", []),
         }
+
+    # 组长可看本组成员名单（姓名/年龄/性别）。
+    group_members = None
+    if member_data and member_data.get("is_leader") and gid:
+        rows = db.session.execute(
+            regis_form_member.select().where(regis_form_member.c.form_id == form.id)
+        ).fetchall()
+        member_ids = {r.member_id for r in rows if r.group_id == gid}
+        group_members = []
+        for m in (form.members or []):
+            if m.id not in member_ids:
+                continue
+            md = m.latest_data()
+            try:
+                age = _calc_age_from_nric(m.nric)
+            except Exception:  # noqa: BLE001
+                age = None
+            group_members.append({
+                "name": (md.name_cn or md.name) if md else "",
+                "age": age,
+                "gender": (md.gender if md else "") or "",
+                "is_leader": grp.leader_member_id == m.id if grp else False,
+            })
+        group_members.sort(key=lambda r: (0 if r.get("is_leader") else 1))
 
     img = getattr(event, "event_image", None)
     poster_url = f"/api/form/event_poster/{form.id}/cache" if (img and getattr(img, "id", None)) else None
@@ -2824,6 +2852,7 @@ def member_portal_detail(nric, form_id):
         "poster_url": poster_url,
         "flow": flow,
         "member_data": member_data,
+        "group_members": group_members,
     })
 
 

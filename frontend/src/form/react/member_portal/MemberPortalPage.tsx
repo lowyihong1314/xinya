@@ -27,8 +27,10 @@ type MemberData = {
   group?: string | null;
   group_id?: number | null;
   group_score?: number | null;
+  is_leader?: boolean;
   extra_fields?: MemberExtraField[];
 };
+type PortalGroupMember = { name: string; age: number | null; gender: string; is_leader?: boolean };
 type DetailResponse = {
   status: string;
   message?: string;
@@ -39,6 +41,7 @@ type DetailResponse = {
   poster_url?: string | null;
   flow?: FlowItem[];
   member_data?: MemberData | null;
+  group_members?: PortalGroupMember[] | null;
 };
 
 function fmtVal(v: unknown): string {
@@ -221,6 +224,7 @@ function PortalView({ nric, formId }: { nric: string; formId: number }) {
   const [error, setError] = useState("");
   const [tab, setTab] = useState<"event" | "info" | "flow">("event");
   const [posterOk, setPosterOk] = useState(true);
+  const [showGroupMembers, setShowGroupMembers] = useState(false);
 
   useEffect(() => {
     let active = true;
@@ -293,6 +297,7 @@ function PortalView({ nric, formId }: { nric: string; formId: number }) {
       <div style={portalHeadStyle}>
         <div style={memberLineStyle}>
           <span style={memberNameStyle}>{data.member_name || "成员"}</span>
+          {data.member_data?.is_leader ? <span style={leaderBadgeStyle}>👑 组长</span> : null}
           {data.member_data?.group ? (
             <span style={groupChipStyle}>
               {data.member_data.group}
@@ -301,7 +306,32 @@ function PortalView({ nric, formId }: { nric: string; formId: number }) {
           ) : null}
         </div>
         <h1 style={titleStyle}>{ev?.event_name || data.form_title || "活动"}</h1>
+        {data.member_data?.is_leader ? (
+          <button type="button" style={leaderBtnStyle} onClick={() => setShowGroupMembers(true)}>
+            查看我的组员（{data.group_members?.length ?? 0}）
+          </button>
+        ) : null}
       </div>
+
+      {showGroupMembers ? (
+        <div style={gmOverlayStyle} onClick={() => setShowGroupMembers(false)}>
+          <div style={gmSheetStyle} onClick={(e) => e.stopPropagation()}>
+            <div style={gmHeadStyle}>
+              <span style={{ fontWeight: 800, fontSize: 16 }}>我的组员（{data.group_members?.length ?? 0}）</span>
+              <button type="button" style={ghostStyle} onClick={() => setShowGroupMembers(false)}>关闭</button>
+            </div>
+            {!data.group_members?.length ? <div style={hintStyle}>暂无组员。</div> : null}
+            <div style={{ display: "grid", gap: 6 }}>
+              {(data.group_members || []).map((m, i) => (
+                <div key={i} style={gmRowStyle}>
+                  <span style={{ fontWeight: 700 }}>{m.is_leader ? "👑 " : ""}{m.name || "—"}</span>
+                  <span style={{ color: "#6b7280", fontSize: 13 }}>{m.age != null ? `${m.age}岁` : "—"} · {m.gender || "—"}</span>
+                </div>
+              ))}
+            </div>
+          </div>
+        </div>
+      ) : null}
 
       {tab === "event" ? (
         <section style={cardStyle}>
@@ -388,6 +418,12 @@ const portalHeadStyle: CSSProperties = { padding: "2px 4px", display: "grid", ga
 const memberLineStyle: CSSProperties = { display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" };
 const memberNameStyle: CSSProperties = { fontSize: 15, fontWeight: 800, color: "#4338ca" };
 const groupChipStyle: CSSProperties = { padding: "2px 10px", borderRadius: 999, background: "#eef2ff", color: "#4338ca", fontSize: 12.5, fontWeight: 700, border: "1px solid #c7d2fe" };
+const leaderBadgeStyle: CSSProperties = { padding: "2px 10px", borderRadius: 999, background: "#fef3c7", color: "#b45309", fontSize: 12.5, fontWeight: 800, border: "1px solid #fde68a" };
+const leaderBtnStyle: CSSProperties = { marginTop: 8, padding: "8px 14px", borderRadius: 10, border: "1px solid #c7d2fe", background: "#eef2ff", color: "#4338ca", fontWeight: 700, fontSize: 13, cursor: "pointer" };
+const gmOverlayStyle: CSSProperties = { position: "fixed", inset: 0, zIndex: 100, background: "rgba(15,23,42,0.4)", display: "flex", alignItems: "flex-end", justifyContent: "center" };
+const gmSheetStyle: CSSProperties = { width: "min(560px, 100%)", maxHeight: "80vh", overflowY: "auto", background: "#fff", borderRadius: "18px 18px 0 0", padding: 16, boxShadow: "0 -20px 50px rgba(15,23,42,0.25)" };
+const gmHeadStyle: CSSProperties = { display: "flex", alignItems: "center", justifyContent: "space-between", gap: 10, marginBottom: 10 };
+const gmRowStyle: CSSProperties = { display: "flex", alignItems: "center", justifyContent: "space-between", gap: 10, padding: "10px 12px", borderRadius: 10, background: "#f8fafc", border: "1px solid #eef2f7" };
 const eyebrowStyle: CSSProperties = { fontSize: 12, fontWeight: 700, color: "#6366f1", letterSpacing: "0.08em" };
 const mutedStyle: CSSProperties = { fontSize: 13, color: "#6b7280", lineHeight: 1.5 };
 const inputStyle: CSSProperties = { width: "100%", padding: "12px 14px", borderRadius: 12, border: "1px solid #d1d5db", fontSize: 16, boxSizing: "border-box", letterSpacing: "0.04em" };

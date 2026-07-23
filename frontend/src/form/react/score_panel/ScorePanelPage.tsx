@@ -5,7 +5,8 @@ import { io, type Socket } from "socket.io-client";
 import { API_BASE } from "../../../js/apiBase";
 import { apiFetch } from "../../../js/apiFetch";
 
-type Group = { id: number; name: string; score: number; color?: string | null };
+type GroupMember = { name: string; age: number | null; gender: string; is_leader?: boolean };
+type Group = { id: number; name: string; score: number; color?: string | null; members?: GroupMember[] };
 type PanelData = {
   status: string;
   message?: string;
@@ -30,6 +31,7 @@ export function ScorePanelPage() {
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
   const [flash, setFlash] = useState("");
+  const [showMembers, setShowMembers] = useState(false);
   const formIdRef = useRef<number | null>(null);
 
   useEffect(() => {
@@ -140,7 +142,34 @@ export function ScorePanelPage() {
         <button type="button" style={{ ...bigBtnStyle, ...(selected ? {} : disStyle) }} disabled={!selected || busy} onClick={() => void adjust(10)}>+10</button>
         <button type="button" style={{ ...bigBtnStyle, ...deductBtnStyle, ...(selected ? {} : disStyle) }} disabled={!selected || busy} onClick={deduct}>扣分</button>
       </div>
-      {selected ? <div style={selInfoStyle}>当前：{selected.name} · {selected.score} 分</div> : <div style={selInfoStyle}>请先选择一个小组</div>}
+      {selected ? (
+        <div style={selInfoStyle}>
+          当前：{selected.name} · {selected.score} 分
+          <button type="button" style={membersBtnStyle} onClick={() => setShowMembers(true)}>
+            组员信息（{selected.members?.length ?? 0}）
+          </button>
+        </div>
+      ) : <div style={selInfoStyle}>请先选择一个小组</div>}
+
+      {showMembers && selected ? (
+        <div style={sheetOverlayStyle} onClick={() => setShowMembers(false)}>
+          <div style={sheetStyle} onClick={(e) => e.stopPropagation()}>
+            <div style={sheetHeadStyle}>
+              <span style={{ fontWeight: 800, fontSize: 16 }}>{selected.name} · 组员（{selected.members?.length ?? 0}）</span>
+              <button type="button" style={sheetCloseStyle} onClick={() => setShowMembers(false)}>关闭</button>
+            </div>
+            {!selected.members?.length ? <div style={hintStyle}>这个小组还没有成员。</div> : null}
+            <div style={memberListStyle}>
+              {(selected.members || []).map((m, i) => (
+                <div key={i} style={{ ...memberRowStyle, ...(m.is_leader ? { border: "1px solid #6366f1" } : {}) }}>
+                  <span style={{ fontWeight: 700 }}>{m.is_leader ? "👑 " : ""}{m.name || "—"}</span>
+                  <span style={{ color: "#94a3b8", fontSize: 13 }}>{m.age != null ? `${m.age}岁` : "—"} · {m.gender || "—"}</span>
+                </div>
+              ))}
+            </div>
+          </div>
+        </div>
+      ) : null}
     </div>
   );
 }
@@ -160,6 +189,13 @@ const btnRowStyle: CSSProperties = { display: "grid", gridTemplateColumns: "1fr 
 const bigBtnStyle: CSSProperties = { padding: "22px 6px", borderRadius: 16, border: "none", background: "linear-gradient(135deg,#6366f1,#8b5cf6)", color: "#fff", fontWeight: 900, fontSize: 22, cursor: "pointer", boxShadow: "0 10px 24px rgba(99,102,241,0.35)" };
 const deductBtnStyle: CSSProperties = { background: "linear-gradient(135deg,#ef4444,#f97316)", boxShadow: "0 10px 24px rgba(239,68,68,0.35)", fontSize: 18 };
 const disStyle: CSSProperties = { opacity: 0.4, cursor: "not-allowed" };
-const selInfoStyle: CSSProperties = { textAlign: "center", color: "#94a3b8", fontSize: 13, marginTop: 12 };
+const selInfoStyle: CSSProperties = { textAlign: "center", color: "#94a3b8", fontSize: 13, marginTop: 12, display: "flex", alignItems: "center", justifyContent: "center", gap: 10, flexWrap: "wrap" };
+const membersBtnStyle: CSSProperties = { padding: "7px 14px", borderRadius: 999, border: "1px solid #334155", background: "#1e293b", color: "#e2e8f0", fontWeight: 700, fontSize: 13, cursor: "pointer" };
+const sheetOverlayStyle: CSSProperties = { position: "fixed", inset: 0, zIndex: 100, background: "rgba(2,6,23,0.6)", display: "flex", alignItems: "flex-end", justifyContent: "center" };
+const sheetStyle: CSSProperties = { width: "min(560px, 100%)", maxHeight: "80vh", overflowY: "auto", background: "#0f172a", border: "1px solid #1e293b", borderRadius: "18px 18px 0 0", padding: 16, boxShadow: "0 -20px 50px rgba(0,0,0,0.5)" };
+const sheetHeadStyle: CSSProperties = { display: "flex", alignItems: "center", justifyContent: "space-between", gap: 10, marginBottom: 10 };
+const sheetCloseStyle: CSSProperties = { padding: "6px 12px", borderRadius: 999, border: "1px solid #334155", background: "#1e293b", color: "#e2e8f0", fontWeight: 700, fontSize: 12.5, cursor: "pointer" };
+const memberListStyle: CSSProperties = { display: "grid", gap: 6 };
+const memberRowStyle: CSSProperties = { display: "flex", alignItems: "center", justifyContent: "space-between", gap: 10, padding: "10px 12px", borderRadius: 10, background: "#1e293b", border: "1px solid #334155" };
 const hintStyle: CSSProperties = { textAlign: "center", color: "#94a3b8", padding: 40, margin: "auto" };
 const errBoxStyle: CSSProperties = { padding: "12px 14px", borderRadius: 10, background: "rgba(239,68,68,0.15)", border: "1px solid rgba(239,68,68,0.4)", color: "#fca5a5", fontSize: 13, textAlign: "center", margin: "auto" };
