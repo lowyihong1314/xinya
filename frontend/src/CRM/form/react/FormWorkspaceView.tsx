@@ -355,6 +355,7 @@ export function FormWorkspaceView(props: {
                     members={selectedForm.members || []}
                     isMobile={isMobile}
                     canDelete={props.canEditForms}
+                    parentalEnabled={Boolean(selectedForm.field_switches?.parental_form ?? selectedForm.parental_form)}
                   />
                 ) : (
                   <div style={emptyInlineStyle}>需要 member_detail 或 form_edit 权限才能点名。</div>

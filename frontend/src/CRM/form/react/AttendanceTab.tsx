@@ -2,6 +2,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import type { CSSProperties } from "react";
 import { io, type Socket } from "socket.io-client";
 
+import { calcAgeFromNric } from "../../../js/nric";
 import { API_BASE } from "../../../js/apiBase";
 import { showConfirmDialog } from "../../../js/dialogs";
 import {
@@ -60,15 +61,48 @@ function patchEntry(
   };
 }
 
+// 与「报名成员」页（FormWorkspaceView）一致的判定逻辑，保持口径统一。
+type StatusTone = "success" | "danger" | "warning" | "muted";
+function memberPaymentMeta(member?: FormMember): { label: string; tone: StatusTone } {
+  if (!member) return { label: "—", tone: "muted" };
+  const payments = Array.isArray(member.payments) ? member.payments : [];
+  const latest = payments[0]; // payments 按 id 倒序，[0] 为最新
+  if (!latest) return { label: "未付款", tone: "muted" };
+  if (latest.status === "checked") return { label: "已付款", tone: "success" };
+  if (latest.status === "fail") return { label: "付款失败", tone: "danger" };
+  return { label: "处理中", tone: "warning" };
+}
+function memberParentalMeta(member: FormMember | undefined, parentalEnabled: boolean): { label: string; tone: StatusTone } {
+  if (!member) return { label: "—", tone: "muted" };
+  const age = calcAgeFromNric(member.nric);
+  const required = parentalEnabled && age != null && age < 19; // 18 岁以下（<19）才需要
+  if (!required) return { label: "不需要", tone: "muted" };
+  return member.parental_data ? { label: "已完成", tone: "success" } : { label: "待完成", tone: "danger" };
+}
+function statusChipStyle(tone: StatusTone): CSSProperties {
+  const palette =
+    tone === "success"
+      ? { background: "var(--x-color-success-soft)", color: "var(--x-color-success)" }
+      : tone === "danger"
+        ? { background: "var(--x-color-danger-soft)", color: "var(--x-color-danger)" }
+        : tone === "warning"
+          ? { background: "var(--x-color-warning-soft)", color: "var(--x-color-warning)" }
+          : { background: "var(--x-color-panel-alt)", color: "var(--x-color-ink-muted)" };
+  return { display: "inline-flex", alignItems: "center", padding: "2px 8px", borderRadius: "5px", fontSize: "11px", fontWeight: 700, whiteSpace: "nowrap", ...palette };
+}
+
 export function AttendanceTab({
   formId,
+  members,
   isMobile,
   canDelete,
+  parentalEnabled,
 }: {
   formId: number;
   members: FormMember[];
   isMobile: boolean;
   canDelete: boolean;
+  parentalEnabled: boolean;
 }) {
   const [snapshots, setSnapshots] = useState<AttendanceSnapshot[]>([]);
   const [loading, setLoading] = useState(true);
@@ -81,6 +115,13 @@ export function AttendanceTab({
   const [query, setQuery] = useState("");
   const [remarkDraft, setRemarkDraft] = useState("");
   const [marking, setMarking] = useState<Record<number, boolean>>({});
+  const [showStatus, setShowStatus] = useState(false); // 顶部开关：显示同意书/付款状态，默认关
+
+  const memberMap = useMemo(() => {
+    const m = new Map<number, FormMember>();
+    for (const mem of members) m.set(mem.id, mem);
+    return m;
+  }, [members]);
 
   // 供 socket 回调读取当前打开的记录 id（避免闭包拿到旧值）。
   const editingIdRef = useRef<number | null>(null);
@@ -346,12 +387,19 @@ export function AttendanceTab({
           ))}
         </div>
         <input type="search" value={query} onChange={(e) => setQuery(e.target.value)} placeholder="搜索姓名快速定位" style={inputStyle} />
+        <label style={statusToggleStyle}>
+          <input type="checkbox" checked={showStatus} onChange={(e) => setShowStatus(e.target.checked)} />
+          <span>显示家长同意书 / 付款状态</span>
+        </label>
         {!roll.length ? <div style={emptyStyle}>此点名名单为空（报名表暂无成员）。</div> : null}
         <div style={rollListStyle}>
           {filtered.map((r) => {
             const on = !!r.present;
             const busy = !!marking[r.id];
             const time = on ? formatTime(r.checked_at) : "";
+            const mem = showStatus ? memberMap.get(r.id) : undefined;
+            const pay = showStatus ? memberPaymentMeta(mem) : null;
+            const consent = showStatus ? memberParentalMeta(mem, parentalEnabled) : null;
             return (
               <button
                 key={r.id}
@@ -366,6 +414,12 @@ export function AttendanceTab({
                     {r.age != null ? `${r.age}岁` : "—"} · {r.gender || "—"}
                     {on && time ? ` · 到 ${time}` : ""}
                   </span>
+                  {showStatus && pay && consent ? (
+                    <span style={{ display: "flex", gap: 4, flexWrap: "wrap", marginTop: 3 }}>
+                      <span style={statusChipStyle(consent.tone)}>同意书 {consent.label}</span>
+                      <span style={statusChipStyle(pay.tone)}>付款 {pay.label}</span>
+                    </span>
+                  ) : null}
                 </span>
                 <span style={on ? presentChipStyle : absentChipStyle}>{on ? "到" : "未到"}</span>
               </button>
@@ -419,6 +473,7 @@ function toolbarStyle(isMobile: boolean): CSSProperties {
 const mutedStyle: CSSProperties = { fontSize: "12px", color: "var(--x-color-ink-muted)" };
 const inputStyle: CSSProperties = { width: "100%", padding: "9px 11px", borderRadius: "8px", border: "1px solid var(--x-color-line)", background: "var(--x-color-panel)", color: "var(--x-color-ink)", fontSize: "13.5px", boxSizing: "border-box" };
 const exampleRowStyle: CSSProperties = { display: "flex", gap: "6px", flexWrap: "wrap" };
+const statusToggleStyle: CSSProperties = { display: "inline-flex", alignItems: "center", gap: "7px", fontSize: "13px", color: "var(--x-color-ink)", cursor: "pointer", userSelect: "none" };
 const chipBtnStyle: CSSProperties = { padding: "5px 10px", borderRadius: "999px", border: "1px dashed var(--x-color-accent-border)", background: "var(--x-color-panel)", color: "var(--x-color-accent-strong)", fontSize: "12px", cursor: "pointer" };
 const countPillStyle: CSSProperties = { padding: "5px 12px", borderRadius: "999px", background: "var(--x-color-accent-tint)", color: "var(--x-color-accent-strong)", fontWeight: 700, fontSize: "13px" };
 const rollListStyle: CSSProperties = { display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(200px, 1fr))", gap: "6px" };
