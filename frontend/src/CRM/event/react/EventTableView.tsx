@@ -322,7 +322,7 @@ export function EventTableView(props: {
               ) : props.activeTab === "budget" ? (
                 <EventBudgetTab eventId={event.id} canEdit={canEditEvent} isMobile={isMobile} />
               ) : props.activeTab === "agent" ? (
-                <EventAgentTab eventId={event.id} canEdit={canEditEvent} isMobile={isMobile} />
+                <EventAgentTab eventId={event.id} canEdit={canEditEvent} isMobile={isMobile} onApplied={props.onRefresh} />
               ) : (
                 <div style={detailGridStyle(isMobile)}>
                   <EditableFact label="活动名称" value={event.event_name || ""} editable={canEditEvent} onSave={(v) => props.onUpdateEvent({ event_name: v })} />

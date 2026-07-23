@@ -45,7 +45,7 @@ function summarizePlan(p: Plan): string[] {
   return lines;
 }
 
-export function EventAgentTab({ eventId, canEdit, isMobile }: { eventId: number; canEdit: boolean; isMobile: boolean }) {
+export function EventAgentTab({ eventId, canEdit, isMobile, onApplied }: { eventId: number; canEdit: boolean; isMobile: boolean; onApplied?: () => void }) {
   const storageKey = `xinya_event_agent_${eventId}`;
   const [entries, setEntries] = useState<Entry[]>(() => {
     try {
@@ -138,7 +138,8 @@ export function EventAgentTab({ eventId, canEdit, isMobile }: { eventId: number;
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.message || "应用失败");
-      setEntries((cur) => cur.map((e, i) => (i === idx ? { ...e, applied: true } : e)).concat([{ role: "assistant", content: `✅ 已执行 ${data.count ?? 0} 项改动。切到对应 tab（基本设置 / 待办 / 预算 / 流程）查看。` }]));
+      setEntries((cur) => cur.map((e, i) => (i === idx ? { ...e, applied: true } : e)).concat([{ role: "assistant", content: `✅ 已执行 ${data.count ?? 0} 项改动。` }]));
+      onApplied?.();
     } catch (err) {
       setError(err instanceof Error ? err.message : "应用失败");
     }
