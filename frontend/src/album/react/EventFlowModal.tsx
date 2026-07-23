@@ -16,7 +16,6 @@ type Props = {
   detail: EventDetailRecord;
   canEdit?: boolean;
   onClose: () => void;
-  inline?: boolean;
 };
 
 type EditorState = {
@@ -26,7 +25,7 @@ type EditorState = {
   minutes: string;
 };
 
-export function EventFlowModal({ detail, canEdit = false, onClose, inline = false }: Props) {
+export function EventFlowModal({ detail, canEdit = false, onClose }: Props) {
   useEnsureDesignTokens();
 
   const [flows, setFlows] = useState<EventFlowRecord[]>([]);
@@ -41,7 +40,6 @@ export function EventFlowModal({ detail, canEdit = false, onClose, inline = fals
   }, [detail.id]);
 
   useEffect(() => {
-    if (inline) return;
     function onKeyDown(event: KeyboardEvent) {
       if (event.key === "Escape") {
         onClose();
@@ -49,7 +47,7 @@ export function EventFlowModal({ detail, canEdit = false, onClose, inline = fals
     }
     window.addEventListener("keydown", onKeyDown);
     return () => window.removeEventListener("keydown", onKeyDown);
-  }, [onClose, inline]);
+  }, [onClose]);
 
   useEffect(() => {
     if (!canEdit) {
@@ -172,8 +170,8 @@ export function EventFlowModal({ detail, canEdit = false, onClose, inline = fals
   }
 
   return (
-    <div style={inline ? inlineWrapStyle : overlayStyle} onClick={inline ? undefined : onClose}>
-      <div style={inline ? inlinePanelStyle : modalStyle} onClick={(event) => event.stopPropagation()}>
+    <div style={overlayStyle} onClick={onClose}>
+      <div style={modalStyle} onClick={(event) => event.stopPropagation()}>
         <div style={headerStyle}>
           <div>
             <div style={eyebrowStyle}>Event Flow</div>
@@ -192,11 +190,9 @@ export function EventFlowModal({ detail, canEdit = false, onClose, inline = fals
                 + 新增
               </button>
             ) : null}
-            {!inline ? (
-              <button type="button" style={closeButtonStyle} onClick={onClose}>
-                关闭
-              </button>
-            ) : null}
+            <button type="button" style={closeButtonStyle} onClick={onClose}>
+              关闭
+            </button>
           </div>
         </div>
 
@@ -353,9 +349,6 @@ const overlayStyle: CSSProperties = {
   padding: "24px",
   backdropFilter: "blur(10px)",
 };
-
-const inlineWrapStyle: CSSProperties = { display: "block", width: "100%" };
-const inlinePanelStyle: CSSProperties = { width: "100%", display: "grid", gap: "16px" };
 
 const modalStyle: CSSProperties = {
   width: "min(920px, 100%)",

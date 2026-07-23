@@ -1,12 +1,12 @@
 import { useEffect, useState } from "react";
 import type { CSSProperties } from "react";
 
-import { EventFlowModal } from "../../../album/react/EventFlowModal";
 import { fetchEventDetail } from "../../../event/shared/api";
 import type { EventDetailRecord } from "../../../event/shared/types";
+import { EventFlowInline } from "./EventFlowInline";
 
-// 复用相册里的活动流程表（弹窗）：按 event_id 拉详情，tab 内点按钮打开。
-export function EventFlowTab({ eventId, canEdit }: { eventId: number; canEdit: boolean }) {
+// 直接内联显示流程表（设计令牌主题）。按 event_id 拉活动详情供时间线推算。
+export function EventFlowTab({ eventId, canEdit, isMobile }: { eventId: number; canEdit: boolean; isMobile: boolean }) {
   const [detail, setDetail] = useState<EventDetailRecord | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
@@ -33,8 +33,7 @@ export function EventFlowTab({ eventId, canEdit }: { eventId: number; canEdit: b
   if (loading) return <div style={hintStyle}>加载流程…</div>;
   if (!detail) return <div style={hintStyle}>{error || "加载失败"}</div>;
 
-  // 直接内联显示流程表（不再弹窗）。
-  return <EventFlowModal detail={detail} canEdit={canEdit} inline onClose={() => {}} />;
+  return <EventFlowInline detail={detail} canEdit={canEdit} isMobile={isMobile} />;
 }
 
 const hintStyle: CSSProperties = { padding: "24px", textAlign: "center", color: "var(--x-color-ink-muted)" };

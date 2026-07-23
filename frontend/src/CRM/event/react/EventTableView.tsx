@@ -314,7 +314,7 @@ export function EventTableView(props: {
               ) : props.activeTab === "checkin" ? (
                 <EventCheckinTab eventId={event.id} isMobile={isMobile} />
               ) : props.activeTab === "flow" ? (
-                <EventFlowTab eventId={event.id} canEdit={canEditEvent} />
+                <EventFlowTab eventId={event.id} canEdit={canEditEvent} isMobile={isMobile} />
               ) : props.activeTab === "tasks" ? (
                 <EventTaskTab eventId={event.id} canEdit={canEditEvent} isMobile={isMobile} />
               ) : props.activeTab === "budget" ? (
