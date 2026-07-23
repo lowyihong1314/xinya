@@ -273,13 +273,17 @@ export function useEventTableController(options?: { preferredEventId?: number | 
     if (!selectedEvent) {
       return;
     }
-    const selectedIds = await select_users_modal(5);
+    // 不限人数；已在团队里的成员在弹窗中禁用，避免重复添加。
+    const existingIds = (selectedEvent.organizers || []).map((u) => u.id);
+    const selectedIds = await select_users_modal(Infinity, existingIds);
     if (!selectedIds?.length) {
       return;
     }
     await flushPendingEventChanges();
+    // 合并现有 + 新选（后端是整表替换 organizers），保证不丢已有成员。
+    const mergedIds = Array.from(new Set([...existingIds, ...selectedIds]));
     try {
-      await persistEventPatch(selectedEvent.id, { organizers: selectedEvent.organizers, organizers_ids: selectedIds });
+      await persistEventPatch(selectedEvent.id, { organizers_ids: mergedIds });
       setToast({ type: "success", text: "活动已更新" });
     } catch (err) {
       setToast({ type: "error", text: err instanceof Error ? err.message : "保存失败" });
