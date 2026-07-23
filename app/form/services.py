@@ -2627,15 +2627,20 @@ def get_form_attendance(attendance_id):
 
 
 def create_form_attendance(form_id, data):
+    """新建点名：默认取名「新建点名」，把当前全部成员拉进名单、全部标记「未到」。
+    之后进入记录逐个切换报到状态（见 mark_form_attendance_member）。
+    兼容旧接口：若带 present_ids 则预先标记这些人已到并盖上报到时间。"""
     form = RegisForm.query.get_or_404(form_id)
-    remark = str((data or {}).get("remark") or "").strip()[:255]
+    data = data or {}
+    remark = str(data.get("remark") or "").strip()[:255] or "新建点名"
 
     present_ids = set()
-    for raw in (data or {}).get("present_ids") or []:
+    for raw in data.get("present_ids") or []:
         try:
             present_ids.add(int(raw))
         except (TypeError, ValueError):
             continue
+    now_iso = malaysia_now_naive().isoformat()
 
     roster = []
     present_count = 0
@@ -2654,24 +2659,71 @@ def create_form_attendance(form_id, data):
             "age": age,
             "gender": (latest.gender if latest else "") or "",
             "present": is_present,
+            "checked_at": now_iso if is_present else None,
         })
 
     att = RegisFormAttendance(
         form_id=form.id,
-        remark=remark or None,
+        remark=remark,
         present_count=present_count,
         total_count=len(roster),
         snapshot_json={"roster": roster},
     )
     db.session.add(att)
     db.session.commit()
+    emit_form_event(form.id, "attendance_update", {"attendance_id": att.id})
+    return jsonify({"status": "success", "attendance": att.to_dict(include_roster=True)})
+
+
+def update_form_attendance(attendance_id, data):
+    """改这条点名记录的名字（remark）。"""
+    att = RegisFormAttendance.query.get_or_404(attendance_id)
+    data = data or {}
+    if "remark" in data:
+        att.remark = str(data.get("remark") or "").strip()[:255] or "新建点名"
+    db.session.commit()
+    emit_form_event(att.form_id, "attendance_update", {"attendance_id": att.id})
+    return jsonify({"status": "success", "attendance": att.to_dict(include_roster=True)})
+
+
+def mark_form_attendance_member(attendance_id, data):
+    """切换单个成员的报到状态；报到时盖上更新时间（checked_at），取消则清空。"""
+    att = RegisFormAttendance.query.get_or_404(attendance_id)
+    data = data or {}
+    try:
+        member_id = int(data.get("member_id"))
+    except (TypeError, ValueError):
+        return jsonify({"status": "error", "message": "member_id 无效"}), 400
+    present = bool(data.get("present"))
+
+    snap = att.snapshot_json if isinstance(att.snapshot_json, dict) else {}
+    roster = list(snap.get("roster") or [])
+    now_iso = malaysia_now_naive().isoformat()
+    found = False
+    for entry in roster:
+        if entry.get("id") == member_id:
+            entry["present"] = present
+            entry["checked_at"] = now_iso if present else None
+            found = True
+            break
+    if not found:
+        return jsonify({"status": "error", "message": "该成员不在此点名名单内"}), 404
+
+    # 重新赋一个新 dict，确保 SQLAlchemy 侦测到 JSON 变更。
+    att.snapshot_json = {**snap, "roster": roster}
+    att.present_count = sum(1 for e in roster if e.get("present"))
+    att.total_count = len(roster)
+    db.session.commit()
+    emit_form_event(att.form_id, "attendance_update", {"attendance_id": att.id})
     return jsonify({"status": "success", "attendance": att.to_dict(include_roster=True)})
 
 
 def delete_form_attendance(attendance_id):
     att = RegisFormAttendance.query.get_or_404(attendance_id)
+    form_id = att.form_id
     db.session.delete(att)
     db.session.commit()
+    emit_form_event(form_id, "attendance_update", {"attendance_id": attendance_id, "deleted": True})
     return jsonify({"status": "success"})
 
 

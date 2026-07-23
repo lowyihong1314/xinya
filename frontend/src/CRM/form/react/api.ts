@@ -293,6 +293,24 @@ export async function createAttendance(formId: number, remark: string, presentId
   return parseJson<{ status?: string; attendance?: AttendanceSnapshot; message?: string }>(response);
 }
 
+export async function updateAttendance(attendanceId: number, remark: string) {
+  const response = await apiFetch(`/api/form/attendance/update/${attendanceId}`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ remark }),
+  });
+  return parseJson<{ status?: string; attendance?: AttendanceSnapshot; message?: string }>(response);
+}
+
+export async function markAttendance(attendanceId: number, memberId: number, present: boolean) {
+  const response = await apiFetch(`/api/form/attendance/mark/${attendanceId}`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ member_id: memberId, present }),
+  });
+  return parseJson<{ status?: string; attendance?: AttendanceSnapshot; message?: string }>(response);
+}
+
 export async function deleteAttendance(attendanceId: number) {
   const response = await apiFetch(`/api/form/attendance/delete/${attendanceId}`, { method: "DELETE" });
   return parseJson<{ status?: string; message?: string }>(response);

@@ -99,6 +99,7 @@ export type AttendanceRosterEntry = {
   age: number | null;
   gender: string;
   present: boolean;
+  checked_at?: string | null;
 };
 export type AttendanceSnapshot = {
   id: number;

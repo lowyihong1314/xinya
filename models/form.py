@@ -258,7 +258,8 @@ class RegisFormAttendance(db.Model):
     remark = db.Column(db.String(255), nullable=True)
     present_count = db.Column(db.Integer, nullable=False, default=0)
     total_count = db.Column(db.Integer, nullable=False, default=0)
-    # {"roster": [{"id","name","age","gender","present"}]}
+    # {"roster": [{"id","name","age","gender","present","checked_at"}]}
+    # checked_at: 该成员报到那一刻的时间（马来本地，ISO 字符串）；未到为 null。
     snapshot_json = db.Column(db.JSON, nullable=True)
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
 

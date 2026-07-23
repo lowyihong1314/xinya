@@ -1,9 +1,17 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import type { CSSProperties } from "react";
+import { io, type Socket } from "socket.io-client";
 
-import { calcAgeFromNric } from "../../../js/nric";
+import { API_BASE } from "../../../js/apiBase";
 import { showConfirmDialog } from "../../../js/dialogs";
-import { createAttendance, deleteAttendance, getAttendance, listAttendance } from "./api";
+import {
+  createAttendance,
+  deleteAttendance,
+  getAttendance,
+  listAttendance,
+  markAttendance,
+  updateAttendance,
+} from "./api";
 import type { AttendanceSnapshot, FormMember } from "./types";
 
 type Toast = { type: "success" | "error"; text: string } | null;
@@ -16,11 +24,24 @@ function formatDateTime(value?: string | null): string {
   return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())} ${pad(date.getHours())}:${pad(date.getMinutes())}`;
 }
 
+function formatTime(value?: string | null): string {
+  if (!value) return "";
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return "";
+  const pad = (n: number) => String(n).padStart(2, "0");
+  return `${pad(date.getHours())}:${pad(date.getMinutes())}`;
+}
+
 const REMARK_EXAMPLES = ["早上报道", "下午吃饭", "巴士车上点名"];
+
+// 本地乐观更新：先翻转 UI，等服务器回来再以其为准。
+function applyPresentLocal(snap: AttendanceSnapshot, memberId: number, present: boolean): AttendanceSnapshot {
+  const roster = (snap.roster || []).map((e) => (e.id === memberId ? { ...e, present } : e));
+  return { ...snap, roster, present_count: roster.filter((e) => e.present).length };
+}
 
 export function AttendanceTab({
   formId,
-  members,
   isMobile,
   canDelete,
 }: {
@@ -31,26 +52,21 @@ export function AttendanceTab({
 }) {
   const [snapshots, setSnapshots] = useState<AttendanceSnapshot[]>([]);
   const [loading, setLoading] = useState(true);
-  const [mode, setMode] = useState<"list" | "new" | "view">("list");
-  const [viewing, setViewing] = useState<AttendanceSnapshot | null>(null);
+  const [mode, setMode] = useState<"list" | "edit">("list");
+  const [editing, setEditing] = useState<AttendanceSnapshot | null>(null);
   const [toast, setToast] = useState<Toast>(null);
+  const [creating, setCreating] = useState(false);
 
-  // 新建点名状态
-  const [remark, setRemark] = useState("");
+  // 编辑态
   const [query, setQuery] = useState("");
-  const [present, setPresent] = useState<Record<number, boolean>>({});
-  const [saving, setSaving] = useState(false);
+  const [remarkDraft, setRemarkDraft] = useState("");
+  const [marking, setMarking] = useState<Record<number, boolean>>({});
 
-  const roster = useMemo(
-    () =>
-      members.map((m) => ({
-        id: m.id,
-        name: m.name_cn || m.name || `成员#${m.id}`,
-        age: calcAgeFromNric(m.nric),
-        gender: String(m.gender || ""),
-      })),
-    [members],
-  );
+  // 供 socket 回调读取当前打开的记录 id（避免闭包拿到旧值）。
+  const editingIdRef = useRef<number | null>(null);
+  useEffect(() => {
+    editingIdRef.current = editing?.id ?? null;
+  }, [editing]);
 
   useEffect(() => {
     let active = true;
@@ -76,6 +92,47 @@ export function AttendanceTab({
     return () => window.clearTimeout(t);
   }, [toast]);
 
+  // 实时同步：多人同时点名时，任何人改动都会广播到 wait_register_{form_id}。
+  useEffect(() => {
+    const origin = API_BASE || (typeof window !== "undefined" ? window.location.origin : "");
+    const room = `wait_register_${formId}`;
+    const socket: Socket = io(origin, { withCredentials: true, transports: ["websocket", "polling"] });
+    const join = () => socket.emit("join_room", { room });
+    socket.on("connect", join);
+    if (socket.connected) join();
+
+    const handler = (payload: { form_id?: number; event?: string; attendance_id?: number; deleted?: boolean }) => {
+      if (payload?.event !== "attendance_update") return;
+      if (payload?.form_id != null && Number(payload.form_id) !== Number(formId)) return;
+      // 后台静默刷新列表计数。
+      listAttendance(formId)
+        .then((res) => setSnapshots(res.attendances || []))
+        .catch(() => {});
+      const openId = editingIdRef.current;
+      if (payload.attendance_id && openId === payload.attendance_id) {
+        if (payload.deleted) {
+          setEditing(null);
+          setMode("list");
+          setToast({ type: "error", text: "这条点名已被删除" });
+        } else {
+          getAttendance(payload.attendance_id)
+            .then((res) => {
+              if (res.attendance && editingIdRef.current === payload.attendance_id) setEditing(res.attendance);
+            })
+            .catch(() => {});
+        }
+      }
+    };
+    socket.on("new_register", handler);
+
+    return () => {
+      socket.off("connect", join);
+      socket.off("new_register", handler);
+      socket.disconnect();
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [formId]);
+
   async function refreshList() {
     setLoading(true);
     try {
@@ -88,45 +145,77 @@ export function AttendanceTab({
     }
   }
 
-  function startNew() {
-    setRemark("");
+  function openEditing(att: AttendanceSnapshot) {
+    setEditing(att);
+    setRemarkDraft(att.remark || "");
     setQuery("");
-    // 默认全部「到」，未到的取消勾选即可（大多数场合出席率高）。
-    setPresent(Object.fromEntries(roster.map((r) => [r.id, true])));
-    setMode("new");
+    setMarking({});
+    setMode("edit");
   }
 
-  const presentCount = roster.filter((r) => present[r.id]).length;
-  const filteredRoster = useMemo(() => {
-    const kw = query.trim().toLowerCase();
-    if (!kw) return roster;
-    return roster.filter((r) => `${r.name} ${r.gender} ${r.age ?? ""}`.toLowerCase().includes(kw));
-  }, [roster, query]);
-
-  async function save() {
-    setSaving(true);
+  // 新建点名：立即建一条「新建点名」（全员未到），直接进入逐个报到。
+  async function startNew() {
+    setCreating(true);
     try {
-      const presentIds = roster.filter((r) => present[r.id]).map((r) => r.id);
-      await createAttendance(formId, remark.trim(), presentIds);
-      setToast({ type: "success", text: "点名快照已保存" });
-      setMode("list");
-      await refreshList();
+      const res = await createAttendance(formId, "新建点名", []);
+      if (res.attendance) {
+        openEditing(res.attendance);
+        await refreshList();
+      } else {
+        throw new Error(res.message || "新建失败");
+      }
     } catch (err) {
-      setToast({ type: "error", text: err instanceof Error ? err.message : "保存失败" });
+      setToast({ type: "error", text: err instanceof Error ? err.message : "新建失败" });
     } finally {
-      setSaving(false);
+      setCreating(false);
     }
   }
 
-  async function openView(id: number) {
+  async function openRecord(id: number) {
     try {
       const res = await getAttendance(id);
-      if (res.attendance) {
-        setViewing(res.attendance);
-        setMode("view");
-      }
+      if (res.attendance) openEditing(res.attendance);
     } catch (err) {
-      setToast({ type: "error", text: err instanceof Error ? err.message : "读取快照失败" });
+      setToast({ type: "error", text: err instanceof Error ? err.message : "读取点名失败" });
+    }
+  }
+
+  async function toggleMember(memberId: number, present: boolean) {
+    if (!editing) return;
+    const attId = editing.id;
+    setMarking((cur) => ({ ...cur, [memberId]: true }));
+    setEditing((cur) => (cur ? applyPresentLocal(cur, memberId, present) : cur));
+    try {
+      const res = await markAttendance(attId, memberId, present);
+      if (res.attendance && editingIdRef.current === attId) setEditing(res.attendance);
+    } catch (err) {
+      setToast({ type: "error", text: err instanceof Error ? err.message : "更新失败" });
+      try {
+        const r = await getAttendance(attId);
+        if (r.attendance && editingIdRef.current === attId) setEditing(r.attendance);
+      } catch {
+        /* ignore */
+      }
+    } finally {
+      setMarking((cur) => {
+        const next = { ...cur };
+        delete next[memberId];
+        return next;
+      });
+    }
+  }
+
+  async function saveRemark(value: string) {
+    if (!editing) return;
+    const next = value.trim() || "新建点名";
+    if (next === (editing.remark || "")) return;
+    const attId = editing.id;
+    setEditing((cur) => (cur ? { ...cur, remark: next } : cur));
+    try {
+      await updateAttendance(attId, next);
+      await refreshList();
+    } catch (err) {
+      setToast({ type: "error", text: err instanceof Error ? err.message : "改名失败" });
     }
   }
 
@@ -145,85 +234,72 @@ export function AttendanceTab({
     <div style={toast.type === "success" ? successStyle : errorStyle}>{toast.text}</div>
   ) : null;
 
-  // -------- 新建点名 --------
-  if (mode === "new") {
+  // -------- 点进去逐个报到 --------
+  if (mode === "edit" && editing) {
+    const roll = editing.roster || [];
+    const kw = query.trim().toLowerCase();
+    const filtered = kw
+      ? roll.filter((r) => `${r.name} ${r.gender} ${r.age ?? ""}`.toLowerCase().includes(kw))
+      : roll;
     return (
       <div style={sectionStyle}>
         {toastNode}
         <div style={toolbarStyle(isMobile)}>
           <button type="button" style={btnStyle} onClick={() => setMode("list")}>← 返回</button>
-          <div style={countPillStyle}>已到 {presentCount} / 共 {roster.length}</div>
-          <div style={{ display: "flex", gap: 8 }}>
-            <button type="button" style={btnStyle} onClick={() => setPresent(Object.fromEntries(roster.map((r) => [r.id, true])))}>全部到</button>
-            <button type="button" style={btnStyle} onClick={() => setPresent({})}>全部未到</button>
-          </div>
+          <div style={countPillStyle}>已到 {editing.present_count} / 共 {editing.total_count}</div>
         </div>
         <input
           type="text"
-          value={remark}
-          onChange={(e) => setRemark(e.target.value)}
-          placeholder="备注，例如：早上报道 / 下午吃饭 / 巴士车上点名"
+          value={remarkDraft}
+          onChange={(e) => setRemarkDraft(e.target.value)}
+          onBlur={() => void saveRemark(remarkDraft)}
+          onKeyDown={(e) => {
+            if (e.key === "Enter") (e.target as HTMLInputElement).blur();
+          }}
+          placeholder="点名名字，例如：早上报道"
           style={inputStyle}
         />
         <div style={exampleRowStyle}>
           {REMARK_EXAMPLES.map((ex) => (
-            <button key={ex} type="button" style={chipBtnStyle} onClick={() => setRemark(ex)}>{ex}</button>
+            <button
+              key={ex}
+              type="button"
+              style={chipBtnStyle}
+              onClick={() => {
+                setRemarkDraft(ex);
+                void saveRemark(ex);
+              }}
+            >
+              {ex}
+            </button>
           ))}
         </div>
         <input type="search" value={query} onChange={(e) => setQuery(e.target.value)} placeholder="搜索姓名快速定位" style={inputStyle} />
-        {!roster.length ? <div style={emptyStyle}>暂无报名成员。</div> : null}
+        {!roll.length ? <div style={emptyStyle}>此点名名单为空（报名表暂无成员）。</div> : null}
         <div style={rollListStyle}>
-          {filteredRoster.map((r) => {
-            const on = !!present[r.id];
+          {filtered.map((r) => {
+            const on = !!r.present;
+            const busy = !!marking[r.id];
+            const time = on ? formatTime(r.checked_at) : "";
             return (
               <button
                 key={r.id}
                 type="button"
-                style={{ ...rollRowStyle, ...(on ? rollRowOnStyle : {}) }}
-                onClick={() => setPresent((cur) => ({ ...cur, [r.id]: !on }))}
+                disabled={busy}
+                style={{ ...rollRowStyle, ...(on ? rollRowOnStyle : {}), opacity: busy ? 0.55 : 1 }}
+                onClick={() => void toggleMember(r.id, !on)}
               >
                 <span style={{ display: "grid", gap: 1, minWidth: 0 }}>
-                  <span style={{ fontWeight: 700, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{r.name}</span>
-                  <span style={rollMetaStyle}>{r.age != null ? `${r.age}岁` : "—"} · {r.gender || "—"}</span>
+                  <span style={{ fontWeight: 700, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{r.name || `成员#${r.id}`}</span>
+                  <span style={rollMetaStyle}>
+                    {r.age != null ? `${r.age}岁` : "—"} · {r.gender || "—"}
+                    {on && time ? ` · 到 ${time}` : ""}
+                  </span>
                 </span>
                 <span style={on ? presentChipStyle : absentChipStyle}>{on ? "到" : "未到"}</span>
               </button>
             );
           })}
-        </div>
-        <div style={saveBarStyle}>
-          <button type="button" style={btnStyle} onClick={() => setMode("list")}>取消</button>
-          <button type="button" style={{ ...primaryBtnStyle, opacity: saving ? 0.6 : 1 }} disabled={saving} onClick={() => void save()}>
-            {saving ? "保存中…" : `保存快照（到 ${presentCount}）`}
-          </button>
-        </div>
-      </div>
-    );
-  }
-
-  // -------- 查看快照 --------
-  if (mode === "view" && viewing) {
-    const roll = viewing.roster || [];
-    return (
-      <div style={sectionStyle}>
-        {toastNode}
-        <div style={toolbarStyle(isMobile)}>
-          <button type="button" style={btnStyle} onClick={() => setMode("list")}>← 返回</button>
-          <div style={{ minWidth: 0 }}>
-            <div style={{ fontWeight: 800, fontSize: 15 }}>{viewing.remark || "（无备注）"}</div>
-            <div style={mutedStyle}>{formatDateTime(viewing.created_at)} · 到 {viewing.present_count} / 共 {viewing.total_count}</div>
-          </div>
-        </div>
-        <div style={rollListStyle}>
-          {roll.map((r) => (
-            <div key={r.id} style={{ ...rollRowStyle, cursor: "default", ...(r.present ? rollRowOnStyle : {}) }}>
-              <span style={{ display: "grid", gap: 1, minWidth: 0 }}>
-                <span style={{ fontWeight: 700, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{r.name || `成员#${r.id}`}</span>
-                <span style={rollMetaStyle}>{r.age != null ? `${r.age}岁` : "—"} · {r.gender || "—"}</span>
-              </span>
-              <span style={r.present ? presentChipStyle : absentChipStyle}>{r.present ? "到" : "未到"}</span>
-            </div>
-          ))}
         </div>
       </div>
     );
@@ -236,11 +312,13 @@ export function AttendanceTab({
       <div style={toolbarStyle(isMobile)}>
         <div>
           <div style={{ fontWeight: 800, fontSize: 15 }}>点名记录</div>
-          <div style={mutedStyle}>共 {snapshots.length} 条快照</div>
+          <div style={mutedStyle}>共 {snapshots.length} 条</div>
         </div>
         <div style={{ display: "flex", gap: 8 }}>
           <button type="button" style={btnStyle} onClick={() => void refreshList()} disabled={loading}>{loading ? "刷新中…" : "刷新"}</button>
-          <button type="button" style={primaryBtnStyle} onClick={startNew}>新建点名</button>
+          <button type="button" style={{ ...primaryBtnStyle, opacity: creating ? 0.6 : 1 }} disabled={creating} onClick={() => void startNew()}>
+            {creating ? "新建中…" : "新建点名"}
+          </button>
         </div>
       </div>
       {loading ? <div style={emptyStyle}>加载中…</div> : null}
@@ -248,8 +326,8 @@ export function AttendanceTab({
       <div style={{ display: "grid", gap: 8 }}>
         {snapshots.map((s) => (
           <div key={s.id} style={recordRowStyle}>
-            <button type="button" style={recordMainStyle} onClick={() => void openView(s.id)}>
-              <span style={{ fontWeight: 700 }}>{s.remark || "（无备注）"}</span>
+            <button type="button" style={recordMainStyle} onClick={() => void openRecord(s.id)}>
+              <span style={{ fontWeight: 700 }}>{s.remark || "（无名）"}</span>
               <span style={mutedStyle}>{formatDateTime(s.created_at)}</span>
             </button>
             <span style={recordCountStyle}>到 {s.present_count}/{s.total_count}</span>
@@ -278,7 +356,6 @@ const rollRowOnStyle: CSSProperties = { border: "1px solid var(--x-color-accent-
 const rollMetaStyle: CSSProperties = { fontSize: "11.5px", color: "var(--x-color-ink-muted)" };
 const presentChipStyle: CSSProperties = { flexShrink: 0, padding: "3px 10px", borderRadius: "6px", background: "var(--x-color-success-soft)", color: "var(--x-color-success)", fontWeight: 700, fontSize: "12px" };
 const absentChipStyle: CSSProperties = { flexShrink: 0, padding: "3px 10px", borderRadius: "6px", background: "var(--x-color-panel-alt)", color: "var(--x-color-ink-muted)", fontWeight: 700, fontSize: "12px" };
-const saveBarStyle: CSSProperties = { display: "flex", justifyContent: "flex-end", gap: "8px", position: "sticky", bottom: 0, paddingTop: "8px" };
 const recordRowStyle: CSSProperties = { display: "flex", alignItems: "center", gap: "8px", padding: "10px 12px", borderRadius: "9px", border: "1px solid var(--x-color-line-soft)", background: "var(--x-color-panel-alt)" };
 const recordMainStyle: CSSProperties = { flex: 1, minWidth: 0, display: "flex", flexDirection: "column", gap: "2px", alignItems: "flex-start", background: "transparent", border: "none", color: "var(--x-color-ink)", cursor: "pointer", textAlign: "left" };
 const recordCountStyle: CSSProperties = { flexShrink: 0, fontFamily: "var(--x-font-mono)", fontSize: "12.5px", color: "var(--x-color-ink)" };

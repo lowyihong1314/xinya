@@ -356,6 +356,18 @@ def create_form_attendance(form_id):
     return services.create_form_attendance(form_id, request.get_json(silent=True) or {})
 
 
+@form_bp.route("/attendance/update/<int:attendance_id>", methods=["POST"])
+@permission_required_any(*FORM_MEMBER_DETAIL_PERMISSION_NAMES)
+def update_form_attendance(attendance_id):
+    return services.update_form_attendance(attendance_id, request.get_json(silent=True) or {})
+
+
+@form_bp.route("/attendance/mark/<int:attendance_id>", methods=["POST"])
+@permission_required_any(*FORM_MEMBER_DETAIL_PERMISSION_NAMES)
+def mark_form_attendance_member(attendance_id):
+    return services.mark_form_attendance_member(attendance_id, request.get_json(silent=True) or {})
+
+
 @form_bp.route("/attendance/delete/<int:attendance_id>", methods=["DELETE"])
 @permission_required_any(*FORM_EDIT_PERMISSION_NAMES)
 def delete_form_attendance(attendance_id):
