@@ -35,7 +35,7 @@ export function LogoQrBadge({ logoSrc = "/static/images/logo/logo.png" }: { logo
   );
 }
 
-const badgeStyle: CSSProperties = { position: "fixed", top: 10, left: 10, zIndex: 900, width: 44, height: 44, borderRadius: 12, border: "1px solid rgba(148,163,184,0.35)", background: "rgba(255,255,255,0.95)", boxShadow: "0 6px 18px rgba(15,23,42,0.18)", cursor: "pointer", padding: 5, display: "grid", placeItems: "center" };
+const badgeStyle: CSSProperties = { position: "fixed", top: 10, left: 10, zIndex: 900, width: 44, height: 44, border: "none", background: "transparent", boxShadow: "none", cursor: "pointer", padding: 0, display: "grid", placeItems: "center" };
 const imgStyle: CSSProperties = { width: "100%", height: "100%", objectFit: "contain", display: "block" };
 const overlayStyle: CSSProperties = { position: "fixed", inset: 0, zIndex: 2000, background: "rgba(15,23,42,0.6)", display: "grid", placeItems: "center", padding: 20 };
 const cardStyle: CSSProperties = { width: "min(340px, 100%)", background: "#fff", borderRadius: 18, padding: 20, textAlign: "center", boxShadow: "0 30px 70px rgba(0,0,0,0.4)", display: "grid", gap: 12, justifyItems: "center", color: "#1f2937" };
