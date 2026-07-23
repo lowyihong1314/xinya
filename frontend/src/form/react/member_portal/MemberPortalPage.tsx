@@ -1,6 +1,8 @@
 import { useEffect, useMemo, useState } from "react";
 import type { CSSProperties } from "react";
+import { io, type Socket } from "socket.io-client";
 
+import { API_BASE } from "../../../js/apiBase";
 import { apiFetch } from "../../../js/apiFetch";
 
 type PortalForm = { form_id: number; title: string };
@@ -23,6 +25,7 @@ type MemberData = {
   medical?: string | null; allergy?: string | null; other_remark?: string | null;
   parent_1?: string | null; parent_1_phone?: string | null; parent_2?: string | null; parent_2_phone?: string | null;
   group?: string | null;
+  group_id?: number | null;
   group_score?: number | null;
   extra_fields?: MemberExtraField[];
 };
@@ -230,6 +233,23 @@ function PortalView({ nric, formId }: { nric: string; formId: number }) {
       .finally(() => { if (active) setLoading(false); });
     return () => { active = false; };
   }, [nric, formId]);
+
+  // 实时：本组积分变化时更新显示。
+  useEffect(() => {
+    const origin = API_BASE || (typeof window !== "undefined" ? window.location.origin : "");
+    const socket: Socket = io(origin, { withCredentials: true, transports: ["websocket", "polling"] });
+    const join = () => socket.emit("join_room", { room: `form_score_${formId}` });
+    socket.on("connect", join);
+    if (socket.connected) join();
+    socket.on("group_score", (p: { form_id?: number; group_id?: number; score?: number }) => {
+      if (p.form_id !== formId) return;
+      setData((cur) => {
+        if (!cur?.member_data || cur.member_data.group_id == null || cur.member_data.group_id !== p.group_id) return cur;
+        return { ...cur, member_data: { ...cur.member_data, group_score: p.score ?? cur.member_data.group_score } };
+      });
+    });
+    return () => { socket.off("group_score"); socket.off("connect", join); socket.disconnect(); };
+  }, [formId]);
 
   const ev = data?.event;
   const startDate = ev?.datetime ? new Date(ev.datetime) : null;

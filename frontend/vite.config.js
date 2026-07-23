@@ -63,6 +63,7 @@ export default defineConfig(({ command, mode }) => {
               formPayment: path.resolve(__dirname, "./formPayRegisterMain.tsx"),
               formPublic: path.resolve(__dirname, "./formPublicMain.tsx"),
               memberPortal: path.resolve(__dirname, "./memberPortalMain.tsx"),
+              scorePanel: path.resolve(__dirname, "./scorePanelMain.tsx"),
               musicPortal: path.resolve(__dirname, "./musicPortalMain.tsx"),
               parentalSign: path.resolve(__dirname, "./parentalSignMain.js"),
             },
@@ -73,6 +74,7 @@ export default defineConfig(({ command, mode }) => {
                 if (chunkInfo.name === "formPayment") return "form-payment.js";
                 if (chunkInfo.name === "formPublic") return "form-public.js";
                 if (chunkInfo.name === "memberPortal") return "member-portal.js";
+                if (chunkInfo.name === "scorePanel") return "score-panel.js";
                 if (chunkInfo.name === "musicPortal") return "music-portal.js";
                 if (chunkInfo.name === "parentalSign") return "parental-sign.js";
                 return "assets/[name]-[hash].js";

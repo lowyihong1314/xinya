@@ -1,6 +1,8 @@
 import { useEffect, useState } from "react";
 import { startTransition } from "react";
+import { io, type Socket } from "socket.io-client";
 
+import { API_BASE } from "../../../js/apiBase";
 import { open_parental_form } from "../../../../../static/js/form/parental/modal.js";
 import { showConfirmDialog } from "../../../js/dialogs";
 import { useDebouncedAutosave } from "../../shared/useDebouncedAutosave";
@@ -16,6 +18,8 @@ import {
   assignMemberGroup,
   createForm,
   createGroup,
+  createScorePanel,
+  setGroupColor,
   deleteExtraField,
   deleteFee,
   deleteGroup,
@@ -170,6 +174,22 @@ export function useFormWorkspace(options?: {
       void refreshSelectedForm();
     },
   });
+
+  // 小组积分实时：任何来源（控制面板/管理端）改分都广播到 form_score_<id>。
+  useEffect(() => {
+    if (!enabled || !selectedFormId) return;
+    const origin = API_BASE || (typeof window !== "undefined" ? window.location.origin : "");
+    const room = `form_score_${selectedFormId}`;
+    const socket: Socket = io(origin, { withCredentials: true, transports: ["websocket", "polling"] });
+    const join = () => socket.emit("join_room", { room });
+    socket.on("connect", join);
+    if (socket.connected) join();
+    socket.on("group_score", (p: { form_id?: number; group_id?: number; score?: number; color?: string | null }) => {
+      if (p.form_id !== selectedFormId || p.group_id == null) return;
+      setGroups((cur) => cur.map((g) => (g.id === p.group_id ? { ...g, score: p.score ?? g.score, color: p.color ?? g.color } : g)));
+    });
+    return () => { socket.off("group_score"); socket.off("connect", join); socket.disconnect(); };
+  }, [enabled, selectedFormId]);
 
   function getErrorMessage(error: unknown, fallback: string) {
     return error instanceof Error ? error.message : fallback;
@@ -467,6 +487,27 @@ export function useFormWorkspace(options?: {
     }
   }
 
+  async function handleCreateScorePanel(): Promise<string | null> {
+    if (!selectedFormId) return null;
+    try {
+      const res = await createScorePanel(selectedFormId);
+      return res.url ?? null;
+    } catch (err) {
+      setToast({ type: "error", text: getErrorMessage(err, "生成面板失败") });
+      return null;
+    }
+  }
+
+  async function handleSetGroupColor(groupId: number, color: string | null) {
+    setGroups((prev) => prev.map((g) => (g.id === groupId ? { ...g, color } : g)));
+    try {
+      await setGroupColor(groupId, color);
+    } catch (err) {
+      setToast({ type: "error", text: getErrorMessage(err, "设置颜色失败") });
+      if (selectedFormId) void openForm(selectedFormId);
+    }
+  }
+
   async function handleAdjustGroupScore(groupId: number, delta: number) {
     // 乐观更新积分，失败回滚为服务器真值。
     setGroups((prev) => prev.map((g) => (g.id === groupId ? { ...g, score: (g.score ?? 0) + delta } : g)));
@@ -597,6 +638,8 @@ export function useFormWorkspace(options?: {
       handleDeleteGroup,
       handleAssignMemberGroup,
       handleAdjustGroupScore,
+      handleCreateScorePanel,
+      handleSetGroupColor,
       handleAiChat,
       handleApplyAiPlan,
       handleEditMemberField,

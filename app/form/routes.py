@@ -3,7 +3,7 @@ from flask import Blueprint, jsonify, request
 from models.form import RegisForm
 
 from app.common import council_sign
-from . import ai_grouping, form_agent, services
+from . import ai_grouping, form_agent, score_panel, services
 from .permissions import (
     FORM_EDIT_PERMISSION_NAMES,
     FORM_LIST_PERMISSION_NAMES,
@@ -269,7 +269,41 @@ def assign_member_group():
 @form_bp.route("/group/score/<int:group_id>", methods=["POST"])
 @permission_required_any(*FORM_EDIT_PERMISSION_NAMES)
 def adjust_form_group_score(group_id):
-    return services.adjust_form_group_score(group_id, request.get_json(silent=True) or {})
+    return score_panel.admin_adjust_score(group_id, request.get_json(silent=True) or {})
+
+
+@form_bp.route("/group/color/<int:group_id>", methods=["POST"])
+@permission_required_any(*FORM_EDIT_PERMISSION_NAMES)
+def set_form_group_color(group_id):
+    return score_panel.set_group_color(group_id, request.get_json(silent=True) or {})
+
+
+@form_bp.route("/group/score_log/<int:group_id>", methods=["GET"])
+@permission_required_any(*FORM_MEMBER_DETAIL_PERMISSION_NAMES)
+def form_group_score_log(group_id):
+    return score_panel.group_score_log(group_id)
+
+
+@form_bp.route("/group/score_panel/create/<int:form_id>", methods=["POST"])
+@permission_required_any(*FORM_EDIT_PERMISSION_NAMES)
+def create_score_panel(form_id):
+    return score_panel.create_score_panel(form_id)
+
+
+# 公开积分面板（token 鉴权，无需登录）
+@form_bp.route("/score_panel/<token>", methods=["GET"])
+def score_panel_page(token):
+    return score_panel.score_panel_page(token)
+
+
+@form_bp.route("/score_panel/<token>/data", methods=["GET"])
+def score_panel_data(token):
+    return score_panel.score_panel_data(token)
+
+
+@form_bp.route("/score_panel/<token>/adjust", methods=["POST"])
+def score_panel_adjust(token):
+    return score_panel.score_panel_adjust(token, request.get_json(silent=True) or {})
 
 
 @form_bp.route("/group/ai_chat/<int:form_id>", methods=["POST"])

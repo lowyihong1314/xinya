@@ -217,6 +217,26 @@ export async function deleteGroup(groupId: number) {
   return parseJson<{ status?: string; message?: string }>(response);
 }
 
+export async function createScorePanel(formId: number) {
+  const response = await apiFetch(`/api/form/group/score_panel/create/${formId}`, { method: "POST" });
+  return parseJson<{ status?: string; token?: string; url?: string; message?: string }>(response);
+}
+
+export async function setGroupColor(groupId: number, color: string | null) {
+  const response = await apiFetch(`/api/form/group/color/${groupId}`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ color }),
+  });
+  return parseJson<{ status?: string; group?: FormGroup; message?: string }>(response);
+}
+
+export type GroupScoreLogEntry = { id: number; group_id: number | null; group_name?: string | null; delta: number; actor_name?: string | null; created_at?: string | null };
+export async function fetchGroupScoreLog(groupId: number) {
+  const response = await apiFetch(`/api/form/group/score_log/${groupId}`, { credentials: "include" });
+  return parseJson<{ status?: string; group?: FormGroup; logs?: GroupScoreLogEntry[] }>(response);
+}
+
 export async function adjustGroupScore(groupId: number, delta: number) {
   const response = await apiFetch(`/api/form/group/score/${groupId}`, {
     method: "POST",

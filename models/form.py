@@ -290,6 +290,7 @@ class RegisFormGroup(db.Model):
     name = db.Column(db.String(255), nullable=False)
     order = db.Column(db.Integer, nullable=False, default=0)
     score = db.Column(db.Integer, nullable=False, default=0)  # 小组积分（可加可扣，可为负）
+    color = db.Column(db.String(20), nullable=True)  # 小组颜色（浅色系 palette key）
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
 
     form = db.relationship("RegisForm", back_populates="groups")
@@ -301,6 +302,30 @@ class RegisFormGroup(db.Model):
             "name": self.name,
             "order": self.order,
             "score": self.score or 0,
+            "color": self.color,
+            "created_at": self.created_at.isoformat() if self.created_at else None,
+        }
+
+
+class RegisFormGroupScoreLog(db.Model):
+    """小组积分变更日志：谁给哪个组加/扣了多少分。"""
+    __tablename__ = "regis_form_group_score_log"
+
+    id = db.Column(db.Integer, primary_key=True, autoincrement=True)
+    form_id = db.Column(db.Integer, db.ForeignKey("regis_form.id", ondelete="CASCADE"), nullable=False, index=True)
+    group_id = db.Column(db.Integer, db.ForeignKey("regis_form_group.id", ondelete="SET NULL"), nullable=True, index=True)
+    group_name = db.Column(db.String(255), nullable=True)  # 快照，删组后仍可查
+    delta = db.Column(db.Integer, nullable=False, default=0)
+    actor_name = db.Column(db.String(120), nullable=True)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow, index=True)
+
+    def to_dict(self):
+        return {
+            "id": self.id,
+            "group_id": self.group_id,
+            "group_name": self.group_name,
+            "delta": self.delta,
+            "actor_name": self.actor_name,
             "created_at": self.created_at.isoformat() if self.created_at else None,
         }
 

@@ -104,6 +104,8 @@ export function FormWorkspacePage() {
       onDeleteGroup={(groupId) => void actions.handleDeleteGroup(groupId)}
       onAssignMemberGroup={(memberId, groupId) => void actions.handleAssignMemberGroup(memberId, groupId)}
       onAdjustGroupScore={(groupId, delta) => void actions.handleAdjustGroupScore(groupId, delta)}
+      onCreateScorePanel={() => actions.handleCreateScorePanel()}
+      onSetGroupColor={(groupId, color) => void actions.handleSetGroupColor(groupId, color)}
       onAiChat={actions.handleAiChat}
       onApplyAiPlan={(plan) => actions.handleApplyAiPlan(plan)}
       onShowMemberDetail={(member) => actions.handleShowMemberDetail(member)}

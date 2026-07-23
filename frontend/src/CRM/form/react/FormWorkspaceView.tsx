@@ -7,6 +7,7 @@ import { CachedImage } from "../../../components/CachedMedia";
 import { downloadBlobOrShare } from "../../../js/browserActions";
 import { smartImageURL } from "../../../js/get_img";
 import { calcAgeFromNric } from "../../../js/nric";
+import { fetchGroupScoreLog, type GroupScoreLogEntry } from "./api";
 import { AttendanceTab } from "./AttendanceTab";
 import { FormAgentTab } from "./FormAgentTab";
 import { ExtraFieldEditor } from "./ExtraFieldEditor";
@@ -238,6 +239,8 @@ export function FormWorkspaceView(props: {
   onDeleteGroup: (groupId: number) => void;
   onAssignMemberGroup: (memberId: number, groupId: number | null) => void;
   onAdjustGroupScore: (groupId: number, delta: number) => void;
+  onCreateScorePanel: () => Promise<string | null>;
+  onSetGroupColor: (groupId: number, color: string | null) => void;
   onAiChat: (messages: GroupChatMessage[]) => Promise<{ job_id?: string; room?: string }>;
   onApplyAiPlan: (plan: GroupPlan) => void;
   onShowMemberDetail: (member: FormMember) => void;
@@ -326,6 +329,8 @@ export function FormWorkspaceView(props: {
                   onDeleteGroup={props.onDeleteGroup}
                   onAssignMemberGroup={props.onAssignMemberGroup}
                   onAdjustGroupScore={props.onAdjustGroupScore}
+                  onCreateScorePanel={props.onCreateScorePanel}
+                  onSetGroupColor={props.onSetGroupColor}
                   onAiChat={props.onAiChat}
                   onApplyAiPlan={props.onApplyAiPlan}
                 />
@@ -679,6 +684,8 @@ function GroupsTab({
   onDeleteGroup,
   onAssignMemberGroup,
   onAdjustGroupScore,
+  onCreateScorePanel,
+  onSetGroupColor,
   onAiChat,
   onApplyAiPlan,
 }: {
@@ -692,10 +699,14 @@ function GroupsTab({
   onDeleteGroup: (groupId: number) => void;
   onAssignMemberGroup: (memberId: number, groupId: number | null) => void;
   onAdjustGroupScore: (groupId: number, delta: number) => void;
+  onCreateScorePanel: () => Promise<string | null>;
+  onSetGroupColor: (groupId: number, color: string | null) => void;
   onAiChat: (messages: GroupChatMessage[]) => Promise<{ job_id?: string; room?: string }>;
   onApplyAiPlan: (plan: GroupPlan) => void;
 }) {
   const [dragOver, setDragOver] = useState<number | "ungrouped" | null>(null);
+  const [panelUrl, setPanelUrl] = useState<string | null>(null);
+  const [logGroup, setLogGroup] = useState<{ id: number; name: string } | null>(null);
   const members = form.members || [];
 
   const sortedGroups = useMemo(
@@ -730,18 +741,30 @@ function GroupsTab({
     onAssignMemberGroup(memberId, groupId);
   }
 
-  const columns: { key: number | "ungrouped"; id: number | null; title: string; score?: number }[] = [
+  const columns: { key: number | "ungrouped"; id: number | null; title: string; score?: number; color?: string | null }[] = [
     { key: "ungrouped", id: null, title: "未分组" },
-    ...sortedGroups.map((g) => ({ key: g.id, id: g.id, title: g.name, score: g.score ?? 0 })),
+    ...sortedGroups.map((g) => ({ key: g.id, id: g.id, title: g.name, score: g.score ?? 0, color: g.color ?? null })),
   ];
 
   return (
     <div style={sectionBodyStyle}>
       {canEdit ? (
-        <div style={memberToolbarStyle}>
+        <div style={{ ...memberToolbarStyle, justifyContent: "flex-start", gap: "8px" }}>
           <button type="button" style={primaryButtonStyle} onClick={() => onCreateGroup(nextGroupName(sortedGroups))}>
             + 新建小组
           </button>
+          <button type="button" style={aiButtonStyle} onClick={async () => { const url = await onCreateScorePanel(); if (url) { setPanelUrl(`${PUBLIC_ORIGIN}${url}`); window.open(url, "_blank"); } }}>
+            <i className="fa-solid fa-gamepad" style={{ marginRight: 6 }} />积分控制面板
+          </button>
+        </div>
+      ) : null}
+
+      {panelUrl ? (
+        <div style={panelBarStyle}>
+          <span style={mutedStyle}>控制面板链接（1 天内有效，可在手机打开控分）：</span>
+          <div style={panelUrlBoxStyle}>{panelUrl}</div>
+          <button type="button" style={btnStyle} onClick={() => void copyToClipboard(panelUrl)}>复制</button>
+          <a href={panelUrl} target="_blank" rel="noreferrer" style={{ ...btnStyle, textDecoration: "none" }}>打开</a>
         </div>
       ) : null}
 
@@ -766,9 +789,12 @@ function GroupsTab({
                 groupId={col.id}
                 title={col.title}
                 count={list.length}
+                color={col.color}
                 canEdit={canEdit && col.id != null}
                 onRename={onRenameGroup}
                 onDelete={onDeleteGroup}
+                onSetColor={(c) => { if (col.id != null) onSetGroupColor(col.id, c); }}
+                onViewLog={() => { if (col.id != null) setLogGroup({ id: col.id as number, name: col.title }); }}
               />
               {col.id != null ? (
                 <div style={scoreBarStyle}>
@@ -807,30 +833,46 @@ function GroupsTab({
           );
         })}
       </div>
+      {logGroup ? <GroupScoreLogModal groupId={logGroup.id} groupName={logGroup.name} onClose={() => setLogGroup(null)} /> : null}
     </div>
   );
 }
+
+const GROUP_PALETTE: Record<string, string> = {
+  blue: "#dbeafe", green: "#dcfce7", yellow: "#fef9c3", pink: "#fce7f3", purple: "#ede9fe",
+  orange: "#ffedd5", teal: "#ccfbf1", rose: "#ffe4e6", sky: "#e0f2fe", lime: "#ecfccb",
+};
 
 function GroupColumnHeader({
   groupId,
   title,
   count,
+  color,
   canEdit,
   onRename,
   onDelete,
+  onSetColor,
+  onViewLog,
 }: {
   groupId: number | null;
   title: string;
   count: number;
+  color?: string | null;
   canEdit: boolean;
   onRename: (groupId: number, name: string) => void;
   onDelete: (groupId: number) => void;
+  onSetColor: (color: string | null) => void;
+  onViewLog: () => void;
 }) {
   const [editing, setEditing] = useState(false);
   const [draft, setDraft] = useState(title);
+  const [palette, setPalette] = useState(false);
+  const tint = color && GROUP_PALETTE[color] ? GROUP_PALETTE[color] : undefined;
+  const headStyle = tint ? { ...groupHeadStyle, background: tint } : groupHeadStyle;
+
   if (editing && groupId != null) {
     return (
-      <div style={groupHeadStyle}>
+      <div style={headStyle}>
         <input
           autoFocus
           value={draft}
@@ -847,17 +889,71 @@ function GroupColumnHeader({
     );
   }
   return (
-    <div style={groupHeadStyle}>
-      <div style={groupTitleStyle}>
-        <span>{title}</span>
-        <span style={groupCountStyle}>{count}</span>
+    <div style={{ position: "relative" }}>
+      <div style={headStyle}>
+        <div style={groupTitleStyle}>
+          {tint ? <span style={{ width: 10, height: 10, borderRadius: 999, background: tint, border: "1px solid rgba(0,0,0,0.15)", flexShrink: 0 }} /> : null}
+          <span>{title}</span>
+          <span style={groupCountStyle}>{count}</span>
+        </div>
+        {groupId != null ? (
+          <div style={{ display: "inline-flex", gap: "4px" }}>
+            <button type="button" style={factIconButtonStyle} title="积分记录" onClick={onViewLog}><i className="fa-solid fa-clock-rotate-left" /></button>
+            {canEdit ? <button type="button" style={factIconButtonStyle} title="小组颜色" onClick={() => setPalette((v) => !v)}><i className="fa-solid fa-palette" /></button> : null}
+            {canEdit ? <button type="button" style={factIconButtonStyle} title="重命名" onClick={() => { setDraft(title); setEditing(true); }}><i className="fa-solid fa-pen" /></button> : null}
+            {canEdit ? <button type="button" style={factIconButtonStyle} title="删除小组" onClick={() => onDelete(groupId)}><i className="fa-solid fa-trash" /></button> : null}
+          </div>
+        ) : null}
       </div>
-      {canEdit && groupId != null ? (
-        <div style={{ display: "inline-flex", gap: "4px" }}>
-          <button type="button" style={factIconButtonStyle} title="重命名" onClick={() => { setDraft(title); setEditing(true); }}><i className="fa-solid fa-pen" /></button>
-          <button type="button" style={factIconButtonStyle} title="删除小组" onClick={() => onDelete(groupId)}><i className="fa-solid fa-trash" /></button>
+      {palette && canEdit ? (
+        <div style={palettePopStyle}>
+          {Object.entries(GROUP_PALETTE).map(([key, hex]) => (
+            <button key={key} type="button" title={key} style={{ ...swatchStyle, background: hex, outline: color === key ? "2px solid var(--x-color-accent)" : "none" }} onClick={() => { onSetColor(key); setPalette(false); }} />
+          ))}
+          <button type="button" style={swatchClearStyle} title="清除" onClick={() => { onSetColor(null); setPalette(false); }}>✕</button>
         </div>
       ) : null}
+    </div>
+  );
+}
+
+function GroupScoreLogModal({ groupId, groupName, onClose }: { groupId: number; groupName: string; onClose: () => void }) {
+  const [logs, setLogs] = useState<GroupScoreLogEntry[] | null>(null);
+  const [error, setError] = useState("");
+  useEffect(() => {
+    let active = true;
+    fetchGroupScoreLog(groupId)
+      .then((d) => { if (active) setLogs(d.logs || []); })
+      .catch((e) => { if (active) setError(e instanceof Error ? e.message : "读取失败"); });
+    return () => { active = false; };
+  }, [groupId]);
+  function fmt(v?: string | null) {
+    if (!v) return "";
+    const d = new Date(v);
+    if (Number.isNaN(d.getTime())) return String(v);
+    const p = (n: number) => String(n).padStart(2, "0");
+    return `${p(d.getMonth() + 1)}-${p(d.getDate())} ${p(d.getHours())}:${p(d.getMinutes())}`;
+  }
+  return (
+    <div style={modalOverlayStyle} onClick={onClose}>
+      <div style={{ ...modalStyle, width: "min(440px, 100%)", maxHeight: "80vh" }} onClick={(e) => e.stopPropagation()}>
+        <div style={publicHeadStyle}>
+          <h4 style={panelTitleStyle}>{groupName} · 积分记录</h4>
+          <button type="button" style={btnStyle} onClick={onClose}>关闭</button>
+        </div>
+        {error ? <div style={errorStyle}>{error}</div> : null}
+        {logs && !logs.length ? <div style={emptyInlineStyle}>暂无积分记录。</div> : null}
+        <div style={{ display: "grid", gap: 6, overflowY: "auto" }}>
+          {(logs || []).map((l) => (
+            <div key={l.id} style={logRowStyle}>
+              <span style={{ ...logDeltaStyle, color: l.delta >= 0 ? "var(--x-color-success)" : "var(--x-color-danger)" }}>{l.delta >= 0 ? `+${l.delta}` : l.delta}</span>
+              <span style={{ flex: 1, minWidth: 0 }}>{l.actor_name || "—"}</span>
+              <span style={mutedStyle}>{fmt(l.created_at)}</span>
+            </div>
+          ))}
+          {!logs && !error ? <div style={emptyInlineStyle}>加载中…</div> : null}
+        </div>
+      </div>
     </div>
   );
 }
@@ -1348,6 +1444,13 @@ const groupColHoverStyle: CSSProperties = { border: "1px dashed var(--x-color-ac
 const groupHeadStyle: CSSProperties = { display: "flex", alignItems: "center", justifyContent: "space-between", gap: "6px", padding: "8px 10px", borderBottom: "1px solid var(--x-color-line-soft)" };
 const groupTitleStyle: CSSProperties = { display: "inline-flex", alignItems: "center", gap: "6px", fontWeight: 700, fontSize: "13px", minWidth: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" };
 const groupCountStyle: CSSProperties = { display: "inline-flex", alignItems: "center", justifyContent: "center", minWidth: "20px", height: "18px", padding: "0 6px", borderRadius: "999px", background: "var(--x-color-panel)", border: "1px solid var(--x-color-line)", fontSize: "11px", fontWeight: 700, color: "var(--x-color-ink-muted)" };
+const panelBarStyle: CSSProperties = { display: "flex", alignItems: "center", gap: "8px", flexWrap: "wrap", padding: "10px 12px", borderRadius: "9px", background: "var(--x-color-accent-tint)", border: "1px solid var(--x-color-accent-border)" };
+const panelUrlBoxStyle: CSSProperties = { flex: "1 1 220px", minWidth: 0, padding: "7px 10px", borderRadius: "7px", background: "var(--x-color-panel)", border: "1px solid var(--x-color-line-soft)", fontFamily: "var(--x-font-mono)", fontSize: "12px", wordBreak: "break-all" };
+const palettePopStyle: CSSProperties = { position: "absolute", right: 6, top: "100%", zIndex: 20, display: "grid", gridTemplateColumns: "repeat(5, 22px)", gap: 6, padding: 8, borderRadius: 10, background: "var(--x-color-panel)", border: "1px solid var(--x-color-line)", boxShadow: "0 12px 30px var(--x-color-shadow)" };
+const swatchStyle: CSSProperties = { width: 22, height: 22, borderRadius: 6, border: "1px solid rgba(0,0,0,0.12)", cursor: "pointer" };
+const swatchClearStyle: CSSProperties = { width: 22, height: 22, borderRadius: 6, border: "1px solid var(--x-color-line)", background: "var(--x-color-panel-alt)", color: "var(--x-color-ink-muted)", cursor: "pointer", fontSize: 11 };
+const logRowStyle: CSSProperties = { display: "flex", alignItems: "center", gap: 10, padding: "8px 10px", borderRadius: 8, border: "1px solid var(--x-color-line-soft)", background: "var(--x-color-panel-alt)", fontSize: 13 };
+const logDeltaStyle: CSSProperties = { minWidth: 44, fontWeight: 800, fontFamily: "var(--x-font-mono)" };
 const scoreBarStyle: CSSProperties = { display: "flex", alignItems: "center", justifyContent: "center", gap: "6px", padding: "6px 8px", borderBottom: "1px solid var(--x-color-line-soft)", background: "var(--x-color-panel)", flexWrap: "wrap" };
 const scoreBtnStyle: CSSProperties = { minWidth: "30px", padding: "4px 7px", borderRadius: "6px", border: "1px solid var(--x-color-line)", background: "var(--x-color-panel-alt)", color: "var(--x-color-ink)", fontWeight: 800, fontSize: "13px", cursor: "pointer", lineHeight: 1 };
 const scoreValueStyle: CSSProperties = { minWidth: "44px", textAlign: "center", fontWeight: 800, fontSize: "18px", color: "var(--x-color-accent-strong)" };

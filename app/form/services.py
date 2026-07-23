@@ -2808,6 +2808,7 @@ def member_portal_detail(nric, form_id):
             "parent_2": ld.get("parent_2"),
             "parent_2_phone": ld.get("parent_2_phone"),
             "group": group_name,
+            "group_id": gid,
             "group_score": group_score,
             "extra_fields": ld.get("extra_fields", []),
         }
