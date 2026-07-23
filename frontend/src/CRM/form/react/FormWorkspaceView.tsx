@@ -1,6 +1,8 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import type { CSSProperties, DragEvent, ReactNode } from "react";
+import { io, type Socket } from "socket.io-client";
 
+import { API_BASE } from "../../../js/apiBase";
 import { CachedImage } from "../../../components/CachedMedia";
 import { downloadBlobOrShare } from "../../../js/browserActions";
 import { smartImageURL } from "../../../js/get_img";
@@ -231,7 +233,7 @@ export function FormWorkspaceView(props: {
   onRenameGroup: (groupId: number, name: string) => void;
   onDeleteGroup: (groupId: number) => void;
   onAssignMemberGroup: (memberId: number, groupId: number | null) => void;
-  onAiChat: (messages: GroupChatMessage[]) => Promise<{ reply?: string; plan?: GroupPlan | null }>;
+  onAiChat: (messages: GroupChatMessage[]) => Promise<{ job_id?: string; room?: string }>;
   onApplyAiPlan: (plan: GroupPlan) => void;
   onShowMemberDetail: (member: FormMember) => void;
   onOpenParental: (member: FormMember) => void;
@@ -600,7 +602,7 @@ function GroupsTab({
   onRenameGroup: (groupId: number, name: string) => void;
   onDeleteGroup: (groupId: number) => void;
   onAssignMemberGroup: (memberId: number, groupId: number | null) => void;
-  onAiChat: (messages: GroupChatMessage[]) => Promise<{ reply?: string; plan?: GroupPlan | null }>;
+  onAiChat: (messages: GroupChatMessage[]) => Promise<{ job_id?: string; room?: string }>;
   onApplyAiPlan: (plan: GroupPlan) => void;
 }) {
   const [dragOver, setDragOver] = useState<number | "ungrouped" | null>(null);
@@ -858,7 +860,7 @@ function GroupAiChatModal({
   isMobile: boolean;
   memberInfo: MemberInfo[];
   onClose: () => void;
-  onAiChat: (messages: GroupChatMessage[]) => Promise<{ reply?: string; plan?: GroupPlan | null }>;
+  onAiChat: (messages: GroupChatMessage[]) => Promise<{ job_id?: string; room?: string }>;
   onApplyAiPlan: (plan: GroupPlan) => void;
 }) {
   const storageKey = `xinya_group_chat_${formId}`;
@@ -872,10 +874,11 @@ function GroupAiChatModal({
     }
   });
   const [input, setInput] = useState("");
-  const [loading, setLoading] = useState(false);
+  const [pending, setPending] = useState(false);
   const [error, setError] = useState("");
   const [copied, setCopied] = useState("");
   const listRef = useRef<HTMLDivElement>(null);
+  const pendingJobRef = useRef<string | null>(null);
 
   useEffect(() => {
     try {
@@ -887,11 +890,39 @@ function GroupAiChatModal({
 
   useEffect(() => {
     listRef.current?.scrollTo({ top: listRef.current.scrollHeight });
-  }, [entries, loading]);
+  }, [entries, pending]);
+
+  // 结果经 socket 事件 ai_group_reply 推回（后端子进程算完 → Redis → socket）。
+  useEffect(() => {
+    const origin = API_BASE || (typeof window !== "undefined" ? window.location.origin : "");
+    const room = `ai_group_${formId}`;
+    const socket: Socket = io(origin, { withCredentials: true, transports: ["websocket", "polling"] });
+    const join = () => socket.emit("join_room", { room });
+    socket.on("connect", join);
+    if (socket.connected) join();
+    socket.on(
+      "ai_group_reply",
+      (payload: { job_id?: string; status?: string; reply?: string; plan?: GroupPlan | null; message?: string }) => {
+        if (!payload || payload.job_id !== pendingJobRef.current) return;
+        pendingJobRef.current = null;
+        setPending(false);
+        if (payload.status === "error") {
+          setError(payload.message || "AI 请求失败");
+        } else {
+          setEntries((cur) => [...cur, { role: "assistant", content: payload.reply || "（无回复）", plan: payload.plan || null }]);
+        }
+      },
+    );
+    return () => {
+      socket.off("ai_group_reply");
+      socket.off("connect", join);
+      socket.disconnect();
+    };
+  }, [formId]);
 
   async function send(text: string) {
     const content = text.trim();
-    if (!content || loading) return;
+    if (!content || pending) return;
     setError("");
     const history: GroupChatMessage[] = [
       ...entries.map((e) => ({ role: e.role, content: e.content })),
@@ -899,14 +930,22 @@ function GroupAiChatModal({
     ];
     setEntries((cur) => [...cur, { role: "user", content }]);
     setInput("");
-    setLoading(true);
+    setPending(true);
     try {
       const res = await onAiChat(history);
-      setEntries((cur) => [...cur, { role: "assistant", content: res.reply || "（无回复）", plan: res.plan || null }]);
+      if (!res.job_id) throw new Error("AI 任务未启动");
+      const jobId = res.job_id;
+      pendingJobRef.current = jobId;
+      window.setTimeout(() => {
+        if (pendingJobRef.current === jobId) {
+          pendingJobRef.current = null;
+          setPending(false);
+          setError("AI 响应超时，请重试");
+        }
+      }, 120000);
     } catch (err) {
+      setPending(false);
       setError(err instanceof Error ? err.message : "AI 请求失败");
-    } finally {
-      setLoading(false);
     }
   }
 
@@ -969,7 +1008,7 @@ function GroupAiChatModal({
             </div>
           </div>
         ))}
-        {loading ? <div style={chatRowAiStyle}><div style={chatBubbleAiStyle}>思考中…</div></div> : null}
+        {pending ? <div style={chatRowAiStyle}><div style={chatBubbleAiStyle}>思考中…（AI 处理完会自动回到这里）</div></div> : null}
       </div>
       {error ? <div style={{ ...errorStyle, margin: "8px 12px 0" }}>{error}</div> : null}
       <div style={chatInputBarStyle}>
@@ -983,8 +1022,8 @@ function GroupAiChatModal({
         />
         <button
           type="button"
-          style={{ ...primaryButtonStyle, opacity: loading || !input.trim() ? 0.6 : 1 }}
-          disabled={loading || !input.trim()}
+          style={{ ...primaryButtonStyle, opacity: pending || !input.trim() ? 0.6 : 1 }}
+          disabled={pending || !input.trim()}
           onClick={() => void send(input)}
         >
           发送

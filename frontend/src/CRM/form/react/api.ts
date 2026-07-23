@@ -222,7 +222,8 @@ export async function aiGroupChat(formId: number, messages: GroupChatMessage[]) 
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ messages }),
   });
-  return parseJson<{ status?: string; reply?: string; plan?: GroupPlan | null; message?: string }>(response);
+  // 异步：返回 job_id + room；真正的回复由 socket 事件 ai_group_reply 推回。
+  return parseJson<{ status?: string; job_id?: string; room?: string; message?: string }>(response);
 }
 
 export async function applyGroupPlan(formId: number, plan: GroupPlan) {

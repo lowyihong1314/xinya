@@ -6,17 +6,25 @@
 """
 import json
 import re
+import subprocess
+import sys
 import urllib.error
 import urllib.request
+import uuid
 
 from flask import jsonify
 
 from app.email.service import env_value
+from app.paths import PROJECT_ROOT
 from models import db
 from models.form import NRIC_Asset, RegisForm, RegisFormGroup, regis_form_member
 
 from .realtime import emit_form_event
 from .services import _calc_age_from_nric
+
+
+def _ai_group_room(form_id):
+    return f"ai_group_{form_id}"
 
 
 DEFAULT_ARK_BASE_URL = "https://ark.ap-southeast.bytepluses.com/api/v3"
@@ -179,6 +187,8 @@ def _extract_plan(text, valid_ids, existing_names):
 
 
 def ai_group_chat(form_id, data):
+    """异步：起一个子进程去调 AI（不阻塞 gunicorn worker），立即返回 job_id。
+    子进程算完后经 Redis 触发 socket 事件 ai_group_reply 推回前端对话框。"""
     form = RegisForm.query.get_or_404(form_id)
     raw_messages = (data or {}).get("messages") or []
     history = [
@@ -204,13 +214,63 @@ def ai_group_chat(form_id, data):
     )
     messages = [{"role": "system", "content": system_content}] + history
 
-    try:
-        reply = _call_ark_chat(messages)
-    except ValueError as exc:
-        return jsonify({"status": "error", "message": str(exc)}), 502
+    if not _ark_api_key():
+        return jsonify({"status": "error", "message": "AI 未配置（缺少 BytePlus/Ark API key）"}), 502
 
-    plan = _extract_plan(reply, {row["id"] for row in context}, set(group_names))
-    return jsonify({"status": "success", "reply": reply, "plan": plan})
+    job_id = uuid.uuid4().hex
+    room = _ai_group_room(form.id)
+    job_payload = {
+        "job_id": job_id,
+        "room": room,
+        "messages": messages,
+        "valid_ids": [row["id"] for row in context],
+        "existing_names": group_names,
+    }
+    try:
+        _spawn_ai_worker(job_payload)
+    except Exception as exc:  # noqa: BLE001
+        return jsonify({"status": "error", "message": f"AI 任务启动失败：{exc}"}), 500
+
+    return jsonify({"status": "success", "job_id": job_id, "room": room})
+
+
+def _spawn_ai_worker(job_payload):
+    process = subprocess.Popen(
+        [sys.executable, "-m", "app.form.ai_group_worker"],
+        stdin=subprocess.PIPE,
+        stdout=subprocess.DEVNULL,
+        stderr=subprocess.DEVNULL,
+        cwd=PROJECT_ROOT,
+        start_new_session=True,  # 脱离请求生命周期，独立运行
+    )
+    process.stdin.write(json.dumps(job_payload, ensure_ascii=False).encode("utf-8"))
+    process.stdin.close()
+
+
+def run_ai_group_job(job_payload):
+    """在子进程里执行：调 AI → 解析方案 → 经 socket_broker 推回房间。"""
+    from app.extensions import socket_broker
+
+    job_id = job_payload.get("job_id")
+    room = job_payload.get("room")
+    try:
+        reply = _call_ark_chat(job_payload.get("messages") or [])
+        plan = _extract_plan(
+            reply,
+            set(job_payload.get("valid_ids") or []),
+            set(job_payload.get("existing_names") or []),
+        )
+        socket_broker.emit(
+            "ai_group_reply",
+            {"job_id": job_id, "room": room, "status": "success", "reply": reply, "plan": plan},
+            room=room,
+        )
+    except Exception as exc:  # noqa: BLE001
+        socket_broker.emit(
+            "ai_group_reply",
+            {"job_id": job_id, "room": room, "status": "error", "message": str(exc)},
+            room=room,
+        )
 
 
 def apply_group_plan(form_id, data):
