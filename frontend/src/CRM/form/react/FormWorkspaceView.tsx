@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import type { CSSProperties, DragEvent, ReactNode } from "react";
 import { io, type Socket } from "socket.io-client";
+import QRCode from "qrcode";
 
 import { API_BASE } from "../../../js/apiBase";
 import { CachedImage } from "../../../components/CachedMedia";
@@ -1151,6 +1152,25 @@ function PublicTab({ formId, isMobile }: { formId: number; isMobile: boolean }) 
     window.setTimeout(() => setCopied(""), 2200);
   }
   const [previewUrl, setPreviewUrl] = useState(registerUrl);
+  const [qrModal, setQrModal] = useState<{ label: string; url: string; data: string } | null>(null);
+  async function openQr(url: string, label: string) {
+    try {
+      const data = await QRCode.toDataURL(url, { width: 640, margin: 2, color: { dark: "#0f172a", light: "#ffffff" } });
+      setQrModal({ label, url, data });
+    } catch {
+      setCopied("二维码生成失败");
+      window.setTimeout(() => setCopied(""), 2200);
+    }
+  }
+  function downloadQr() {
+    if (!qrModal) return;
+    const a = document.createElement("a");
+    a.href = qrModal.data;
+    a.download = `qr_${qrModal.label}.png`;
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+  }
   const entries: { label: string; url: string; note?: string }[] = [
     { label: "报名页", url: registerUrl },
     { label: "强制报名链接", url: forceRegisterUrl, note: "绕过截止日期、名额已满与手动终止，仅在需要补录时私下发送。" },
@@ -1171,6 +1191,7 @@ function PublicTab({ formId, isMobile }: { formId: number; isMobile: boolean }) 
                   <div style={{ display: "flex", gap: 6, flexShrink: 0 }}>
                     <button type="button" style={active ? primaryButtonStyle : btnStyle} onClick={() => setPreviewUrl(e.url)}>预览</button>
                     <button type="button" style={btnStyle} onClick={() => void copy(e.url, e.label)}>复制链接</button>
+                    <button type="button" style={btnStyle} onClick={() => void openQr(e.url, e.label)}>QR code</button>
                   </div>
                 </div>
                 <div style={urlBoxStyle}>{e.url}</div>
@@ -1183,9 +1204,25 @@ function PublicTab({ formId, isMobile }: { formId: number; isMobile: boolean }) 
           <PhoneFrame src={previewUrl} title="预览" />
         </div>
       </div>
+      {qrModal ? (
+        <div style={qrOverlayStyle} onClick={() => setQrModal(null)}>
+          <div style={qrCardStyle} onClick={(ev) => ev.stopPropagation()}>
+            <div style={{ fontSize: 15, fontWeight: 800, color: "#1f2937" }}>{qrModal.label} · 二维码</div>
+            <img src={qrModal.data} alt="二维码" style={{ width: "min(300px, 70vw)", height: "auto", borderRadius: 12, border: "1px solid #e5e7eb" }} />
+            <div style={{ ...urlBoxStyle, wordBreak: "break-all" }}>{qrModal.url}</div>
+            <div style={{ display: "flex", gap: 8 }}>
+              <button type="button" style={primaryButtonStyle} onClick={downloadQr}>下载 QR</button>
+              <button type="button" style={btnStyle} onClick={() => setQrModal(null)}>关闭</button>
+            </div>
+          </div>
+        </div>
+      ) : null}
     </div>
   );
 }
+
+const qrOverlayStyle: CSSProperties = { position: "fixed", inset: 0, zIndex: 2000, background: "rgba(15,23,42,0.6)", display: "grid", placeItems: "center", padding: 20 };
+const qrCardStyle: CSSProperties = { width: "min(360px, 100%)", background: "#fff", borderRadius: 18, padding: 20, textAlign: "center", boxShadow: "0 30px 70px rgba(0,0,0,0.4)", display: "grid", gap: 12, justifyItems: "center" };
 
 function PhoneFrame({ src, title }: { src: string; title: string }) {
   return (
