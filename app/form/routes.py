@@ -3,7 +3,7 @@ from flask import Blueprint, jsonify, request
 from models.form import RegisForm
 
 from app.common import council_sign
-from . import ai_grouping, services
+from . import ai_grouping, form_agent, services
 from .permissions import (
     FORM_EDIT_PERMISSION_NAMES,
     FORM_LIST_PERMISSION_NAMES,
@@ -260,6 +260,19 @@ def group_ai_chat(form_id):
 @permission_required_any(*FORM_EDIT_PERMISSION_NAMES)
 def group_apply_plan(form_id):
     return ai_grouping.apply_group_plan(form_id, request.get_json(silent=True) or {})
+
+
+# -------- 报名表 AI Agent --------
+@form_bp.route("/agent/chat/<int:form_id>", methods=["POST"])
+@permission_required_any(*FORM_EDIT_PERMISSION_NAMES)
+def form_agent_chat(form_id):
+    return form_agent.form_agent_chat(form_id, request.get_json(silent=True) or {})
+
+
+@form_bp.route("/agent/apply/<int:form_id>", methods=["POST"])
+@permission_required_any(*FORM_EDIT_PERMISSION_NAMES)
+def form_agent_apply(form_id):
+    return form_agent.apply_form_agent_plan(form_id, request.get_json(silent=True) or {})
 
 
 # -------- 点名（出席快照）--------

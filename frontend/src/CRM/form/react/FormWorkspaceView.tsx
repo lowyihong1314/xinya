@@ -8,6 +8,7 @@ import { downloadBlobOrShare } from "../../../js/browserActions";
 import { smartImageURL } from "../../../js/get_img";
 import { calcAgeFromNric } from "../../../js/nric";
 import { AttendanceTab } from "./AttendanceTab";
+import { FormAgentTab } from "./FormAgentTab";
 import { ExtraFieldEditor } from "./ExtraFieldEditor";
 import { FeePanel } from "./FeePanel";
 import { TablePagination, usePagedRows } from "../../shared/TablePagination";
@@ -30,6 +31,7 @@ type FeePayload = {
 const TABS: { key: string; label: string; icon: string }[] = [
   { key: "members", label: "报名成员", icon: "fa-solid fa-users" },
   { key: "groups", label: "分组", icon: "fa-solid fa-layer-group" },
+  { key: "agent", label: "AI 助手", icon: "fa-solid fa-robot" },
   { key: "attendance", label: "点名", icon: "fa-solid fa-clipboard-check" },
   { key: "fees", label: "报名费", icon: "fa-solid fa-receipt" },
   { key: "fields", label: "表格内容", icon: "fa-solid fa-list-check" },
@@ -324,6 +326,15 @@ export function FormWorkspaceView(props: {
                   onAssignMemberGroup={props.onAssignMemberGroup}
                   onAiChat={props.onAiChat}
                   onApplyAiPlan={props.onApplyAiPlan}
+                />
+              ) : null}
+
+              {activeTab === "agent" ? (
+                <FormAgentTab
+                  formId={selectedForm.id}
+                  canEdit={props.canEditForms}
+                  isMobile={isMobile}
+                  onApplied={props.onRefresh}
                 />
               ) : null}
 
