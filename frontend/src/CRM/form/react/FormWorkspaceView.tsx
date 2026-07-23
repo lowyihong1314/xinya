@@ -521,7 +521,8 @@ function MembersTab({
   }
 
   return (
-    <div style={sectionBodyStyle}>
+    <div style={memberLayoutStyle(isMobile)}>
+      <div style={memberMainStyle}>
       <div style={memberToolbarStyle}>
         <input type="search" placeholder="搜索姓名、NRIC、电话、Email、家长或表格内容" value={query} onChange={(e) => setQuery(e.target.value)} style={searchInputStyle} />
         <button
@@ -596,14 +597,15 @@ function MembersTab({
         </div>
         </>
       ) : null}
+      </div>
       {portalMember ? (
-        <MemberPortalPreviewModal formId={form.id} member={portalMember} isMobile={isMobile} onClose={() => setPortalMember(null)} />
+        <MemberTerminalDock formId={form.id} member={portalMember} isMobile={isMobile} onClose={() => setPortalMember(null)} />
       ) : null}
     </div>
   );
 }
 
-function MemberPortalPreviewModal({ formId, member, isMobile, onClose }: { formId: number; member: FormMember; isMobile: boolean; onClose: () => void }) {
+function MemberTerminalDock({ formId, member, isMobile, onClose }: { formId: number; member: FormMember; isMobile: boolean; onClose: () => void }) {
   const url = `${PUBLIC_ORIGIN}/api/form/member?form_id=${formId}&nric=${encodeURIComponent(String(member.nric || ""))}`;
   const [copied, setCopied] = useState("");
   async function copy() {
@@ -612,41 +614,45 @@ function MemberPortalPreviewModal({ formId, member, isMobile, onClose }: { formI
     window.setTimeout(() => setCopied(""), 2000);
   }
   return (
-    <div style={drawerOverlayStyle} onClick={onClose}>
-      <style>{`@keyframes memberDrawerIn { from { transform: translateX(100%); } to { transform: translateX(0); } }`}</style>
-      <aside style={drawerPanelStyle(isMobile)} onClick={(e) => e.stopPropagation()}>
-        <div style={publicHeadStyle}>
-          <div style={{ minWidth: 0 }}>
-            <h4 style={panelTitleStyle}>{member.name_cn || member.name || `成员 #${member.id}`} · 成员终端</h4>
-            <div style={mutedStyle}>手机预览，或复制链接发给该成员</div>
-          </div>
-          <div style={{ display: "flex", gap: 8, flexShrink: 0 }}>
-            <button type="button" style={primaryButtonStyle} onClick={() => void copy()}>复制链接</button>
-            <button type="button" style={btnStyle} onClick={onClose}>关闭</button>
-          </div>
+    <aside style={terminalDockStyle(isMobile)}>
+      <div style={publicHeadStyle}>
+        <div style={{ minWidth: 0 }}>
+          <div style={eyebrowStyle}>成员终端 · 手机预览</div>
+          <h4 style={panelTitleStyle}>{member.name_cn || member.name || `成员 #${member.id}`}</h4>
         </div>
-        {copied ? <div style={successStyle}>{copied}</div> : null}
-        <div style={urlBoxStyle}>{url}</div>
-        <PhoneFrame src={url} title="成员终端预览" />
-      </aside>
-    </div>
+        <div style={{ display: "flex", gap: 8, flexShrink: 0 }}>
+          <button type="button" style={primaryButtonStyle} onClick={() => void copy()}>复制链接</button>
+          <button type="button" style={btnStyle} onClick={onClose}>关闭</button>
+        </div>
+      </div>
+      {copied ? <div style={successStyle}>{copied}</div> : null}
+      <div style={urlBoxStyle}>{url}</div>
+      <PhoneFrame src={url} title="成员终端预览" />
+    </aside>
   );
 }
 
-const drawerOverlayStyle: CSSProperties = { position: "fixed", inset: 0, zIndex: 1000, background: "rgba(15, 23, 42, 0.45)", display: "flex", justifyContent: "flex-end" };
-function drawerPanelStyle(isMobile: boolean): CSSProperties {
+const memberMainStyle: CSSProperties = { flex: 1, minWidth: 0, display: "grid", gap: "10px" };
+function memberLayoutStyle(isMobile: boolean): CSSProperties {
+  return { display: "flex", flexDirection: isMobile ? "column" : "row", gap: "14px", alignItems: "flex-start", width: "100%" };
+}
+function terminalDockStyle(isMobile: boolean): CSSProperties {
   return {
-    width: isMobile ? "100%" : "min(440px, 100%)",
-    height: "100%",
+    width: isMobile ? "100%" : "min(400px, 40vw)",
+    flexShrink: 0,
+    position: isMobile ? "static" : "sticky",
+    top: "12px",
+    alignSelf: "flex-start",
+    maxHeight: isMobile ? "none" : "calc(100vh - 24px)",
     overflowY: "auto",
-    background: "var(--x-color-panel)",
-    borderLeft: "1px solid var(--x-color-line)",
-    boxShadow: "-24px 0 60px var(--x-color-shadow)",
-    padding: "18px",
     display: "grid",
     gap: "12px",
-    alignContent: "start",
-    animation: "memberDrawerIn 0.22s ease",
+    padding: "14px",
+    boxSizing: "border-box",
+    background: "var(--x-color-panel)",
+    border: "1px solid var(--x-color-line)",
+    borderRadius: "14px",
+    boxShadow: "0 20px 50px var(--x-color-shadow-soft)",
   };
 }
 
