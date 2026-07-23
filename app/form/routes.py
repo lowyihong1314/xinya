@@ -262,6 +262,31 @@ def group_apply_plan(form_id):
     return ai_grouping.apply_group_plan(form_id, request.get_json(silent=True) or {})
 
 
+# -------- 点名（出席快照）--------
+@form_bp.route("/attendance/list/<int:form_id>", methods=["GET"])
+@permission_required_any(*FORM_MEMBER_DETAIL_PERMISSION_NAMES)
+def list_form_attendances(form_id):
+    return services.list_form_attendances(form_id)
+
+
+@form_bp.route("/attendance/get/<int:attendance_id>", methods=["GET"])
+@permission_required_any(*FORM_MEMBER_DETAIL_PERMISSION_NAMES)
+def get_form_attendance(attendance_id):
+    return services.get_form_attendance(attendance_id)
+
+
+@form_bp.route("/attendance/create/<int:form_id>", methods=["POST"])
+@permission_required_any(*FORM_MEMBER_DETAIL_PERMISSION_NAMES)
+def create_form_attendance(form_id):
+    return services.create_form_attendance(form_id, request.get_json(silent=True) or {})
+
+
+@form_bp.route("/attendance/delete/<int:attendance_id>", methods=["DELETE"])
+@permission_required_any(*FORM_EDIT_PERMISSION_NAMES)
+def delete_form_attendance(attendance_id):
+    return services.delete_form_attendance(attendance_id)
+
+
 @form_bp.route("/edit_member", methods=["POST"])
 @permission_required_any(*FORM_EDIT_PERMISSION_NAMES)
 def edit_member():

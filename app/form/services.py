@@ -20,6 +20,7 @@ from models.form import (
     NRIC_Asset,
     RegistrationFee,
     RegisForm,
+    RegisFormAttendance,
     RegisFormExtraFieldConfig,
     RegisFormGroup,
     RegisMemberData,
@@ -2603,3 +2604,70 @@ def assign_member_group(data):
     db.session.commit()
     _emit_form_update(form.id)
     return jsonify({"status": "success", "member_id": member_id, "group_id": group_id})
+
+
+# =========================
+# 点名（出席快照）
+# =========================
+def list_form_attendances(form_id):
+    form = RegisForm.query.get_or_404(form_id)
+    items = sorted(
+        form.attendances or [],
+        key=lambda a: (a.created_at or datetime.min, a.id),
+        reverse=True,
+    )
+    return jsonify({"status": "success", "attendances": [a.to_dict() for a in items]})
+
+
+def get_form_attendance(attendance_id):
+    att = RegisFormAttendance.query.get_or_404(attendance_id)
+    return jsonify({"status": "success", "attendance": att.to_dict(include_roster=True)})
+
+
+def create_form_attendance(form_id, data):
+    form = RegisForm.query.get_or_404(form_id)
+    remark = str((data or {}).get("remark") or "").strip()[:255]
+
+    present_ids = set()
+    for raw in (data or {}).get("present_ids") or []:
+        try:
+            present_ids.add(int(raw))
+        except (TypeError, ValueError):
+            continue
+
+    roster = []
+    present_count = 0
+    for member in (form.members or []):
+        latest = member.latest_data()
+        try:
+            age = _calc_age_from_nric(member.nric)
+        except Exception:  # noqa: BLE001
+            age = None
+        is_present = member.id in present_ids
+        if is_present:
+            present_count += 1
+        roster.append({
+            "id": member.id,
+            "name": (latest.name_cn or latest.name) if latest else "",
+            "age": age,
+            "gender": (latest.gender if latest else "") or "",
+            "present": is_present,
+        })
+
+    att = RegisFormAttendance(
+        form_id=form.id,
+        remark=remark or None,
+        present_count=present_count,
+        total_count=len(roster),
+        snapshot_json={"roster": roster},
+    )
+    db.session.add(att)
+    db.session.commit()
+    return jsonify({"status": "success", "attendance": att.to_dict(include_roster=True)})
+
+
+def delete_form_attendance(attendance_id):
+    att = RegisFormAttendance.query.get_or_404(attendance_id)
+    db.session.delete(att)
+    db.session.commit()
+    return jsonify({"status": "success"})

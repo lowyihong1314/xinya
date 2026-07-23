@@ -94,6 +94,15 @@ class RegisForm(db.Model):
         lazy=True,
     )
 
+    # ✅ 一对多：点名快照
+    attendances = db.relationship(
+        "RegisFormAttendance",
+        back_populates="form",
+        cascade="all, delete-orphan",
+        order_by="RegisFormAttendance.created_at.desc(), RegisFormAttendance.id.desc()",
+        lazy=True,
+    )
+
     def field_switches_dict(self):
         return {
             "email": bool(self.email),
@@ -229,6 +238,42 @@ class RegistrationFee(db.Model):
             "image_path": self.image_path,
             "created_at": self.created_at.isoformat() if self.created_at else None
         }
+
+
+class RegisFormAttendance(db.Model):
+    """点名快照：某次点名的出席记录（含备注与提交时间）。roster 存名字快照，
+    即使成员日后被移除/改名，历史记录仍可完整显示。"""
+    __tablename__ = "regis_form_attendance"
+
+    id = db.Column(db.Integer, primary_key=True, autoincrement=True)
+    form_id = db.Column(
+        db.Integer,
+        db.ForeignKey("regis_form.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    remark = db.Column(db.String(255), nullable=True)
+    present_count = db.Column(db.Integer, nullable=False, default=0)
+    total_count = db.Column(db.Integer, nullable=False, default=0)
+    # {"roster": [{"id","name","age","gender","present"}]}
+    snapshot_json = db.Column(db.JSON, nullable=True)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+
+    form = db.relationship("RegisForm", back_populates="attendances")
+
+    def to_dict(self, include_roster=False):
+        data = {
+            "id": self.id,
+            "form_id": self.form_id,
+            "remark": self.remark,
+            "present_count": self.present_count,
+            "total_count": self.total_count,
+            "created_at": self.created_at.isoformat() if self.created_at else None,
+        }
+        if include_roster:
+            snap = self.snapshot_json if isinstance(self.snapshot_json, dict) else {}
+            data["roster"] = snap.get("roster", [])
+        return data
 
 
 class RegisFormGroup(db.Model):

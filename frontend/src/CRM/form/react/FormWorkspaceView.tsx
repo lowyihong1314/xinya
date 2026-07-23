@@ -7,6 +7,7 @@ import { CachedImage } from "../../../components/CachedMedia";
 import { downloadBlobOrShare } from "../../../js/browserActions";
 import { smartImageURL } from "../../../js/get_img";
 import { calcAgeFromNric } from "../../../js/nric";
+import { AttendanceTab } from "./AttendanceTab";
 import { ExtraFieldEditor } from "./ExtraFieldEditor";
 import { FeePanel } from "./FeePanel";
 import { TablePagination, usePagedRows } from "../../shared/TablePagination";
@@ -29,6 +30,7 @@ type FeePayload = {
 const TABS: { key: string; label: string; icon: string }[] = [
   { key: "members", label: "报名成员", icon: "fa-solid fa-users" },
   { key: "groups", label: "分组", icon: "fa-solid fa-layer-group" },
+  { key: "attendance", label: "点名", icon: "fa-solid fa-clipboard-check" },
   { key: "fees", label: "报名费", icon: "fa-solid fa-receipt" },
   { key: "fields", label: "表格内容", icon: "fa-solid fa-list-check" },
   { key: "events", label: "关联活动", icon: "fa-solid fa-calendar-check" },
@@ -323,6 +325,19 @@ export function FormWorkspaceView(props: {
                   onAiChat={props.onAiChat}
                   onApplyAiPlan={props.onApplyAiPlan}
                 />
+              ) : null}
+
+              {activeTab === "attendance" ? (
+                props.canViewMemberDetail ? (
+                  <AttendanceTab
+                    formId={selectedForm.id}
+                    members={selectedForm.members || []}
+                    isMobile={isMobile}
+                    canDelete={props.canEditForms}
+                  />
+                ) : (
+                  <div style={emptyInlineStyle}>需要 member_detail 或 form_edit 权限才能点名。</div>
+                )
               ) : null}
 
               {activeTab === "fees" ? (

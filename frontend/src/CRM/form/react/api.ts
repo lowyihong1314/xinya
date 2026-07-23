@@ -1,4 +1,5 @@
 import type {
+  AttendanceSnapshot,
   ExtraFieldConfig,
   FormCreatePayload,
   FormDetailResponse,
@@ -233,6 +234,30 @@ export async function applyGroupPlan(formId: number, plan: GroupPlan) {
     body: JSON.stringify({ plan }),
   });
   return parseJson<{ status?: string; assigned?: number; renamed?: number; deleted?: number; message?: string }>(response);
+}
+
+export async function listAttendance(formId: number) {
+  const response = await apiFetch(`/api/form/attendance/list/${formId}`, { credentials: "include" });
+  return parseJson<{ attendances?: AttendanceSnapshot[] }>(response);
+}
+
+export async function getAttendance(attendanceId: number) {
+  const response = await apiFetch(`/api/form/attendance/get/${attendanceId}`, { credentials: "include" });
+  return parseJson<{ attendance?: AttendanceSnapshot }>(response);
+}
+
+export async function createAttendance(formId: number, remark: string, presentIds: number[]) {
+  const response = await apiFetch(`/api/form/attendance/create/${formId}`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ remark, present_ids: presentIds }),
+  });
+  return parseJson<{ status?: string; attendance?: AttendanceSnapshot; message?: string }>(response);
+}
+
+export async function deleteAttendance(attendanceId: number) {
+  const response = await apiFetch(`/api/form/attendance/delete/${attendanceId}`, { method: "DELETE" });
+  return parseJson<{ status?: string; message?: string }>(response);
 }
 
 export async function assignMemberGroup(formId: number, memberId: number, groupId: number | null) {

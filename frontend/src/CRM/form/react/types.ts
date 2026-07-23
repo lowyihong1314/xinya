@@ -90,6 +90,23 @@ export type GroupPlan = {
 };
 export type GroupChatMessage = { role: "user" | "assistant"; content: string };
 
+export type AttendanceRosterEntry = {
+  id: number;
+  name: string;
+  age: number | null;
+  gender: string;
+  present: boolean;
+};
+export type AttendanceSnapshot = {
+  id: number;
+  form_id?: number;
+  remark?: string | null;
+  present_count: number;
+  total_count: number;
+  created_at?: string | null;
+  roster?: AttendanceRosterEntry[];
+};
+
 export type FormMember = {
   id: number;
   registered_at?: string | null;
