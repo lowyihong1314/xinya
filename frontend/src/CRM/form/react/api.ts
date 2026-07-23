@@ -3,6 +3,7 @@ import type {
   FormCreatePayload,
   FormDetailResponse,
   FormFee,
+  FormGroup,
   FormListResponse,
   FormPayment,
   FormRecord,
@@ -179,6 +180,47 @@ export async function removeEventFromForm(formId: number, eventId: number) {
     body: JSON.stringify({ event_id: eventId }),
   });
   return parseJson<{ status?: string; message?: string }>(response);
+}
+
+export async function listGroups(formId: number) {
+  const response = await apiFetch(`/api/form/group/list/${formId}`, {
+    credentials: "include",
+  });
+  return parseJson<{ groups?: FormGroup[] } | FormGroup[]>(response);
+}
+
+export async function createGroup(formId: number, name: string) {
+  const response = await apiFetch(`/api/form/group/create/${formId}`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ name }),
+  });
+  return parseJson<{ status?: string; group?: FormGroup; message?: string }>(response);
+}
+
+export async function renameGroup(groupId: number, name: string) {
+  const response = await apiFetch(`/api/form/group/rename/${groupId}`, {
+    method: "PUT",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ name }),
+  });
+  return parseJson<{ status?: string; group?: FormGroup; message?: string }>(response);
+}
+
+export async function deleteGroup(groupId: number) {
+  const response = await apiFetch(`/api/form/group/delete/${groupId}`, {
+    method: "DELETE",
+  });
+  return parseJson<{ status?: string; message?: string }>(response);
+}
+
+export async function assignMemberGroup(formId: number, memberId: number, groupId: number | null) {
+  const response = await apiFetch("/api/form/group/assign", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ form_id: formId, member_id: memberId, group_id: groupId }),
+  });
+  return parseJson<{ status?: string; message?: string; member_id?: number; group_id?: number | null }>(response);
 }
 
 export async function removeMemberFromForm(formId: number, memberId: number) {

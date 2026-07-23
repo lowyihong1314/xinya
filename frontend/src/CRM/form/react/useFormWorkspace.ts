@@ -10,9 +10,12 @@ import {
   addEventToForm,
   addExtraField,
   addFee,
+  assignMemberGroup,
   createForm,
+  createGroup,
   deleteExtraField,
   deleteFee,
+  deleteGroup,
   editMemberField,
   editExtraField,
   editFee,
@@ -21,11 +24,13 @@ import {
   fetchForms,
   listExtraFields,
   listFees,
+  listGroups,
   removeEventFromForm,
   removeForm,
   removeMemberFromForm,
+  renameGroup,
 } from "./api";
-import type { ExtraFieldConfig, FormCreatePayload, FormFee, FormFieldSwitches, FormMember, FormRecord } from "./types";
+import type { ExtraFieldConfig, FormCreatePayload, FormFee, FormFieldSwitches, FormGroup, FormMember, FormRecord } from "./types";
 import { useFormRealtime } from "./useFormRealtime";
 
 type Toast = { type: "success" | "error"; text: string } | null;
@@ -86,6 +91,7 @@ export function useFormWorkspace(options?: {
   const [selectedForm, setSelectedForm] = useState<FormRecord | null>(null);
   const [fees, setFees] = useState<FormFee[]>([]);
   const [extraFields, setExtraFields] = useState<ExtraFieldConfig[]>([]);
+  const [groups, setGroups] = useState<FormGroup[]>([]);
   const [loading, setLoading] = useState(true);
   const [detailLoading, setDetailLoading] = useState(false);
   const [createOpen, setCreateOpen] = useState(false);
@@ -120,6 +126,7 @@ export function useFormWorkspace(options?: {
       setSelectedForm(null);
       setFees([]);
       setExtraFields([]);
+      setGroups([]);
       setLoading(false);
       setDetailLoading(false);
       return;
@@ -140,6 +147,7 @@ export function useFormWorkspace(options?: {
       setSelectedForm(null);
       setFees([]);
       setExtraFields([]);
+      setGroups([]);
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [enabled, preferredFormId]);
@@ -212,10 +220,11 @@ export function useFormWorkspace(options?: {
     setSelectedFormId(formId);
     setDetailLoading(true);
     try {
-      const [detailPayload, feesPayload, extraPayload] = await Promise.all([
+      const [detailPayload, feesPayload, extraPayload, groupsPayload] = await Promise.all([
         fetchFormDetail(formId),
         listFees(formId),
         listExtraFields(formId),
+        listGroups(formId),
       ]);
       const detail =
         "form" in detailPayload ? detailPayload.form || null : (detailPayload as FormRecord);
@@ -227,6 +236,7 @@ export function useFormWorkspace(options?: {
       setSelectedForm(merged);
       setFees(Array.isArray(feesPayload) ? feesPayload : feesPayload.fees || []);
       setExtraFields(Array.isArray(extraPayload) ? extraPayload : extraPayload.fields || []);
+      setGroups(Array.isArray(groupsPayload) ? groupsPayload : groupsPayload.groups || []);
     } catch (err) {
       setToast({ type: "error", text: err instanceof Error ? err.message : "读取表单详情失败" });
     } finally {
@@ -266,6 +276,7 @@ export function useFormWorkspace(options?: {
       setSelectedForm(null);
       setFees([]);
       setExtraFields([]);
+      setGroups([]);
       setToast({ type: "success", text: "报名表已删除" });
       return true;
     } catch (err) {
@@ -405,6 +416,66 @@ export function useFormWorkspace(options?: {
     }
   }
 
+  function setMembersGroupLocal(updater: (member: FormMember) => number | null | undefined) {
+    setSelectedForm((prev) => {
+      if (!prev) return prev;
+      return {
+        ...prev,
+        members: (prev.members || []).map((m) => ({ ...m, group_id: updater(m) })),
+      };
+    });
+  }
+
+  async function handleCreateGroup(name: string) {
+    if (!selectedFormId) return;
+    const trimmed = name.trim();
+    if (!trimmed) return;
+    try {
+      await createGroup(selectedFormId, trimmed);
+      const payload = await listGroups(selectedFormId);
+      setGroups(Array.isArray(payload) ? payload : payload.groups || []);
+      setToast({ type: "success", text: "小组已创建" });
+    } catch (err) {
+      setToast({ type: "error", text: getErrorMessage(err, "创建小组失败") });
+    }
+  }
+
+  async function handleRenameGroup(groupId: number, name: string) {
+    const trimmed = name.trim();
+    if (!trimmed) return;
+    try {
+      await renameGroup(groupId, trimmed);
+      setGroups((prev) => prev.map((g) => (g.id === groupId ? { ...g, name: trimmed } : g)));
+      setToast({ type: "success", text: "小组已重命名" });
+    } catch (err) {
+      setToast({ type: "error", text: getErrorMessage(err, "重命名小组失败") });
+    }
+  }
+
+  async function handleDeleteGroup(groupId: number) {
+    if (!(await showConfirmDialog({ message: "删除这个小组？组内成员会变回未分组。", tone: "danger" }))) return;
+    try {
+      await deleteGroup(groupId);
+      setGroups((prev) => prev.filter((g) => g.id !== groupId));
+      setMembersGroupLocal((m) => (m.group_id === groupId ? null : m.group_id ?? null));
+      setToast({ type: "success", text: "小组已删除" });
+    } catch (err) {
+      setToast({ type: "error", text: getErrorMessage(err, "删除小组失败") });
+    }
+  }
+
+  async function handleAssignMemberGroup(memberId: number, groupId: number | null) {
+    if (!selectedFormId) return;
+    // 乐观更新：拖拽后立即生效，失败再回滚为服务器真值。
+    setMembersGroupLocal((m) => (m.id === memberId ? groupId : m.group_id ?? null));
+    try {
+      await assignMemberGroup(selectedFormId, memberId, groupId);
+    } catch (err) {
+      setToast({ type: "error", text: getErrorMessage(err, "移动成员失败") });
+      void openForm(selectedFormId);
+    }
+  }
+
   async function handleEditMemberField(member: FormMember, field: string | number, value: unknown) {
     if (!canEditMembers) {
       throw new Error("当前是只读模式，不能修改成员资料");
@@ -463,6 +534,7 @@ export function useFormWorkspace(options?: {
       selectedForm,
       fees,
       extraFields,
+      groups,
       loading,
       detailLoading,
       createOpen,
@@ -485,6 +557,10 @@ export function useFormWorkspace(options?: {
       handlePickEvent,
       handleRemoveEvent,
       handleRemoveMember,
+      handleCreateGroup,
+      handleRenameGroup,
+      handleDeleteGroup,
+      handleAssignMemberGroup,
       handleEditMemberField,
       handleShowMemberDetail,
       handleOpenParental,

@@ -75,9 +75,18 @@ export type FormMemberTimeSlot = {
   end_datetime?: string | null;
 };
 
+export type FormGroup = {
+  id: number;
+  form_id?: number;
+  name: string;
+  order?: number;
+  created_at?: string | null;
+};
+
 export type FormMember = {
   id: number;
   registered_at?: string | null;
+  group_id?: number | null;
   name_cn?: string;
   name?: string;
   phone?: string;

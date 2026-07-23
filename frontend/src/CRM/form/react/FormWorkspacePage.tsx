@@ -72,6 +72,7 @@ export function FormWorkspacePage() {
       activeTab={activeTab}
       fees={state.fees}
       extraFields={state.extraFields}
+      groups={state.groups}
       loading={state.loading}
       detailLoading={state.detailLoading}
       createOpen={state.createOpen}
@@ -98,6 +99,10 @@ export function FormWorkspacePage() {
       onOpenEventDetail={(eventId) => navigate(`/crm/event_table?event_id=${eventId}`)}
       onRemoveEvent={(eventId) => void actions.handleRemoveEvent(eventId)}
       onRemoveMember={(memberId) => void actions.handleRemoveMember(memberId)}
+      onCreateGroup={(name) => void actions.handleCreateGroup(name)}
+      onRenameGroup={(groupId, name) => void actions.handleRenameGroup(groupId, name)}
+      onDeleteGroup={(groupId) => void actions.handleDeleteGroup(groupId)}
+      onAssignMemberGroup={(memberId, groupId) => void actions.handleAssignMemberGroup(memberId, groupId)}
       onShowMemberDetail={(member) => actions.handleShowMemberDetail(member)}
       onOpenParental={(member) => void actions.handleOpenParental(member)}
       onRefresh={() => void actions.refreshSelectedForm()}

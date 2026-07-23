@@ -21,10 +21,12 @@ from models.form import (
     RegistrationFee,
     RegisForm,
     RegisFormExtraFieldConfig,
+    RegisFormGroup,
     RegisMemberData,
     RegisMemberFieldValue,
     RegisPayment,
     RegisParentalData,
+    regis_form_member,
 )
 from models.user_data import User, db
 from models.event_data import AlbumFiles, EventData
@@ -2511,3 +2513,93 @@ def get_youth_class_nric_check(nric):
 
     category, eligible = _youth_class_category_from_age(age)
     return jsonify({"status": "success", "age": age, "category": category, "eligible": eligible})
+
+
+# =========================
+# 报名成员分组（小组）
+# =========================
+def _emit_form_update(form_id):
+    # 分组变更后推送实时刷新给 CRM 报名成员/分组页；socket 断开不影响主流程。
+    try:
+        emit_form_event(form_id, "update")
+    except Exception as exc:  # noqa: BLE001
+        print(f"[WS-DISCONNECTED] form group emit skipped: {exc}")
+
+
+def list_form_groups(form_id):
+    form = RegisForm.query.get_or_404(form_id)
+    groups = sorted(form.groups or [], key=lambda g: (g.order or 0, g.id))
+    return jsonify({"status": "success", "groups": [group.to_dict() for group in groups]})
+
+
+def create_form_group(form_id, data):
+    form = RegisForm.query.get_or_404(form_id)
+    name = str((data or {}).get("name") or "").strip()
+    if not name:
+        return jsonify({"status": "error", "message": "小组名称不能为空"}), 400
+
+    next_order = max([group.order or 0 for group in (form.groups or [])], default=-1) + 1
+    group = RegisFormGroup(form_id=form.id, name=name, order=next_order)
+    db.session.add(group)
+    db.session.commit()
+    _emit_form_update(form.id)
+    return jsonify({"status": "success", "group": group.to_dict()})
+
+
+def rename_form_group(group_id, data):
+    group = RegisFormGroup.query.get_or_404(group_id)
+    name = str((data or {}).get("name") or "").strip()
+    if not name:
+        return jsonify({"status": "error", "message": "小组名称不能为空"}), 400
+
+    group.name = name
+    db.session.commit()
+    _emit_form_update(group.form_id)
+    return jsonify({"status": "success", "group": group.to_dict()})
+
+
+def delete_form_group(group_id):
+    group = RegisFormGroup.query.get_or_404(group_id)
+    form_id = group.form_id
+    # 组内成员的 group_id 由外键 ondelete=SET NULL 自动置空 → 变回未分组。
+    db.session.delete(group)
+    db.session.commit()
+    _emit_form_update(form_id)
+    return jsonify({"status": "success"})
+
+
+def assign_member_group(data):
+    data = data or {}
+    form_id = data.get("form_id")
+    member_id = data.get("member_id")
+    group_id = data.get("group_id")  # None → 移出小组（未分组）
+
+    if not form_id or not member_id:
+        return jsonify({"status": "error", "message": "缺少 form_id 或 member_id"}), 400
+
+    form = RegisForm.query.get_or_404(form_id)
+    link = db.session.execute(
+        regis_form_member.select().where(
+            regis_form_member.c.form_id == form_id,
+            regis_form_member.c.member_id == member_id,
+        )
+    ).first()
+    if not link:
+        return jsonify({"status": "error", "message": "该成员未报名此表单"}), 400
+
+    if group_id is not None:
+        group = RegisFormGroup.query.get(group_id)
+        if not group or group.form_id != form.id:
+            return jsonify({"status": "error", "message": "小组不存在或不属于此表单"}), 400
+
+    db.session.execute(
+        regis_form_member.update()
+        .where(
+            regis_form_member.c.form_id == form_id,
+            regis_form_member.c.member_id == member_id,
+        )
+        .values(group_id=group_id)
+    )
+    db.session.commit()
+    _emit_form_update(form.id)
+    return jsonify({"status": "success", "member_id": member_id, "group_id": group_id})

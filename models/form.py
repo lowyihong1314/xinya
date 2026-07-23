@@ -14,7 +14,9 @@ regis_form_member = db.Table(
     "regis_form_member",
     db.Column("form_id", db.Integer, db.ForeignKey("regis_form.id", ondelete="CASCADE"), primary_key=True),
     db.Column("member_id", db.Integer, db.ForeignKey("nric_asset.id", ondelete="CASCADE"), primary_key=True),
-    db.Column("created_at", db.DateTime, default=datetime.utcnow)
+    db.Column("created_at", db.DateTime, default=datetime.utcnow),
+    # 成员在此表单里所属的小组（NULL = 未分组；小组删除时 SET NULL 变回未分组）。
+    db.Column("group_id", db.Integer, db.ForeignKey("regis_form_group.id", ondelete="SET NULL"), nullable=True),
 )
 
 regis_form_event = db.Table(
@@ -82,6 +84,15 @@ class RegisForm(db.Model):
         lazy=True
     )
     payments = db.relationship("RegisPayment", backref="form", lazy=True)
+
+    # ✅ 一对多：分组小组
+    groups = db.relationship(
+        "RegisFormGroup",
+        back_populates="form",
+        cascade="all, delete-orphan",
+        order_by="RegisFormGroup.order, RegisFormGroup.id",
+        lazy=True,
+    )
 
     def field_switches_dict(self):
         return {
@@ -220,6 +231,33 @@ class RegistrationFee(db.Model):
         }
 
 
+class RegisFormGroup(db.Model):
+    """报名表下的分组小组：把报名成员拉进小组，可在组间移动（一人一组）。"""
+    __tablename__ = "regis_form_group"
+
+    id = db.Column(db.Integer, primary_key=True, autoincrement=True)
+    form_id = db.Column(
+        db.Integer,
+        db.ForeignKey("regis_form.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    name = db.Column(db.String(255), nullable=False)
+    order = db.Column(db.Integer, nullable=False, default=0)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+
+    form = db.relationship("RegisForm", back_populates="groups")
+
+    def to_dict(self):
+        return {
+            "id": self.id,
+            "form_id": self.form_id,
+            "name": self.name,
+            "order": self.order,
+            "created_at": self.created_at.isoformat() if self.created_at else None,
+        }
+
+
 class NRIC_Asset(db.Model):
     __tablename__ = "nric_asset"
 
@@ -323,6 +361,8 @@ class NRIC_Asset(db.Model):
                 if link_row and link_row.created_at
                 else None
             )
+            # 该成员在此表单里所属的小组（NULL = 未分组）。
+            data["group_id"] = getattr(link_row, "group_id", None) if link_row else None
 
         payment_query = RegisPayment.query.filter_by(nric_asset_id=self.id)
         if form_id is not None:

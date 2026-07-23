@@ -219,6 +219,37 @@ def remove_regis_form_member():
     return services.remove_regis_form_member(request.get_json() or {})
 
 
+# -------- 报名成员分组（小组）--------
+@form_bp.route("/group/list/<int:form_id>", methods=["GET"])
+@permission_required_any(*FORM_READ_PERMISSION_NAMES)
+def list_form_groups(form_id):
+    return services.list_form_groups(form_id)
+
+
+@form_bp.route("/group/create/<int:form_id>", methods=["POST"])
+@permission_required_any(*FORM_EDIT_PERMISSION_NAMES)
+def create_form_group(form_id):
+    return services.create_form_group(form_id, request.get_json(silent=True) or {})
+
+
+@form_bp.route("/group/rename/<int:group_id>", methods=["PUT"])
+@permission_required_any(*FORM_EDIT_PERMISSION_NAMES)
+def rename_form_group(group_id):
+    return services.rename_form_group(group_id, request.get_json(silent=True) or {})
+
+
+@form_bp.route("/group/delete/<int:group_id>", methods=["DELETE"])
+@permission_required_any(*FORM_EDIT_PERMISSION_NAMES)
+def delete_form_group(group_id):
+    return services.delete_form_group(group_id)
+
+
+@form_bp.route("/group/assign", methods=["POST"])
+@permission_required_any(*FORM_EDIT_PERMISSION_NAMES)
+def assign_member_group():
+    return services.assign_member_group(request.get_json(silent=True) or {})
+
+
 @form_bp.route("/edit_member", methods=["POST"])
 @permission_required_any(*FORM_EDIT_PERMISSION_NAMES)
 def edit_member():

@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import type { CSSProperties, ReactNode } from "react";
+import type { CSSProperties, DragEvent, ReactNode } from "react";
 
 import { CachedImage } from "../../../components/CachedMedia";
 import { downloadBlobOrShare } from "../../../js/browserActions";
@@ -10,7 +10,7 @@ import { FeePanel } from "./FeePanel";
 import { TablePagination, usePagedRows } from "../../shared/TablePagination";
 import { sortArrow, sortRows, sortableThStyle, toggleSort, type SortState } from "../../Account/react/shared/tableSort";
 import type { ExtraFieldDraft } from "./ExtraFieldEditor";
-import type { ExtraFieldConfig, FormCreatePayload, FormEvent, FormFee, FormMember, FormRecord } from "./types";
+import type { ExtraFieldConfig, FormCreatePayload, FormEvent, FormFee, FormGroup, FormMember, FormRecord } from "./types";
 
 type Toast = { type: "success" | "error"; text: string } | null;
 const PUBLIC_ORIGIN = "https://utbabuddha.com";
@@ -26,6 +26,7 @@ type FeePayload = {
 
 const TABS: { key: string; label: string; icon: string }[] = [
   { key: "members", label: "报名成员", icon: "fa-solid fa-users" },
+  { key: "groups", label: "分组", icon: "fa-solid fa-layer-group" },
   { key: "fees", label: "报名费", icon: "fa-solid fa-receipt" },
   { key: "fields", label: "表格内容", icon: "fa-solid fa-list-check" },
   { key: "events", label: "关联活动", icon: "fa-solid fa-calendar-check" },
@@ -203,6 +204,7 @@ export function FormWorkspaceView(props: {
   activeTab: string;
   fees: FormFee[];
   extraFields: ExtraFieldConfig[];
+  groups: FormGroup[];
   loading: boolean;
   detailLoading: boolean;
   createOpen: boolean;
@@ -225,6 +227,10 @@ export function FormWorkspaceView(props: {
   onOpenEventDetail: (eventId: number) => void;
   onRemoveEvent: (eventId: number) => void;
   onRemoveMember: (memberId: number) => void;
+  onCreateGroup: (name: string) => void;
+  onRenameGroup: (groupId: number, name: string) => void;
+  onDeleteGroup: (groupId: number) => void;
+  onAssignMemberGroup: (memberId: number, groupId: number | null) => void;
   onShowMemberDetail: (member: FormMember) => void;
   onOpenParental: (member: FormMember) => void;
   onRefresh: () => void;
@@ -296,6 +302,20 @@ export function FormWorkspaceView(props: {
                   onShowMemberDetail={props.onShowMemberDetail}
                   onOpenParental={props.onOpenParental}
                   onRemoveMember={props.onRemoveMember}
+                />
+              ) : null}
+
+              {activeTab === "groups" ? (
+                <GroupsTab
+                  form={selectedForm}
+                  groups={props.groups}
+                  isMobile={isMobile}
+                  canViewMemberDetail={props.canViewMemberDetail}
+                  canEdit={props.canEditForms}
+                  onCreateGroup={props.onCreateGroup}
+                  onRenameGroup={props.onRenameGroup}
+                  onDeleteGroup={props.onDeleteGroup}
+                  onAssignMemberGroup={props.onAssignMemberGroup}
                 />
               ) : null}
 
@@ -539,6 +559,239 @@ function MembersTab({
           </table>
         </div>
         </>
+      ) : null}
+    </div>
+  );
+}
+
+function GroupsTab({
+  form,
+  groups,
+  isMobile,
+  canViewMemberDetail,
+  canEdit,
+  onCreateGroup,
+  onRenameGroup,
+  onDeleteGroup,
+  onAssignMemberGroup,
+}: {
+  form: FormRecord;
+  groups: FormGroup[];
+  isMobile: boolean;
+  canViewMemberDetail: boolean;
+  canEdit: boolean;
+  onCreateGroup: (name: string) => void;
+  onRenameGroup: (groupId: number, name: string) => void;
+  onDeleteGroup: (groupId: number) => void;
+  onAssignMemberGroup: (memberId: number, groupId: number | null) => void;
+}) {
+  const [newName, setNewName] = useState("");
+  const [dragOver, setDragOver] = useState<number | "ungrouped" | null>(null);
+  const members = form.members || [];
+
+  const sortedGroups = useMemo(
+    () => [...groups].sort((a, b) => (a.order ?? 0) - (b.order ?? 0) || a.id - b.id),
+    [groups],
+  );
+
+  const byGroup = useMemo(() => {
+    const validIds = new Set(sortedGroups.map((g) => g.id));
+    const map = new Map<number | null, FormMember[]>();
+    map.set(null, []);
+    sortedGroups.forEach((g) => map.set(g.id, []));
+    members.forEach((m) => {
+      const gid = (m.group_id ?? null) as number | null;
+      const key = gid != null && validIds.has(gid) ? gid : null;
+      (map.get(key) as FormMember[]).push(m);
+    });
+    return map;
+  }, [members, sortedGroups]);
+
+  if (!canViewMemberDetail) {
+    return <div style={emptyInlineStyle}>需要 member_detail 或 form_edit 权限才能查看和管理分组。</div>;
+  }
+
+  function submitNew() {
+    const name = newName.trim();
+    if (!name) return;
+    onCreateGroup(name);
+    setNewName("");
+  }
+
+  function handleDrop(groupId: number | null, e: DragEvent) {
+    e.preventDefault();
+    setDragOver(null);
+    const memberId = Number(e.dataTransfer.getData("text/plain"));
+    if (!Number.isFinite(memberId)) return;
+    const member = members.find((m) => m.id === memberId);
+    if (!member || (member.group_id ?? null) === groupId) return;
+    onAssignMemberGroup(memberId, groupId);
+  }
+
+  const columns: { key: number | "ungrouped"; id: number | null; title: string }[] = [
+    { key: "ungrouped", id: null, title: "未分组" },
+    ...sortedGroups.map((g) => ({ key: g.id, id: g.id, title: g.name })),
+  ];
+
+  return (
+    <div style={sectionBodyStyle}>
+      {canEdit ? (
+        <div style={memberToolbarStyle}>
+          <input
+            type="text"
+            placeholder="新建小组名称，例如 第一组 / 红队"
+            value={newName}
+            onChange={(e) => setNewName(e.target.value)}
+            onKeyDown={(e) => { if (e.key === "Enter") submitNew(); }}
+            style={searchInputStyle}
+          />
+          <button type="button" style={primaryButtonStyle} disabled={!newName.trim()} onClick={submitNew}>新建小组</button>
+        </div>
+      ) : null}
+
+      <div style={mutedStyle}>
+        {isMobile ? "点每张卡片下方的下拉，把成员移到小组。" : "把成员卡片拖到目标小组即可分组或移动（一人一组）。"}
+        {" "}共 {members.length} 人 · {sortedGroups.length} 个小组。
+      </div>
+
+      <div style={groupBoardStyle(isMobile)}>
+        {columns.map((col) => {
+          const list = byGroup.get(col.id) || [];
+          const active = dragOver === col.key;
+          return (
+            <section
+              key={String(col.key)}
+              style={{ ...groupColStyle, ...(active ? groupColHoverStyle : {}) }}
+              onDragOver={(e) => { if (canEdit) { e.preventDefault(); setDragOver(col.key); } }}
+              onDragLeave={() => setDragOver((cur) => (cur === col.key ? null : cur))}
+              onDrop={(e) => handleDrop(col.id, e)}
+            >
+              <GroupColumnHeader
+                groupId={col.id}
+                title={col.title}
+                count={list.length}
+                canEdit={canEdit && col.id != null}
+                onRename={onRenameGroup}
+                onDelete={onDeleteGroup}
+              />
+              <div style={groupColBodyStyle}>
+                {!list.length ? (
+                  <div style={groupEmptyStyle}>{col.id == null ? "全部已分组" : canEdit ? "拖成员到这里" : "暂无成员"}</div>
+                ) : null}
+                {list.map((m) => (
+                  <MemberChipCard
+                    key={m.id}
+                    member={m}
+                    canEdit={canEdit}
+                    isMobile={isMobile}
+                    currentGroupId={col.id}
+                    groups={sortedGroups}
+                    onMove={onAssignMemberGroup}
+                  />
+                ))}
+              </div>
+            </section>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
+function GroupColumnHeader({
+  groupId,
+  title,
+  count,
+  canEdit,
+  onRename,
+  onDelete,
+}: {
+  groupId: number | null;
+  title: string;
+  count: number;
+  canEdit: boolean;
+  onRename: (groupId: number, name: string) => void;
+  onDelete: (groupId: number) => void;
+}) {
+  const [editing, setEditing] = useState(false);
+  const [draft, setDraft] = useState(title);
+  if (editing && groupId != null) {
+    return (
+      <div style={groupHeadStyle}>
+        <input
+          autoFocus
+          value={draft}
+          onChange={(e) => setDraft(e.target.value)}
+          onKeyDown={(e) => {
+            if (e.key === "Enter") { onRename(groupId, draft); setEditing(false); }
+            if (e.key === "Escape") setEditing(false);
+          }}
+          style={{ ...factInputStyle, height: "30px" }}
+        />
+        <button type="button" style={factIconButtonStyle} title="保存" onClick={() => { onRename(groupId, draft); setEditing(false); }}><i className="fa-solid fa-check" /></button>
+        <button type="button" style={factIconButtonStyle} title="取消" onClick={() => setEditing(false)}><i className="fa-solid fa-xmark" /></button>
+      </div>
+    );
+  }
+  return (
+    <div style={groupHeadStyle}>
+      <div style={groupTitleStyle}>
+        <span>{title}</span>
+        <span style={groupCountStyle}>{count}</span>
+      </div>
+      {canEdit && groupId != null ? (
+        <div style={{ display: "inline-flex", gap: "4px" }}>
+          <button type="button" style={factIconButtonStyle} title="重命名" onClick={() => { setDraft(title); setEditing(true); }}><i className="fa-solid fa-pen" /></button>
+          <button type="button" style={factIconButtonStyle} title="删除小组" onClick={() => onDelete(groupId)}><i className="fa-solid fa-trash" /></button>
+        </div>
+      ) : null}
+    </div>
+  );
+}
+
+function MemberChipCard({
+  member,
+  canEdit,
+  isMobile,
+  currentGroupId,
+  groups,
+  onMove,
+}: {
+  member: FormMember;
+  canEdit: boolean;
+  isMobile: boolean;
+  currentGroupId: number | null;
+  groups: FormGroup[];
+  onMove: (memberId: number, groupId: number | null) => void;
+}) {
+  const age = calcAgeFromNric(member.nric);
+  const gender = String(member.gender || "");
+  const name = member.name_cn || member.name || `成员 #${member.id}`;
+  const draggable = canEdit && !isMobile;
+  return (
+    <div
+      style={{ ...memberCardStyle, cursor: draggable ? "grab" : "default" }}
+      draggable={draggable}
+      onDragStart={(e) => {
+        e.dataTransfer.setData("text/plain", String(member.id));
+        e.dataTransfer.effectAllowed = "move";
+      }}
+    >
+      <div style={memberCardMainStyle}>
+        <span style={memberCardNameStyle}>{name}</span>
+        <span style={memberCardMetaStyle}>{age != null ? `${age}岁` : "—"}{gender ? ` · ${gender}` : ""}</span>
+      </div>
+      {canEdit && isMobile ? (
+        <select
+          value={currentGroupId == null ? "" : String(currentGroupId)}
+          onChange={(e) => onMove(member.id, e.target.value === "" ? null : Number(e.target.value))}
+          style={memberCardSelectStyle}
+        >
+          <option value="">未分组</option>
+          {groups.map((g) => (
+            <option key={g.id} value={g.id}>{g.name}</option>
+          ))}
+        </select>
       ) : null}
     </div>
   );
@@ -956,6 +1209,32 @@ const actionsCellStyle: CSSProperties = { display: "flex", gap: "6px", flexWrap:
 
 const memberToolbarStyle: CSSProperties = { display: "flex", gap: "8px", alignItems: "center", flexWrap: "wrap", justifyContent: "space-between" };
 const searchInputStyle: CSSProperties = { flex: "1 1 220px", minHeight: "34px", padding: "7px 10px", borderRadius: "8px", border: "1px solid var(--x-color-line)", background: "var(--x-color-panel)", color: "var(--x-color-ink)", fontSize: "13px", boxSizing: "border-box" };
+
+// -------- 分组（拖拽看板）--------
+function groupBoardStyle(isMobile: boolean): CSSProperties {
+  return {
+    display: "grid",
+    gridAutoFlow: isMobile ? "row" : "column",
+    gridAutoColumns: isMobile ? undefined : "minmax(200px, 1fr)",
+    gridTemplateColumns: isMobile ? "1fr" : undefined,
+    gap: "10px",
+    overflowX: isMobile ? undefined : "auto",
+    paddingBottom: "4px",
+    alignItems: "start",
+  };
+}
+const groupColStyle: CSSProperties = { display: "flex", flexDirection: "column", minWidth: 0, borderRadius: "10px", border: "1px solid var(--x-color-line-soft)", background: "var(--x-color-panel-alt)", minHeight: "120px" };
+const groupColHoverStyle: CSSProperties = { border: "1px dashed var(--x-color-accent)", background: "var(--x-color-accent-tint)" };
+const groupHeadStyle: CSSProperties = { display: "flex", alignItems: "center", justifyContent: "space-between", gap: "6px", padding: "8px 10px", borderBottom: "1px solid var(--x-color-line-soft)" };
+const groupTitleStyle: CSSProperties = { display: "inline-flex", alignItems: "center", gap: "6px", fontWeight: 700, fontSize: "13px", minWidth: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" };
+const groupCountStyle: CSSProperties = { display: "inline-flex", alignItems: "center", justifyContent: "center", minWidth: "20px", height: "18px", padding: "0 6px", borderRadius: "999px", background: "var(--x-color-panel)", border: "1px solid var(--x-color-line)", fontSize: "11px", fontWeight: 700, color: "var(--x-color-ink-muted)" };
+const groupColBodyStyle: CSSProperties = { display: "grid", gap: "6px", padding: "8px", alignContent: "start" };
+const groupEmptyStyle: CSSProperties = { padding: "14px 8px", borderRadius: "8px", border: "1px dashed var(--x-color-line)", textAlign: "center", fontSize: "12px", color: "var(--x-color-ink-muted)" };
+const memberCardStyle: CSSProperties = { display: "grid", gap: "6px", padding: "8px 10px", borderRadius: "8px", background: "var(--x-color-panel)", border: "1px solid var(--x-color-line)", boxShadow: "0 1px 2px var(--x-color-shadow-soft)" };
+const memberCardMainStyle: CSSProperties = { display: "flex", alignItems: "baseline", justifyContent: "space-between", gap: "8px", minWidth: 0 };
+const memberCardNameStyle: CSSProperties = { fontWeight: 700, fontSize: "13px", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" };
+const memberCardMetaStyle: CSSProperties = { fontSize: "12px", color: "var(--x-color-ink-muted)", whiteSpace: "nowrap", flexShrink: 0 };
+const memberCardSelectStyle: CSSProperties = { width: "100%", padding: "5px 8px", borderRadius: "6px", border: "1px solid var(--x-color-line)", background: "var(--x-color-panel-alt)", color: "var(--x-color-ink)", fontSize: "12px" };
 
 function detailGridStyle(isMobile: boolean): CSSProperties {
   return { display: "grid", gridTemplateColumns: isMobile ? "1fr" : "repeat(2, minmax(0, 1fr))", gap: "8px" };
