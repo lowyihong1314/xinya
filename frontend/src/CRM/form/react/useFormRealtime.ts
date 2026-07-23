@@ -1,4 +1,7 @@
 import { useEffect } from "react";
+import { io, type Socket } from "socket.io-client";
+
+import { API_BASE } from "../../../js/apiBase";
 
 type RealtimeOptions = {
   enabled?: boolean;
@@ -6,20 +9,39 @@ type RealtimeOptions = {
   onRefresh: () => void;
 };
 
+// 报名成员页实时刷新：后端 register/parental/fee/field 变更都会向房间
+// `wait_register_{form_id}` 广播 socket 事件 `new_register`，收到即重新拉取详情。
 export function useFormRealtime({ enabled = false, formId, onRefresh }: RealtimeOptions) {
   useEffect(() => {
     if (!enabled || !formId) {
       return;
     }
 
-    const channel = `form:${formId}`;
+    const origin = API_BASE || (typeof window !== "undefined" ? window.location.origin : "");
+    const room = `wait_register_${formId}`;
+    const socket: Socket = io(origin, {
+      withCredentials: true,
+      transports: ["websocket", "polling"],
+    });
 
-    // Socket integration is intentionally deferred.
-    // This hook is the single place where future socket subscription should be attached.
-    console.debug("[form-realtime] reserved channel", channel);
+    const join = () => socket.emit("join_room", { room });
+    socket.on("connect", join);
+    if (socket.connected) join();
+
+    const handler = (payload: { form_id?: number; event?: string }) => {
+      // 房间已经按 form_id 隔离；仍校验一次以防串号。
+      if (payload?.form_id != null && Number(payload.form_id) !== Number(formId)) {
+        return;
+      }
+      onRefresh();
+    };
+    socket.on("new_register", handler);
 
     return () => {
-      console.debug("[form-realtime] unsubscribe", channel);
+      socket.off("connect", join);
+      socket.off("new_register", handler);
+      socket.disconnect();
     };
-  }, [enabled, formId, onRefresh]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [enabled, formId]);
 }

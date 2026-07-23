@@ -35,6 +35,8 @@ export function FormWorkspacePage() {
     canManagePayments,
     canConfirmPayments,
     preferredFormId: selectedFormId,
+    // 打开某个表单的「报名成员」页时开启 socket 实时刷新。
+    realtime: canViewMemberDetail && selectedFormId != null && activeTab === "members",
   });
 
   function selectForm(formId: number) {

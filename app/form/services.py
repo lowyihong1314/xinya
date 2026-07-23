@@ -1129,6 +1129,11 @@ def register_member(form_id, data):
             )
 
         db.session.commit()
+        # 报名成功 → 推送实时更新给 CRM 报名成员页（socket 断开时不影响报名结果）。
+        try:
+            emit_form_event(form_id, "update")
+        except Exception as exc:  # noqa: BLE001 - 实时推送失败不能影响报名
+            print(f"[WS-DISCONNECTED] register emit skipped: {exc}")
         return jsonify({"status": "success", "message": "注册成功"})
     except ValueError as exc:
         db.session.rollback()
@@ -1165,6 +1170,10 @@ def complete_parental_consent(form_id, data):
     try:
         _upsert_parental_data(latest, parental_payload)
         db.session.commit()
+        try:
+            emit_form_event(form_id, "update")
+        except Exception as exc:  # noqa: BLE001 - 实时推送失败不能影响补签
+            print(f"[WS-DISCONNECTED] parental emit skipped: {exc}")
         return jsonify({"status": "success", "message": "家长同意书已提交"})
     except ValueError as exc:
         db.session.rollback()

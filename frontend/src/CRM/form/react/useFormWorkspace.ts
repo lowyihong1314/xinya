@@ -73,12 +73,14 @@ export function useFormWorkspace(options?: {
   canManagePayments?: boolean;
   canConfirmPayments?: boolean;
   preferredFormId?: number | null;
+  realtime?: boolean;
 }) {
   const enabled = options?.enabled ?? true;
   const canEditMembers = options?.canEditMembers ?? true;
   const canManagePayments = options?.canManagePayments ?? false;
   const canConfirmPayments = options?.canConfirmPayments ?? false;
   const preferredFormId = options?.preferredFormId ?? null;
+  const realtime = options?.realtime ?? false;
   const [forms, setForms] = useState<FormRecord[]>([]);
   const [selectedFormId, setSelectedFormId] = useState<number | null>(null);
   const [selectedForm, setSelectedForm] = useState<FormRecord | null>(null);
@@ -151,7 +153,7 @@ export function useFormWorkspace(options?: {
   }, [toast]);
 
   useFormRealtime({
-    enabled: enabled && realtimeEnabled,
+    enabled: enabled && (realtime || realtimeEnabled),
     formId: selectedFormId,
     onRefresh: () => {
       void refreshSelectedForm();
