@@ -3,7 +3,7 @@ from flask import Blueprint, jsonify, request
 from models.form import RegisForm
 
 from app.common import council_sign
-from . import services
+from . import ai_grouping, services
 from .permissions import (
     FORM_EDIT_PERMISSION_NAMES,
     FORM_LIST_PERMISSION_NAMES,
@@ -248,6 +248,18 @@ def delete_form_group(group_id):
 @permission_required_any(*FORM_EDIT_PERMISSION_NAMES)
 def assign_member_group():
     return services.assign_member_group(request.get_json(silent=True) or {})
+
+
+@form_bp.route("/group/ai_chat/<int:form_id>", methods=["POST"])
+@permission_required_any(*FORM_MEMBER_DETAIL_PERMISSION_NAMES)
+def group_ai_chat(form_id):
+    return ai_grouping.ai_group_chat(form_id, request.get_json(silent=True) or {})
+
+
+@form_bp.route("/group/apply_plan/<int:form_id>", methods=["POST"])
+@permission_required_any(*FORM_EDIT_PERMISSION_NAMES)
+def group_apply_plan(form_id):
+    return ai_grouping.apply_group_plan(form_id, request.get_json(silent=True) or {})
 
 
 @form_bp.route("/edit_member", methods=["POST"])

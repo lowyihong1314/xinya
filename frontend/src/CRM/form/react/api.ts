@@ -4,6 +4,8 @@ import type {
   FormDetailResponse,
   FormFee,
   FormGroup,
+  GroupChatMessage,
+  GroupPlan,
   FormListResponse,
   FormPayment,
   FormRecord,
@@ -212,6 +214,24 @@ export async function deleteGroup(groupId: number) {
     method: "DELETE",
   });
   return parseJson<{ status?: string; message?: string }>(response);
+}
+
+export async function aiGroupChat(formId: number, messages: GroupChatMessage[]) {
+  const response = await apiFetch(`/api/form/group/ai_chat/${formId}`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ messages }),
+  });
+  return parseJson<{ status?: string; reply?: string; plan?: GroupPlan | null; message?: string }>(response);
+}
+
+export async function applyGroupPlan(formId: number, plan: GroupPlan) {
+  const response = await apiFetch(`/api/form/group/apply_plan/${formId}`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ plan }),
+  });
+  return parseJson<{ status?: string; assigned?: number; message?: string }>(response);
 }
 
 export async function assignMemberGroup(formId: number, memberId: number, groupId: number | null) {

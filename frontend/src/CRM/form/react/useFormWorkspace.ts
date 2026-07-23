@@ -10,6 +10,8 @@ import {
   addEventToForm,
   addExtraField,
   addFee,
+  aiGroupChat,
+  applyGroupPlan,
   assignMemberGroup,
   createForm,
   createGroup,
@@ -30,7 +32,7 @@ import {
   removeMemberFromForm,
   renameGroup,
 } from "./api";
-import type { ExtraFieldConfig, FormCreatePayload, FormFee, FormFieldSwitches, FormGroup, FormMember, FormRecord } from "./types";
+import type { ExtraFieldConfig, FormCreatePayload, FormFee, FormFieldSwitches, FormGroup, FormMember, FormRecord, GroupChatMessage, GroupPlan } from "./types";
 import { useFormRealtime } from "./useFormRealtime";
 
 type Toast = { type: "success" | "error"; text: string } | null;
@@ -464,6 +466,22 @@ export function useFormWorkspace(options?: {
     }
   }
 
+  async function handleAiChat(messages: GroupChatMessage[]) {
+    if (!selectedFormId) throw new Error("未选择表单");
+    return aiGroupChat(selectedFormId, messages);
+  }
+
+  async function handleApplyAiPlan(plan: GroupPlan) {
+    if (!selectedFormId) return;
+    try {
+      const res = await applyGroupPlan(selectedFormId, plan);
+      await refreshSelectedForm();
+      setToast({ type: "success", text: `已应用分组（${res.assigned ?? 0} 人）` });
+    } catch (err) {
+      setToast({ type: "error", text: getErrorMessage(err, "应用分组失败") });
+    }
+  }
+
   async function handleAssignMemberGroup(memberId: number, groupId: number | null) {
     if (!selectedFormId) return;
     // 乐观更新：拖拽后立即生效，失败再回滚为服务器真值。
@@ -561,6 +579,8 @@ export function useFormWorkspace(options?: {
       handleRenameGroup,
       handleDeleteGroup,
       handleAssignMemberGroup,
+      handleAiChat,
+      handleApplyAiPlan,
       handleEditMemberField,
       handleShowMemberDetail,
       handleOpenParental,

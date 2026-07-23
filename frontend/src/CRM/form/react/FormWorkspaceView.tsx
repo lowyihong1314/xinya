@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import type { CSSProperties, DragEvent, ReactNode } from "react";
 
 import { CachedImage } from "../../../components/CachedMedia";
@@ -10,7 +10,7 @@ import { FeePanel } from "./FeePanel";
 import { TablePagination, usePagedRows } from "../../shared/TablePagination";
 import { sortArrow, sortRows, sortableThStyle, toggleSort, type SortState } from "../../Account/react/shared/tableSort";
 import type { ExtraFieldDraft } from "./ExtraFieldEditor";
-import type { ExtraFieldConfig, FormCreatePayload, FormEvent, FormFee, FormGroup, FormMember, FormRecord } from "./types";
+import type { ExtraFieldConfig, FormCreatePayload, FormEvent, FormFee, FormGroup, FormMember, FormRecord, GroupChatMessage, GroupPlan } from "./types";
 
 type Toast = { type: "success" | "error"; text: string } | null;
 const PUBLIC_ORIGIN = "https://utbabuddha.com";
@@ -231,6 +231,8 @@ export function FormWorkspaceView(props: {
   onRenameGroup: (groupId: number, name: string) => void;
   onDeleteGroup: (groupId: number) => void;
   onAssignMemberGroup: (memberId: number, groupId: number | null) => void;
+  onAiChat: (messages: GroupChatMessage[]) => Promise<{ reply?: string; plan?: GroupPlan | null }>;
+  onApplyAiPlan: (plan: GroupPlan) => void;
   onShowMemberDetail: (member: FormMember) => void;
   onOpenParental: (member: FormMember) => void;
   onRefresh: () => void;
@@ -316,6 +318,8 @@ export function FormWorkspaceView(props: {
                   onRenameGroup={props.onRenameGroup}
                   onDeleteGroup={props.onDeleteGroup}
                   onAssignMemberGroup={props.onAssignMemberGroup}
+                  onAiChat={props.onAiChat}
+                  onApplyAiPlan={props.onApplyAiPlan}
                 />
               ) : null}
 
@@ -584,6 +588,8 @@ function GroupsTab({
   onRenameGroup,
   onDeleteGroup,
   onAssignMemberGroup,
+  onAiChat,
+  onApplyAiPlan,
 }: {
   form: FormRecord;
   groups: FormGroup[];
@@ -594,8 +600,11 @@ function GroupsTab({
   onRenameGroup: (groupId: number, name: string) => void;
   onDeleteGroup: (groupId: number) => void;
   onAssignMemberGroup: (memberId: number, groupId: number | null) => void;
+  onAiChat: (messages: GroupChatMessage[]) => Promise<{ reply?: string; plan?: GroupPlan | null }>;
+  onApplyAiPlan: (plan: GroupPlan) => void;
 }) {
   const [dragOver, setDragOver] = useState<number | "ungrouped" | null>(null);
+  const [aiOpen, setAiOpen] = useState(false);
   const members = form.members || [];
 
   const sortedGroups = useMemo(
@@ -638,11 +647,23 @@ function GroupsTab({
   return (
     <div style={sectionBodyStyle}>
       {canEdit ? (
-        <div style={memberToolbarStyle}>
+        <div style={{ ...memberToolbarStyle, justifyContent: "flex-start", gap: "8px" }}>
           <button type="button" style={primaryButtonStyle} onClick={() => onCreateGroup(nextGroupName(sortedGroups))}>
             + 新建小组
           </button>
+          <button type="button" style={aiButtonStyle} onClick={() => setAiOpen(true)}>
+            <i className="fa-solid fa-wand-magic-sparkles" style={{ marginRight: 6 }} />AI 分组
+          </button>
         </div>
+      ) : null}
+
+      {aiOpen ? (
+        <GroupAiChatModal
+          isMobile={isMobile}
+          onClose={() => setAiOpen(false)}
+          onAiChat={onAiChat}
+          onApplyAiPlan={onApplyAiPlan}
+        />
       ) : null}
 
       <div style={mutedStyle}>
@@ -789,6 +810,143 @@ function MemberChipCard({
           ))}
         </select>
       ) : null}
+    </div>
+  );
+}
+
+type ChatEntry = { role: "user" | "assistant"; content: string; plan?: GroupPlan | null };
+
+// 隐藏回复里的 ```json 方案块（已用「应用」按钮呈现），只显示说明文字。
+function stripPlanJson(text: string): string {
+  const cleaned = (text || "").replace(/```(?:json)?\s*\{[\s\S]*?\}\s*```/g, "").trim();
+  return cleaned || (text || "").trim();
+}
+
+function GroupAiChatModal({
+  isMobile,
+  onClose,
+  onAiChat,
+  onApplyAiPlan,
+}: {
+  isMobile: boolean;
+  onClose: () => void;
+  onAiChat: (messages: GroupChatMessage[]) => Promise<{ reply?: string; plan?: GroupPlan | null }>;
+  onApplyAiPlan: (plan: GroupPlan) => void;
+}) {
+  const [entries, setEntries] = useState<ChatEntry[]>([]);
+  const [input, setInput] = useState("");
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState("");
+  const listRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    listRef.current?.scrollTo({ top: listRef.current.scrollHeight });
+  }, [entries, loading]);
+
+  async function send(text: string) {
+    const content = text.trim();
+    if (!content || loading) return;
+    setError("");
+    const history: GroupChatMessage[] = [
+      ...entries.map((e) => ({ role: e.role, content: e.content })),
+      { role: "user", content },
+    ];
+    setEntries((cur) => [...cur, { role: "user", content }]);
+    setInput("");
+    setLoading(true);
+    try {
+      const res = await onAiChat(history);
+      setEntries((cur) => [...cur, { role: "assistant", content: res.reply || "（无回复）", plan: res.plan || null }]);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "AI 请求失败");
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  const examples = ["现在各组几个人？姓黄的有几个？", "把所有人按年龄平衡分成 3 组"];
+
+  return (
+    <div style={modalOverlayStyle} onClick={onClose}>
+      <div
+        style={{
+          ...modalStyle,
+          width: isMobile ? "100%" : "min(660px, 100%)",
+          height: isMobile ? "90vh" : "min(80vh, 720px)",
+          display: "flex",
+          flexDirection: "column",
+          padding: 0,
+          gap: 0,
+        }}
+        onClick={(e) => e.stopPropagation()}
+      >
+        <div style={{ ...publicHeadStyle, padding: "14px 16px", borderBottom: "1px solid var(--x-color-line-soft)" }}>
+          <div>
+            <h4 style={panelTitleStyle}>
+              <i className="fa-solid fa-wand-magic-sparkles" style={{ marginRight: 6, color: "var(--x-color-accent)" }} />AI 分组助手
+            </h4>
+            <div style={mutedStyle}>可提问（如「姓黄的有几个」）或直接说分组要求；只会发送姓名/年龄/性别/组名。</div>
+          </div>
+          <button type="button" style={btnStyle} onClick={onClose}>关闭</button>
+        </div>
+
+        <div ref={listRef} style={chatListStyle}>
+          {!entries.length ? (
+            <div style={chatEmptyStyle}>
+              <div style={{ marginBottom: 8 }}>试试这样问 / 说：</div>
+              {examples.map((ex) => (
+                <button key={ex} type="button" style={chatExampleStyle} onClick={() => void send(ex)}>{ex}</button>
+              ))}
+            </div>
+          ) : null}
+          {entries.map((entry, i) => (
+            <div key={i} style={entry.role === "user" ? chatRowUserStyle : chatRowAiStyle}>
+              <div style={entry.role === "user" ? chatBubbleUserStyle : chatBubbleAiStyle}>
+                <div style={{ whiteSpace: "pre-wrap", wordBreak: "break-word" }}>{stripPlanJson(entry.content)}</div>
+                {entry.plan && entry.plan.groups.length ? (
+                  <div style={planBoxStyle}>
+                    <div style={{ fontWeight: 700, marginBottom: 4 }}>
+                      建议分组：{entry.plan.groups.length} 组 · {entry.plan.groups.reduce((n, g) => n + g.member_ids.length, 0)} 人
+                    </div>
+                    <div style={{ fontSize: 12, color: "var(--x-color-ink-muted)" }}>
+                      {entry.plan.groups.map((g) => `${g.name}(${g.member_ids.length})`).join(" · ")}
+                    </div>
+                    <button
+                      type="button"
+                      style={{ ...primaryButtonStyle, marginTop: 8 }}
+                      onClick={() => { onApplyAiPlan(entry.plan as GroupPlan); onClose(); }}
+                    >
+                      应用此分组
+                    </button>
+                  </div>
+                ) : null}
+              </div>
+            </div>
+          ))}
+          {loading ? <div style={chatRowAiStyle}><div style={chatBubbleAiStyle}>思考中…</div></div> : null}
+        </div>
+
+        {error ? <div style={{ ...errorStyle, margin: "8px 16px 0" }}>{error}</div> : null}
+
+        <div style={chatInputBarStyle}>
+          <textarea
+            value={input}
+            onChange={(e) => setInput(e.target.value)}
+            onKeyDown={(e) => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); void send(input); } }}
+            placeholder="输入要求，例如：调整各组年龄平衡；把 陈莹莹/赖思琦 放同一组…（Enter 发送，Shift+Enter 换行）"
+            style={chatTextareaStyle}
+            rows={isMobile ? 2 : 3}
+          />
+          <button
+            type="button"
+            style={{ ...primaryButtonStyle, opacity: loading || !input.trim() ? 0.6 : 1 }}
+            disabled={loading || !input.trim()}
+            onClick={() => void send(input)}
+          >
+            发送
+          </button>
+        </div>
+      </div>
     </div>
   );
 }
@@ -1231,6 +1389,19 @@ const memberCardMainStyle: CSSProperties = { display: "flex", alignItems: "basel
 const memberCardNameStyle: CSSProperties = { fontWeight: 700, fontSize: "13px", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" };
 const memberCardMetaStyle: CSSProperties = { fontSize: "12px", color: "var(--x-color-ink-muted)", whiteSpace: "nowrap", flexShrink: 0 };
 const memberCardSelectStyle: CSSProperties = { width: "100%", padding: "5px 8px", borderRadius: "6px", border: "1px solid var(--x-color-line)", background: "var(--x-color-panel-alt)", color: "var(--x-color-ink)", fontSize: "12px" };
+
+// -------- AI 分组对话 --------
+const aiButtonStyle: CSSProperties = { padding: "9px 16px", borderRadius: "8px", border: "1px solid var(--x-color-accent-border)", background: "var(--x-color-accent-tint)", color: "var(--x-color-accent-strong)", fontWeight: 700, fontSize: "13px", cursor: "pointer", whiteSpace: "nowrap" };
+const chatListStyle: CSSProperties = { flex: 1, overflowY: "auto", padding: "14px 16px", display: "flex", flexDirection: "column", gap: "10px", background: "var(--x-color-canvas-alt)" };
+const chatEmptyStyle: CSSProperties = { color: "var(--x-color-ink-muted)", fontSize: "13px", display: "flex", flexDirection: "column", alignItems: "flex-start", gap: "6px", margin: "auto 0" };
+const chatExampleStyle: CSSProperties = { textAlign: "left", padding: "8px 12px", borderRadius: "8px", border: "1px dashed var(--x-color-accent-border)", background: "var(--x-color-panel)", color: "var(--x-color-accent-strong)", fontSize: "13px", cursor: "pointer", width: "100%" };
+const chatRowUserStyle: CSSProperties = { display: "flex", justifyContent: "flex-end" };
+const chatRowAiStyle: CSSProperties = { display: "flex", justifyContent: "flex-start" };
+const chatBubbleUserStyle: CSSProperties = { maxWidth: "82%", padding: "9px 12px", borderRadius: "12px 12px 2px 12px", background: "var(--x-color-accent)", color: "#fff", fontSize: "13.5px", lineHeight: 1.5 };
+const chatBubbleAiStyle: CSSProperties = { maxWidth: "82%", padding: "9px 12px", borderRadius: "12px 12px 12px 2px", background: "var(--x-color-panel)", border: "1px solid var(--x-color-line)", color: "var(--x-color-ink)", fontSize: "13.5px", lineHeight: 1.5 };
+const planBoxStyle: CSSProperties = { marginTop: "8px", padding: "10px", borderRadius: "8px", background: "var(--x-color-accent-tint)", border: "1px solid var(--x-color-accent-border)" };
+const chatInputBarStyle: CSSProperties = { display: "flex", gap: "8px", alignItems: "flex-end", padding: "12px 16px", borderTop: "1px solid var(--x-color-line-soft)", background: "var(--x-color-panel)" };
+const chatTextareaStyle: CSSProperties = { flex: 1, resize: "none", padding: "9px 11px", borderRadius: "10px", border: "1px solid var(--x-color-line)", background: "var(--x-color-panel-alt)", color: "var(--x-color-ink)", fontSize: "13.5px", lineHeight: 1.5, boxSizing: "border-box" };
 
 function detailGridStyle(isMobile: boolean): CSSProperties {
   return { display: "grid", gridTemplateColumns: isMobile ? "1fr" : "repeat(2, minmax(0, 1fr))", gap: "8px" };
