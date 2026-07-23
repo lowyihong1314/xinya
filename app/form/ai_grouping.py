@@ -27,10 +27,14 @@ SYSTEM_PROMPT = (
     "成员字段：id（内部编号，只用于分组引用）、name（姓名）、age（年龄，可能为 null）、"
     "gender（性别）、group（当前所在小组名，null 表示未分组）。\n\n"
     "规则：\n"
-    "- 只是提问时（例如「姓黄的有几个」「各组几人」「谁未分组」），直接用中文回答，不要输出分组 JSON。\n"
-    "- 需要分组或调整时，先用中文简要说明方案，然后在回复最后附一个 ```json 代码块，格式：\n"
-    '  {"groups":[{"name":"小组1","member_ids":[1,2]}]}\n'
-    "  name 用小组名（可用已有组名或新建），member_ids 用成员 id。没提到的人保持原样。\n"
+    "- 只是提问时（例如「姓黄的有几个」「各组几人」「谁未分组」），直接用中文回答，不要输出 JSON。\n"
+    "- 需要分组/建组/改名/删组时，先用中文简要说明，然后在回复最后附一个 ```json 代码块，可含以下任意字段：\n"
+    '  {\n'
+    '    "groups": [{"name":"小组1","member_ids":[1,2]}],   // 把这些成员放进该组；组名不存在会自动新建\n'
+    '    "rename": [{"from":"小组2","to":"红队"}],            // 重命名已有小组\n'
+    '    "delete": ["小组3"]                                  // 删除小组（组内成员变回未分组）\n'
+    "  }\n"
+    "  member_ids 用成员 id；没提到的人保持原样。只在用户要求相应操作时才输出对应字段。\n"
     "- 若无特别说明，尽量让各组人数与年龄均衡；用户点名要在一起的人务必放同一组。\n"
 )
 
@@ -57,6 +61,8 @@ def _call_ark_chat(messages, temperature=0.3, max_tokens=1600):
         "messages": messages,
         "temperature": temperature,
         "max_tokens": max_tokens,
+        # 关闭「深度思考」，把分组这类任务从 ~12s 降到 ~3.5s，避免 gunicorn 超时。
+        "thinking": {"type": "disabled"},
     }
     request_obj = urllib.request.Request(
         f"{_ark_base_url()}/chat/completions",
@@ -113,13 +119,13 @@ def _is_int(value):
         return False
 
 
-def _extract_plan(text, valid_ids):
+def _extract_plan(text, valid_ids, existing_names):
     block = None
-    fenced = re.search(r"```(?:json)?\s*(\{.*?\})\s*```", text or "", re.DOTALL)
+    fenced = re.search(r"```(?:json)?\s*(\{[\s\S]*\})\s*```", text or "")
     if fenced:
         block = fenced.group(1)
     else:
-        bare = re.search(r"(\{[^{}]*\"groups\"[\s\S]*\})", text or "")
+        bare = re.search(r"(\{[\s\S]*\"(?:groups|rename|delete)\"[\s\S]*\})", text or "")
         if bare:
             block = bare.group(1)
     if not block:
@@ -128,24 +134,48 @@ def _extract_plan(text, valid_ids):
         obj = json.loads(block)
     except Exception:  # noqa: BLE001
         return None
-
-    groups = obj.get("groups") if isinstance(obj, dict) else None
-    if not isinstance(groups, list):
+    if not isinstance(obj, dict):
         return None
 
-    cleaned = []
-    for group in groups:
-        if not isinstance(group, dict):
-            continue
-        name = str(group.get("name") or "").strip()
-        ids = [
-            int(mid)
-            for mid in (group.get("member_ids") or [])
-            if _is_int(mid) and int(mid) in valid_ids
-        ]
-        if name and ids:
-            cleaned.append({"name": name, "member_ids": ids})
-    return {"groups": cleaned} if cleaned else None
+    plan = {}
+
+    groups = obj.get("groups")
+    if isinstance(groups, list):
+        cleaned = []
+        for group in groups:
+            if not isinstance(group, dict):
+                continue
+            name = str(group.get("name") or "").strip()
+            ids = [
+                int(mid)
+                for mid in (group.get("member_ids") or [])
+                if _is_int(mid) and int(mid) in valid_ids
+            ]
+            if name and ids:
+                cleaned.append({"name": name, "member_ids": ids})
+        if cleaned:
+            plan["groups"] = cleaned
+
+    rename = obj.get("rename")
+    if isinstance(rename, list):
+        cleaned = []
+        for item in rename:
+            if not isinstance(item, dict):
+                continue
+            frm = str(item.get("from") or "").strip()
+            to = str(item.get("to") or "").strip()
+            if frm and to and frm != to and frm in existing_names:
+                cleaned.append({"from": frm, "to": to})
+        if cleaned:
+            plan["rename"] = cleaned
+
+    delete = obj.get("delete")
+    if isinstance(delete, list):
+        cleaned = [str(x).strip() for x in delete if str(x).strip() in existing_names]
+        if cleaned:
+            plan["delete"] = cleaned
+
+    return plan or None
 
 
 def ai_group_chat(form_id, data):
@@ -179,21 +209,53 @@ def ai_group_chat(form_id, data):
     except ValueError as exc:
         return jsonify({"status": "error", "message": str(exc)}), 502
 
-    plan = _extract_plan(reply, {row["id"] for row in context})
+    plan = _extract_plan(reply, {row["id"] for row in context}, set(group_names))
     return jsonify({"status": "success", "reply": reply, "plan": plan})
 
 
 def apply_group_plan(form_id, data):
     form = RegisForm.query.get_or_404(form_id)
     plan = (data or {}).get("plan") or (data or {})
-    groups = plan.get("groups") if isinstance(plan, dict) else None
-    if not isinstance(groups, list) or not groups:
+    if not isinstance(plan, dict):
         return jsonify({"status": "error", "message": "没有可应用的分组方案"}), 400
 
-    valid_member_ids = {member.id for member in (form.members or [])}
-    existing = {g.name: g for g in (form.groups or [])}
-    next_order = max([g.order or 0 for g in (form.groups or [])], default=-1)
+    groups = plan.get("groups") if isinstance(plan.get("groups"), list) else []
+    renames = plan.get("rename") if isinstance(plan.get("rename"), list) else []
+    deletes = plan.get("delete") if isinstance(plan.get("delete"), list) else []
+    if not (groups or renames or deletes):
+        return jsonify({"status": "error", "message": "没有可应用的分组方案"}), 400
 
+    existing = {g.name: g for g in (form.groups or [])}
+
+    # 1) 改名
+    renamed = 0
+    for item in renames:
+        if not isinstance(item, dict):
+            continue
+        frm = str(item.get("from") or "").strip()
+        to = str(item.get("to") or "").strip()
+        target = existing.get(frm)
+        if target is not None and to:
+            target.name = to
+            existing.pop(frm, None)
+            existing[to] = target
+            renamed += 1
+
+    # 2) 删除（组内成员由外键 SET NULL 变回未分组）
+    deleted = 0
+    for name in deletes:
+        name = str(name).strip()
+        target = existing.get(name)
+        if target is not None:
+            db.session.delete(target)
+            existing.pop(name, None)
+            deleted += 1
+    if renamed or deleted:
+        db.session.flush()
+
+    # 3) 分组（组名不存在则新建）
+    valid_member_ids = {member.id for member in (form.members or [])}
+    next_order = max([g.order or 0 for g in existing.values()], default=-1)
     assigned = set()
     for group in groups:
         if not isinstance(group, dict):
@@ -229,4 +291,9 @@ def apply_group_plan(form_id, data):
         emit_form_event(form.id, "update")
     except Exception as exc:  # noqa: BLE001
         print(f"[WS-DISCONNECTED] ai group apply emit skipped: {exc}")
-    return jsonify({"status": "success", "assigned": len(assigned)})
+    return jsonify({
+        "status": "success",
+        "assigned": len(assigned),
+        "renamed": renamed,
+        "deleted": deleted,
+    })

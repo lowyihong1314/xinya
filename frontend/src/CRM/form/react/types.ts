@@ -83,7 +83,11 @@ export type FormGroup = {
   created_at?: string | null;
 };
 
-export type GroupPlan = { groups: { name: string; member_ids: number[] }[] };
+export type GroupPlan = {
+  groups?: { name: string; member_ids: number[] }[];
+  rename?: { from: string; to: string }[];
+  delete?: string[];
+};
 export type GroupChatMessage = { role: "user" | "assistant"; content: string };
 
 export type FormMember = {

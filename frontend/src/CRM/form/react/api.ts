@@ -231,7 +231,7 @@ export async function applyGroupPlan(formId: number, plan: GroupPlan) {
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ plan }),
   });
-  return parseJson<{ status?: string; assigned?: number; message?: string }>(response);
+  return parseJson<{ status?: string; assigned?: number; renamed?: number; deleted?: number; message?: string }>(response);
 }
 
 export async function assignMemberGroup(formId: number, memberId: number, groupId: number | null) {

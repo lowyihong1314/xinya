@@ -476,7 +476,12 @@ export function useFormWorkspace(options?: {
     try {
       const res = await applyGroupPlan(selectedFormId, plan);
       await refreshSelectedForm();
-      setToast({ type: "success", text: `已应用分组（${res.assigned ?? 0} 人）` });
+      const parts = [
+        res.assigned ? `分组 ${res.assigned} 人` : "",
+        res.renamed ? `改名 ${res.renamed}` : "",
+        res.deleted ? `删除 ${res.deleted}` : "",
+      ].filter(Boolean);
+      setToast({ type: "success", text: `已应用（${parts.join("·") || "无改动"}）` });
     } catch (err) {
       setToast({ type: "error", text: getErrorMessage(err, "应用分组失败") });
     }
