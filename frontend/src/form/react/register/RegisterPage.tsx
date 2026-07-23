@@ -89,10 +89,20 @@ export function RegisterPage({ formId }: { formId: number }) {
   const closed = Boolean(form.registration_closed);
   const firstEvent = form.events?.[0];
   const flowSlots = useMemo(() => computeEventFlowSlots(firstEvent), [firstEvent]);
+  // 默认全选所有时段；新报名者一律带上全部时段（弹性模式下可再取消）。
+  const defaultSlots = useMemo(() => slotsToPayload(flowSlots), [flowSlots]);
+  const makePerson = (prev?: Person): Person => ({ ...personWithInheritedContact(prev), slots: defaultSlots });
 
   useEffect(() => {
     setResumePending(pendingConsentPeople(loadDraft(formId)));
   }, [formId]);
+
+  // flowSlots 加载好后，给还没有时段的报名者补上「全选」默认值（只在首次加载补，不覆盖用户改动）。
+  useEffect(() => {
+    if (!flowSlots.length) return;
+    setPeople((cur) => cur.map((p) => (p.slots && p.slots.length ? p : { ...p, slots: defaultSlots })));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [flowSlots]);
 
   function updatePerson(index: number, patch: Partial<Person>) {
     setPeople((cur) => cur.map((p, i) => (i === index ? { ...p, ...patch } : p)));
@@ -132,7 +142,8 @@ export function RegisterPage({ formId }: { formId: number }) {
       medical: fieldOn(form, "medical") ? p.medical.trim() : null,
       allergy: fieldOn(form, "allergy") ? p.allergy.trim() : null,
       other_remark: fieldOn(form, "other_remark") ? p.other_remark.trim() : null,
-      available_time_slot_json: p.slots,
+      // 弹性模式下用报名者的选择；非弹性则不渲染选择器，直接全选所有时段。
+      available_time_slot_json: fieldOn(form, "flexible_time_slot") ? p.slots : defaultSlots,
       extra_fields: buildExtraPayload(p.extraValues, form.extra_field_configs),
     };
   }
@@ -317,7 +328,7 @@ export function RegisterPage({ formId }: { formId: number }) {
               style={styles.choiceCard}
               onClick={() => {
                 setPath("single");
-                setPeople([emptyPerson()]);
+                setPeople([makePerson()]);
                 setStep("form");
               }}
             >
@@ -329,7 +340,7 @@ export function RegisterPage({ formId }: { formId: number }) {
               style={styles.choiceCard}
               onClick={() => {
                 setPath("family");
-                setPeople([emptyPerson()]);
+                setPeople([makePerson()]);
                 setStep("form");
               }}
             >
@@ -357,7 +368,7 @@ export function RegisterPage({ formId }: { formId: number }) {
               />
             ))}
             {path === "family" ? (
-              <button type="button" style={styles.addButton} onClick={() => setPeople((cur) => [...cur, personWithInheritedContact(cur[cur.length - 1])])}>
+              <button type="button" style={styles.addButton} onClick={() => setPeople((cur) => [...cur, makePerson(cur[cur.length - 1])])}>
                 + 添加一位家人
               </button>
             ) : null}
@@ -487,6 +498,8 @@ function PersonForm({
 }) {
   const age = calcAgeFromIc(person.nric);
   const needConsent = Boolean(form.parental_form) && age != null && age < 19;
+  // 只有开启「弹性参加时段」才渲染时段选择器；否则不显示（提交时默认全选）。
+  const slotPickerOn = fieldOn(form, "flexible_time_slot");
 
   function toggleSlot(slot: FlowSlot, checked: boolean) {
     const cur = flowSlots.filter((s) => person.slots.some((ps) => ps.datetime === s.startISO));
@@ -595,7 +608,7 @@ function PersonForm({
         />
       ))}
 
-      {flowSlots.length ? (
+      {slotPickerOn && flowSlots.length ? (
         <Field label="参加时段">
           <div style={styles.slotList}>
             {flowSlots.map((slot) => {

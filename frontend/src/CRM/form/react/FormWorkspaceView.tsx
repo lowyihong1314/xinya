@@ -1082,6 +1082,7 @@ function SettingsTab({
         <ConfigToggle label="医疗备注" checked={sw("medical", form.medical)} disabled={!canEdit} onChange={(n) => setSwitch({ medical: n })} />
         <ConfigToggle label="过敏" checked={sw("allergy", form.allergy)} disabled={!canEdit} onChange={(n) => setSwitch({ allergy: n })} />
         <ConfigToggle label="其他备注" checked={sw("other_remark", form.other_remark)} disabled={!canEdit} onChange={(n) => setSwitch({ other_remark: n })} />
+        <ConfigToggle label="弹性参加时段" checked={sw("flexible_time_slot", form.flexible_time_slot)} disabled={!canEdit} onChange={(n) => setSwitch({ flexible_time_slot: n })} />
       </div>
       <div style={mutedStyle}>已启用 {getEnabledFieldSwitchCount(form)} 个默认字段。</div>
     </div>
@@ -1372,7 +1373,7 @@ function CreateFormModal({ onClose, onSubmit }: { onClose: () => void; onSubmit:
   const [detail, setDetail] = useState("");
   const [expired, setExpired] = useState("");
   const [extras, setExtras] = useState<ExtraFieldDraft[]>([]);
-  const [flags, setFlags] = useState({ email: true, parental_form: false, parent_1: true, parent_2: false, address: false, medical: false, allergy: false, other_remark: false });
+  const [flags, setFlags] = useState({ email: true, parental_form: false, parent_1: true, parent_2: false, address: false, medical: false, allergy: false, other_remark: false, flexible_time_slot: false });
 
   return (
     <div style={modalOverlayStyle} onClick={onClose}>
@@ -1388,7 +1389,7 @@ function CreateFormModal({ onClose, onSubmit }: { onClose: () => void; onSubmit:
         </div>
         <div style={sectionTitleStyle}>配置开关</div>
         <div style={toggleGridStyle}>
-          {Object.entries({ email: "启用 Email", parental_form: "家长同意书", parent_1: "家长 1", parent_2: "家长 2", address: "居住地址", medical: "医疗备注", allergy: "过敏", other_remark: "其他备注" }).map(([key, label]) => (
+          {Object.entries({ email: "启用 Email", parental_form: "家长同意书", parent_1: "家长 1", parent_2: "家长 2", address: "居住地址", medical: "医疗备注", allergy: "过敏", other_remark: "其他备注", flexible_time_slot: "弹性参加时段" }).map(([key, label]) => (
             <ConfigToggle key={key} label={label} checked={Boolean(flags[key as keyof typeof flags])} onChange={(next) => setFlags((prev) => ({ ...prev, [key]: next }))} />
           ))}
         </div>

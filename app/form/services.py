@@ -55,6 +55,7 @@ FIELD_SWITCH_KEYS = [
     "medical",
     "allergy",
     "other_remark",
+    "flexible_time_slot",
 ]
 
 ALLOWED_FEE_IMAGE_EXTENSIONS = {".png", ".jpg", ".jpeg", ".heic", ".heif"}
@@ -988,6 +989,7 @@ def create_form(data):
             medical=field_switches.get("medical", data.get("medical", False)),
             allergy=field_switches.get("allergy", data.get("allergy", False)),
             other_remark=field_switches.get("other_remark", data.get("other_remark", False)),
+            flexible_time_slot=field_switches.get("flexible_time_slot", data.get("flexible_time_slot", False)),
         )
         db.session.add(form)
         db.session.flush()
@@ -2065,7 +2067,7 @@ def edit_form(form_id, data):
 
         switches = _extract_field_switches(data)
 
-        for key in ["email", "parental_form", "address", "medical", "allergy", "other_remark"]:
+        for key in ["email", "parental_form", "address", "medical", "allergy", "other_remark", "flexible_time_slot"]:
             if key in switches:
                 setattr(form, key, switches[key])
 

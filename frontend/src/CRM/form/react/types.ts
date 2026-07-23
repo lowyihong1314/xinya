@@ -68,6 +68,7 @@ export type FormFieldSwitches = {
   medical?: boolean;
   allergy?: boolean;
   other_remark?: boolean;
+  flexible_time_slot?: boolean;
 };
 
 export type FormMemberTimeSlot = {
@@ -166,6 +167,7 @@ export type FormRecord = {
   medical?: boolean;
   allergy?: boolean;
   other_remark?: boolean;
+  flexible_time_slot?: boolean;
 };
 
 export type FormDetailResponse = {
@@ -192,6 +194,7 @@ export type FormCreatePayload = {
   medical?: boolean;
   allergy?: boolean;
   other_remark?: boolean;
+  flexible_time_slot?: boolean;
   extra_fields_config: Array<{
     label: string;
     field_type: string;

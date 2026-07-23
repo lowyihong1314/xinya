@@ -68,6 +68,8 @@ class RegisForm(db.Model):
     medical = db.Column(db.Boolean, nullable=False, default=False)
     allergy = db.Column(db.Boolean, nullable=False, default=False)
     other_remark = db.Column(db.Boolean, nullable=False, default=False)
+    # 弹性参加时段：打钩后报名前端才渲染时段选择；不打钩则不渲染，默认全选所有时段。
+    flexible_time_slot = db.Column(db.Boolean, nullable=False, default=False)
 
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
 
@@ -117,6 +119,7 @@ class RegisForm(db.Model):
             "medical": bool(self.medical),
             "allergy": bool(self.allergy),
             "other_remark": bool(self.other_remark),
+            "flexible_time_slot": bool(self.flexible_time_slot),
         }
 
     def to_dict(self, is_public=False):

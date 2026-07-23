@@ -50,6 +50,7 @@ export type PublicForm = {
   medical?: boolean;
   allergy?: boolean;
   other_remark?: boolean;
+  flexible_time_slot?: boolean;
   field_switches?: Record<string, boolean>;
   fees?: PublicFee[];
   extra_field_configs?: PublicExtraFieldConfig[];
