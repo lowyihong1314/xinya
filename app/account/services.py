@@ -2,6 +2,7 @@ import io
 import json
 import mimetypes
 import os
+import re
 import urllib.error
 import urllib.request
 import uuid
@@ -37,6 +38,10 @@ READ_BILL_PARSE_TEXT_URL = os.environ.get(
 READ_BILL_ALLOWED_MODELS = {"auto", "byteplus", "local"}
 READ_BILL_DEFAULT_MODEL = os.environ.get("READ_BILL_DEFAULT_MODEL", "auto").strip().lower()
 READ_BILL_IMAGE_EXTENSIONS = {".jpg", ".jpeg", ".png", ".webp", ".bmp", ".tif", ".tiff"}
+
+
+class ReadBillAuthError(ValidationError):
+    """远程 AI fillin 服务返回 401（未授权）时抛出，用于触发本地 OCR 回退。"""
 CLAIM_EDIT_FIELD_LABELS = {
     "applicant_name": "申请人",
     "request_date": "日期",
@@ -185,6 +190,8 @@ def _request_read_bill_upload(filename, mimetype, content, form_fields):
             error_payload = json.loads(response_text)
         except Exception:
             error_payload = None
+        if exc.code == 401:
+            raise ReadBillAuthError(_extract_read_bill_error(error_payload, "AI fillin 未授权（401）")) from exc
         raise ValidationError(_extract_read_bill_error(error_payload, f"AI fillin 失败（{exc.code}）")) from exc
     except urllib.error.URLError as exc:
         raise ValidationError(f"AI fillin 服务暂时无法连接：{exc.reason}") from exc
@@ -226,6 +233,8 @@ def _request_read_bill_parse_text(text, form_fields):
             error_payload = json.loads(response_text)
         except Exception:
             error_payload = None
+        if exc.code == 401:
+            raise ReadBillAuthError(_extract_read_bill_error(error_payload, "AI fillin 未授权（401）")) from exc
         raise ValidationError(_extract_read_bill_error(error_payload, f"AI fillin 失败（{exc.code}）")) from exc
     except urllib.error.URLError as exc:
         raise ValidationError(f"AI fillin 服务暂时无法连接：{exc.reason}") from exc
@@ -310,11 +319,22 @@ def read_bill_from_file(uploaded_file, model=None, debug=None, bypass=None):
 
     form_fields = _build_read_bill_fields(selected_model, debug, bypass)
 
+    try:
+        return _remote_read_bill(content, filename, uploaded_file.mimetype, is_pdf, form_fields)
+    except ReadBillAuthError:
+        # 远程 AI fillin 服务返回 401（未授权）→ 自动回退到本机 tesseract OCR。
+        return _local_read_bill(content, filename, uploaded_file.mimetype, is_pdf)
+
+
+def _remote_read_bill(content, filename, mimetype, is_pdf, form_fields):
+    # 远程 AI fillin 调用逻辑（未改动）——仅被上层包了一层 401 回退。
     if is_pdf:
         pdf_text = _extract_pdf_text(content)
         if pdf_text:
             try:
                 return _request_read_bill_parse_text(pdf_text, form_fields)
+            except ReadBillAuthError:
+                raise
             except ValidationError:
                 pass
 
@@ -322,7 +342,142 @@ def read_bill_from_file(uploaded_file, model=None, debug=None, bypass=None):
         image_filename = f"{os.path.splitext(filename)[0] or 'receipt'}.jpg"
         return _request_read_bill_upload(image_filename, "image/jpeg", image_content, form_fields)
 
-    return _request_read_bill_upload(filename, uploaded_file.mimetype, content, form_fields)
+    return _request_read_bill_upload(filename, mimetype, content, form_fields)
+
+
+# =========================
+# 本地 OCR 回退（tesseract）
+# =========================
+def _local_read_bill(content, filename, mimetype, is_pdf):
+    del filename, mimetype
+    try:
+        import pytesseract
+        from PIL import Image
+    except Exception as exc:  # noqa: BLE001
+        raise ValidationError("本地 OCR 不可用（未安装 tesseract / pytesseract）") from exc
+
+    image_bytes = _render_pdf_first_page_to_jpeg(content) if is_pdf else content
+    try:
+        image = Image.open(io.BytesIO(image_bytes)).convert("RGB")
+    except Exception as exc:  # noqa: BLE001
+        raise ValidationError("本地 OCR 无法读取图片") from exc
+
+    try:
+        text = pytesseract.image_to_string(image, lang="eng+chi_sim")
+    except Exception as exc:  # noqa: BLE001
+        raise ValidationError(f"本地 OCR 识别失败：{exc}") from exc
+
+    data = _parse_receipt_text_local(text)
+    return {
+        "success": True,
+        "data": data,
+        "meta": {
+            "source": "local_ocr_fallback",
+            "requestedModel": "local",
+            "needsReview": True,
+            "reviewReasons": ["远程 AI 服务未授权(401)，已使用本地 OCR 回退，请核对金额/日期/商家。"],
+        },
+    }
+
+
+_MONEY_RE = re.compile(r"(?:RM|MYR)?\s*([0-9][0-9,]*\.[0-9]{2})", re.IGNORECASE)
+_TOTAL_HINT_RE = re.compile(r"(grand\s*total|total|amount\s*due|amount|nett?|balance)", re.IGNORECASE)
+_DATE_DMY_RE = re.compile(r"\b(\d{1,2})[/\-.](\d{1,2})[/\-.](\d{2,4})\b")
+_DATE_YMD_RE = re.compile(r"\b(\d{4})[/\-.](\d{1,2})[/\-.](\d{1,2})\b")
+_TIME_RE = re.compile(r"\b(\d{1,2}):(\d{2})(?::\d{2})?\s*([AaPp][Mm])?\b")
+_PHONE_HINT_RE = re.compile(r"(?:tel|phone|h\s*/?\s*p|hp|fax|contact)[:.\s]*([+0-9][0-9\s\-]{6,})", re.IGNORECASE)
+_PHONE_BARE_RE = re.compile(r"\b(0\d{1,2}[-\s]?\d{3,4}[-\s]?\d{3,4})\b")
+_RECEIPT_NO_RE = re.compile(r"(?:receipt|invoice|bill|ref|doc)\s*(?:no|number|#|:)[:.#\s]*([A-Za-z0-9\-/]+)", re.IGNORECASE)
+
+
+def _normalize_local_date(day, month, year):
+    try:
+        d, m, y = int(day), int(month), int(year)
+    except (TypeError, ValueError):
+        return ""
+    if y < 100:
+        y += 2000
+    if not (1 <= m <= 12 and 1 <= d <= 31 and 2000 <= y <= 2100):
+        return ""
+    return f"{y:04d}-{m:02d}-{d:02d}"
+
+
+def _parse_receipt_text_local(text):
+    lines = [ln.strip() for ln in (text or "").splitlines() if ln.strip()]
+
+    # 商家名：第一条“像名字”的行（含字母、不是纯数字/符号）。
+    merchant_name = ""
+    for ln in lines[:6]:
+        letters = sum(ch.isalpha() for ch in ln)
+        if letters >= 3 and not _DATE_DMY_RE.search(ln) and not _DATE_YMD_RE.search(ln):
+            merchant_name = ln
+            break
+
+    # 金额：优先取含 TOTAL 等关键词的行里的钱数；否则取全文最大的钱数。
+    total_amount = ""
+    hinted = []
+    for ln in lines:
+        if _TOTAL_HINT_RE.search(ln) and not re.search(r"sub\s*total", ln, re.IGNORECASE):
+            hinted.extend(_MONEY_RE.findall(ln))
+    candidates = hinted or _MONEY_RE.findall(text or "")
+    money_values = []
+    for raw in candidates:
+        try:
+            money_values.append(float(raw.replace(",", "")))
+        except ValueError:
+            continue
+    if money_values:
+        total_amount = f"{max(money_values):.2f}"
+
+    # 日期
+    receipt_date = ""
+    ymd = _DATE_YMD_RE.search(text or "")
+    if ymd:
+        receipt_date = _normalize_local_date(ymd.group(3), ymd.group(2), ymd.group(1))
+    if not receipt_date:
+        dmy = _DATE_DMY_RE.search(text or "")
+        if dmy:
+            receipt_date = _normalize_local_date(dmy.group(1), dmy.group(2), dmy.group(3))
+
+    # 日期时间（日期 + 首个时间）
+    purchase_datetime = ""
+    if receipt_date:
+        tm = _TIME_RE.search(text or "")
+        if tm:
+            hour = int(tm.group(1))
+            minute = tm.group(2)
+            meridiem = (tm.group(3) or "").lower()
+            if meridiem == "pm" and hour < 12:
+                hour += 12
+            elif meridiem == "am" and hour == 12:
+                hour = 0
+            if 0 <= hour <= 23:
+                purchase_datetime = f"{receipt_date}T{hour:02d}:{minute}"
+
+    # 电话
+    merchant_phone = ""
+    phone_hit = _PHONE_HINT_RE.search(text or "") or _PHONE_BARE_RE.search(text or "")
+    if phone_hit:
+        merchant_phone = re.sub(r"\s+", " ", phone_hit.group(1)).strip()
+
+    # 收据号
+    receipt_number = ""
+    rn = _RECEIPT_NO_RE.search(text or "")
+    if rn:
+        receipt_number = rn.group(1).strip()
+
+    return {
+        "merchant_name": merchant_name,
+        "merchant_address": "",
+        "merchant_phone": merchant_phone,
+        "receipt_number": receipt_number,
+        "total_amount": total_amount,
+        "receipt_date": receipt_date,
+        "purchase_datetime": purchase_datetime,
+        "description": "",
+        "receipt_items": [],
+        "ocr_text": (text or "").strip()[:2000],
+    }
 
 
 def _parse_json_text(raw_value, field_name):
