@@ -2,7 +2,7 @@ from flask import Blueprint, request
 from flask_login import login_required
 
 from app.auth import permission_required
-from . import services
+from . import agent, services
 
 
 event_data_bp = Blueprint("event_data", __name__)
@@ -141,6 +141,21 @@ def event_budget_update(item_id):
 @permission_required("event_edit")
 def event_budget_delete(item_id):
     return services.delete_event_budget(item_id)
+
+
+# -------- 活动 AI Agent --------
+@event_data_bp.route("/agent/chat/<int:event_id>", methods=["POST"])
+@login_required
+@permission_required("event_edit")
+def event_agent_chat(event_id):
+    return agent.event_agent_chat(event_id, services.get_json_payload())
+
+
+@event_data_bp.route("/agent/apply/<int:event_id>", methods=["POST"])
+@login_required
+@permission_required("event_edit")
+def event_agent_apply(event_id):
+    return agent.apply_event_agent_plan(event_id, services.get_json_payload())
 
 
 @event_data_bp.route("/delete_event/<int:event_id>", methods=["DELETE"])

@@ -7,6 +7,7 @@ import { show_alert } from "../../../js/show_alert";
 import { openBrochurePreviewModal } from "../../../event/shared/brochurePreview";
 import { buildEventTypeChoices } from "../../../event/shared/eventTypes";
 import { TablePagination, usePagedRows } from "../../shared/TablePagination";
+import { EventAgentTab } from "./EventAgentTab";
 import { EventBudgetTab } from "./EventBudgetTab";
 import { EventCheckinTab } from "./EventCheckinTab";
 import { EventFlowTab } from "./EventFlowTab";
@@ -34,6 +35,7 @@ const TABS: { key: string; label: string; icon: string }[] = [
   { key: "flow", label: "流程", icon: "fa-solid fa-list-ol" },
   { key: "tasks", label: "待办", icon: "fa-solid fa-list-check" },
   { key: "budget", label: "预算", icon: "fa-solid fa-coins" },
+  { key: "agent", label: "AI Agent", icon: "fa-solid fa-robot" },
 ];
 
 function findEventForm(forms: FormRecord[], eventId: number): FormRecord | null {
@@ -319,6 +321,8 @@ export function EventTableView(props: {
                 <EventTaskTab eventId={event.id} canEdit={canEditEvent} isMobile={isMobile} />
               ) : props.activeTab === "budget" ? (
                 <EventBudgetTab eventId={event.id} canEdit={canEditEvent} isMobile={isMobile} />
+              ) : props.activeTab === "agent" ? (
+                <EventAgentTab eventId={event.id} canEdit={canEditEvent} isMobile={isMobile} />
               ) : (
                 <div style={detailGridStyle(isMobile)}>
                   <EditableFact label="活动名称" value={event.event_name || ""} editable={canEditEvent} onSave={(v) => props.onUpdateEvent({ event_name: v })} />
