@@ -9,6 +9,7 @@ from decimal import Decimal, InvalidOperation
 
 from flask import abort, jsonify, render_template, request, send_file
 from flask_login import current_user
+from sqlalchemy.orm.attributes import flag_modified
 from werkzeug.utils import secure_filename
 
 from app.timezone import malaysia_now, malaysia_now_naive
@@ -2698,22 +2699,26 @@ def mark_form_attendance_member(attendance_id, data):
     present = bool(data.get("present"))
 
     snap = att.snapshot_json if isinstance(att.snapshot_json, dict) else {}
-    roster = list(snap.get("roster") or [])
     now_iso = malaysia_now_naive().isoformat()
+    # 关键：不要原地改 att.snapshot_json 里的 dict —— db.JSON 默认不追踪就地突变，
+    # 会导致 UPDATE 不发出（点了不报错但没存进库）。这里每条都拷成新 dict 再整块替换，
+    # 并用 flag_modified 强制标脏，双保险。
     entry_out = None
-    for entry in roster:
-        if entry.get("id") == member_id:
-            entry["present"] = present
-            entry["checked_at"] = now_iso if present else None
-            entry_out = entry
-            break
+    new_roster = []
+    for entry in (snap.get("roster") or []):
+        e = dict(entry)
+        if e.get("id") == member_id:
+            e["present"] = present
+            e["checked_at"] = now_iso if present else None
+            entry_out = e
+        new_roster.append(e)
     if entry_out is None:
         return jsonify({"status": "error", "message": "该成员不在此点名名单内"}), 404
 
-    # 重新赋一个新 dict，确保 SQLAlchemy 侦测到 JSON 变更。
-    att.snapshot_json = {**snap, "roster": roster}
-    att.present_count = sum(1 for e in roster if e.get("present"))
-    att.total_count = len(roster)
+    att.snapshot_json = {**snap, "roster": new_roster}
+    flag_modified(att, "snapshot_json")
+    att.present_count = sum(1 for e in new_roster if e.get("present"))
+    att.total_count = len(new_roster)
     db.session.commit()
 
     delta = {
