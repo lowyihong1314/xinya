@@ -89,6 +89,7 @@ export function RegisterPage({ formId }: { formId: number }) {
     const age = calcAgeFromIc(p.nric);
     const needConsent = Boolean(form.parental_form) && age != null && age < 19;
     return {
+      force: Boolean(form.force),
       name: p.name.trim(),
       name_cn: p.name_cn.trim(),
       nric: p.nric.replace(/\D/g, ""),

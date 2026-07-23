@@ -135,26 +135,35 @@ def _is_form_full(form):
     return form.max_members is not None and _form_member_count(form) >= form.max_members
 
 
+def _is_truthy(raw_value):
+    if isinstance(raw_value, str):
+        return raw_value.strip().lower() in {"1", "true", "yes", "on"}
+    return bool(raw_value)
+
+
 def _is_form_registration_closed(form):
     # 综合判定：手动终止 / 已过期 / 名额已满 都视为截止。
     return bool(form.closed_manually) or _is_form_expired(form) or _is_form_full(form)
 
 
-def _inject_public_registration_status(form_data, form):
-    form_data["registration_closed"] = _is_form_registration_closed(form)
+def _inject_public_registration_status(form_data, form, force=False):
+    # force（强制报名链接）绕过全部截止判定，让公开报名页正常开放。
+    form_data["registration_closed"] = False if force else _is_form_registration_closed(form)
     form_data["closed_manually"] = bool(form.closed_manually)
     form_data["is_full"] = _is_form_full(form)
     form_data["member_count"] = _form_member_count(form)
     form_data["max_members"] = form.max_members
+    form_data["force"] = bool(force)
     return form_data
 
 
 def form_index_response(form_id):
     form = RegisForm.query.get_or_404(form_id)
+    force = _is_truthy(request.args.get("force"))
     custom_tpl = f"form/custom_template/{form_id}.html"
     tpl_path = os.path.join(PROJECT_ROOT, "templates", custom_tpl)
     form_data = form.to_dict_event(is_public=True)
-    _inject_public_registration_status(form_data, form)
+    _inject_public_registration_status(form_data, form, force=force)
 
     if os.path.exists(tpl_path):
         return render_template(custom_tpl, form=form_data)
@@ -1039,10 +1048,13 @@ def _get_or_create_member_by_nric(nric, *, name_nric=None):
 
 def register_member(form_id, data):
     form = RegisForm.query.get_or_404(form_id)
-    if bool(form.closed_manually) or _is_form_expired(form):
-        return jsonify({"status": "error", "message": "报名已截止，无法继续报名"}), 400
-    if _is_form_full(form):
-        return jsonify({"status": "error", "message": "报名人数已满，无法继续报名"}), 400
+    # force（强制报名链接）绕过手动终止 / 已过期 / 名额已满 全部截止判定。
+    force = _is_truthy(data.get("force"))
+    if not force:
+        if bool(form.closed_manually) or _is_form_expired(form):
+            return jsonify({"status": "error", "message": "报名已截止，无法继续报名"}), 400
+        if _is_form_full(form):
+            return jsonify({"status": "error", "message": "报名人数已满，无法继续报名"}), 400
 
     for field in ["name", "name_cn", "nric", "phone", "gender"]:
         if not data.get(field):

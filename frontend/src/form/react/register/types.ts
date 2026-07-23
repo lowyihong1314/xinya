@@ -55,6 +55,7 @@ export type PublicForm = {
   extra_field_configs?: PublicExtraFieldConfig[];
   events?: PublicEvent[];
   registration_closed?: boolean;
+  force?: boolean;
   is_full?: boolean;
   max_members?: number | null;
   member_count?: number;

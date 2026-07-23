@@ -654,6 +654,7 @@ function RegistrationStatusControl({
 
 function PublicTab({ formId, isMobile }: { formId: number; isMobile: boolean }) {
   const registerUrl = `${PUBLIC_ORIGIN}/api/form/index/${formId}`;
+  const forceRegisterUrl = `${registerUrl}?force=true`;
   const payUrl = `${PUBLIC_ORIGIN}/api/form/pay_register/${formId}`;
   const [copied, setCopied] = useState("");
   async function copy(url: string, label: string) {
@@ -671,6 +672,12 @@ function PublicTab({ formId, isMobile }: { formId: number; isMobile: boolean }) 
             <button type="button" style={btnStyle} onClick={() => void copy(registerUrl, "报名页")}>复制链接</button>
           </div>
           <div style={urlBoxStyle}>{registerUrl}</div>
+          <div style={publicHeadStyle}>
+            <span style={sectionTitleStyle}>强制报名链接</span>
+            <button type="button" style={btnStyle} onClick={() => void copy(forceRegisterUrl, "强制报名")}>复制链接</button>
+          </div>
+          <div style={urlBoxStyle}>{forceRegisterUrl}</div>
+          <div style={mutedStyle}>强制报名链接会绕过截止日期、名额已满与手动终止，请仅在需要补录时私下发送。</div>
           <PhoneFrame src={registerUrl} title="公开报名页" />
         </div>
         <div style={sectionBodyStyle}>
