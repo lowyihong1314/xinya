@@ -269,7 +269,10 @@ function PortalView({ nric, formId }: { nric: string; formId: number }) {
   return (
     <div style={{ paddingBottom: 74 }}>
       <div style={portalHeadStyle}>
-        <div style={eyebrowStyle}>{data.member_name || ""}</div>
+        <div style={memberLineStyle}>
+          <span style={memberNameStyle}>{data.member_name || "成员"}</span>
+          {data.member_data?.group ? <span style={groupChipStyle}>{data.member_data.group}</span> : null}
+        </div>
         <h1 style={titleStyle}>{ev?.event_name || data.form_title || "活动"}</h1>
       </div>
 
@@ -354,7 +357,10 @@ const brandStyle: CSSProperties = { fontSize: 13, fontWeight: 800, letterSpacing
 const cardStyle: CSSProperties = { background: "rgba(255,255,255,0.92)", border: "1px solid #e5e7eb", borderRadius: 16, padding: "20px", boxShadow: "0 12px 40px rgba(30,41,59,0.10)", display: "grid", gap: 12 };
 const headRowStyle: CSSProperties = { display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: 10 };
 const titleStyle: CSSProperties = { margin: 0, fontSize: 22, fontWeight: 800 };
-const portalHeadStyle: CSSProperties = { padding: "2px 4px", display: "grid", gap: 2 };
+const portalHeadStyle: CSSProperties = { padding: "2px 4px", display: "grid", gap: 4 };
+const memberLineStyle: CSSProperties = { display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" };
+const memberNameStyle: CSSProperties = { fontSize: 15, fontWeight: 800, color: "#4338ca" };
+const groupChipStyle: CSSProperties = { padding: "2px 10px", borderRadius: 999, background: "#eef2ff", color: "#4338ca", fontSize: 12.5, fontWeight: 700, border: "1px solid #c7d2fe" };
 const eyebrowStyle: CSSProperties = { fontSize: 12, fontWeight: 700, color: "#6366f1", letterSpacing: "0.08em" };
 const mutedStyle: CSSProperties = { fontSize: 13, color: "#6b7280", lineHeight: 1.5 };
 const inputStyle: CSSProperties = { width: "100%", padding: "12px 14px", borderRadius: 12, border: "1px solid #d1d5db", fontSize: 16, boxSizing: "border-box", letterSpacing: "0.04em" };
