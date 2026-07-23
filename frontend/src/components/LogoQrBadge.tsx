@@ -6,9 +6,12 @@ import QRCode from "qrcode";
 export function LogoQrBadge({ logoSrc = "/static/images/logo/logo.png" }: { logoSrc?: string }) {
   const [open, setOpen] = useState(false);
   const [qr, setQr] = useState("");
+  const [qrUrl, setQrUrl] = useState("");
 
   function show() {
-    const url = window.location.href;
+    // 二维码只编码基础地址，不带任何 query args（如 nric / form_id / token）
+    const url = window.location.origin + window.location.pathname;
+    setQrUrl(url);
     setOpen(true);
     setQr("");
     void QRCode.toDataURL(url, { width: 360, margin: 1, color: { dark: "#0f172a", light: "#ffffff" } })
@@ -26,7 +29,7 @@ export function LogoQrBadge({ logoSrc = "/static/images/logo/logo.png" }: { logo
           <div style={cardStyle} onClick={(e) => e.stopPropagation()}>
             <div style={titleStyle}>扫码打开此页</div>
             {qr ? <img src={qr} alt="二维码" style={qrImgStyle} /> : <div style={{ padding: 60, color: "#64748b" }}>生成中…</div>}
-            <div style={urlStyle}>{window.location.href}</div>
+            <div style={urlStyle}>{qrUrl}</div>
             <button type="button" style={closeStyle} onClick={() => setOpen(false)}>关闭</button>
           </div>
         </div>
