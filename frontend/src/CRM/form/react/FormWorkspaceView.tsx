@@ -1008,39 +1008,37 @@ function PublicTab({ formId, isMobile }: { formId: number; isMobile: boolean }) 
     setCopied(ok ? `${label}链接已复制` : "复制失败，请手动复制");
     window.setTimeout(() => setCopied(""), 2200);
   }
+  const [previewUrl, setPreviewUrl] = useState(registerUrl);
+  const entries: { label: string; url: string; note?: string }[] = [
+    { label: "报名页", url: registerUrl },
+    { label: "强制报名链接", url: forceRegisterUrl, note: "绕过截止日期、名额已满与手动终止，仅在需要补录时私下发送。" },
+    { label: "付款页", url: payUrl },
+    { label: "成员终端（公共入口）", url: memberUrl, note: "报名者凭 NRIC 进入，查看自己的报名资料与活动流程。仅在活动结束时间之前开放。" },
+  ];
   return (
     <div style={sectionBodyStyle}>
       {copied ? <div style={successStyle}>{copied}</div> : null}
-      <div style={publicGridStyle(isMobile)}>
-        <div style={sectionBodyStyle}>
-          <div style={publicHeadStyle}>
-            <span style={sectionTitleStyle}>报名页</span>
-            <button type="button" style={btnStyle} onClick={() => void copy(registerUrl, "报名页")}>复制链接</button>
-          </div>
-          <div style={urlBoxStyle}>{registerUrl}</div>
-          <div style={publicHeadStyle}>
-            <span style={sectionTitleStyle}>强制报名链接</span>
-            <button type="button" style={btnStyle} onClick={() => void copy(forceRegisterUrl, "强制报名")}>复制链接</button>
-          </div>
-          <div style={urlBoxStyle}>{forceRegisterUrl}</div>
-          <div style={mutedStyle}>强制报名链接会绕过截止日期、名额已满与手动终止，请仅在需要补录时私下发送。</div>
-          <PhoneFrame src={registerUrl} title="公开报名页" />
+      <div style={publicSplitStyle(isMobile)}>
+        <div style={publicLinksStyle}>
+          {entries.map((e) => {
+            const active = previewUrl === e.url;
+            return (
+              <div key={e.label} style={linkCardStyle(active)}>
+                <div style={publicHeadStyle}>
+                  <span style={sectionTitleStyle}>{e.label}</span>
+                  <div style={{ display: "flex", gap: 6, flexShrink: 0 }}>
+                    <button type="button" style={active ? primaryButtonStyle : btnStyle} onClick={() => setPreviewUrl(e.url)}>预览</button>
+                    <button type="button" style={btnStyle} onClick={() => void copy(e.url, e.label)}>复制链接</button>
+                  </div>
+                </div>
+                <div style={urlBoxStyle}>{e.url}</div>
+                {e.note ? <div style={mutedStyle}>{e.note}</div> : null}
+              </div>
+            );
+          })}
         </div>
-        <div style={sectionBodyStyle}>
-          <div style={publicHeadStyle}>
-            <span style={sectionTitleStyle}>付款页</span>
-            <button type="button" style={btnStyle} onClick={() => void copy(payUrl, "付款页")}>复制链接</button>
-          </div>
-          <div style={urlBoxStyle}>{payUrl}</div>
-          <PhoneFrame src={payUrl} title="公开付款页" />
-
-          <div style={publicHeadStyle}>
-            <span style={sectionTitleStyle}>成员终端（公共入口）</span>
-            <button type="button" style={btnStyle} onClick={() => void copy(memberUrl, "成员终端")}>复制链接</button>
-          </div>
-          <div style={urlBoxStyle}>{memberUrl}</div>
-          <div style={mutedStyle}>报名者凭 NRIC 进入，查看自己的报名资料与活动流程。仅在活动结束时间之前开放。</div>
-          <PhoneFrame src={memberUrl} title="成员终端" />
+        <div style={publicPreviewStyle(isMobile)}>
+          <PhoneFrame src={previewUrl} title="预览" />
         </div>
       </div>
     </div>
@@ -1389,6 +1387,16 @@ const eventOpenHintStyle: CSSProperties = { fontSize: "12px", fontWeight: 700, c
 const urlBoxStyle: CSSProperties = { padding: "10px 12px", borderRadius: "8px", background: "var(--x-color-panel-alt)", border: "1px solid var(--x-color-line-soft)", fontFamily: "var(--x-font-mono)", fontSize: "12.5px", wordBreak: "break-all" };
 function publicGridStyle(isMobile: boolean): CSSProperties {
   return { display: "grid", gridTemplateColumns: isMobile ? "1fr" : "repeat(2, minmax(0, 1fr))", gap: "14px" };
+}
+function publicSplitStyle(isMobile: boolean): CSSProperties {
+  return { display: "flex", flexDirection: isMobile ? "column" : "row", gap: "16px", alignItems: "flex-start" };
+}
+const publicLinksStyle: CSSProperties = { flex: 1, minWidth: 0, display: "grid", gap: "10px", alignContent: "start" };
+function publicPreviewStyle(isMobile: boolean): CSSProperties {
+  return { width: isMobile ? "100%" : "min(380px, 42vw)", flexShrink: 0, position: isMobile ? "static" : "sticky", top: "8px", alignSelf: isMobile ? "stretch" : "flex-start" };
+}
+function linkCardStyle(active: boolean): CSSProperties {
+  return { display: "grid", gap: "6px", padding: "12px", borderRadius: "10px", background: "var(--x-color-panel-alt)", border: active ? "1px solid var(--x-color-accent-border)" : "1px solid var(--x-color-line-soft)", boxShadow: active ? "0 0 0 2px var(--x-color-accent-tint)" : "none" };
 }
 const publicHeadStyle: CSSProperties = { display: "flex", alignItems: "center", justifyContent: "space-between", gap: "10px", flexWrap: "wrap" };
 

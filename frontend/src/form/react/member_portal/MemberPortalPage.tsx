@@ -32,6 +32,7 @@ type DetailResponse = {
   form_title?: string | null;
   event?: PortalEvent;
   event_name?: string | null;
+  poster_url?: string | null;
   flow?: FlowItem[];
   member_data?: MemberData | null;
 };
@@ -213,6 +214,8 @@ function PortalView({ nric, formId }: { nric: string; formId: number }) {
   const [loading, setLoading] = useState(true);
   const [data, setData] = useState<DetailResponse | null>(null);
   const [error, setError] = useState("");
+  const [tab, setTab] = useState<"event" | "info" | "flow">("event");
+  const [posterOk, setPosterOk] = useState(true);
 
   useEffect(() => {
     let active = true;
@@ -256,53 +259,76 @@ function PortalView({ nric, formId }: { nric: string; formId: number }) {
   }
 
   const memberFacts = data.member_data ? buildMemberFacts(data.member_data) : [];
+  const posterUrl = posterOk && data.poster_url ? data.poster_url : null;
+  const tabs: { key: "event" | "info" | "flow"; label: string }[] = [
+    { key: "event", label: "活动" },
+    { key: "info", label: "信息" },
+    { key: "flow", label: "流程" },
+  ];
 
   return (
-    <>
+    <div style={{ paddingBottom: 74 }}>
       <div style={portalHeadStyle}>
         <div style={eyebrowStyle}>{data.member_name || ""}</div>
         <h1 style={titleStyle}>{ev?.event_name || data.form_title || "活动"}</h1>
       </div>
 
-      <section style={cardStyle}>
-        <h2 style={sectionTitleStyle}>活动信息</h2>
-        <div style={factGridStyle}>
-          {ev?.datetime ? <Fact label="时间" value={`${fmtDateTime(ev.datetime)}${ev.end_datetime ? ` — ${fmtDateTime(ev.end_datetime)}` : ""}`} /> : null}
-          {ev?.location ? <Fact label="地点" value={ev.location} /> : null}
-          {ev?.target ? <Fact label="对象" value={ev.target} /> : null}
-          {ev?.type ? <Fact label="类型" value={ev.type} /> : null}
-        </div>
-        {ev?.purpose ? <div style={purposeStyle}>{ev.purpose}</div> : null}
-      </section>
+      {tab === "event" ? (
+        <section style={cardStyle}>
+          {posterUrl ? <img src={posterUrl} alt="活动海报" style={posterStyle} onError={() => setPosterOk(false)} /> : null}
+          <div style={factGridStyle}>
+            {ev?.datetime ? <Fact label="时间" value={`${fmtDateTime(ev.datetime)}${ev.end_datetime ? ` — ${fmtDateTime(ev.end_datetime)}` : ""}`} /> : null}
+            {ev?.location ? <Fact label="地点" value={ev.location} /> : null}
+            {ev?.target ? <Fact label="对象" value={ev.target} /> : null}
+            {ev?.type ? <Fact label="类型" value={ev.type} /> : null}
+          </div>
+          {ev?.purpose ? <div style={purposeStyle}>{ev.purpose}</div> : null}
+          {!posterUrl && !ev?.datetime && !ev?.location && !ev?.purpose ? <div style={hintStyle}>暂无活动信息。</div> : null}
+        </section>
+      ) : null}
 
-      {memberFacts.length ? (
+      {tab === "info" ? (
         <section style={cardStyle}>
           <h2 style={sectionTitleStyle}>我的报名资料</h2>
-          <div style={factGridStyle}>
-            {memberFacts.map((f) => <Fact key={f.label} label={f.label} value={f.value} />)}
+          {memberFacts.length ? (
+            <div style={factGridStyle}>
+              {memberFacts.map((f) => <Fact key={f.label} label={f.label} value={f.value} />)}
+            </div>
+          ) : <div style={hintStyle}>暂无报名资料。</div>}
+        </section>
+      ) : null}
+
+      {tab === "flow" ? (
+        <section style={cardStyle}>
+          <h2 style={sectionTitleStyle}>流程</h2>
+          {!flowRows.length ? <div style={hintStyle}>暂无流程。</div> : null}
+          <div style={{ display: "grid", gap: 8 }}>
+            {flowRows.map(({ start, end, item }, i) => (
+              <div key={i} style={flowRowStyle}>
+                <div style={timeBadgeStyle}>
+                  <span style={{ fontWeight: 800 }}>{clock(start)}</span>
+                  <span style={{ fontSize: 11, opacity: 0.7 }}>{clock(end)}</span>
+                </div>
+                <div style={{ minWidth: 0 }}>
+                  <div style={{ fontWeight: 700 }}>{item.title || "（环节）"}</div>
+                  {item.detail ? <div style={mutedStyle}>{item.detail}</div> : null}
+                </div>
+              </div>
+            ))}
           </div>
         </section>
       ) : null}
 
-      <section style={cardStyle}>
-        <h2 style={sectionTitleStyle}>流程</h2>
-        {!flowRows.length ? <div style={hintStyle}>暂无流程。</div> : null}
-        <div style={{ display: "grid", gap: 8 }}>
-          {flowRows.map(({ start, end, item }, i) => (
-            <div key={i} style={flowRowStyle}>
-              <div style={timeBadgeStyle}>
-                <span style={{ fontWeight: 800 }}>{clock(start)}</span>
-                <span style={{ fontSize: 11, opacity: 0.7 }}>{clock(end)}</span>
-              </div>
-              <div style={{ minWidth: 0 }}>
-                <div style={{ fontWeight: 700 }}>{item.title || "（环节）"}</div>
-                {item.detail ? <div style={mutedStyle}>{item.detail}</div> : null}
-              </div>
-            </div>
+      <nav style={tabBarStyle}>
+        <div style={tabBarInnerStyle}>
+          {tabs.map((t) => (
+            <button key={t.key} type="button" style={tab === t.key ? tabBtnActiveStyle : tabBtnStyle} onClick={() => setTab(t.key)}>
+              {t.label}
+            </button>
           ))}
         </div>
-      </section>
-    </>
+      </nav>
+    </div>
   );
 }
 
@@ -353,3 +379,8 @@ const purposeStyle: CSSProperties = { fontSize: 13.5, lineHeight: 1.6, color: "#
 const sectionTitleStyle: CSSProperties = { margin: "6px 0 0", fontSize: 15, fontWeight: 800 };
 const flowRowStyle: CSSProperties = { display: "flex", gap: 12, alignItems: "center", padding: "10px 12px", borderRadius: 10, border: "1px solid #eef2f7", background: "#fff" };
 const timeBadgeStyle: CSSProperties = { flexShrink: 0, display: "grid", justifyItems: "center", minWidth: 54, padding: "6px 8px", borderRadius: 8, background: "#eef2ff", color: "#4338ca", lineHeight: 1.2 };
+const posterStyle: CSSProperties = { width: "100%", borderRadius: 12, display: "block", marginBottom: 4, objectFit: "cover" };
+const tabBarStyle: CSSProperties = { position: "fixed", left: 0, right: 0, bottom: 0, zIndex: 50, background: "rgba(255,255,255,0.97)", borderTop: "1px solid #e5e7eb", boxShadow: "0 -6px 24px rgba(30,41,59,0.08)", backdropFilter: "blur(8px)" };
+const tabBarInnerStyle: CSSProperties = { width: "min(560px, 100%)", margin: "0 auto", display: "grid", gridTemplateColumns: "1fr 1fr 1fr" };
+const tabBtnStyle: CSSProperties = { padding: "13px 8px", border: "none", borderTop: "3px solid transparent", background: "transparent", color: "#6b7280", fontWeight: 700, fontSize: 14, cursor: "pointer" };
+const tabBtnActiveStyle: CSSProperties = { ...tabBtnStyle, color: "#6366f1", borderTop: "3px solid #6366f1", background: "rgba(99,102,241,0.06)" };

@@ -2701,8 +2701,9 @@ def _portal_event_dict(event):
 
 
 def _portal_form_event(form):
+    # 与海报接口 event_poster_response 保持一致，取最后一个关联活动。
     events = form.events or []
-    return events[0] if events else None
+    return events[-1] if events else None
 
 
 def member_portal_page():
@@ -2807,11 +2808,15 @@ def member_portal_detail(nric, form_id):
             "extra_fields": ld.get("extra_fields", []),
         }
 
+    img = getattr(event, "event_image", None)
+    poster_url = f"/api/form/event_poster/{form.id}/cache" if (img and getattr(img, "id", None)) else None
+
     return jsonify({
         "status": "success",
         "member_name": (latest.name_cn or latest.name) if latest else None,
         "form_title": form.title,
         "event": _portal_event_dict(event),
+        "poster_url": poster_url,
         "flow": flow,
         "member_data": member_data,
     })
