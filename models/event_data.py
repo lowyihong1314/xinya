@@ -259,6 +259,74 @@ class EventFlowData(db.Model):
         }
 
 
+class EventTaskData(db.Model):
+    """活动待办事项（准备清单）。"""
+    __tablename__ = "event_task_data"
+
+    id = db.Column(db.Integer, primary_key=True, autoincrement=True)
+    event_id = db.Column(
+        db.Integer,
+        db.ForeignKey("event_data.id", ondelete="CASCADE", onupdate="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    event = db.relationship("EventData", backref=db.backref("event_tasks", passive_deletes=True))
+
+    no = db.Column(db.Integer, nullable=False, default=0, index=True)
+    title = db.Column(db.String(255), nullable=False)
+    assignee = db.Column(db.String(120), nullable=True)   # 负责人（自由文本）
+    status = db.Column(db.String(20), nullable=False, default="todo")  # todo / doing / done
+    due_date = db.Column(db.Date, nullable=True)
+    remark = db.Column(db.Text, nullable=True)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+
+    def to_dict(self):
+        return {
+            "id": self.id,
+            "event_id": self.event_id,
+            "no": self.no,
+            "title": self.title,
+            "assignee": self.assignee,
+            "status": self.status,
+            "due_date": self.due_date.isoformat() if self.due_date else None,
+            "remark": self.remark,
+            "created_at": self.created_at.isoformat() if self.created_at else None,
+        }
+
+
+class EventBudgetData(db.Model):
+    """活动财政预算明细。"""
+    __tablename__ = "event_budget_data"
+
+    id = db.Column(db.Integer, primary_key=True, autoincrement=True)
+    event_id = db.Column(
+        db.Integer,
+        db.ForeignKey("event_data.id", ondelete="CASCADE", onupdate="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    event = db.relationship("EventData", backref=db.backref("event_budgets", passive_deletes=True))
+
+    no = db.Column(db.Integer, nullable=False, default=0, index=True)
+    category = db.Column(db.String(255), nullable=False)
+    budget_amount = db.Column(db.Numeric(10, 2), nullable=False, default=0)
+    actual_amount = db.Column(db.Numeric(10, 2), nullable=True)
+    remark = db.Column(db.Text, nullable=True)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+
+    def to_dict(self):
+        return {
+            "id": self.id,
+            "event_id": self.event_id,
+            "no": self.no,
+            "category": self.category,
+            "budget_amount": float(self.budget_amount or 0),
+            "actual_amount": float(self.actual_amount) if self.actual_amount is not None else None,
+            "remark": self.remark,
+            "created_at": self.created_at.isoformat() if self.created_at else None,
+        }
+
+
 class EventFile(db.Model):
     __tablename__ = "event_file"
 

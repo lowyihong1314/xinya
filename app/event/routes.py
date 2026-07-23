@@ -89,6 +89,60 @@ def event_flow_reorder():
     return services.reorder_event_flow(services.get_json_payload())
 
 
+# -------- 活动待办事项 --------
+@event_data_bp.route("/event_task/list/<int:event_id>", methods=["GET"])
+def event_task_list(event_id):
+    return services.event_task_list_response(event_id)
+
+
+@event_data_bp.route("/event_task/new", methods=["POST"])
+@login_required
+@permission_required("event_edit")
+def event_task_new():
+    return services.create_event_task(services.get_json_payload())
+
+
+@event_data_bp.route("/event_task/update/<int:task_id>", methods=["POST"])
+@login_required
+@permission_required("event_edit")
+def event_task_update(task_id):
+    return services.update_event_task(task_id, services.get_json_payload())
+
+
+@event_data_bp.route("/event_task/delete/<int:task_id>", methods=["POST"])
+@login_required
+@permission_required("event_edit")
+def event_task_delete(task_id):
+    return services.delete_event_task(task_id)
+
+
+# -------- 活动财政预算 --------
+@event_data_bp.route("/event_budget/list/<int:event_id>", methods=["GET"])
+def event_budget_list(event_id):
+    return services.event_budget_list_response(event_id)
+
+
+@event_data_bp.route("/event_budget/new", methods=["POST"])
+@login_required
+@permission_required("event_edit")
+def event_budget_new():
+    return services.create_event_budget(services.get_json_payload())
+
+
+@event_data_bp.route("/event_budget/update/<int:item_id>", methods=["POST"])
+@login_required
+@permission_required("event_edit")
+def event_budget_update(item_id):
+    return services.update_event_budget(item_id, services.get_json_payload())
+
+
+@event_data_bp.route("/event_budget/delete/<int:item_id>", methods=["POST"])
+@login_required
+@permission_required("event_edit")
+def event_budget_delete(item_id):
+    return services.delete_event_budget(item_id)
+
+
 @event_data_bp.route("/delete_event/<int:event_id>", methods=["DELETE"])
 @login_required
 @permission_required("event_edit")

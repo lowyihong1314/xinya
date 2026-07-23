@@ -7,8 +7,10 @@ import { show_alert } from "../../../js/show_alert";
 import { openBrochurePreviewModal } from "../../../event/shared/brochurePreview";
 import { buildEventTypeChoices } from "../../../event/shared/eventTypes";
 import { TablePagination, usePagedRows } from "../../shared/TablePagination";
+import { EventBudgetTab } from "./EventBudgetTab";
 import { EventCheckinTab } from "./EventCheckinTab";
 import { EventFlowTab } from "./EventFlowTab";
+import { EventTaskTab } from "./EventTaskTab";
 import type { EventCreatePayload, EventMutationPayload, EventRecord } from "./types";
 import type { FormRecord } from "../../form/react/types";
 
@@ -30,6 +32,8 @@ const TABS: { key: string; label: string; icon: string }[] = [
   { key: "form", label: "关联报名表", icon: "fa-solid fa-clipboard-list" },
   { key: "checkin", label: "签到", icon: "fa-solid fa-clipboard-check" },
   { key: "flow", label: "流程", icon: "fa-solid fa-list-ol" },
+  { key: "tasks", label: "待办", icon: "fa-solid fa-list-check" },
+  { key: "budget", label: "预算", icon: "fa-solid fa-coins" },
 ];
 
 function findEventForm(forms: FormRecord[], eventId: number): FormRecord | null {
@@ -311,6 +315,10 @@ export function EventTableView(props: {
                 <EventCheckinTab eventId={event.id} isMobile={isMobile} />
               ) : props.activeTab === "flow" ? (
                 <EventFlowTab eventId={event.id} canEdit={canEditEvent} />
+              ) : props.activeTab === "tasks" ? (
+                <EventTaskTab eventId={event.id} canEdit={canEditEvent} isMobile={isMobile} />
+              ) : props.activeTab === "budget" ? (
+                <EventBudgetTab eventId={event.id} canEdit={canEditEvent} isMobile={isMobile} />
               ) : (
                 <div style={detailGridStyle(isMobile)}>
                   <EditableFact label="活动名称" value={event.event_name || ""} editable={canEditEvent} onSave={(v) => props.onUpdateEvent({ event_name: v })} />
