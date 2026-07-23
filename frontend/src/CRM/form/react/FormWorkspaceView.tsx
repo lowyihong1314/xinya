@@ -632,7 +632,6 @@ function GroupsTab({
   onApplyAiPlan: (plan: GroupPlan) => void;
 }) {
   const [dragOver, setDragOver] = useState<number | "ungrouped" | null>(null);
-  const [aiOpen, setAiOpen] = useState(false);
   const members = form.members || [];
 
   const sortedGroups = useMemo(
@@ -652,22 +651,6 @@ function GroupsTab({
     });
     return map;
   }, [members, sortedGroups]);
-
-  const memberInfo = useMemo(
-    () =>
-      members.map((m) => {
-        const gid = (m.group_id ?? null) as number | null;
-        const g = gid != null ? sortedGroups.find((x) => x.id === gid) : null;
-        return {
-          id: m.id,
-          name: m.name_cn || m.name || `成员#${m.id}`,
-          age: calcAgeFromNric(m.nric),
-          gender: String(m.gender || ""),
-          group: g ? g.name : "未分组",
-        };
-      }),
-    [members, sortedGroups],
-  );
 
   if (!canViewMemberDetail) {
     return <div style={emptyInlineStyle}>需要 member_detail 或 form_edit 权限才能查看和管理分组。</div>;
@@ -691,25 +674,11 @@ function GroupsTab({
   return (
     <div style={sectionBodyStyle}>
       {canEdit ? (
-        <div style={{ ...memberToolbarStyle, justifyContent: "flex-start", gap: "8px" }}>
+        <div style={memberToolbarStyle}>
           <button type="button" style={primaryButtonStyle} onClick={() => onCreateGroup(nextGroupName(sortedGroups))}>
             + 新建小组
           </button>
-          <button type="button" style={aiButtonStyle} onClick={() => setAiOpen(true)}>
-            <i className="fa-solid fa-wand-magic-sparkles" style={{ marginRight: 6 }} />AI 分组
-          </button>
         </div>
-      ) : null}
-
-      {aiOpen ? (
-        <GroupAiChatModal
-          formId={form.id}
-          isMobile={isMobile}
-          memberInfo={memberInfo}
-          onClose={() => setAiOpen(false)}
-          onAiChat={onAiChat}
-          onApplyAiPlan={onApplyAiPlan}
-        />
       ) : null}
 
       <div style={mutedStyle}>
@@ -856,257 +825,6 @@ function MemberChipCard({
           ))}
         </select>
       ) : null}
-    </div>
-  );
-}
-
-type ChatEntry = { role: "user" | "assistant"; content: string; plan?: GroupPlan | null };
-
-// 隐藏回复里的 ```json 方案块（已用「应用」按钮呈现），只显示说明文字。
-function stripPlanJson(text: string): string {
-  const cleaned = (text || "").replace(/```(?:json)?\s*\{[\s\S]*?\}\s*```/g, "").trim();
-  return cleaned || (text || "").trim();
-}
-
-type MemberInfo = { id: number; name: string; age: number | null; gender: string; group: string };
-
-function planHasContent(plan?: GroupPlan | null): boolean {
-  return !!plan && !!(plan.groups?.length || plan.rename?.length || plan.delete?.length);
-}
-
-function GroupAiChatModal({
-  formId,
-  isMobile,
-  memberInfo,
-  onClose,
-  onAiChat,
-  onApplyAiPlan,
-}: {
-  formId: number;
-  isMobile: boolean;
-  memberInfo: MemberInfo[];
-  onClose: () => void;
-  onAiChat: (messages: GroupChatMessage[]) => Promise<{ job_id?: string; room?: string }>;
-  onApplyAiPlan: (plan: GroupPlan) => void;
-}) {
-  const storageKey = `xinya_group_chat_${formId}`;
-  const [entries, setEntries] = useState<ChatEntry[]>(() => {
-    try {
-      const raw = localStorage.getItem(storageKey);
-      const parsed = raw ? JSON.parse(raw) : [];
-      return Array.isArray(parsed) ? parsed : [];
-    } catch {
-      return [];
-    }
-  });
-  const [input, setInput] = useState("");
-  const [pending, setPending] = useState(false);
-  const [error, setError] = useState("");
-  const [copied, setCopied] = useState("");
-  const listRef = useRef<HTMLDivElement>(null);
-  const pendingJobRef = useRef<string | null>(null);
-
-  useEffect(() => {
-    try {
-      localStorage.setItem(storageKey, JSON.stringify(entries));
-    } catch {
-      /* localStorage 不可用时忽略 */
-    }
-  }, [entries, storageKey]);
-
-  useEffect(() => {
-    listRef.current?.scrollTo({ top: listRef.current.scrollHeight });
-  }, [entries, pending]);
-
-  // 结果经 socket 事件 ai_group_reply 推回（后端子进程算完 → Redis → socket）。
-  useEffect(() => {
-    const origin = API_BASE || (typeof window !== "undefined" ? window.location.origin : "");
-    const room = `ai_group_${formId}`;
-    const socket: Socket = io(origin, { withCredentials: true, transports: ["websocket", "polling"] });
-    const join = () => socket.emit("join_room", { room });
-    socket.on("connect", join);
-    if (socket.connected) join();
-    socket.on(
-      "ai_group_reply",
-      (payload: { job_id?: string; status?: string; reply?: string; plan?: GroupPlan | null; message?: string }) => {
-        if (!payload || payload.job_id !== pendingJobRef.current) return;
-        pendingJobRef.current = null;
-        setPending(false);
-        if (payload.status === "error") {
-          setError(payload.message || "AI 请求失败");
-        } else {
-          setEntries((cur) => [...cur, { role: "assistant", content: payload.reply || "（无回复）", plan: payload.plan || null }]);
-        }
-      },
-    );
-    return () => {
-      socket.off("ai_group_reply");
-      socket.off("connect", join);
-      socket.disconnect();
-    };
-  }, [formId]);
-
-  async function send(text: string) {
-    const content = text.trim();
-    if (!content || pending) return;
-    setError("");
-    const history: GroupChatMessage[] = [
-      ...entries.map((e) => ({ role: e.role, content: e.content })),
-      { role: "user", content },
-    ];
-    setEntries((cur) => [...cur, { role: "user", content }]);
-    setInput("");
-    setPending(true);
-    try {
-      const res = await onAiChat(history);
-      if (!res.job_id) throw new Error("AI 任务未启动");
-      const jobId = res.job_id;
-      pendingJobRef.current = jobId;
-      window.setTimeout(() => {
-        if (pendingJobRef.current === jobId) {
-          pendingJobRef.current = null;
-          setPending(false);
-          setError("AI 响应超时，请重试");
-        }
-      }, 120000);
-    } catch (err) {
-      setPending(false);
-      setError(err instanceof Error ? err.message : "AI 请求失败");
-    }
-  }
-
-  function clearChat() {
-    setEntries([]);
-    try {
-      localStorage.removeItem(storageKey);
-    } catch {
-      /* ignore */
-    }
-  }
-
-  async function copyText(text: string, label: string) {
-    const ok = await copyToClipboard(text);
-    setCopied(ok ? `已复制${label}` : "复制失败");
-    window.setTimeout(() => setCopied(""), 1600);
-  }
-
-  const copyAll = () =>
-    copyText(memberInfo.map((m) => `${m.name} ${m.age ?? "—"} ${m.gender || "—"} ${m.group}`).join("\n"), "全部名单");
-
-  const examples = ["现在各组几个人？姓黄的有几个？", "把所有人按年龄平衡分成 3 组"];
-
-  const chatPane = (
-    <div style={chatPaneStyle}>
-      <div ref={listRef} style={chatListStyle}>
-        {!entries.length ? (
-          <div style={chatEmptyStyle}>
-            <div style={{ marginBottom: 8 }}>试试这样问 / 说：</div>
-            {examples.map((ex) => (
-              <button key={ex} type="button" style={chatExampleStyle} onClick={() => void send(ex)}>{ex}</button>
-            ))}
-          </div>
-        ) : null}
-        {entries.map((entry, i) => (
-          <div key={i} style={entry.role === "user" ? chatRowUserStyle : chatRowAiStyle}>
-            <div style={entry.role === "user" ? chatBubbleUserStyle : chatBubbleAiStyle}>
-              <div style={{ whiteSpace: "pre-wrap", wordBreak: "break-word" }}>{stripPlanJson(entry.content)}</div>
-              {planHasContent(entry.plan) ? (
-                <div style={planBoxStyle}>
-                  <div style={{ fontWeight: 700, marginBottom: 4 }}>建议操作</div>
-                  {entry.plan!.groups?.length ? (
-                    <div style={planLineStyle}>分组：{entry.plan!.groups.map((g) => `${g.name}(${g.member_ids.length})`).join(" · ")}</div>
-                  ) : null}
-                  {entry.plan!.rename?.length ? (
-                    <div style={planLineStyle}>改名：{entry.plan!.rename.map((r) => `${r.from}→${r.to}`).join("、")}</div>
-                  ) : null}
-                  {entry.plan!.delete?.length ? (
-                    <div style={planLineStyle}>删除：{entry.plan!.delete.join("、")}</div>
-                  ) : null}
-                  <button
-                    type="button"
-                    style={{ ...primaryButtonStyle, marginTop: 8 }}
-                    onClick={() => { onApplyAiPlan(entry.plan as GroupPlan); onClose(); }}
-                  >
-                    应用此操作
-                  </button>
-                </div>
-              ) : null}
-            </div>
-          </div>
-        ))}
-        {pending ? <div style={chatRowAiStyle}><div style={chatBubbleAiStyle}>思考中…（AI 处理完会自动回到这里）</div></div> : null}
-      </div>
-      {error ? <div style={{ ...errorStyle, margin: "8px 12px 0" }}>{error}</div> : null}
-      <div style={chatInputBarStyle}>
-        <textarea
-          value={input}
-          onChange={(e) => setInput(e.target.value)}
-          onKeyDown={(e) => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); void send(input); } }}
-          placeholder="输入要求，例如：各组年龄平衡；把 陈莹莹/赖思琦 放同一组…（Enter 发送，Shift+Enter 换行）"
-          style={chatTextareaStyle}
-          rows={isMobile ? 2 : 3}
-        />
-        <button
-          type="button"
-          style={{ ...primaryButtonStyle, opacity: pending || !input.trim() ? 0.6 : 1 }}
-          disabled={pending || !input.trim()}
-          onClick={() => void send(input)}
-        >
-          发送
-        </button>
-      </div>
-    </div>
-  );
-
-  const memberPane = (
-    <aside style={memberPanelStyle(isMobile)}>
-      <div style={memberPanelHeadStyle}>
-        <span style={{ fontWeight: 700, fontSize: 13 }}>成员信息（{memberInfo.length}）</span>
-        <button type="button" className="fw-btn" onClick={() => void copyAll()}>复制全部</button>
-      </div>
-      {copied ? <div style={{ ...successStyle, margin: "6px 10px 0" }}>{copied}</div> : null}
-      <div style={memberPanelListStyle}>
-        {!memberInfo.length ? <div style={emptyInlineStyle}>暂无成员。</div> : null}
-        {memberInfo.map((m) => (
-          <button key={m.id} type="button" style={memberInfoRowStyle} title="点击复制姓名" onClick={() => void copyText(m.name, `「${m.name}」`)}>
-            <span style={{ fontWeight: 600, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{m.name}</span>
-            <span style={memberInfoMetaStyle}>{m.age != null ? `${m.age}岁` : "—"} · {m.gender || "—"} · {m.group}</span>
-          </button>
-        ))}
-      </div>
-    </aside>
-  );
-
-  return (
-    <div style={modalOverlayStyle} onClick={onClose}>
-      <div
-        style={{
-          ...modalStyle,
-          width: isMobile ? "100%" : "min(920px, 100%)",
-          height: isMobile ? "92vh" : "min(82vh, 760px)",
-          display: "flex",
-          flexDirection: "column",
-          padding: 0,
-          gap: 0,
-        }}
-        onClick={(e) => e.stopPropagation()}
-      >
-        <div style={{ ...publicHeadStyle, padding: "14px 16px", borderBottom: "1px solid var(--x-color-line-soft)" }}>
-          <div>
-            <h4 style={panelTitleStyle}>
-              <i className="fa-solid fa-wand-magic-sparkles" style={{ marginRight: 6, color: "var(--x-color-accent)" }} />AI 分组助手
-            </h4>
-            <div style={mutedStyle}>可提问或下达分组/改名/删组要求；只发送姓名/年龄/性别/组名。</div>
-          </div>
-          <div style={{ display: "flex", gap: 8 }}>
-            {entries.length ? <button type="button" style={btnStyle} onClick={clearChat}>清空对话</button> : null}
-            <button type="button" style={btnStyle} onClick={onClose}>关闭</button>
-          </div>
-        </div>
-        <div style={{ display: "flex", flexDirection: isMobile ? "column" : "row", flex: 1, minHeight: 0 }}>
-          {isMobile ? (<>{memberPane}{chatPane}</>) : (<>{chatPane}{memberPane}</>)}
-        </div>
-      </div>
     </div>
   );
 }
