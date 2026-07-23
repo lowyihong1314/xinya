@@ -21,3 +21,4 @@ pypdfium2
 psutil
 pillow-heif
 PyMuPDF
+onvif_zeep
