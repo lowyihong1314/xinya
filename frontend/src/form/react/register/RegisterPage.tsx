@@ -10,7 +10,15 @@ import { clearDraft, loadDraft, pendingConsentPeople, saveDraft, type DraftPerso
 import { emptyPerson, type Person, type PublicExtraFieldConfig, type PublicForm } from "./types";
 
 type Step = "detail" | "choose" | "form" | "consent" | "done";
-type ConsentItem = { nric: string; name: string; name_cn: string; phone: string; done: boolean };
+type ConsentItem = {
+  nric: string;
+  name: string;
+  name_cn: string;
+  phone: string;
+  done: boolean;
+  parent_1?: string;
+  parent_1_phone?: string;
+};
 
 declare global {
   interface Window {
@@ -53,6 +61,7 @@ function personWithInheritedContact(prev?: Person): Person {
   if (!prev) return base;
   return {
     ...base,
+    address: prev.address,
     parent_1: prev.parent_1,
     parent_1_phone: prev.parent_1_phone,
     parent_2: prev.parent_2,
@@ -147,13 +156,23 @@ export function RegisterPage({ formId }: { formId: number }) {
           needConsent: Boolean(payload.parental_form_required),
           submitted: true,
           consentDone: false,
+          parent_1: payload.parent_1 ?? undefined,
+          parent_1_phone: payload.parent_1_phone ?? undefined,
         });
       }
       saveDraft(formId, { path, people: draftPeople, updatedAt: Date.now() });
 
       const queue: ConsentItem[] = draftPeople
         .filter((d) => d.needConsent)
-        .map((d) => ({ nric: d.nric, name: d.name, name_cn: d.name_cn, phone: d.phone, done: false }));
+        .map((d) => ({
+          nric: d.nric,
+          name: d.name,
+          name_cn: d.name_cn,
+          phone: d.phone,
+          parent_1: d.parent_1,
+          parent_1_phone: d.parent_1_phone,
+          done: false,
+        }));
       if (queue.length) {
         setConsentQueue(queue);
         setStep("consent");
@@ -180,7 +199,10 @@ export function RegisterPage({ formId }: { formId: number }) {
   async function handleConsent(item: ConsentItem) {
     setError("");
     const person: Person = { ...emptyPerson(), nric: item.nric, name: item.name, name_cn: item.name_cn, phone: item.phone };
-    const prefill = { child_cn: item.name_cn, child_en: item.name, child_nric: item.nric, child_phone: item.phone };
+    // 家长同意书里家长一般就是紧急联络人：用报名时填的紧急联络人预填家长称呼/电话（仍可改）。
+    const prefill: Record<string, unknown> = { child_cn: item.name_cn, child_en: item.name, child_nric: item.nric, child_phone: item.phone };
+    if (item.parent_1) prefill.parent_cn = item.parent_1;
+    if (item.parent_1_phone) prefill.parent_phone = item.parent_1_phone;
     try {
       const parental = await collectParentalConsent(form, person, prefill);
       if (!parental) return; // 用户取消
@@ -193,7 +215,15 @@ export function RegisterPage({ formId }: { formId: number }) {
 
   function resumeConsent() {
     setConsentQueue(
-      resumePending.map((d) => ({ nric: d.nric, name: d.name, name_cn: d.name_cn, phone: d.phone, done: false })),
+      resumePending.map((d) => ({
+        nric: d.nric,
+        name: d.name,
+        name_cn: d.name_cn,
+        phone: d.phone,
+        parent_1: d.parent_1,
+        parent_1_phone: d.parent_1_phone,
+        done: false,
+      })),
     );
     setResumePending([]);
     setStep("consent");

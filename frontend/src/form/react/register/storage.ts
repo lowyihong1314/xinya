@@ -8,6 +8,9 @@ export type DraftPerson = {
   needConsent: boolean;
   submitted: boolean;
   consentDone: boolean;
+  // 紧急联络人（家长同意书里家长通常就是紧急联络人，用来预填）。
+  parent_1?: string;
+  parent_1_phone?: string;
 };
 
 export type RegisterDraft = {
