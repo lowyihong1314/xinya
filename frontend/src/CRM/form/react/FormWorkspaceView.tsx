@@ -576,7 +576,7 @@ function MembersTab({
                     <td onClick={(e) => e.stopPropagation()}>
                       <div style={actionsCellStyle}>
                         {member.nric ? (
-                          <button type="button" className="fw-btn" onClick={() => setPortalMember(member)} title="成员通道预览">通道</button>
+                          <button type="button" className="fw-btn" onClick={() => setPortalMember(member)} title="成员终端预览">终端</button>
                         ) : null}
                         {parentalFormEnabled || member.parental_data ? (
                           <button type="button" className="fw-btn" onClick={() => onOpenParental(member)}>
@@ -612,11 +612,12 @@ function MemberPortalPreviewModal({ formId, member, isMobile, onClose }: { formI
     window.setTimeout(() => setCopied(""), 2000);
   }
   return (
-    <div style={modalOverlayStyle} onClick={onClose}>
-      <div style={{ ...modalStyle, width: "min(440px, 100%)" }} onClick={(e) => e.stopPropagation()}>
+    <div style={drawerOverlayStyle} onClick={onClose}>
+      <style>{`@keyframes memberDrawerIn { from { transform: translateX(100%); } to { transform: translateX(0); } }`}</style>
+      <aside style={drawerPanelStyle(isMobile)} onClick={(e) => e.stopPropagation()}>
         <div style={publicHeadStyle}>
           <div style={{ minWidth: 0 }}>
-            <h4 style={panelTitleStyle}>{member.name_cn || member.name || `成员 #${member.id}`} · 成员通道</h4>
+            <h4 style={panelTitleStyle}>{member.name_cn || member.name || `成员 #${member.id}`} · 成员终端</h4>
             <div style={mutedStyle}>手机预览，或复制链接发给该成员</div>
           </div>
           <div style={{ display: "flex", gap: 8, flexShrink: 0 }}>
@@ -626,10 +627,27 @@ function MemberPortalPreviewModal({ formId, member, isMobile, onClose }: { formI
         </div>
         {copied ? <div style={successStyle}>{copied}</div> : null}
         <div style={urlBoxStyle}>{url}</div>
-        <PhoneFrame src={url} title="成员通道预览" />
-      </div>
+        <PhoneFrame src={url} title="成员终端预览" />
+      </aside>
     </div>
   );
+}
+
+const drawerOverlayStyle: CSSProperties = { position: "fixed", inset: 0, zIndex: 1000, background: "rgba(15, 23, 42, 0.45)", display: "flex", justifyContent: "flex-end" };
+function drawerPanelStyle(isMobile: boolean): CSSProperties {
+  return {
+    width: isMobile ? "100%" : "min(440px, 100%)",
+    height: "100%",
+    overflowY: "auto",
+    background: "var(--x-color-panel)",
+    borderLeft: "1px solid var(--x-color-line)",
+    boxShadow: "-24px 0 60px var(--x-color-shadow)",
+    padding: "18px",
+    display: "grid",
+    gap: "12px",
+    alignContent: "start",
+    animation: "memberDrawerIn 0.22s ease",
+  };
 }
 
 // 自动命名：取现有「小组N」里最大的 N + 1（重命名过的组不影响编号）。

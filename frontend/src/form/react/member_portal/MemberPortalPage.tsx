@@ -53,7 +53,7 @@ export function MemberPortalPage() {
   return (
     <div style={pageStyle}>
       <div style={shellStyle}>
-        <div style={brandStyle}>成员通道</div>
+        <div style={brandStyle}>成员终端</div>
         {!nric ? (
           <NricGate />
         ) : formId ? (
@@ -117,12 +117,21 @@ function ParticipatedView({ nric }: { nric: string }) {
           <h1 style={titleStyle}>{name ? `${name}，你好` : "你参加的活动"}</h1>
           <p style={mutedStyle}>点选活动进入。仅在活动结束时间之前开放。</p>
         </div>
-        <button type="button" style={ghostStyle} onClick={() => setQuery({})}>换 NRIC</button>
       </div>
 
       {loading ? <div style={hintStyle}>加载中…</div> : null}
-      {error ? <div style={errBoxStyle}>{error}</div> : null}
-      {!loading && !error && !events.length ? <div style={hintStyle}>没有找到这个 NRIC 的报名记录。</div> : null}
+      {error ? (
+        <div>
+          <div style={errBoxStyle}>{error}</div>
+          <button type="button" style={{ ...ghostStyle, marginTop: 10 }} onClick={() => setQuery({})}>换 NRIC</button>
+        </div>
+      ) : null}
+      {!loading && !error && !events.length ? (
+        <div style={{ display: "grid", gap: 10, justifyItems: "center" }}>
+          <div style={hintStyle}>没有找到这个 NRIC 的报名记录。</div>
+          <button type="button" style={ghostStyle} onClick={() => setQuery({})}>换 NRIC</button>
+        </div>
+      ) : null}
 
       <div style={{ display: "grid", gap: 10 }}>
         {events.map((ev) => {
@@ -213,7 +222,6 @@ function PortalView({ nric, formId }: { nric: string; formId: number }) {
           <div style={eyebrowStyle}>{data.member_name || ""}</div>
           <h1 style={titleStyle}>{ev?.event_name || data.form_title || "活动"}</h1>
         </div>
-        <button type="button" style={ghostStyle} onClick={() => setQuery({ nric })}>其他活动</button>
       </div>
 
       <div style={factGridStyle}>
@@ -256,7 +264,6 @@ function BackBar({ nric }: { nric: string }) {
   return (
     <div style={{ marginTop: 14, display: "flex", gap: 8 }}>
       <button type="button" style={ghostStyle} onClick={() => setQuery({ nric })}>← 我的活动</button>
-      <button type="button" style={ghostStyle} onClick={() => setQuery({})}>换 NRIC</button>
     </div>
   );
 }
