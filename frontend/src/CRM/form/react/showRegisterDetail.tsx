@@ -563,7 +563,7 @@ function MemberDetailModal({
             }
           >
             <ReadItem label="Email" value={member.email} />
-            <ReadItem label="可用时段" value={availableSlots.length ? `${availableSlots.length} 个时段` : "-"} />
+            <ReadItem label="参加时段" value={availableSlots.length ? `${availableSlots.length} 个时段` : "-"} />
             {parental ? (
               <div style={compactGridStyle}>
                 <ReadItem label="家长中文名" value={parental.parent_cn} />
@@ -580,7 +580,7 @@ function MemberDetailModal({
         </div>
 
         {availableSlots.length ? (
-          <Section title="可用时间段">
+          <Section title="参加时段">
             <div style={timelineListStyle}>
               {availableSlots.map((slot, index) => (
                 <div key={`${slot.datetime || "start"}-${slot.end_datetime || "end"}-${index}`} style={timeSlotStyle}>
@@ -687,6 +687,12 @@ function formatTimeSlot(slot: FormMemberTimeSlot) {
   const end = formatDateTime(slot.end_datetime);
   if (start === "-" && end === "-") {
     return "-";
+  }
+  if (end === "-") return start;
+  if (start === "-") return end;
+  // 同一天只显示一次日期：2026-01-01 08:00 - 12:00
+  if (start.slice(0, 10) === end.slice(0, 10)) {
+    return `${start} - ${end.slice(11)}`;
   }
   return `${start} -> ${end}`;
 }
