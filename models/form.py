@@ -40,6 +40,8 @@ class RegisForm(db.Model):
 
     title = db.Column(db.String(255), nullable=False)
     detail = db.Column(db.Text, nullable=False)
+    # 活动注意事项（在成员终端信息页显示）
+    notes = db.Column(db.Text, nullable=True)
 
     fees = db.relationship(
         "RegistrationFee",
@@ -123,6 +125,7 @@ class RegisForm(db.Model):
             "id": self.id,
             "title": self.title,
             "detail": self.detail,
+            "notes": self.notes,
             "fees": [f.to_dict() for f in self.fees],
             "expired": self.expired.isoformat() if self.expired else None,
             "created_at": self.created_at.isoformat() if self.created_at else None,

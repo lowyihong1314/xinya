@@ -140,6 +140,7 @@ export type FormRecord = {
   id: number;
   title: string;
   detail?: string;
+  notes?: string;
   expired?: string;
   created_at?: string;
   member_count?: number;

@@ -1066,6 +1066,7 @@ function SettingsTab({
         />
       </div>
       <EditableFact label="详情" value={form.detail || ""} kind="textarea" editable={canEdit} onSave={(v) => onPatchForm({ detail: v })} />
+      <EditableFact label="注意事项（成员终端信息页显示）" value={form.notes || ""} kind="textarea" editable={canEdit} onSave={(v) => onPatchForm({ notes: v })} />
 
       <div style={sectionTitleStyle}>报名状态</div>
       <RegistrationStatusControl form={form} canEdit={canEdit} onPatchForm={onPatchForm} />

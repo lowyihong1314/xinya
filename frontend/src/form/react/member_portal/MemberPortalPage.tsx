@@ -37,6 +37,7 @@ type DetailResponse = {
   message?: string;
   member_name?: string | null;
   form_title?: string | null;
+  notes?: string | null;
   event?: PortalEvent;
   event_name?: string | null;
   poster_url?: string | null;
@@ -350,14 +351,21 @@ function PortalView({ nric, formId }: { nric: string; formId: number }) {
       ) : null}
 
       {tab === "info" ? (
-        <section style={cardStyle}>
-          <h2 style={sectionTitleStyle}>我的报名资料</h2>
-          {memberFacts.length ? (
-            <div style={factGridStyle}>
-              {memberFacts.map((f) => <Fact key={f.label} label={f.label} value={f.value} />)}
-            </div>
-          ) : <div style={hintStyle}>暂无报名资料。</div>}
-        </section>
+        <>
+          <section style={cardStyle}>
+            <h2 style={sectionTitleStyle}>我的报名资料</h2>
+            {memberFacts.length ? (
+              <div style={factGridStyle}>
+                {memberFacts.map((f) => <Fact key={f.label} label={f.label} value={f.value} />)}
+              </div>
+            ) : <div style={hintStyle}>暂无报名资料。</div>}
+          </section>
+          {data.notes && data.notes.trim() ? (
+            <section style={cardStyle}>
+              <div style={notesTextStyle}>{data.notes}</div>
+            </section>
+          ) : null}
+        </>
       ) : null}
 
       {tab === "flow" ? (
@@ -434,6 +442,7 @@ const disabledStyle: CSSProperties = { opacity: 0.5, cursor: "not-allowed" };
 const ghostStyle: CSSProperties = { padding: "7px 12px", borderRadius: 999, border: "1px solid #d1d5db", background: "#fff", color: "#374151", fontWeight: 700, fontSize: 12.5, cursor: "pointer", whiteSpace: "nowrap" };
 const smallBtnStyle: CSSProperties = { padding: "7px 12px", borderRadius: 8, border: "1px solid #c7d2fe", background: "#eef2ff", color: "#4338ca", fontWeight: 700, fontSize: 13, cursor: "pointer" };
 const hintStyle: CSSProperties = { padding: 18, textAlign: "center", color: "#6b7280" };
+const notesTextStyle: CSSProperties = { whiteSpace: "pre-wrap", wordBreak: "break-word", fontSize: 14, lineHeight: 1.7, color: "#334155" };
 const errBoxStyle: CSSProperties = { padding: "12px 14px", borderRadius: 10, background: "#fef2f2", border: "1px solid #fecaca", color: "#b91c1c", fontSize: 13 };
 const closedBoxStyle: CSSProperties = { padding: "16px", borderRadius: 12, background: "#f3f4f6", border: "1px solid #e5e7eb", color: "#4b5563", textAlign: "center", fontWeight: 600 };
 const eventCardStyle: CSSProperties = { border: "1px solid #e5e7eb", borderRadius: 12, background: "#fff", overflow: "hidden" };

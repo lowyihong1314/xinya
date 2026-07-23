@@ -2043,6 +2043,8 @@ def edit_form(form_id, data):
             form.title = (data.get("title") or "").strip()
         if "detail" in data:
             form.detail = data.get("detail") or ""
+        if "notes" in data:
+            form.notes = (data.get("notes") or "").strip() or None
         if "expired" in data:
             expired = data.get("expired")
             if expired:
@@ -2848,6 +2850,7 @@ def member_portal_detail(nric, form_id):
         "status": "success",
         "member_name": (latest.name_cn or latest.name) if latest else None,
         "form_title": form.title,
+        "notes": form.notes or "",
         "event": _portal_event_dict(event),
         "poster_url": poster_url,
         "flow": flow,
