@@ -60,6 +60,7 @@ function normalizeFieldSwitches(form: FormRecord | null): FormRecord | null {
     medical: form.field_switches?.medical ?? Boolean(form.medical),
     allergy: form.field_switches?.allergy ?? Boolean(form.allergy),
     other_remark: form.field_switches?.other_remark ?? Boolean(form.other_remark),
+    flexible_time_slot: form.field_switches?.flexible_time_slot ?? Boolean(form.flexible_time_slot),
   };
 
   return {
