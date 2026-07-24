@@ -237,6 +237,8 @@ class EventFlowData(db.Model):
     detail = db.Column(db.Text, nullable=True)
     note = db.Column(db.Text, nullable=True)
     notice = db.Column(db.Text, nullable=True)
+    # 仅登陆可见：打钩后该环节对公开/终端隐藏，只有登陆用户能看到。
+    login_only = db.Column(db.Boolean, nullable=False, default=False)
 
     def to_dict(self):
         return {
@@ -250,6 +252,7 @@ class EventFlowData(db.Model):
             "detail": self.detail,
             "note": self.note,
             "notice": self.notice,
+            "login_only": bool(self.login_only),
 
             "creator_id": self.creator_id,
             "creator_name": getattr(self.creator, "display_name", None),

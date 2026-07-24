@@ -23,6 +23,9 @@ def ping():
 def get_event(event_id):
     event = EventData.query.get_or_404(event_id)
     data = event.to_dict_full()
+    # 公开接口：非登陆用户隐藏「仅登陆可见」的环节。
+    if not current_user.is_authenticated:
+        data["event_flows"] = [f for f in (data.get("event_flows") or []) if not f.get("login_only")]
     data["login"] = current_user.is_authenticated
     return jsonify({"status": "success", "data": data})
 

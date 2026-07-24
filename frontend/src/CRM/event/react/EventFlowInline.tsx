@@ -131,10 +131,16 @@ export function EventFlowInline({ detail, canEdit, isMobile }: { detail: EventDe
             </div>
             <div style={{ flex: 1, minWidth: 0, display: "grid", gap: 3 }}>
               {canEdit ? (
-                <input style={titleInputStyle} defaultValue={f.title || ""} placeholder="环节标题"
-                  onBlur={(ev) => { const v = ev.target.value.trim(); if (v !== (f.title || "")) void patch(f.id, { title: v }); }} />
+                <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+                  <input style={titleInputStyle} defaultValue={f.title || ""} placeholder="环节标题"
+                    onBlur={(ev) => { const v = ev.target.value.trim(); if (v !== (f.title || "")) void patch(f.id, { title: v }); }} />
+                  {f.login_only ? <span style={lockBadgeStyle} title="仅登陆可见">🔒</span> : null}
+                </div>
               ) : (
-                <span style={{ fontWeight: 700, fontSize: 14 }}>{f.title || "（未命名）"}</span>
+                <span style={{ fontWeight: 700, fontSize: 14 }}>
+                  {f.title || "（未命名）"}
+                  {f.login_only ? <span style={lockBadgeStyle} title="仅登陆可见">🔒</span> : null}
+                </span>
               )}
               {canEdit ? (
                 <input style={detailInputStyle} defaultValue={f.detail || ""} placeholder="详情 / 负责人"
@@ -148,6 +154,11 @@ export function EventFlowInline({ detail, canEdit, isMobile }: { detail: EventDe
                     onBlur={(ev) => { const v = ev.target.value.trim(); const n = v === "" ? 0 : Number(v); if (n !== (Number(f.minutes) || 0)) void patch(f.id, { minutes: n }); }} />
                   <span style={{ fontSize: 11, color: "var(--x-color-ink-muted)" }}>分</span>
                 </label>
+                <button type="button" style={f.login_only ? lockOnBtnStyle : iconBtnStyle}
+                  onClick={() => void patch(f.id, { login_only: !f.login_only })}
+                  title={f.login_only ? "仅登陆可见（点一下改回公开）" : "设为仅登陆可见（公开/终端将隐藏）"}>
+                  {f.login_only ? "🔒" : "🔓"}
+                </button>
                 <button type="button" style={iconBtnStyle} disabled={idx === 0} onClick={() => void move(idx, -1)} title="上移">↑</button>
                 <button type="button" style={iconBtnStyle} disabled={idx === rows.length - 1} onClick={() => void move(idx, 1)} title="下移">↓</button>
                 <button type="button" style={delBtnStyle} onClick={() => void remove(f.id)}>删</button>
@@ -179,6 +190,8 @@ const durWrapStyle: CSSProperties = { display: "inline-flex", alignItems: "cente
 const durInputStyle: CSSProperties = { width: "52px", padding: "5px 6px", borderRadius: "6px", border: "1px solid var(--x-color-line-soft)", background: "var(--x-color-panel-alt)", color: "var(--x-color-ink)", fontSize: "12.5px", textAlign: "right" };
 const durTextStyle: CSSProperties = { flexShrink: 0, fontSize: "12px", color: "var(--x-color-ink-muted)" };
 const iconBtnStyle: CSSProperties = { width: 28, height: 28, borderRadius: "6px", border: "1px solid var(--x-color-line)", background: "var(--x-color-panel)", color: "var(--x-color-ink)", cursor: "pointer", fontSize: "13px", lineHeight: 1 };
+const lockOnBtnStyle: CSSProperties = { width: 28, height: 28, borderRadius: "6px", border: "1px solid var(--x-color-accent-strong)", background: "var(--x-color-accent-tint)", color: "var(--x-color-accent-strong)", cursor: "pointer", fontSize: "13px", lineHeight: 1 };
+const lockBadgeStyle: CSSProperties = { fontSize: "11px", flexShrink: 0 };
 const delBtnStyle: CSSProperties = { padding: "5px 10px", borderRadius: "6px", border: "1px solid var(--x-color-danger-border)", background: "var(--x-color-danger-soft)", color: "var(--x-color-danger)", fontWeight: 700, fontSize: "12px", cursor: "pointer" };
 const emptyStyle: CSSProperties = { padding: "22px", borderRadius: "10px", border: "1px dashed var(--x-color-line)", textAlign: "center", color: "var(--x-color-ink-muted)" };
 const errorStyle: CSSProperties = { padding: "9px 12px", borderRadius: "8px", background: "var(--x-color-danger-soft)", border: "1px solid var(--x-color-danger-border)", color: "var(--x-color-danger)", fontSize: "13px" };

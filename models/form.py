@@ -183,6 +183,9 @@ class RegisForm(db.Model):
                     if flows:
                         ev_data["event_flows"] = []
                         for f in flows:
+                            # 公开表单里隐藏「仅登陆可见」的环节（不进公开报名/时段选择）。
+                            if is_public and getattr(f, "login_only", False):
+                                continue
                             if hasattr(f, "to_dict"):
                                 ev_data["event_flows"].append(f.to_dict())
                             else:

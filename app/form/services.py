@@ -2846,7 +2846,12 @@ def member_portal_detail(nric, form_id):
 
     latest = member.latest_data()
     flows = sorted(event.event_flows or [], key=lambda f: (f.no or 0, f.minutes or 0, f.id))
-    flow = [{"no": f.no, "minutes": f.minutes, "title": f.title, "detail": f.detail} for f in flows]
+    # 成员终端是公开入口（凭 NRIC，非登陆）：隐藏「仅登陆可见」的环节。
+    flow = [
+        {"no": f.no, "minutes": f.minutes, "title": f.title, "detail": f.detail}
+        for f in flows
+        if not f.login_only
+    ]
 
     # 成员自己的报名资料（本人凭 NRIC 进入，展示自己的信息）。
     member_data = None

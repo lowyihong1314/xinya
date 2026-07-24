@@ -431,7 +431,11 @@ def event_flow_list_response(event_id):
         .order_by(asc(EventFlowData.no), asc(EventFlowData.minutes), asc(EventFlowData.id))
         .all()
     )
-    return jsonify({"status": "success", "data": [flow.to_dict() for flow in flows]})
+    items = [flow.to_dict() for flow in flows]
+    # 此路由未登陆也可访问：非登陆用户隐藏「仅登陆可见」的环节。
+    if not current_user.is_authenticated:
+        items = [f for f in items if not f.get("login_only")]
+    return jsonify({"status": "success", "data": items})
 
 
 def create_event_flow(data):
@@ -479,6 +483,8 @@ def update_event_flow(flow_id, data):
         flow.note = (data.get("note") or "").strip() or None
     if "notice" in data:
         flow.notice = (data.get("notice") or "").strip() or None
+    if "login_only" in data:
+        flow.login_only = bool(data.get("login_only"))
 
     db.session.commit()
     return jsonify(

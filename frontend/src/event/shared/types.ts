@@ -90,6 +90,7 @@ export type EventFlowRecord = {
   detail?: string | null;
   note?: string | null;
   notice?: string | null;
+  login_only?: boolean;
   creator_id?: number | null;
   creator_name?: string | null;
   handler_id?: number | null;
