@@ -5,6 +5,8 @@ import { io, type Socket } from "socket.io-client";
 import { API_BASE } from "../../../js/apiBase";
 import { apiFetch } from "../../../js/apiFetch";
 import { LogoQrBadge } from "../../../components/LogoQrBadge";
+import { createMemberPayment, fetchPaymentQuote, resolveStaticUrl } from "../payApi";
+import type { FormFee } from "../../../CRM/form/react/types";
 
 type PortalForm = { form_id: number; title: string };
 type PortalEvent = {
@@ -32,6 +34,7 @@ type MemberData = {
   extra_fields?: MemberExtraField[];
 };
 type PortalGroupMember = { name: string; age: number | null; gender: string; is_leader?: boolean };
+type PaymentInfo = { applicable: boolean; status: string | null; price?: number | null };
 type DetailResponse = {
   status: string;
   message?: string;
@@ -44,6 +47,7 @@ type DetailResponse = {
   flow?: FlowItem[];
   member_data?: MemberData | null;
   group_members?: PortalGroupMember[] | null;
+  payment?: PaymentInfo | null;
 };
 
 function fmtVal(v: unknown): string {
@@ -258,6 +262,14 @@ function PortalView({ nric, formId }: { nric: string; formId: number }) {
     return () => { socket.off("group_score"); socket.off("connect", join); socket.disconnect(); };
   }, [formId]);
 
+  // 付款提交后静默刷新详情（更新付款状态），不闪整页 loading。
+  function reload() {
+    apiFetch(`/api/form/member/detail?nric=${encodeURIComponent(nric)}&form_id=${formId}`)
+      .then((r) => r.json())
+      .then((d) => setData(d))
+      .catch(() => { /* ignore */ });
+  }
+
   const ev = data?.event;
   const startDate = ev?.datetime ? new Date(ev.datetime) : null;
   const flowRows = useMemo(() => {
@@ -360,6 +372,9 @@ function PortalView({ nric, formId }: { nric: string; formId: number }) {
               </div>
             ) : <div style={hintStyle}>暂无报名资料。</div>}
           </section>
+          {data.payment && data.payment.applicable ? (
+            <PaymentSection payment={data.payment} nric={nric} formId={formId} onPaid={reload} />
+          ) : null}
           {data.notes && data.notes.trim() ? (
             <section style={cardStyle}>
               <div style={notesTextStyle}>{data.notes}</div>
@@ -398,6 +413,124 @@ function PortalView({ nric, formId }: { nric: string; formId: number }) {
           ))}
         </div>
       </nav>
+    </div>
+  );
+}
+
+function PaymentSection({ payment, nric, formId, onPaid }: { payment: PaymentInfo; nric: string; formId: number; onPaid: () => void }) {
+  const status = payment.status ?? null;
+  const meta =
+    status === "checked"
+      ? { label: "已付款", color: "#15803d", bg: "#dcfce7" }
+      : status === "process"
+        ? { label: "处理中（待核对）", color: "#b45309", bg: "#fef3c7" }
+        : status === "fail"
+          ? { label: "付款失败，请重新提交", color: "#b91c1c", bg: "#fee2e2" }
+          : { label: "未付款", color: "#b91c1c", bg: "#fee2e2" };
+  const canPay = status == null || status === "fail";
+  return (
+    <section style={cardStyle}>
+      <h2 style={sectionTitleStyle}>付款</h2>
+      <div style={payStatusRowStyle}>
+        <span style={{ ...payBadgeStyle, color: meta.color, background: meta.bg }}>{meta.label}</span>
+        {payment.price != null ? <span style={{ fontWeight: 800 }}>RM {payment.price.toFixed(2)}</span> : null}
+      </div>
+      {canPay ? <TerminalPay nric={nric} formId={formId} onPaid={onPaid} /> : null}
+    </section>
+  );
+}
+
+function TerminalPay({ nric, formId, onPaid }: { nric: string; formId: number; onPaid: () => void }) {
+  const [open, setOpen] = useState(false);
+  const [fees, setFees] = useState<FormFee[] | null>(null);
+  const [sel, setSel] = useState<FormFee | null>(null);
+  const [proof, setProof] = useState<File | null>(null);
+  const [loading, setLoading] = useState(false);
+  const [submitting, setSubmitting] = useState(false);
+  const [err, setErr] = useState("");
+  const [done, setDone] = useState(false);
+
+  async function begin() {
+    setOpen(true);
+    setErr("");
+    setLoading(true);
+    try {
+      const q = await fetchPaymentQuote(formId, nric);
+      const list = q.fees || [];
+      setFees(list);
+      setSel(list[0] ?? null);
+      if (!list.length) setErr("没有符合你年龄的收费项，请联系管理员。");
+    } catch (e) {
+      setErr(e instanceof Error ? e.message : "读取收费项失败");
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  async function submit() {
+    if (!sel) { setErr("请选择收费项"); return; }
+    if (!proof) { setErr("请上传付款截图"); return; }
+    setSubmitting(true);
+    setErr("");
+    try {
+      const res = await createMemberPayment(formId, { nric, fee_id: sel.id, payment_mode: "QR" }, proof);
+      if (res.status !== "success") throw new Error(res.message || "提交失败");
+      setDone(true);
+      onPaid();
+    } catch (e) {
+      setErr(e instanceof Error ? e.message : "提交失败");
+    } finally {
+      setSubmitting(false);
+    }
+  }
+
+  if (done) return <div style={paySuccessStyle}>✓ 付款资料已提交，等待管理员核对。</div>;
+  if (!open) {
+    return <button type="button" style={primaryStyle} onClick={() => void begin()}>去付款</button>;
+  }
+
+  const qr = sel ? resolveStaticUrl(sel.image_path) : "";
+  return (
+    <div style={{ display: "grid", gap: 10 }}>
+      {err ? <div style={errBoxStyle}>{err}</div> : null}
+      {loading ? <div style={hintStyle}>加载中…</div> : null}
+      {fees && fees.length > 1 ? (
+        <div style={{ display: "grid", gap: 8 }}>
+          {fees.map((f) => (
+            <button key={f.id} type="button" style={{ ...feePickStyle, ...(sel?.id === f.id ? feePickOnStyle : {}) }} onClick={() => setSel(f)}>
+              <span style={{ fontWeight: 700 }}>{f.category || "收费项"}</span>
+              <span style={{ fontWeight: 800 }}>RM {Number(f.amount).toFixed(2)}</span>
+            </button>
+          ))}
+        </div>
+      ) : sel ? (
+        <div style={payStatusRowStyle}>
+          <span style={{ fontWeight: 700 }}>{sel.category || "收费项"}</span>
+          <span style={{ fontWeight: 800 }}>RM {Number(sel.amount).toFixed(2)}</span>
+        </div>
+      ) : null}
+      {sel && qr ? <img src={qr} alt="收款码" style={qrStyle} /> : null}
+      {sel ? (
+        <>
+          <label style={factLabelStyle}>付款截图</label>
+          <input
+            type="file"
+            accept="image/png,image/jpeg,.heic,.heif"
+            style={fileInputStyle}
+            disabled={submitting}
+            onChange={(e) => setProof(e.target.files?.[0] ?? null)}
+          />
+          {proof ? <div style={{ fontSize: 12, color: "#15803d" }}>已选择：{proof.name}</div> : null}
+          <button
+            type="button"
+            style={{ ...primaryStyle, ...(submitting || !proof ? disabledStyle : {}) }}
+            disabled={submitting || !proof}
+            onClick={() => void submit()}
+          >
+            {submitting ? "提交中…" : "提交付款截图"}
+          </button>
+        </>
+      ) : null}
     </div>
   );
 }
@@ -457,6 +590,13 @@ const factLabelStyle: CSSProperties = { fontSize: 10.5, letterSpacing: "0.08em",
 const factValueStyle: CSSProperties = { fontSize: 13.5, fontWeight: 600, wordBreak: "break-word" };
 const purposeStyle: CSSProperties = { fontSize: 13.5, lineHeight: 1.6, color: "#374151", whiteSpace: "pre-wrap", background: "#f8fafc", borderRadius: 10, padding: "12px" };
 const sectionTitleStyle: CSSProperties = { margin: "6px 0 0", fontSize: 15, fontWeight: 800 };
+const payStatusRowStyle: CSSProperties = { display: "flex", alignItems: "center", justifyContent: "space-between", gap: 10 };
+const payBadgeStyle: CSSProperties = { padding: "4px 12px", borderRadius: 999, fontSize: 13, fontWeight: 800 };
+const paySuccessStyle: CSSProperties = { padding: "12px 14px", borderRadius: 10, background: "#dcfce7", border: "1px solid #bbf7d0", color: "#15803d", fontSize: 13.5, fontWeight: 700, textAlign: "center" };
+const feePickStyle: CSSProperties = { display: "flex", alignItems: "center", justifyContent: "space-between", gap: 10, padding: "12px 14px", borderRadius: 10, border: "1px solid #e5e7eb", background: "#fff", cursor: "pointer", fontSize: 14 };
+const feePickOnStyle: CSSProperties = { border: "1px solid #6366f1", background: "#eef2ff" };
+const qrStyle: CSSProperties = { width: "100%", maxWidth: 260, alignSelf: "center", justifySelf: "center", borderRadius: 12, border: "1px solid #e5e7eb", background: "#fff" };
+const fileInputStyle: CSSProperties = { width: "100%", boxSizing: "border-box", fontSize: 14, padding: "10px 12px", borderRadius: 10, border: "1px dashed #cbd5e1", background: "#f8fafc" };
 const flowRowStyle: CSSProperties = { display: "flex", gap: 12, alignItems: "center", padding: "10px 12px", borderRadius: 10, border: "1px solid #eef2f7", background: "#fff" };
 const timeBadgeStyle: CSSProperties = { flexShrink: 0, display: "grid", justifyItems: "center", minWidth: 54, padding: "6px 8px", borderRadius: 8, background: "#eef2ff", color: "#4338ca", lineHeight: 1.2 };
 const posterStyle: CSSProperties = { width: "100%", borderRadius: 12, display: "block", marginBottom: 4, objectFit: "cover" };

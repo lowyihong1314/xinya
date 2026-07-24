@@ -2853,6 +2853,31 @@ def member_portal_detail(nric, form_id):
         if not f.login_only
     ]
 
+    # 付款状态：让成员终端展示，并决定是否显示「去付款」。
+    # applicable=有符合本人年龄的收费项才需要付款；status: None=未付款 / process / checked / fail。
+    payment_info = None
+    form_fees = _sorted_fees_for_form(form)
+    if form_fees:
+        try:
+            _age = _calc_age_from_nric(member.nric)
+        except Exception:  # noqa: BLE001
+            _age = None
+        applicable = (
+            any(_fee_matches_age(fee, _age) for fee in form_fees)
+            if _age is not None else True
+        )
+        last_pay = (
+            RegisPayment.query
+            .filter_by(nric_asset_id=member.id, regis_form_id=form.id, payment_scope=FORM_FEE_SCOPE)
+            .order_by(RegisPayment.id.desc())
+            .first()
+        )
+        payment_info = {
+            "applicable": bool(applicable),
+            "status": last_pay.status if last_pay else None,
+            "price": float(last_pay.price) if last_pay and last_pay.price is not None else None,
+        }
+
     # 成员自己的报名资料（本人凭 NRIC 进入，展示自己的信息）。
     member_data = None
     if latest:
@@ -2933,6 +2958,7 @@ def member_portal_detail(nric, form_id):
         "flow": flow,
         "member_data": member_data,
         "group_members": group_members,
+        "payment": payment_info,
     })
 
 
