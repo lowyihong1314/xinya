@@ -217,6 +217,14 @@ def upload_brochure(event_id):
     return services.upload_event_brochure(event_id, uploaded_file)
 
 
+@event_data_bp.route("/set_brochure/<int:event_id>", methods=["POST"])
+@login_required
+@permission_required("event_edit")
+def set_brochure(event_id):
+    data = request.get_json(silent=True) or {}
+    return services.set_event_brochure(event_id, data.get("file_id"))
+
+
 @event_data_bp.route("/event_file/upload/<int:event_id>", methods=["POST"])
 @login_required
 @permission_required("event_edit")

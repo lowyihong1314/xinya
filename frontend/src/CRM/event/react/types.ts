@@ -32,6 +32,7 @@ export type EventRecord = {
   type?: string;
   target?: string;
   purpose?: string;
+  brochure_file_id?: number | null;
   brochure_path?: string | null;
   brochure_name?: string | null;
   brochure_mime?: string | null;

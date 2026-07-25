@@ -48,7 +48,9 @@ export const designTokens = {
     lg: "24px",
   },
   fonts: {
-    sans: '"Avenir Next", "Segoe UI", "Helvetica Neue", sans-serif',
+    // 保留衬线标题（结构性改进，非配色）
+    sans: '"Avenir Next", "Segoe UI", "Helvetica Neue", "PingFang SC", "Microsoft YaHei", sans-serif',
+    serif: '"Songti SC", "STSong", "Noto Serif SC", "Source Han Serif SC", "SimSun", serif',
     mono: '"IBM Plex Mono", "SFMono-Regular", monospace',
   },
 };
@@ -107,6 +109,7 @@ export function ensureDesignTokens() {
       --x-radius-md: ${designTokens.radius.md};
       --x-radius-lg: ${designTokens.radius.lg};
       --x-font-sans: ${designTokens.fonts.sans};
+      --x-font-serif: ${designTokens.fonts.serif};
       --x-font-mono: ${designTokens.fonts.mono};
     }
   `;

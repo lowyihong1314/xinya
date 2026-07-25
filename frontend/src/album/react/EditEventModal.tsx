@@ -15,6 +15,7 @@ type Props = {
   detail: EventDetailRecord;
   onClose: () => void;
   onSaved: (next: EventDetailRecord) => void;
+  embedded?: boolean;
 };
 
 type PosterThumbProps = {
@@ -23,7 +24,7 @@ type PosterThumbProps = {
   onSelect: (fileId: number) => void;
 };
 
-export function EditEventModal({ detail, onClose, onSaved }: Props) {
+export function EditEventModal({ detail, onClose, onSaved, embedded = false }: Props) {
   useEnsureDesignTokens();
   const { isMobile } = useUserState();
   const posterFiles = detail.album_files || [];
@@ -171,9 +172,8 @@ export function EditEventModal({ detail, onClose, onSaved }: Props) {
     }
   }
 
-  return (
-    <div style={overlayStyle} onClick={onClose}>
-      <div style={modalStyle} onClick={(event) => event.stopPropagation()}>
+  const content = (
+    <>
         <datalist id="album-event-type-options">
           {FIXED_EVENT_TYPES.map((value) => (
             <option key={value} value={value} />
@@ -181,12 +181,14 @@ export function EditEventModal({ detail, onClose, onSaved }: Props) {
         </datalist>
         <div style={headerStyle}>
           <div>
-            <div style={eyebrowStyle}>Event Editor</div>
+            <div style={eyebrowStyle}>编辑活动</div>
             <h2 style={titleStyle}>编辑活动资料</h2>
           </div>
-          <button type="button" style={closeButtonStyle} onClick={onClose}>
-            关闭
-          </button>
+          {embedded ? null : (
+            <button type="button" style={closeButtonStyle} onClick={onClose}>
+              关闭
+            </button>
+          )}
         </div>
 
         {error ? <div style={errorStyle}>{error}</div> : null}
@@ -339,6 +341,17 @@ export function EditEventModal({ detail, onClose, onSaved }: Props) {
             {saving ? "保存中…" : "保存"}
           </button>
         </div>
+    </>
+  );
+
+  if (embedded) {
+    return <div style={embeddedPanelStyle}>{content}</div>;
+  }
+
+  return (
+    <div style={overlayStyle} onClick={onClose}>
+      <div style={modalStyle} onClick={(event) => event.stopPropagation()}>
+        {content}
       </div>
     </div>
   );
@@ -407,12 +420,12 @@ function toLocalInputValue(value?: string | null) {
 const overlayStyle: CSSProperties = {
   position: "fixed",
   inset: 0,
-  background: "rgba(214,242,255,0.66)",
+  background: "rgba(15,23,42,0.32)",
   display: "grid",
   placeItems: "center",
   zIndex: 5000,
   padding: "24px",
-  backdropFilter: "blur(10px)",
+  backdropFilter: "blur(8px)",
 };
 
 const modalStyle: CSSProperties = {
@@ -420,12 +433,23 @@ const modalStyle: CSSProperties = {
   maxHeight: "90vh",
   overflow: "auto",
   padding: "24px",
-  borderRadius: 0,
-  background: "linear-gradient(180deg, rgba(255,255,255,0.72), rgba(232,247,255,0.6))",
-  border: "1px solid rgba(255,255,255,0.14)",
-  boxShadow: "0 30px 90px rgba(14,116,144,0.18), inset 0 1px 0 rgba(255,255,255,0.12)",
-  backdropFilter: "blur(24px) saturate(140%)",
-  color: "rgba(31,78,121,0.92)",
+  borderRadius: "var(--x-radius-lg)",
+  background: "var(--x-color-panel)",
+  border: "1px solid var(--x-color-line)",
+  boxShadow: "0 16px 40px var(--x-color-shadow)",
+  color: "var(--x-color-ink)",
+  display: "grid",
+  gap: "18px",
+};
+
+const embeddedPanelStyle: CSSProperties = {
+  width: "100%",
+  padding: "24px",
+  borderRadius: "var(--x-radius-lg)",
+  background: "var(--x-color-panel)",
+  border: "1px solid var(--x-color-line)",
+  boxShadow: "0 16px 40px var(--x-color-shadow-soft)",
+  color: "var(--x-color-ink)",
   display: "grid",
   gap: "18px",
 };
@@ -442,41 +466,41 @@ const eyebrowStyle: CSSProperties = {
   fontSize: "12px",
   letterSpacing: "0.16em",
   textTransform: "uppercase",
-  color: "rgba(14,165,233,0.82)",
+  color: "var(--x-color-accent)",
 };
 
 const titleStyle: CSSProperties = {
   margin: "8px 0 0",
   fontSize: "28px",
-  color: "rgba(12,74,110,0.98)",
+  fontFamily: "var(--x-font-serif)",
+  fontWeight: 500,
+  color: "var(--x-color-ink)",
 };
 
 const closeButtonStyle: CSSProperties = {
   padding: "10px 14px",
   borderRadius: "999px",
-  border: "1px solid rgba(255,255,255,0.14)",
-  background: "rgba(255,255,255,0.6)",
-  color: "rgba(31,78,121,0.9)",
+  border: "1px solid var(--x-color-line)",
+  background: "var(--x-color-panel-alt)",
+  color: "var(--x-color-ink)",
   cursor: "pointer",
-  boxShadow: "0 12px 28px rgba(14,116,144,0.12)",
-  backdropFilter: "blur(14px)",
+  boxShadow: "0 12px 28px var(--x-color-shadow-soft)",
 };
 
 const sectionStyle: CSSProperties = {
   display: "grid",
   gap: "12px",
   padding: "16px",
-  borderRadius: 0,
-  background: "rgba(255,255,255,0.46)",
-  border: "1px solid rgba(255,255,255,0.1)",
-  boxShadow: "inset 0 1px 0 rgba(255,255,255,0.06)",
-  backdropFilter: "blur(14px)",
+  borderRadius: "var(--x-radius-md)",
+  background: "var(--x-color-panel-alt)",
+  border: "1px solid var(--x-color-line)",
+  boxShadow: "inset 0 1px 0 var(--x-color-shadow-soft)",
 };
 
 const sectionTitleStyle: CSSProperties = {
   fontSize: "15px",
   fontWeight: 700,
-  color: "rgba(12,74,110,0.94)",
+  color: "var(--x-color-ink)",
 };
 
 const posterHeaderStyle: CSSProperties = {
@@ -489,11 +513,11 @@ const posterHeaderStyle: CSSProperties = {
 
 const posterPagerMetaStyle: CSSProperties = {
   fontSize: "13px",
-  color: "rgba(70,120,158,0.86)",
+  color: "var(--x-color-ink-muted)",
 };
 
 const hintStyle: CSSProperties = {
-  color: "rgba(70,120,158,0.86)",
+  color: "var(--x-color-ink-muted)",
   fontSize: "13px",
 };
 
@@ -513,21 +537,20 @@ const posterPagerStyle: CSSProperties = {
 const posterPagerButtonStyle: CSSProperties = {
   padding: "10px 14px",
   borderRadius: "999px",
-  border: "1px solid rgba(255,255,255,0.14)",
-  background: "rgba(255,255,255,0.6)",
-  color: "rgba(31,78,121,0.9)",
+  border: "1px solid var(--x-color-line)",
+  background: "var(--x-color-panel-alt)",
+  color: "var(--x-color-ink)",
   cursor: "pointer",
   fontWeight: 700,
-  backdropFilter: "blur(14px)",
 };
 
 const posterButtonStyle = (selected: boolean): CSSProperties => ({
   padding: "0",
-  borderRadius: 0,
+  borderRadius: "var(--x-radius-md)",
   overflow: "hidden",
-  border: selected ? "2px solid rgba(56,189,248,0.9)" : "1px solid rgba(255,255,255,0.12)",
-  background: "rgba(232,247,255,0.5)",
-  boxShadow: selected ? "0 0 0 3px rgba(56,189,248,0.18), 0 14px 30px rgba(14,116,144,0.14)" : "none",
+  border: selected ? "2px solid var(--x-color-accent)" : "1px solid var(--x-color-line)",
+  background: "var(--x-color-panel-alt)",
+  boxShadow: selected ? "0 0 0 3px var(--x-color-accent-soft), 0 14px 30px var(--x-color-shadow)" : "none",
   cursor: "pointer",
 });
 
@@ -536,7 +559,7 @@ const posterImageStyle: CSSProperties = {
   aspectRatio: "1 / 1",
   objectFit: "cover",
   display: "block",
-  background: "#eef9ff",
+  background: "var(--x-color-panel-alt)",
 };
 
 const formGridStyle: CSSProperties = {
@@ -558,20 +581,19 @@ const wideFieldStyle: CSSProperties = {
 const labelStyle: CSSProperties = {
   fontSize: "13px",
   fontWeight: 700,
-  color: "rgba(70,120,158,0.9)",
+  color: "var(--x-color-ink-muted)",
 };
 
 const inputStyle: CSSProperties = {
   width: "100%",
   minHeight: "46px",
   padding: "12px 14px",
-  borderRadius: 0,
-  border: "1px solid rgba(255,255,255,0.12)",
-  background: "rgba(232,247,255,0.44)",
-  color: "rgba(12,74,110,0.94)",
+  borderRadius: "var(--x-radius-sm)",
+  border: "1px solid var(--x-color-line)",
+  background: "var(--x-color-panel)",
+  color: "var(--x-color-ink)",
   boxSizing: "border-box",
-  outlineColor: "rgba(56,189,248,0.72)",
-  backdropFilter: "blur(12px)",
+  outlineColor: "var(--x-color-accent)",
 };
 
 const textareaStyle: CSSProperties = {
@@ -587,11 +609,10 @@ const brochureCardStyle: CSSProperties = {
   alignItems: "center",
   flexWrap: "wrap",
   padding: "14px 16px",
-  borderRadius: 0,
-  border: "1px solid rgba(56,189,248,0.2)",
-  background: "linear-gradient(135deg, rgba(56,189,248,0.16), rgba(255,255,255,0.48))",
-  boxShadow: "inset 0 1px 0 rgba(255,255,255,0.06)",
-  backdropFilter: "blur(14px)",
+  borderRadius: "var(--x-radius-md)",
+  border: "1px solid var(--x-color-accent-border)",
+  background: "var(--x-color-accent-soft)",
+  boxShadow: "inset 0 1px 0 var(--x-color-shadow-soft)",
 };
 
 const brochureMetaStyle: CSSProperties = {
@@ -602,13 +623,13 @@ const brochureMetaStyle: CSSProperties = {
 const brochureNameStyle: CSSProperties = {
   fontSize: "14px",
   fontWeight: 700,
-  color: "rgba(12,74,110,0.96)",
+  color: "var(--x-color-ink)",
   wordBreak: "break-word",
 };
 
 const brochureHintStyle: CSSProperties = {
   fontSize: "13px",
-  color: "rgba(70,120,158,0.86)",
+  color: "var(--x-color-ink-muted)",
 };
 
 const brochureActionStyle: CSSProperties = {
@@ -628,32 +649,29 @@ const footerStyle: CSSProperties = {
 const secondaryButtonStyle: CSSProperties = {
   padding: "12px 18px",
   borderRadius: "999px",
-  border: "1px solid rgba(255,255,255,0.14)",
-  background: "rgba(255,255,255,0.6)",
-  color: "rgba(31,78,121,0.9)",
+  border: "1px solid var(--x-color-line)",
+  background: "var(--x-color-panel-alt)",
+  color: "var(--x-color-ink)",
   fontWeight: 700,
   cursor: "pointer",
-  boxShadow: "0 12px 28px rgba(14,116,144,0.12)",
-  backdropFilter: "blur(14px)",
+  boxShadow: "0 12px 28px var(--x-color-shadow-soft)",
 };
 
 const primaryButtonStyle: CSSProperties = {
   padding: "12px 18px",
   borderRadius: "999px",
-  border: "1px solid rgba(56,189,248,0.28)",
-  background: "linear-gradient(135deg, rgba(14,165,233,0.78), rgba(125,211,252,0.62))",
-  color: "rgba(3,105,161,0.98)",
+  border: "1px solid var(--x-color-accent-strong)",
+  background: "var(--x-color-accent)",
+  color: "#ffffff",
   fontWeight: 700,
   cursor: "pointer",
-  boxShadow: "0 14px 32px rgba(56,189,248,0.22)",
-  backdropFilter: "blur(14px)",
+  boxShadow: "0 14px 32px var(--x-color-shadow)",
 };
 
 const errorStyle: CSSProperties = {
   padding: "12px 14px",
-  borderRadius: 0,
-  border: "1px solid rgba(244,63,94,0.24)",
-  background: "rgba(255,241,242,0.86)",
-  color: "rgba(159,18,57,0.86)",
-  backdropFilter: "blur(12px)",
+  borderRadius: "var(--x-radius-md)",
+  border: "1px solid var(--x-color-danger-border)",
+  background: "var(--x-color-danger-soft)",
+  color: "var(--x-color-danger)",
 };

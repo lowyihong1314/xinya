@@ -93,6 +93,70 @@ export function EventFlowInline({ detail, canEdit, isMobile }: { detail: EventDe
     }
   }
 
+  // ------- 手机版：极简只读时间线（+ 可选精简增删） -------
+  if (isMobile) {
+    return (
+      <div style={mWrapStyle}>
+        <div style={mHeadStyle}>
+          <span style={mHeadTitleStyle}>活动流程</span>
+          <span style={mutedStyle}>{flows.length} 段</span>
+        </div>
+        {error ? <div style={errorStyle}>{error}</div> : null}
+
+        {canEdit ? (
+          <div style={mAddStyle}>
+            <input
+              style={inputStyle}
+              placeholder="环节，例如：破冰分组"
+              value={nf.title}
+              onChange={(e) => setNf((v) => ({ ...v, title: e.target.value }))}
+              onKeyDown={(e) => { if (e.key === "Enter") void add(); }}
+            />
+            <div style={{ display: "flex", gap: 6 }}>
+              <input
+                type="number"
+                min={0}
+                style={{ ...inputStyle, flex: 1 }}
+                placeholder="时长(分)"
+                value={nf.minutes}
+                onChange={(e) => setNf((v) => ({ ...v, minutes: e.target.value }))}
+              />
+              <button type="button" style={primaryBtnStyle} disabled={!nf.title.trim()} onClick={() => void add()}>添加</button>
+            </div>
+          </div>
+        ) : null}
+
+        {loading ? <div style={emptyStyle}>加载中…</div> : null}
+        {!loading && !flows.length ? <div style={emptyStyle}>还没有流程环节。</div> : null}
+
+        <div style={mTimelineStyle}>
+          {rows.map(({ f, s, e }, idx) => (
+            <div key={f.id} style={mItemStyle}>
+              <div style={mRailStyle}>
+                <span style={mDotStyle} />
+                {idx < rows.length - 1 ? <span style={mLineStyle} /> : null}
+              </div>
+              <div style={mBodyStyle}>
+                <div style={mTimeStyle}>
+                  {clock(s)}{s && e ? ` – ${clock(e)}` : ""}{f.minutes != null ? ` · ${f.minutes} 分` : ""}
+                </div>
+                <div style={mTitleStyle}>
+                  {f.title || "（未命名）"}
+                  {f.login_only ? <span style={lockBadgeStyle} title="仅登陆可见"> 🔒</span> : null}
+                </div>
+                {f.detail ? <div style={mDetailStyle}>{f.detail}</div> : null}
+              </div>
+              {canEdit ? (
+                <button type="button" style={delBtnStyle} onClick={() => void remove(f.id)}>删</button>
+              ) : null}
+            </div>
+          ))}
+        </div>
+      </div>
+    );
+  }
+
+  // ------- 电脑版：完整可编辑流程表 -------
   return (
     <div style={wrapStyle}>
       <div style={headRowStyle}>
@@ -173,7 +237,7 @@ export function EventFlowInline({ detail, canEdit, isMobile }: { detail: EventDe
   );
 }
 
-const wrapStyle: CSSProperties = { display: "grid", gap: "10px" };
+const wrapStyle: CSSProperties = { display: "grid", gap: "8px", width: "100%", maxWidth: "960px", margin: "0 auto", padding: "20px 24px", boxSizing: "border-box" };
 const headRowStyle: CSSProperties = { display: "flex", alignItems: "flex-start", justifyContent: "space-between", gap: 10 };
 const mutedStyle: CSSProperties = { fontSize: "12px", color: "var(--x-color-ink-muted)" };
 function addRowStyle(isMobile: boolean): CSSProperties {
@@ -181,11 +245,11 @@ function addRowStyle(isMobile: boolean): CSSProperties {
 }
 const inputStyle: CSSProperties = { padding: "8px 10px", borderRadius: "7px", border: "1px solid var(--x-color-line)", background: "var(--x-color-panel)", color: "var(--x-color-ink)", fontSize: "13px", boxSizing: "border-box" };
 const primaryBtnStyle: CSSProperties = { padding: "8px 16px", borderRadius: "7px", border: "1px solid var(--x-color-accent-strong)", background: "var(--x-color-accent)", color: "white", fontWeight: 700, fontSize: "13px", cursor: "pointer", whiteSpace: "nowrap" };
-const rowStyle: CSSProperties = { display: "flex", alignItems: "center", gap: "10px", padding: "9px 11px", borderRadius: "9px", border: "1px solid var(--x-color-line-soft)", background: "var(--x-color-panel)", flexWrap: "wrap" };
-const timeBadgeStyle: CSSProperties = { flexShrink: 0, display: "grid", justifyItems: "center", alignContent: "center", minWidth: 58, padding: "6px 8px", borderRadius: "8px", background: "var(--x-color-accent-tint)", color: "var(--x-color-accent-strong)", lineHeight: 1.2 };
+const rowStyle: CSSProperties = { display: "grid", gridTemplateColumns: "80px minmax(0, 1fr) auto", alignItems: "center", gap: "14px", padding: "8px 14px", borderRadius: "10px", border: "1px solid var(--x-color-line-soft)", background: "var(--x-color-panel)" };
+const timeBadgeStyle: CSSProperties = { display: "grid", justifyItems: "center", alignContent: "center", padding: "6px 6px", borderRadius: "8px", background: "var(--x-color-accent-tint)", color: "var(--x-color-accent-strong)", lineHeight: 1.2 };
 const titleInputStyle: CSSProperties = { border: "none", background: "transparent", color: "var(--x-color-ink)", fontSize: "14px", fontWeight: 700, padding: "2px 0", width: "100%" };
 const detailInputStyle: CSSProperties = { border: "none", background: "transparent", color: "var(--x-color-ink-muted)", fontSize: "12.5px", padding: "1px 0", width: "100%" };
-const actionsStyle: CSSProperties = { flexShrink: 0, display: "flex", alignItems: "center", gap: "6px" };
+const actionsStyle: CSSProperties = { flexShrink: 0, display: "flex", alignItems: "center", gap: "6px", justifyContent: "flex-end" };
 const durWrapStyle: CSSProperties = { display: "inline-flex", alignItems: "center", gap: "3px" };
 const durInputStyle: CSSProperties = { width: "52px", padding: "5px 6px", borderRadius: "6px", border: "1px solid var(--x-color-line-soft)", background: "var(--x-color-panel-alt)", color: "var(--x-color-ink)", fontSize: "12.5px", textAlign: "right" };
 const durTextStyle: CSSProperties = { flexShrink: 0, fontSize: "12px", color: "var(--x-color-ink-muted)" };
@@ -195,3 +259,18 @@ const lockBadgeStyle: CSSProperties = { fontSize: "11px", flexShrink: 0 };
 const delBtnStyle: CSSProperties = { padding: "5px 10px", borderRadius: "6px", border: "1px solid var(--x-color-danger-border)", background: "var(--x-color-danger-soft)", color: "var(--x-color-danger)", fontWeight: 700, fontSize: "12px", cursor: "pointer" };
 const emptyStyle: CSSProperties = { padding: "22px", borderRadius: "10px", border: "1px dashed var(--x-color-line)", textAlign: "center", color: "var(--x-color-ink-muted)" };
 const errorStyle: CSSProperties = { padding: "9px 12px", borderRadius: "8px", background: "var(--x-color-danger-soft)", border: "1px solid var(--x-color-danger-border)", color: "var(--x-color-danger)", fontSize: "13px" };
+
+// —— 手机极简时间线 ——
+const mWrapStyle: CSSProperties = { display: "grid", gap: "12px", padding: "16px 14px" };
+const mHeadStyle: CSSProperties = { display: "flex", alignItems: "baseline", justifyContent: "space-between", gap: 10 };
+const mHeadTitleStyle: CSSProperties = { fontFamily: "var(--x-font-serif)", fontWeight: 500, fontSize: "18px", color: "var(--x-color-ink)" };
+const mAddStyle: CSSProperties = { display: "grid", gap: "6px", padding: "10px", borderRadius: "10px", background: "var(--x-color-panel-alt)", border: "1px solid var(--x-color-line-soft)" };
+const mTimelineStyle: CSSProperties = { display: "grid", gap: 0 };
+const mItemStyle: CSSProperties = { display: "flex", alignItems: "stretch", gap: "12px", padding: "2px 0" };
+const mRailStyle: CSSProperties = { position: "relative", width: "14px", flexShrink: 0, display: "flex", flexDirection: "column", alignItems: "center" };
+const mDotStyle: CSSProperties = { width: "12px", height: "12px", borderRadius: "999px", background: "var(--x-color-accent)", marginTop: "5px", flexShrink: 0, boxShadow: "0 0 0 3px var(--x-color-accent-tint)" };
+const mLineStyle: CSSProperties = { flex: 1, width: "2px", background: "var(--x-color-line)", marginTop: "2px" };
+const mBodyStyle: CSSProperties = { flex: 1, minWidth: 0, paddingBottom: "16px", display: "grid", gap: "2px" };
+const mTimeStyle: CSSProperties = { fontSize: "12px", fontWeight: 600, letterSpacing: "0.02em", color: "var(--x-color-accent-strong)" };
+const mTitleStyle: CSSProperties = { fontSize: "15px", fontWeight: 600, color: "var(--x-color-ink)" };
+const mDetailStyle: CSSProperties = { fontSize: "13px", lineHeight: 1.6, color: "var(--x-color-ink-muted)" };

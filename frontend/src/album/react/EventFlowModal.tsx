@@ -16,6 +16,7 @@ type Props = {
   detail: EventDetailRecord;
   canEdit?: boolean;
   onClose: () => void;
+  embedded?: boolean;
 };
 
 type EditorState = {
@@ -25,7 +26,7 @@ type EditorState = {
   minutes: string;
 };
 
-export function EventFlowModal({ detail, canEdit = false, onClose }: Props) {
+export function EventFlowModal({ detail, canEdit = false, onClose, embedded = false }: Props) {
   useEnsureDesignTokens();
 
   const [flows, setFlows] = useState<EventFlowRecord[]>([]);
@@ -169,164 +170,183 @@ export function EventFlowModal({ detail, canEdit = false, onClose }: Props) {
     }
   }
 
-  return (
-    <div style={overlayStyle} onClick={onClose}>
-      <div style={modalStyle} onClick={(event) => event.stopPropagation()}>
-        <div style={headerStyle}>
-          <div>
-            <div style={eyebrowStyle}>Event Flow</div>
-            <h2 style={titleStyle}>活动流程</h2>
-            <div style={subTitleStyle}>
-              {detail.event_name || `活动 #${detail.id}`} {detail.datetime ? `· ${detail.datetime}` : ""}
-            </div>
+  const panel = (
+    <div
+      style={embedded ? embeddedPanelStyle : modalStyle}
+      onClick={embedded ? undefined : (event) => event.stopPropagation()}
+    >
+      <div style={headerStyle}>
+        <div>
+          <div style={eyebrowStyle}>活动流程</div>
+          <h2 style={titleStyle}>活动流程</h2>
+          <div style={subTitleStyle}>
+            {detail.event_name || `活动 #${detail.id}`} {detail.datetime ? `· ${detail.datetime}` : ""}
           </div>
-          <div style={headerActionsStyle}>
-            {canEdit ? (
-              <button
-                type="button"
-                style={primaryButtonStyle}
-                onClick={() => setEditor({ flowId: null, title: "", detail: "", minutes: "" })}
-              >
-                + 新增
-              </button>
-            ) : null}
+        </div>
+        <div style={headerActionsStyle}>
+          {canEdit ? (
+            <button
+              type="button"
+              style={primaryButtonStyle}
+              onClick={() => setEditor({ flowId: null, title: "", detail: "", minutes: "" })}
+            >
+              + 新增
+            </button>
+          ) : null}
+          {embedded ? null : (
             <button type="button" style={closeButtonStyle} onClick={onClose}>
               关闭
             </button>
-          </div>
+          )}
         </div>
-
-        {error ? <div style={errorStyle}>{error}</div> : null}
-
-        <div style={hintStyle}>
-          {canEdit
-            ? detail.datetime
-              ? "拖动左侧把手可以排序。每一行开始时间会根据活动开始时间和前面流程时长自动推算。"
-              : "当前活动没有开始时间，流程仍可编辑，但不会推算具体时钟时间。"
-            : "当前账号可查看流程，但新增、编辑、删除和排序需要 event_edit 权限。"}
-        </div>
-
-        {loading ? <div style={placeholderStyle}>读取流程中…</div> : null}
-        {!loading && !flows.length ? <div style={placeholderStyle}>{canEdit ? "暂无流程，点击右上角新增。" : "当前活动还没有流程。"}</div> : null}
-
-        {!loading && flows.length ? (
-          <div style={listStyle}>
-            {renderedFlows.map(({ flow, startLabel, endLabel }) => (
-              <div
-                key={flow.id}
-                style={rowStyle}
-                draggable={canEdit}
-                onDragStart={() => {
-                  if (canEdit) {
-                    setDraggingId(flow.id);
-                  }
-                }}
-                onDragOver={(event) => {
-                  if (canEdit) {
-                    event.preventDefault();
-                  }
-                }}
-                onDrop={() => void handleDrop(flow.id)}
-                onDragEnd={() => setDraggingId(null)}
-              >
-                <div style={dragHandleStyle}>
-                  <i className="fa-solid fa-grip-vertical" />
-                </div>
-                <button
-                  type="button"
-                  style={timeBoxStyle}
-                  disabled={!canEdit}
-                  onClick={() =>
-                    setEditor({
-                      flowId: flow.id,
-                      title: flow.title || "",
-                      detail: flow.detail || "",
-                      minutes: flow.minutes == null ? "" : String(flow.minutes),
-                    })
-                  }
-                >
-                  <span style={timeStartStyle}>{startLabel}</span>
-                  <span style={timeEndStyle}>→ {endLabel}</span>
-                </button>
-                <div style={contentStyle}>
-                  <div style={contentTitleStyle}>{flow.title || "(无标题)"}</div>
-                  {flow.detail ? <div style={contentBodyStyle}>{flow.detail}</div> : null}
-                </div>
-                {canEdit ? (
-                  <div style={rowActionsStyle}>
-                    <button
-                      type="button"
-                      style={secondaryPillStyle}
-                      onClick={() =>
-                        setEditor({
-                          flowId: flow.id,
-                          title: flow.title || "",
-                          detail: flow.detail || "",
-                          minutes: flow.minutes == null ? "" : String(flow.minutes),
-                        })
-                      }
-                    >
-                      编辑
-                    </button>
-                    <button type="button" style={dangerPillStyle} disabled={saving} onClick={() => void handleDelete(flow.id)}>
-                      移除
-                    </button>
-                  </div>
-                ) : null}
-              </div>
-            ))}
-          </div>
-        ) : null}
       </div>
 
-      {editor ? (
-        <div style={editorOverlayStyle} onClick={() => setEditor(null)}>
-          <div style={editorCardStyle} onClick={(event) => event.stopPropagation()}>
-            <div style={editorHeaderStyle}>
-              <div style={editorTitleStyle}>{editor.flowId ? "编辑流程" : "新增流程"}</div>
-              <button type="button" style={closeButtonStyle} onClick={() => setEditor(null)}>
-                关闭
+      {error ? <div style={errorStyle}>{error}</div> : null}
+
+      <div style={hintStyle}>
+        {canEdit
+          ? detail.datetime
+            ? "拖动左侧把手可以排序。每一行开始时间会根据活动开始时间和前面流程时长自动推算。"
+            : "当前活动没有开始时间，流程仍可编辑，但不会推算具体时钟时间。"
+          : "当前账号可查看流程，但新增、编辑、删除和排序需要 event_edit 权限。"}
+      </div>
+
+      {loading ? <div style={placeholderStyle}>读取流程中…</div> : null}
+      {!loading && !flows.length ? <div style={placeholderStyle}>{canEdit ? "暂无流程，点击右上角新增。" : "当前活动还没有流程。"}</div> : null}
+
+      {!loading && flows.length ? (
+        <div style={listStyle}>
+          {renderedFlows.map(({ flow, startLabel, endLabel }) => (
+            <div
+              key={flow.id}
+              style={rowStyle}
+              draggable={canEdit}
+              onDragStart={() => {
+                if (canEdit) {
+                  setDraggingId(flow.id);
+                }
+              }}
+              onDragOver={(event) => {
+                if (canEdit) {
+                  event.preventDefault();
+                }
+              }}
+              onDrop={() => void handleDrop(flow.id)}
+              onDragEnd={() => setDraggingId(null)}
+            >
+              <div style={dragHandleStyle}>
+                <i className="fa-solid fa-grip-vertical" />
+              </div>
+              <button
+                type="button"
+                style={timeBoxStyle}
+                disabled={!canEdit}
+                onClick={() =>
+                  setEditor({
+                    flowId: flow.id,
+                    title: flow.title || "",
+                    detail: flow.detail || "",
+                    minutes: flow.minutes == null ? "" : String(flow.minutes),
+                  })
+                }
+              >
+                <span style={timeStartStyle}>{startLabel}</span>
+                <span style={timeEndStyle}>→ {endLabel}</span>
               </button>
+              <div style={contentStyle}>
+                <div style={contentTitleStyle}>{flow.title || "(无标题)"}</div>
+                {flow.detail ? <div style={contentBodyStyle}>{flow.detail}</div> : null}
+              </div>
+              {canEdit ? (
+                <div style={rowActionsStyle}>
+                  <button
+                    type="button"
+                    style={secondaryPillStyle}
+                    onClick={() =>
+                      setEditor({
+                        flowId: flow.id,
+                        title: flow.title || "",
+                        detail: flow.detail || "",
+                        minutes: flow.minutes == null ? "" : String(flow.minutes),
+                      })
+                    }
+                  >
+                    编辑
+                  </button>
+                  <button type="button" style={dangerPillStyle} disabled={saving} onClick={() => void handleDelete(flow.id)}>
+                    移除
+                  </button>
+                </div>
+              ) : null}
             </div>
-            <label style={fieldStyle}>
-              <span style={fieldLabelStyle}>标题</span>
-              <input
-                style={inputStyle}
-                value={editor.title}
-                onChange={(event) => setEditor((prev) => (prev ? { ...prev, title: event.target.value } : prev))}
-              />
-            </label>
-            <label style={fieldStyle}>
-              <span style={fieldLabelStyle}>时长（分钟）</span>
-              <input
-                type="number"
-                min="0"
-                step="1"
-                style={inputStyle}
-                value={editor.minutes}
-                onChange={(event) => setEditor((prev) => (prev ? { ...prev, minutes: event.target.value } : prev))}
-              />
-            </label>
-            <label style={fieldStyle}>
-              <span style={fieldLabelStyle}>详细内容</span>
-              <textarea
-                rows={5}
-                style={textareaStyle}
-                value={editor.detail}
-                onChange={(event) => setEditor((prev) => (prev ? { ...prev, detail: event.target.value } : prev))}
-              />
-            </label>
-            <div style={editorFooterStyle}>
-              <button type="button" style={secondaryButtonStyle} onClick={() => setEditor(null)}>
-                取消
-              </button>
-              <button type="button" style={primaryButtonStyle} disabled={saving} onClick={() => void handleSaveEditor()}>
-                {saving ? "保存中…" : "保存"}
-              </button>
-            </div>
-          </div>
+          ))}
         </div>
       ) : null}
+    </div>
+  );
+
+  const editorModal = editor ? (
+    <div style={editorOverlayStyle} onClick={() => setEditor(null)}>
+      <div style={editorCardStyle} onClick={(event) => event.stopPropagation()}>
+        <div style={editorHeaderStyle}>
+          <div style={editorTitleStyle}>{editor.flowId ? "编辑流程" : "新增流程"}</div>
+          <button type="button" style={closeButtonStyle} onClick={() => setEditor(null)}>
+            关闭
+          </button>
+        </div>
+        <label style={fieldStyle}>
+          <span style={fieldLabelStyle}>标题</span>
+          <input
+            style={inputStyle}
+            value={editor.title}
+            onChange={(event) => setEditor((prev) => (prev ? { ...prev, title: event.target.value } : prev))}
+          />
+        </label>
+        <label style={fieldStyle}>
+          <span style={fieldLabelStyle}>时长（分钟）</span>
+          <input
+            type="number"
+            min="0"
+            step="1"
+            style={inputStyle}
+            value={editor.minutes}
+            onChange={(event) => setEditor((prev) => (prev ? { ...prev, minutes: event.target.value } : prev))}
+          />
+        </label>
+        <label style={fieldStyle}>
+          <span style={fieldLabelStyle}>详细内容</span>
+          <textarea
+            rows={5}
+            style={textareaStyle}
+            value={editor.detail}
+            onChange={(event) => setEditor((prev) => (prev ? { ...prev, detail: event.target.value } : prev))}
+          />
+        </label>
+        <div style={editorFooterStyle}>
+          <button type="button" style={secondaryButtonStyle} onClick={() => setEditor(null)}>
+            取消
+          </button>
+          <button type="button" style={primaryButtonStyle} disabled={saving} onClick={() => void handleSaveEditor()}>
+            {saving ? "保存中…" : "保存"}
+          </button>
+        </div>
+      </div>
+    </div>
+  ) : null;
+
+  if (embedded) {
+    return (
+      <>
+        {panel}
+        {editorModal}
+      </>
+    );
+  }
+
+  return (
+    <div style={overlayStyle} onClick={onClose}>
+      {panel}
+      {editorModal}
     </div>
   );
 }
@@ -342,12 +362,12 @@ function formatClock(date: Date) {
 const overlayStyle: CSSProperties = {
   position: "fixed",
   inset: 0,
-  background: "rgba(214,242,255,0.66)",
+  background: "rgba(15,23,42,0.32)",
   display: "grid",
   placeItems: "center",
   zIndex: 5000,
   padding: "24px",
-  backdropFilter: "blur(10px)",
+  backdropFilter: "blur(6px)",
 };
 
 const modalStyle: CSSProperties = {
@@ -355,12 +375,24 @@ const modalStyle: CSSProperties = {
   maxHeight: "90vh",
   overflow: "auto",
   padding: "22px",
-  borderRadius: 0,
-  background: "linear-gradient(180deg, rgba(255,255,255,0.72), rgba(232,247,255,0.6))",
-  border: "1px solid rgba(255,255,255,0.14)",
-  boxShadow: "0 30px 90px rgba(14,116,144,0.18), inset 0 1px 0 rgba(255,255,255,0.12)",
-  color: "rgba(31,78,121,0.92)",
-  backdropFilter: "blur(24px) saturate(140%)",
+  borderRadius: "var(--x-radius-lg)",
+  background: "var(--x-color-panel)",
+  border: "1px solid var(--x-color-line)",
+  boxShadow: "0 16px 40px var(--x-color-shadow-soft)",
+  color: "var(--x-color-ink)",
+  backdropFilter: "blur(8px)",
+  display: "grid",
+  gap: "16px",
+};
+
+const embeddedPanelStyle: CSSProperties = {
+  width: "100%",
+  padding: "22px",
+  borderRadius: "var(--x-radius-lg)",
+  background: "var(--x-color-panel)",
+  border: "1px solid var(--x-color-line)",
+  boxShadow: "0 16px 40px var(--x-color-shadow-soft)",
+  color: "var(--x-color-ink)",
   display: "grid",
   gap: "16px",
 };
@@ -377,19 +409,21 @@ const eyebrowStyle: CSSProperties = {
   fontSize: "12px",
   letterSpacing: "0.16em",
   textTransform: "uppercase",
-  color: "rgba(14,165,233,0.82)",
+  color: "var(--x-color-accent)",
 };
 
 const titleStyle: CSSProperties = {
   margin: "8px 0 0",
   fontSize: "28px",
-  color: "rgba(12,74,110,0.98)",
+  fontFamily: "var(--x-font-serif)",
+  fontWeight: 500,
+  color: "var(--x-color-ink)",
 };
 
 const subTitleStyle: CSSProperties = {
   marginTop: "6px",
   fontSize: "13px",
-  color: "rgba(70,120,158,0.86)",
+  color: "var(--x-color-ink-muted)",
 };
 
 const headerActionsStyle: CSSProperties = {
@@ -401,25 +435,23 @@ const headerActionsStyle: CSSProperties = {
 const primaryButtonStyle: CSSProperties = {
   padding: "12px 18px",
   borderRadius: "999px",
-  border: "1px solid rgba(56,189,248,0.28)",
-  background: "linear-gradient(135deg, rgba(14,165,233,0.78), rgba(125,211,252,0.62))",
-  color: "rgba(3,105,161,0.98)",
+  border: "1px solid var(--x-color-accent-border)",
+  background: "var(--x-color-accent)",
+  color: "#ffffff",
   fontWeight: 700,
   cursor: "pointer",
-  boxShadow: "0 14px 32px rgba(56,189,248,0.22)",
-  backdropFilter: "blur(14px)",
+  boxShadow: "0 14px 32px var(--x-color-shadow-soft)",
 };
 
 const secondaryButtonStyle: CSSProperties = {
   padding: "12px 18px",
   borderRadius: "999px",
-  border: "1px solid rgba(255,255,255,0.14)",
-  background: "rgba(255,255,255,0.6)",
-  color: "rgba(31,78,121,0.9)",
+  border: "1px solid var(--x-color-line)",
+  background: "var(--x-color-panel)",
+  color: "var(--x-color-ink)",
   fontWeight: 700,
   cursor: "pointer",
-  boxShadow: "0 12px 28px rgba(14,116,144,0.12)",
-  backdropFilter: "blur(14px)",
+  boxShadow: "0 12px 28px var(--x-color-shadow-soft)",
 };
 
 const closeButtonStyle: CSSProperties = {
@@ -429,30 +461,27 @@ const closeButtonStyle: CSSProperties = {
 
 const hintStyle: CSSProperties = {
   padding: "12px 14px",
-  borderRadius: 0,
-  background: "rgba(255,255,255,0.46)",
-  border: "1px solid rgba(56,189,248,0.18)",
-  color: "rgba(31,78,121,0.9)",
+  borderRadius: "var(--x-radius-md)",
+  background: "var(--x-color-panel-alt)",
+  border: "1px solid var(--x-color-accent-border)",
+  color: "var(--x-color-ink)",
   fontSize: "13px",
-  backdropFilter: "blur(12px)",
 };
 
 const errorStyle: CSSProperties = {
   padding: "12px 14px",
-  borderRadius: 0,
-  border: "1px solid rgba(244,63,94,0.24)",
-  background: "rgba(255,241,242,0.86)",
-  color: "rgba(159,18,57,0.86)",
-  backdropFilter: "blur(12px)",
+  borderRadius: "var(--x-radius-md)",
+  border: "1px solid var(--x-color-danger-border)",
+  background: "var(--x-color-danger-soft)",
+  color: "var(--x-color-danger)",
 };
 
 const placeholderStyle: CSSProperties = {
   padding: "24px",
-  borderRadius: 0,
-  background: "rgba(255,255,255,0.46)",
-  border: "1px solid rgba(255,255,255,0.1)",
-  color: "rgba(70,120,158,0.86)",
-  backdropFilter: "blur(12px)",
+  borderRadius: "var(--x-radius-md)",
+  background: "var(--x-color-panel-alt)",
+  border: "1px solid var(--x-color-line)",
+  color: "var(--x-color-ink-muted)",
 };
 
 const listStyle: CSSProperties = {
@@ -466,26 +495,25 @@ const rowStyle: CSSProperties = {
   gap: "12px",
   alignItems: "center",
   padding: "12px",
-  borderRadius: 0,
-  border: "1px solid rgba(255,255,255,0.12)",
-  background: "rgba(255,255,255,0.48)",
-  boxShadow: "inset 0 1px 0 rgba(255,255,255,0.06)",
-  backdropFilter: "blur(12px)",
+  borderRadius: "var(--x-radius-md)",
+  border: "1px solid var(--x-color-line)",
+  background: "var(--x-color-panel)",
+  boxShadow: "0 6px 16px var(--x-color-shadow-soft)",
 };
 
 const dragHandleStyle: CSSProperties = {
   display: "grid",
   placeItems: "center",
-  color: "rgba(70,120,158,0.82)",
+  color: "var(--x-color-ink-muted)",
   cursor: "grab",
 };
 
 const timeBoxStyle: CSSProperties = {
-  borderRadius: 0,
+  borderRadius: "var(--x-radius-md)",
   padding: "10px 12px",
-  background: "linear-gradient(135deg, rgba(14,165,233,0.78), rgba(125,211,252,0.62))",
-  border: "1px solid rgba(56,189,248,0.22)",
-  color: "rgba(3,105,161,0.98)",
+  background: "var(--x-color-accent)",
+  border: "1px solid var(--x-color-accent-border)",
+  color: "#ffffff",
   display: "grid",
   gap: "2px",
   textAlign: "left",
@@ -511,12 +539,12 @@ const contentStyle: CSSProperties = {
 const contentTitleStyle: CSSProperties = {
   fontSize: "15px",
   fontWeight: 800,
-  color: "rgba(12,74,110,0.96)",
+  color: "var(--x-color-ink)",
 };
 
 const contentBodyStyle: CSSProperties = {
   fontSize: "13px",
-  color: "rgba(70,120,158,0.86)",
+  color: "var(--x-color-ink-muted)",
   lineHeight: 1.6,
 };
 
@@ -529,9 +557,9 @@ const rowActionsStyle: CSSProperties = {
 const secondaryPillStyle: CSSProperties = {
   padding: "8px 10px",
   borderRadius: "999px",
-  border: "1px solid rgba(56,189,248,0.24)",
-  background: "rgba(255,255,255,0.58)",
-  color: "rgba(14,165,233,0.96)",
+  border: "1px solid var(--x-color-accent-border)",
+  background: "var(--x-color-panel)",
+  color: "var(--x-color-accent)",
   cursor: "pointer",
   fontWeight: 700,
 };
@@ -539,9 +567,9 @@ const secondaryPillStyle: CSSProperties = {
 const dangerPillStyle: CSSProperties = {
   padding: "8px 10px",
   borderRadius: "999px",
-  border: "1px solid rgba(244,63,94,0.24)",
-  background: "rgba(255,241,242,0.82)",
-  color: "rgba(159,18,57,0.86)",
+  border: "1px solid var(--x-color-danger-border)",
+  background: "var(--x-color-danger-soft)",
+  color: "var(--x-color-danger)",
   cursor: "pointer",
   fontWeight: 700,
 };
@@ -549,21 +577,22 @@ const dangerPillStyle: CSSProperties = {
 const editorOverlayStyle: CSSProperties = {
   position: "fixed",
   inset: 0,
-  background: "rgba(214,242,255,0.52)",
+  background: "rgba(15,23,42,0.32)",
   display: "grid",
   placeItems: "center",
   zIndex: 5100,
   padding: "24px",
+  backdropFilter: "blur(6px)",
 };
 
 const editorCardStyle: CSSProperties = {
   width: "min(520px, 100%)",
   padding: "22px",
-  borderRadius: 0,
-  background: "linear-gradient(180deg, rgba(255,255,255,0.72), rgba(232,247,255,0.62))",
-  border: "1px solid rgba(255,255,255,0.14)",
-  boxShadow: "0 30px 90px rgba(14,116,144,0.18), inset 0 1px 0 rgba(255,255,255,0.12)",
-  backdropFilter: "blur(24px) saturate(140%)",
+  borderRadius: "var(--x-radius-lg)",
+  background: "var(--x-color-panel)",
+  border: "1px solid var(--x-color-line)",
+  boxShadow: "0 16px 40px var(--x-color-shadow-soft)",
+  backdropFilter: "blur(8px)",
   display: "grid",
   gap: "14px",
 };
@@ -577,8 +606,9 @@ const editorHeaderStyle: CSSProperties = {
 
 const editorTitleStyle: CSSProperties = {
   fontSize: "22px",
-  fontWeight: 800,
-  color: "rgba(12,74,110,0.98)",
+  fontFamily: "var(--x-font-serif)",
+  fontWeight: 500,
+  color: "var(--x-color-ink)",
 };
 
 const fieldStyle: CSSProperties = {
@@ -589,20 +619,19 @@ const fieldStyle: CSSProperties = {
 const fieldLabelStyle: CSSProperties = {
   fontSize: "13px",
   fontWeight: 700,
-  color: "rgba(70,120,158,0.9)",
+  color: "var(--x-color-ink-muted)",
 };
 
 const inputStyle: CSSProperties = {
   width: "100%",
   minHeight: "46px",
   padding: "12px 14px",
-  borderRadius: 0,
-  border: "1px solid rgba(255,255,255,0.12)",
-  background: "rgba(232,247,255,0.44)",
-  color: "rgba(12,74,110,0.94)",
+  borderRadius: "var(--x-radius-md)",
+  border: "1px solid var(--x-color-line)",
+  background: "var(--x-color-panel-alt)",
+  color: "var(--x-color-ink)",
   boxSizing: "border-box",
-  outlineColor: "rgba(56,189,248,0.72)",
-  backdropFilter: "blur(12px)",
+  outlineColor: "var(--x-color-accent)",
 };
 
 const textareaStyle: CSSProperties = {

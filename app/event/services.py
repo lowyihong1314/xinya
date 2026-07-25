@@ -35,7 +35,6 @@ BROCHURE_EXTENSIONS = {
     ".docx",
     ".dox",
 }
-BROCHURE_STORAGE_ROOT = DATA_ROOT / "NAS" / "UTBA" / "event_brochure"
 EVENT_FILE_STORAGE_ROOT = DATA_ROOT / "NAS" / "UTBA" / "event_file"
 CHECK_IN_QR_SALT = "xinya-event-check-in-qr-v1"
 CHECK_IN_QR_SECONDS = 5 * 60
@@ -189,19 +188,6 @@ def all_event_sort_response():
     )
 
 
-def _delete_event_brochure_file(brochure_path):
-    normalized = str(brochure_path or "").strip()
-    if not normalized:
-        return
-
-    full_path = os.path.join(DATA_PATH, normalized)
-    try:
-        if os.path.isfile(full_path):
-            os.remove(full_path)
-    except OSError:
-        pass
-
-
 def _normalize_brochure_base_name(raw_name):
     normalized = unicodedata.normalize("NFKC", str(raw_name or "").strip())
     base_name = os.path.splitext(os.path.basename(normalized))[0]
@@ -209,26 +195,6 @@ def _normalize_brochure_base_name(raw_name):
     base_name = re.sub(r'[\\/:*?"<>|\x00-\x1f]+', "_", base_name)
     base_name = re.sub(r"\s+", " ", base_name).strip().strip(".")
     return base_name or "brochure"
-
-
-def _save_event_brochure_file(event, uploaded_file):
-    if not uploaded_file or not getattr(uploaded_file, "filename", ""):
-        raise ValueError("请选择 brochure 文件")
-
-    raw_name = os.path.basename((uploaded_file.filename or "").strip())
-    extension = os.path.splitext(raw_name)[1].lower()
-    if extension not in BROCHURE_EXTENSIONS:
-        raise ValueError("brochure 仅支持 PDF、PPT、PPTX、XLS、XLSX、DOC、DOCX、DOX")
-
-    folder_name = event.event_code or f"event_{event.id}"
-    target_dir = BROCHURE_STORAGE_ROOT / folder_name
-    target_dir.mkdir(parents=True, exist_ok=True)
-
-    base_name = _normalize_brochure_base_name(raw_name)
-    filename = f"{datetime.utcnow().strftime('%Y%m%d%H%M%S')}_{secrets.token_hex(6)}_{base_name}{extension}"
-    target_path = target_dir / filename
-    uploaded_file.save(target_path)
-    return to_short_data_path(str(target_path))
 
 
 def _delete_event_file_path(file_path):
@@ -605,7 +571,6 @@ def set_event_poster(event_id, file_id):
 
 def save_event(data):
     try:
-        brochure_path_to_delete = None
         event_id = data.get("event_id")
         is_edit = bool(event_id)
 
@@ -685,14 +650,6 @@ def save_event(data):
             if field in data:
                 setattr(event, field, data.get(field))
 
-        if "brochure_path" in data:
-            raw_brochure_path = data.get("brochure_path")
-            if raw_brochure_path is None or str(raw_brochure_path).strip() == "":
-                brochure_path_to_delete = event.brochure_path
-                event.brochure_path = None
-            else:
-                event.brochure_path = str(raw_brochure_path).strip()
-
         if "album" in data:
             event.album = str(data.get("album")).lower() in ["1", "true", "yes", "on"]
 
@@ -707,8 +664,6 @@ def save_event(data):
             event.organizers = users
 
         db.session.commit()
-        if brochure_path_to_delete:
-            _delete_event_brochure_file(brochure_path_to_delete)
         return jsonify({"status": "success", "message": "Event 已保存", "data": event.to_dict()})
     except Exception as exc:
         db.session.rollback()
@@ -730,18 +685,53 @@ def set_event_album(event_id, album):
 
 
 def upload_event_brochure(event_id, uploaded_file):
+    """上传文件作为活动附件，并直接设为该活动的简章（仅文档类）。"""
     try:
         event = EventData.query.get_or_404(event_id)
-        brochure_path = _save_event_brochure_file(event, uploaded_file)
-        old_path = event.brochure_path
-        event.brochure_path = brochure_path
+        raw_name = os.path.basename((getattr(uploaded_file, "filename", "") or "").strip())
+        extension = os.path.splitext(raw_name)[1].lower()
+        if extension not in BROCHURE_EXTENSIONS:
+            return jsonify({"status": "error", "message": "简章仅支持 PDF、PPT、PPTX、XLS、XLSX、DOC、DOCX、DOX"}), 400
+        saved = _save_event_attachment_file(event, uploaded_file)
+        record = EventFile(
+            event_id=event.id,
+            user_id=current_user.id if current_user.is_authenticated else None,
+            file_path=saved["file_path"],
+            file_name=saved["file_name"],
+            mime_type=saved["mime_type"],
+            file_size=saved["file_size"],
+        )
+        db.session.add(record)
+        db.session.flush()
+        event.brochure_file_id = record.id
         db.session.commit()
-        if old_path and old_path != brochure_path:
-            _delete_event_brochure_file(old_path)
-        return jsonify({"status": "success", "message": "Brochure 已上传", "data": event.to_dict()})
+        return jsonify({"status": "success", "message": "简章已上传", "data": event.to_dict()})
     except ValueError as exc:
         db.session.rollback()
         return jsonify({"status": "error", "message": str(exc)}), 400
+    except Exception as exc:
+        db.session.rollback()
+        return jsonify({"status": "error", "message": str(exc)}), 500
+
+
+def set_event_brochure(event_id, file_id):
+    """把某个已有活动附件设为简章；file_id 为空则取消简章。仅文档类可设。"""
+    try:
+        event = EventData.query.get_or_404(event_id)
+        if file_id in (None, "", 0, "0"):
+            event.brochure_file_id = None
+            db.session.commit()
+            return jsonify({"status": "success", "message": "已取消简章", "data": event.to_dict()})
+
+        record = EventFile.query.get(as_int(file_id))
+        if not record or record.event_id != event.id:
+            return jsonify({"status": "error", "message": "附件不存在或不属于该活动"}), 404
+        extension = os.path.splitext(record.file_name or record.file_path or "")[1].lower()
+        if extension not in BROCHURE_EXTENSIONS:
+            return jsonify({"status": "error", "message": "只有文档类附件（PDF/PPT/Word/Excel）可设为简章"}), 400
+        event.brochure_file_id = record.id
+        db.session.commit()
+        return jsonify({"status": "success", "message": "已设为简章", "data": event.to_dict()})
     except Exception as exc:
         db.session.rollback()
         return jsonify({"status": "error", "message": str(exc)}), 500

@@ -38,12 +38,18 @@ export function PhotoGrid({
   mediaNotification = null,
   canEditEvent = false,
   hideHeader = false,
+  paged = false,
+  onPickPhoto,
+  selectedPhotoId = null,
 }: {
   detail: EventDetailRecord;
   isMobile?: boolean;
   mediaNotification?: MediaNotification | null;
   canEditEvent?: boolean;
   hideHeader?: boolean;
+  paged?: boolean;
+  onPickPhoto?: (fileId: number) => void;
+  selectedPhotoId?: number | null;
 }) {
   const location = useLocation();
   const navigate = useNavigate();
@@ -74,8 +80,18 @@ export function PhotoGrid({
     ),
     [detail.album_files, removedIds],
   );
-  const visibleFiles = useMemo(() => files.slice(0, visibleCount), [files, visibleCount]);
-  const hasMore = visibleCount < files.length;
+  const [page, setPage] = useState(0);
+  const pageSize = isMobile ? 20 : 40;
+  const pageCount = Math.max(1, Math.ceil(files.length / pageSize));
+  const safePage = Math.min(page, pageCount - 1);
+  const visibleFiles = useMemo(
+    () =>
+      paged
+        ? files.slice(safePage * pageSize, safePage * pageSize + pageSize)
+        : files.slice(0, visibleCount),
+    [files, paged, safePage, pageSize, visibleCount],
+  );
+  const hasMore = !paged && visibleCount < files.length;
   const previewIdFromArgs = useMemo(() => readPreviewIdFromArgs(location.search), [location.search]);
   const activePreviewIndex = activePreviewId ? files.findIndex((file) => file.id === activePreviewId) : -1;
   const activePreviewFile = activePreviewIndex >= 0 ? files[activePreviewIndex] : null;
@@ -184,28 +200,44 @@ export function PhotoGrid({
     [files.length, hasMore, loadingMore],
   );
 
+  // 仅在用户滚动、且底部触发点接近视口底部时加载下一批；
+  // 不在挂载时自动加载（避免一进来就把所有图片一次性拉完）。
   useEffect(() => {
-    const trigger = loadMoreTriggerRef.current;
-    if (!trigger || !hasMore || loadingMore || typeof IntersectionObserver === "undefined") {
+    if (paged || !hasMore || typeof window === "undefined") {
       return undefined;
     }
 
-    const observer = new IntersectionObserver(
-      (entries) => {
-        if (entries.some((entry) => entry.isIntersecting)) {
-          loadMore("auto");
-        }
-      },
-      {
-        root: null,
-        rootMargin: "360px 0px",
-        threshold: 0,
-      },
-    );
+    let frame = 0;
+    const check = () => {
+      frame = 0;
+      const trigger = loadMoreTriggerRef.current;
+      if (!trigger || loadingMore || loadMoreTimerRef.current != null) {
+        return;
+      }
+      const rect = trigger.getBoundingClientRect();
+      const viewportHeight = window.innerHeight || document.documentElement.clientHeight;
+      // 触发点滚动进入视口底部附近才加载
+      if (rect.top <= viewportHeight + 160) {
+        loadMore("auto");
+      }
+    };
+    const onScroll = () => {
+      if (frame) {
+        return;
+      }
+      frame = window.requestAnimationFrame(check);
+    };
 
-    observer.observe(trigger);
-    return () => observer.disconnect();
-  }, [hasMore, loadMore, loadingMore, visibleCount]);
+    window.addEventListener("scroll", onScroll, { passive: true });
+    window.addEventListener("resize", onScroll);
+    return () => {
+      window.removeEventListener("scroll", onScroll);
+      window.removeEventListener("resize", onScroll);
+      if (frame) {
+        window.cancelAnimationFrame(frame);
+      }
+    };
+  }, [hasMore, loadMore, loadingMore]);
 
   useEffect(() => {
     if (!mediaNotification) {
@@ -469,13 +501,15 @@ export function PhotoGrid({
 
       {visibleFiles.length ? (
         <>
-          <div id="event-detail-photo-grid-items" style={gridStyle(tileSize)}>
+          <div id="event-detail-photo-grid-items" style={gridStyle(tileSize, paged)}>
             {visibleFiles.map((file, index) => (
               <PhotoCard
                 key={file.id}
                 file={file}
                 index={index}
                 tileSize={tileSize}
+                paged={paged}
+                isPoster={selectedPhotoId != null && selectedPhotoId === file.id}
                 selectionMode={selectionMode}
                 selected={selectedIds.includes(file.id)}
                 previewVersion={previewBumps[file.id] || 0}
@@ -483,7 +517,7 @@ export function PhotoGrid({
                 shouldLoad={settledMediaIds.includes(file.id) || activeLoadId === file.id}
                 onToggleSelect={toggleSelect}
                 onStartSelection={startSelectionMode}
-                onOpenPreview={openPreview}
+                onOpenPreview={onPickPhoto || openPreview}
                 onMediaSettled={handleMediaSettled}
               />
             ))}
@@ -500,16 +534,42 @@ export function PhotoGrid({
         />
       ) : null}
 
-      <div id="event-detail-photo-grid-load-trigger" ref={loadMoreTriggerRef} style={loadTriggerStyle} />
+      {paged ? (
+        pageCount > 1 ? (
+          <div id="event-detail-photo-grid-pager" style={photoPagerStyle}>
+            <button
+              type="button"
+              style={photoPagerBtnStyle(safePage === 0)}
+              disabled={safePage === 0}
+              onClick={() => setPage((p) => Math.max(0, p - 1))}
+            >
+              ◀ 上一页
+            </button>
+            <span style={photoPagerLabelStyle}>{safePage + 1} / {pageCount}</span>
+            <button
+              type="button"
+              style={photoPagerBtnStyle(safePage >= pageCount - 1)}
+              disabled={safePage >= pageCount - 1}
+              onClick={() => setPage((p) => Math.min(pageCount - 1, p + 1))}
+            >
+              下一页 ▶
+            </button>
+          </div>
+        ) : null
+      ) : (
+        <>
+          <div id="event-detail-photo-grid-load-trigger" ref={loadMoreTriggerRef} style={loadTriggerStyle} />
 
-      {hasMore && !loadingMore ? (
-        <div id="event-detail-photo-grid-load-more" style={loadMoreWrapStyle}>
-          <button id="event-detail-photo-grid-load-more-button" type="button" style={loadMoreButtonStyle} onClick={() => loadMore("manual")}>
-            <i className="fa-solid fa-chevron-down" aria-hidden="true" style={loadMoreIconStyle} />
-            <span>查看更多</span>
-          </button>
-        </div>
-      ) : null}
+          {hasMore && !loadingMore ? (
+            <div id="event-detail-photo-grid-load-more" style={loadMoreWrapStyle}>
+              <button id="event-detail-photo-grid-load-more-button" type="button" style={loadMoreButtonStyle} onClick={() => loadMore("manual")}>
+                <i className="fa-solid fa-chevron-down" aria-hidden="true" style={loadMoreIconStyle} />
+                <span>查看更多</span>
+              </button>
+            </div>
+          ) : null}
+        </>
+      )}
 
       {activePreviewFile ? (
         <PhotoPreviewModal
@@ -599,6 +659,8 @@ function PhotoCard({
   file,
   index,
   tileSize,
+  paged = false,
+  isPoster = false,
   selectionMode,
   selected,
   previewVersion,
@@ -612,6 +674,8 @@ function PhotoCard({
   file: AlbumFile;
   index: number;
   tileSize: PhotoTileSize;
+  paged?: boolean;
+  isPoster?: boolean;
   selectionMode: boolean;
   selected: boolean;
   previewVersion: number;
@@ -702,10 +766,11 @@ function PhotoCard({
   return (
     <div
       id={`event-detail-photo-${file.id}-card`}
+      className="event-detail-photo-card"
       role="button"
       tabIndex={0}
       aria-label={`打开照片 ${file.id}`}
-      style={cardStyle(index, selected, tileSize, aspectRatio, mediaReady)}
+      style={cardStyle(index, selected, tileSize, aspectRatio, mediaReady, paged)}
       onContextMenu={handleContextMenu}
       onTouchStart={handleTouchStart}
       onTouchMove={handleTouchEnd}
@@ -720,6 +785,12 @@ function PhotoCard({
         handleCardAction();
       }}
     >
+      {isPoster ? (
+        <>
+          <div style={posterRingStyle} />
+          <div style={posterTagStyle}>海报</div>
+        </>
+      ) : null}
       {selectionMode ? (
         <div id={`event-detail-photo-${file.id}-selection`} style={selectionBadgeStyle(selected)}>
           <i
@@ -984,7 +1055,7 @@ const panelStyle: CSSProperties = {
   boxSizing: "border-box",
   padding: 0,
   borderRadius: 0,
-  background: "#eef9ff",
+  background: "transparent",
   border: "none",
   boxShadow: "none",
   backdropFilter: "none",
@@ -1024,14 +1095,24 @@ const metaStyle: CSSProperties = {
   color: "var(--x-color-ink-muted)",
 };
 
-function gridStyle(tileSize: PhotoTileSize): CSSProperties {
+function gridStyle(tileSize: PhotoTileSize, paged = false): CSSProperties {
+  if (paged) {
+    // 分页模式：固定 ~100x100 小方块网格
+    return {
+      display: "grid",
+      gridTemplateColumns: "repeat(auto-fill, 100px)",
+      gap: "6px",
+      justifyContent: "start",
+      background: "transparent",
+    };
+  }
   return {
     display: "flex",
     flexWrap: "wrap",
     alignItems: "stretch",
     alignContent: "flex-start",
     gap: 0,
-    background: "#eef9ff",
+    background: "transparent",
     minHeight: tileSize === "small" ? "160px" : "220px",
   };
 }
@@ -1042,7 +1123,27 @@ const cardStyle = (
   tileSize: PhotoTileSize,
   aspectRatio: number,
   mediaReady: boolean,
+  paged = false,
 ): CSSProperties => {
+  if (paged) {
+    return {
+      padding: 0,
+      border: "none",
+      borderRadius: "6px",
+      overflow: "hidden",
+      background: "var(--x-color-canvas-alt)",
+      cursor: "pointer",
+      opacity: mediaReady ? 1 : 0,
+      animation: mediaReady ? `album-photo-soft-in 320ms ease ${Math.min(index * 16, 160)}ms backwards` : undefined,
+      position: "relative",
+      outline: "none",
+      width: "100px",
+      height: "100px",
+      display: "block",
+      lineHeight: 0,
+      isolation: "isolate",
+    };
+  }
   const normalizedRatio = clampTileRatio(aspectRatio);
   const rowHeight = tileSize === "small" ? 128 : tileSize === "medium" ? 190 : tileSize === "large" ? 260 : 340;
   const basis = Math.round(rowHeight * normalizedRatio);
@@ -1059,7 +1160,7 @@ const cardStyle = (
     cursor: "pointer",
     boxShadow: "none",
     opacity: mediaReady ? 1 : 0,
-    animation: mediaReady ? `album-photo-soft-in 360ms cubic-bezier(0.2, 0.8, 0.2, 1) ${Math.min(index * 24, 180)}ms both` : undefined,
+    animation: mediaReady ? `album-photo-soft-in 360ms cubic-bezier(0.2, 0.8, 0.2, 1) ${Math.min(index * 24, 180)}ms backwards` : undefined,
     position: "relative",
     outline: "none",
     minWidth,
@@ -1084,6 +1185,15 @@ const hiddenCardStyle: CSSProperties = {
 };
 
 const photoGridAnimationStyle = `
+.event-detail-photo-card {
+  transition: transform 200ms ease, box-shadow 200ms ease;
+}
+.event-detail-photo-card:hover {
+  transform: scale(1.2);
+  z-index: 5;
+  box-shadow: 0 18px 40px var(--x-color-shadow);
+}
+
 @keyframes album-photo-soft-in {
   from {
     opacity: 0;
@@ -1197,19 +1307,19 @@ const previewAnimationStyle = `
 }
 
 #event-detail-photo-preview-actions button:not(:disabled):hover {
-  transform: translateY(-3px) scale(1.14);
-  background: rgba(255,255,255,0.84) !important;
-  border-color: rgba(56,189,248,0.44) !important;
-  color: rgba(3,105,161,0.98) !important;
-  text-shadow: none;
+  transform: scale(1.1);
+  background: var(--x-color-accent) !important;
+  border-color: var(--x-color-accent) !important;
+  color: #ffffff !important;
 }
 
-#event-detail-photo-preview-close:hover {
-  color: rgba(3,105,161,0.98) !important;
+#event-detail-photo-preview-close:not(:disabled):hover {
+  background: var(--x-color-danger) !important;
+  border-color: var(--x-color-danger) !important;
 }
 
 #event-detail-photo-preview-actions button:focus-visible {
-  outline: 2px solid rgba(56,189,248,0.7);
+  outline: 2px solid rgba(255,255,255,0.7);
   outline-offset: 3px;
 }
 `;
@@ -1222,8 +1332,8 @@ function previewOverlayStyle(isMobile: boolean): CSSProperties {
     display: "grid",
     placeItems: "center",
     padding: isMobile ? 0 : "24px",
-    background: "rgba(214,242,255,0.72)",
-    backdropFilter: "blur(10px)",
+    background: "rgba(18, 22, 26, 0.9)",
+    backdropFilter: "blur(6px)",
     animation: "event-detail-photo-preview-overlay-in 180ms ease-out both",
   };
 }
@@ -1258,25 +1368,25 @@ function previewActionRowStyle(isMobile: boolean): CSSProperties {
 
 function previewIconButtonStyle(disabled: boolean): CSSProperties {
   return {
-    width: "42px",
-    height: "42px",
+    width: "46px",
+    height: "46px",
     padding: 0,
     borderRadius: "999px",
-    border: "1px solid rgba(56,189,248,0.24)",
-    background: disabled ? "rgba(255,255,255,0.42)" : "rgba(255,255,255,0.66)",
-    color: disabled ? "rgba(70,120,158,0.34)" : "rgba(31,78,121,0.92)",
+    border: "1px solid rgba(255,255,255,0.22)",
+    background: "rgba(255,255,255,0.12)",
+    color: "#ffffff",
     display: "grid",
     placeItems: "center",
     cursor: disabled ? "not-allowed" : "pointer",
-    boxShadow: disabled ? "none" : "0 10px 24px rgba(14,116,144,0.12)",
-    backdropFilter: "blur(14px) saturate(130%)",
-    transition: "transform 170ms ease, color 170ms ease, text-shadow 170ms ease, opacity 170ms ease, background 170ms ease, border-color 170ms ease",
+    opacity: disabled ? 0.35 : 1,
+    boxShadow: "none",
+    backdropFilter: "blur(6px)",
+    transition: "transform 170ms ease, background 170ms ease, border-color 170ms ease, opacity 170ms ease",
   };
 }
 
 const previewCloseButtonStyle: CSSProperties = {
   ...previewIconButtonStyle(false),
-  color: "rgba(31,78,121,0.92)",
 };
 
 const previewIconStyle: CSSProperties = {
@@ -1309,11 +1419,9 @@ const previewMediaWrapStyle: CSSProperties = {
   boxSizing: "border-box",
   display: "grid",
   placeItems: "center",
-  borderRadius: 0,
-  background: "rgba(255,255,255,0.42)",
-  border: "1px solid rgba(255,255,255,0.24)",
-  boxShadow: "inset 0 1px 0 rgba(255,255,255,0.18), 0 18px 46px rgba(14,116,144,0.12)",
-  backdropFilter: "blur(14px) saturate(130%)",
+  background: "transparent",
+  border: "none",
+  boxShadow: "none",
 };
 
 const previewMediaContainerStyle: CSSProperties = {
@@ -1332,6 +1440,8 @@ function previewImageStyle(isMobile: boolean): CSSProperties {
     objectFit: "contain",
     display: "block",
     background: "transparent",
+    borderRadius: isMobile ? 0 : "var(--x-radius-md)",
+    boxShadow: "0 24px 60px rgba(0, 0, 0, 0.5)",
   };
 }
 
@@ -1343,7 +1453,9 @@ function previewVideoStyle(isMobile: boolean): CSSProperties {
     maxHeight: isMobile ? "calc(100dvh - 86px)" : "calc(92vh - 94px)",
     objectFit: "contain",
     display: "block",
-    background: "transparent",
+    background: "#000",
+    borderRadius: isMobile ? 0 : "var(--x-radius-md)",
+    boxShadow: "0 24px 60px rgba(0, 0, 0, 0.5)",
   };
 }
 
@@ -1518,6 +1630,59 @@ const loadMoreWrapStyle: CSSProperties = {
   display: "grid",
   placeItems: "center",
   padding: "16px",
+};
+
+const photoPagerStyle: CSSProperties = {
+  display: "flex",
+  alignItems: "center",
+  justifyContent: "center",
+  gap: "14px",
+  padding: "18px 16px",
+};
+
+function photoPagerBtnStyle(disabled: boolean): CSSProperties {
+  return {
+    padding: "9px 18px",
+    borderRadius: "999px",
+    border: "1px solid var(--x-color-line)",
+    background: disabled ? "transparent" : "var(--x-color-panel)",
+    color: disabled ? "var(--x-color-ink-muted)" : "var(--x-color-accent-strong)",
+    fontSize: "13px",
+    fontWeight: 600,
+    cursor: disabled ? "default" : "pointer",
+    opacity: disabled ? 0.45 : 1,
+  };
+}
+
+const photoPagerLabelStyle: CSSProperties = {
+  fontSize: "13px",
+  color: "var(--x-color-ink-muted)",
+  minWidth: "56px",
+  textAlign: "center",
+};
+
+const posterRingStyle: CSSProperties = {
+  position: "absolute",
+  inset: 0,
+  zIndex: 4,
+  borderRadius: "6px",
+  boxShadow: "inset 0 0 0 3px var(--x-color-accent)",
+  pointerEvents: "none",
+};
+
+const posterTagStyle: CSSProperties = {
+  position: "absolute",
+  top: "4px",
+  left: "4px",
+  zIndex: 5,
+  padding: "2px 7px",
+  borderRadius: "999px",
+  background: "var(--x-color-accent)",
+  color: "#ffffff",
+  fontSize: "11px",
+  fontWeight: 600,
+  lineHeight: 1.4,
+  pointerEvents: "none",
 };
 
 const loadMoreButtonStyle: CSSProperties = {

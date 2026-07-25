@@ -91,9 +91,9 @@ export function PageHero({ title, subtitle, idPrefix = "page-hero", tone = "defa
           />
         </div>
       ))}
-      <div id={`${idPrefix}-mask`} style={heroMaskStyle(pressed, tone)} />
+      <div id={`${idPrefix}-mask`} style={heroMaskStyle(pressed)} />
       <div id={`${idPrefix}-content`} style={heroContentStyle(isMobile)}>
-        <div id={`${idPrefix}-logo-wrap`} style={logoCircleStyle(isMobile, tone)}>
+        <div id={`${idPrefix}-logo-wrap`} style={logoCircleStyle(isMobile)}>
           <CachedImage
             id={`${idPrefix}-logo`}
             src={`${API_BASE}/static/images/logo/logo.png`}
@@ -102,8 +102,8 @@ export function PageHero({ title, subtitle, idPrefix = "page-hero", tone = "defa
             style={logoStyle(isMobile)}
           />
         </div>
-        <h1 id={`${idPrefix}-title`} style={heroTitleStyle(isMobile, tone)}>{title}</h1>
-        <p id={`${idPrefix}-subtitle`} style={heroSubtitleStyle(isMobile, tone)}>{subtitle}</p>
+        <h1 id={`${idPrefix}-title`} style={heroTitleStyle(isMobile)}>{title}</h1>
+        <p id={`${idPrefix}-subtitle`} style={heroSubtitleStyle(isMobile)}>{subtitle}</p>
       </div>
     </section>
   );
@@ -118,28 +118,28 @@ function isVideoType(fileType?: string | null) {
 function heroStyle(isMobile: boolean, tone: PageHeroProps["tone"]): CSSProperties {
   return {
     position: "relative",
-    minHeight: isMobile ? "46vh" : "68vh",
+    minHeight: isMobile ? "42vh" : "58vh",
     display: "grid",
     placeItems: "center",
     overflow: "hidden",
     margin: tone === "sky" ? 0 : isMobile ? "0 0" : "0 24px",
     padding: 0,
     borderRadius: tone === "sky" ? 0 : "0 0 var(--x-radius-lg) var(--x-radius-lg)",
-    boxShadow: tone === "sky" ? "0 28px 70px rgba(14, 116, 144, 0.14)" : "0 28px 70px var(--x-color-shadow)",
-    background: tone === "sky"
-      ? "linear-gradient(135deg, rgba(224, 247, 255, 0.98), rgba(186, 230, 253, 0.88), rgba(240, 249, 255, 0.92))"
-      : "linear-gradient(135deg, rgba(18,52,59,0.96), rgba(15,118,110,0.88), rgba(29,78,216,0.72))",
+    boxShadow: "0 24px 60px var(--x-color-shadow)",
+    // 冷色兜底（有海报时被照片覆盖）
+    background:
+      "linear-gradient(160deg, rgba(240,249,255,0.98), rgba(217,243,239,0.88), rgba(238,243,249,0.94))",
   };
 }
 
-function heroMaskStyle(pressed: boolean, tone: PageHeroProps["tone"]): CSSProperties {
+function heroMaskStyle(pressed: boolean): CSSProperties {
   return {
     position: "absolute",
     inset: 0,
-    background: tone === "sky"
-      ? "linear-gradient(180deg, rgba(238,249,255,0.74), rgba(224,247,255,0.46)), linear-gradient(135deg, rgba(56,189,248,0.22), rgba(14,165,233,0.12), rgba(255,255,255,0.1))"
-      : "linear-gradient(180deg, rgba(255,255,255,0.32), rgba(255,255,255,0.14)), linear-gradient(135deg, rgba(18,52,59,0.48), rgba(15,118,110,0.24), rgba(29,78,216,0.18))",
-    backdropFilter: `blur(${pressed ? 1 : 10}px)`,
+    // 冷白薄雾，保证墨色标题在照片上可读；克制的青绿晕染
+    background:
+      "linear-gradient(180deg, rgba(238,243,249,0.78), rgba(238,243,249,0.42)), linear-gradient(135deg, rgba(15,118,110,0.14), rgba(15,118,110,0.06), rgba(255,255,255,0.05))",
+    backdropFilter: `blur(${pressed ? 1 : 4}px)`,
     transition: "backdrop-filter 160ms ease",
     zIndex: 1,
   };
@@ -161,6 +161,7 @@ function backdropMediaStyle(active: boolean): CSSProperties {
     width: "100%",
     height: "100%",
     objectFit: "cover",
+    objectPosition: "center 25%",
     transform: active ? "scale(1.02)" : "scale(1.08)",
     transition: "transform 5200ms ease",
     filter: "saturate(1.08) contrast(1.02)",
@@ -188,16 +189,17 @@ function heroContentStyle(isMobile: boolean): CSSProperties {
   };
 }
 
-function logoCircleStyle(isMobile: boolean, tone: PageHeroProps["tone"]): CSSProperties {
+function logoCircleStyle(isMobile: boolean): CSSProperties {
   return {
-    width: isMobile ? "84px" : "112px",
-    height: isMobile ? "84px" : "112px",
+    width: isMobile ? "78px" : "104px",
+    height: isMobile ? "78px" : "104px",
     borderRadius: "50%",
-    background: tone === "sky" ? "rgba(255,255,255,0.58)" : "rgba(255,255,255,0.14)",
+    background: "rgba(255,255,255,0.72)",
+    border: "1px solid var(--x-color-accent-border)",
     display: "grid",
     placeItems: "center",
     marginBottom: "4px",
-    boxShadow: tone === "sky" ? "0 16px 36px rgba(14,116,144,0.14)" : "0 16px 36px rgba(0,0,0,0.22)",
+    boxShadow: "0 16px 36px var(--x-color-shadow)",
   };
 }
 
@@ -209,21 +211,26 @@ function logoStyle(isMobile: boolean): CSSProperties {
   };
 }
 
-function heroTitleStyle(isMobile: boolean, tone: PageHeroProps["tone"]): CSSProperties {
+function heroTitleStyle(isMobile: boolean): CSSProperties {
   return {
     margin: 0,
-    fontSize: isMobile ? "44px" : "72px",
-    lineHeight: 0.95,
-    color: tone === "sky" ? "rgba(12,74,110,0.98)" : "var(--x-color-ink)",
+    fontFamily: "var(--x-font-serif)",
+    fontWeight: 500,
+    fontSize: isMobile ? "40px" : "64px",
+    lineHeight: 1.06,
+    letterSpacing: isMobile ? "0.08em" : "0.14em",
+    color: "var(--x-color-ink)",
   };
 }
 
-function heroSubtitleStyle(isMobile: boolean, tone: PageHeroProps["tone"]): CSSProperties {
+function heroSubtitleStyle(isMobile: boolean): CSSProperties {
   return {
     margin: 0,
-    fontSize: isMobile ? "14px" : "20px",
-    letterSpacing: 0,
-    opacity: 0.86,
-    color: tone === "sky" ? "rgba(31,78,121,0.9)" : "var(--x-color-ink)",
+    fontFamily: "var(--x-font-serif)",
+    fontSize: isMobile ? "13px" : "17px",
+    letterSpacing: "0.34em",
+    textIndent: "0.34em",
+    opacity: 0.82,
+    color: "var(--x-color-ink-muted)",
   };
 }

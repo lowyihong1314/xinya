@@ -1,6 +1,5 @@
 import { useEffect, useRef, useState } from "react";
 import type { CSSProperties } from "react";
-import { createPortal } from "react-dom";
 import { useNavigate, useParams } from "react-router-dom";
 
 import { CacheMediaPlayer } from "../../components/CacheMediaPlayer";
@@ -11,8 +10,7 @@ import type { EventDetailRecord } from "../../event/shared/types";
 import { useEnsureDesignTokens } from "../../theme/designTokens";
 import { PhotoGrid } from "./PhotoGrid";
 import { EventCheckInPanel } from "./EventCheckInPanel";
-import { EditEventModal } from "./EditEventModal";
-import { EventFlowModal } from "./EventFlowModal";
+import { EventFlowInline } from "../../CRM/event/react/EventFlowInline";
 import { UploadMediaModal } from "./UploadMediaModal";
 import { useUserState } from "../../app/UserState";
 import { API_BASE } from "../../js/apiBase";
@@ -30,6 +28,8 @@ import { openBrochurePreviewModal } from "../../event/shared/brochurePreview";
 const DEFAULT_DOCUMENT_TITLE = "地南佛学会";
 const DEFAULT_DOCUMENT_ICON = "/favicon.ico";
 
+type EventDetailView = "photos" | "checkin" | "info" | "upload" | "flow";
+
 export function EventDetailPage() {
   useEnsureDesignTokens();
 
@@ -41,11 +41,7 @@ export function EventDetailPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [heroHovered, setHeroHovered] = useState(false);
-  const [editing, setEditing] = useState(false);
-  const [showFlow, setShowFlow] = useState(false);
-  const [showUpload, setShowUpload] = useState(false);
-  const [showContentInfo, setShowContentInfo] = useState(false);
-  const [viewMode, setViewMode] = useState<"photos" | "checkin">("photos");
+  const [viewMode, setViewMode] = useState<EventDetailView>("info");
   const [mediaNotification, setMediaNotification] = useState<MediaNotification | null>(null);
   const [sharing, setSharing] = useState(false);
   const [isNarrowWidth, setIsNarrowWidth] = useState(() =>
@@ -60,7 +56,10 @@ export function EventDetailPage() {
     if (!canUseCheckIn && viewMode === "checkin") {
       setViewMode("photos");
     }
-  }, [canUseCheckIn, viewMode]);
+    if (!canEditEvent && viewMode === "upload") {
+      setViewMode("photos");
+    }
+  }, [canUseCheckIn, canEditEvent, viewMode]);
 
   useEffect(() => {
     const handleResize = () => {
@@ -339,8 +338,7 @@ export function EventDetailPage() {
   return (
     <div id="event-detail-page" style={pageStyle}>
       <style>{eventDetailToolbarInteractionStyle}</style>
-      <div id="event-detail-hero-shell" style={heroShellStyle}>
-        <section
+      <section
           id="event-detail-hero"
           style={heroStyle(Boolean(detail.event_image?.id), isMobile)}
           onMouseEnter={() => !isMobile && setHeroHovered(true)}
@@ -367,86 +365,79 @@ export function EventDetailPage() {
           ) : null}
           <div id="event-detail-hero-overlay" style={heroOverlayStyle(heroHovered)} />
           <div id="event-detail-hero-content" style={heroContentStyle}>
-            <div id="event-detail-hero-eyebrow" style={heroEyebrowStyle}>Event Detail</div>
+            <div id="event-detail-hero-eyebrow" style={heroEyebrowStyle}>活 动 详 情</div>
             <h1 style={heroTitleStyle}>{detail.event_name || `活动 #${detail.id}`}</h1>
             <p style={heroMetaStyle}>
-              {detail.location || "地南佛学会"} · {formatDateRange(detail.datetime, detail.end_datetime)}
+              地南佛学会 · {formatDateRange(detail.datetime, detail.end_datetime)}
             </p>
             {detail.purpose ? <p style={heroBodyStyle}>{detail.purpose}</p> : null}
           </div>
         </section>
 
-        {detail.place_id || detail.location ? (
-          <section id="event-detail-map" style={{ padding: isMobile ? "0 12px" : "0", maxWidth: 900, margin: "16px auto 0" }}>
-            <GoogleMapEmbed placeId={detail.place_id} lat={detail.lat} lng={detail.lng} query={detail.location} height={260} />
-          </section>
-        ) : null}
-
         <section id="event-detail-toolbar" style={toolbarStyle(isMobile, isNarrowWidth)}>
-          <div id="event-detail-toolbar-navigation" style={toolbarGroupStyle}>
-            <IconToolbarButton
+          <div id="event-detail-toolbar-nav" style={toolbarGroupStyle(isMobile)}>
+            <TabButton
               id="event-detail-toolbar-home"
-              label="返回首页"
+              label="首页"
               icon="fa-solid fa-house"
+              color={TAB_COLORS.home}
+              iconOnly={isMobile}
               onClick={() => navigate("/")}
             />
-            <button
-              type="button"
+            <TabButton
               id="event-detail-toolbar-prev"
-              aria-label="上一个"
-              title="上一个"
-              style={iconToolbarButtonStyle(!detail.prev_event_id)}
+              label="上一个"
+              icon="fa-solid fa-chevron-left"
+              color={TAB_COLORS.prev}
+              iconOnly={isMobile}
               disabled={!detail.prev_event_id}
-              onClick={() => {
-                if (detail.prev_event_id) {
-                  navigate(`/event/${detail.prev_event_id}`);
-                }
-              }}
-            >
-              <i className="fa-solid fa-chevron-left" aria-hidden="true" style={toolbarIconStyle} />
-            </button>
-            <button
-              type="button"
-              id="event-detail-toolbar-next"
-              aria-label="下一个"
-              title="下一个"
-              style={iconToolbarButtonStyle(!detail.next_event_id)}
-              disabled={!detail.next_event_id}
-              onClick={() => {
-                if (detail.next_event_id) {
-                  navigate(`/event/${detail.next_event_id}`);
-                }
-              }}
-            >
-              <i className="fa-solid fa-chevron-right" aria-hidden="true" style={toolbarIconStyle} />
-            </button>
-          </div>
-          <div id="event-detail-toolbar-actions" style={toolbarGroupStyle}>
-            <IconToolbarButton
-              id="event-detail-toolbar-content"
-              label="内容"
-              icon="fa-solid fa-circle-info"
-              onClick={() => setShowContentInfo(true)}
+              onClick={() => detail.prev_event_id && navigate(`/event/${detail.prev_event_id}`)}
             />
-            <IconToolbarButton
+            <TabButton
+              id="event-detail-toolbar-next"
+              label="下一个"
+              icon="fa-solid fa-chevron-right"
+              color={TAB_COLORS.next}
+              iconOnly={isMobile}
+              disabled={!detail.next_event_id}
+              onClick={() => detail.next_event_id && navigate(`/event/${detail.next_event_id}`)}
+            />
+            <TabButton
               id="event-detail-toolbar-share"
-              label={sharing ? "分享中" : "分享活动"}
+              label={sharing ? "分享中" : "分享"}
               icon={sharing ? "fa-solid fa-spinner fa-spin" : "fa-solid fa-share-nodes"}
+              color={TAB_COLORS.share}
+              iconOnly={isMobile}
               disabled={sharing}
               onClick={() => void handleShareEvent()}
             />
-            <IconToolbarButton
+          </div>
+          <div id="event-detail-toolbar-views" style={toolbarGroupStyle(isMobile)}>
+            <TabButton
+              id="event-detail-toolbar-content"
+              label="内容"
+              icon="fa-solid fa-circle-info"
+              color={TAB_COLORS.content}
+              iconOnly={isMobile}
+              active={viewMode === "info"}
+              onClick={() => setViewMode("info")}
+            />
+            <TabButton
               id="event-detail-toolbar-photos"
               label="照片"
               icon="fa-solid fa-images"
+              color={TAB_COLORS.photos}
+              iconOnly={isMobile}
               active={viewMode === "photos"}
               onClick={() => setViewMode("photos")}
             />
             {canUseCheckIn ? (
-              <IconToolbarButton
+              <TabButton
                 id="event-detail-toolbar-checkin"
                 label="签到"
                 icon="fa-solid fa-clipboard-check"
+                color={TAB_COLORS.checkin}
+                iconOnly={isMobile}
                 active={viewMode === "checkin"}
                 onClick={() => {
                   if (isMobile && !isAuthenticated) {
@@ -458,38 +449,34 @@ export function EventDetailPage() {
               />
             ) : null}
             {canEditEvent ? (
-              <IconToolbarButton
-                id="event-detail-toolbar-edit"
-                label="编辑活动资料"
-                icon="fa-solid fa-pen-to-square"
-                accent
-                onClick={() => setEditing(true)}
-              />
-            ) : null}
-            {canEditEvent ? (
-              <IconToolbarButton
+              <TabButton
                 id="event-detail-toolbar-upload"
-                label="上传照片 / 视频"
+                label="上传"
                 icon="fa-solid fa-cloud-arrow-up"
-                onClick={() => setShowUpload(true)}
+                color={TAB_COLORS.upload}
+                iconOnly={isMobile}
+                active={viewMode === "upload"}
+                onClick={() => setViewMode("upload")}
               />
             ) : null}
             {detail.datetime && detail.end_datetime ? (
-              <IconToolbarButton
+              <TabButton
                 id="event-detail-toolbar-flow"
-                label="活动流程"
+                label="流程"
                 icon="fa-solid fa-timeline"
-                onClick={() => setShowFlow(true)}
+                color={TAB_COLORS.flow}
+                iconOnly={isMobile}
+                active={viewMode === "flow"}
+                onClick={() => setViewMode("flow")}
               />
             ) : null}
           </div>
         </section>
-      </div>
 
-      <section id="event-detail-content" style={contentWrapStyle(isMobile, isNarrowWidth)}>
+      <section id="event-detail-content" style={contentWrapStyle(isMobile, viewMode)}>
         {viewMode === "photos" ? (
           <PhotoGrid detail={detail} isMobile={isMobile} mediaNotification={mediaNotification} canEditEvent={canEditEvent} hideHeader />
-        ) : (
+        ) : viewMode === "checkin" ? (
           <EventCheckInPanel
             detail={detail}
             isMobile={isMobile}
@@ -498,136 +485,274 @@ export function EventDetailPage() {
               void refreshEvents();
             }}
           />
-        )}
+        ) : viewMode === "info" ? (
+          <EventInfoPanel
+            detail={detail}
+            isMobile={isMobile}
+            onDownloadBrochure={() => void handleDownloadBrochure()}
+            onOpenPhotos={() => setViewMode("photos")}
+            onOpenSettings={
+              isAuthenticated
+                ? () => navigate(`/crm/event_table?event_id=${detail.id}&event_tab=settings`)
+                : undefined
+            }
+          />
+        ) : viewMode === "upload" ? (
+          <UploadMediaModal
+            embedded
+            eventId={detail.id}
+            eventName={detail.event_name}
+            onClose={() => setViewMode("photos")}
+            onUploaded={async () => {
+              await loadDetail(String(detail.id));
+              void refreshEvents();
+            }}
+          />
+        ) : viewMode === "flow" ? (
+          <EventFlowInline detail={detail} canEdit={canEditEvent} isMobile={isMobile} />
+        ) : null}
       </section>
-
-      {editing ? (
-        <EditEventModal
-          detail={detail}
-          onClose={() => setEditing(false)}
-          onSaved={(next) => {
-            setDetail(next);
-            void refreshEvents();
-          }}
-        />
-      ) : null}
-      {showUpload ? (
-        <UploadMediaModal
-          eventId={detail.id}
-          eventName={detail.event_name}
-          onClose={() => setShowUpload(false)}
-          onUploaded={async () => {
-            await loadDetail(String(detail.id));
-            void refreshEvents();
-          }}
-        />
-      ) : null}
-      {showFlow ? <EventFlowModal detail={detail} canEdit={canEditEvent} onClose={() => setShowFlow(false)} /> : null}
-      {showContentInfo ? (
-        <EventContentInfoModal
-          detail={detail}
-          isMobile={isMobile}
-          onDownloadBrochure={() => void handleDownloadBrochure()}
-          onClose={() => setShowContentInfo(false)}
-        />
-      ) : null}
     </div>
   );
 }
 
-function EventContentInfoModal({
+function formatEventDateTimeRange(detail: EventDetailRecord) {
+  const start = detail.datetime;
+  if (!start) return "-";
+  const norm = (v: string) => v.slice(0, 16).replace("T", " ");
+  const startText = norm(start);
+  const end = detail.end_datetime;
+  if (!end) return startText;
+  const sameDay = start.slice(0, 10) === end.slice(0, 10);
+  const endText = sameDay ? end.slice(11, 16) : norm(end);
+  return endText ? `${startText} — ${endText}` : startText;
+}
+
+function isVideoFile(fileType?: string | null) {
+  return ["mp4", "mov", "mod", "m4v", "avi", "mkv", "webm", "flv", "mts", "m2ts", "3gp", "wmv"].includes(
+    String(fileType || "").trim().toLowerCase(),
+  );
+}
+
+function EventInfoPanel({
   detail,
   isMobile,
   onDownloadBrochure,
-  onClose,
+  onOpenPhotos,
+  onOpenSettings,
 }: {
   detail: EventDetailRecord;
   isMobile: boolean;
   onDownloadBrochure: () => void;
-  onClose: () => void;
+  onOpenPhotos: () => void;
+  onOpenSettings?: () => void;
 }) {
-  useEffect(() => {
-    const previousOverflow = document.body.style.overflow;
-    document.body.style.overflow = "hidden";
-    return () => {
-      document.body.style.overflow = previousOverflow;
-    };
-  }, []);
-
-  useEffect(() => {
-    const handleKeyDown = (event: KeyboardEvent) => {
-      if (event.key === "Escape") {
-        onClose();
-      }
-    };
-
-    window.addEventListener("keydown", handleKeyDown);
-    return () => window.removeEventListener("keydown", handleKeyDown);
-  }, [onClose]);
-
   const photoCount = detail.album_files?.length || 0;
-  const organizers = (detail.organizers || []).map((user) => user.display_name || user.username || user.id).join(", ") || "-";
+  const checkinCount = detail.check_ins?.length || 0;
+  const organizers = (detail.organizers || []).map((user) => user.display_name || user.username || user.id).join("、") || "-";
   const hasBrochure = Boolean(detail.brochure_path);
+  const attachments = detail.event_files || [];
+  const hasMap = Boolean(detail.place_id || detail.location);
+  const timeText = formatEventDateTimeRange(detail);
+  const purpose = (detail.purpose || "").trim();
 
-  return createPortal(
-    <>
-    <style>{contentInfoAnimationStyle}</style>
-    <div id="event-detail-content-info-overlay" style={contentInfoOverlayStyle(isMobile)} onClick={onClose}>
-      <div id="event-detail-content-info-dialog" style={contentInfoDialogStyle(isMobile)} onClick={(event) => event.stopPropagation()}>
-        <div id="event-detail-content-info-header" style={contentInfoHeaderStyle}>
-          <div id="event-detail-content-info-title-block" style={contentInfoTitleBlockStyle}>
-            <div id="event-detail-content-info-kicker" style={contentInfoKickerStyle}>Event Content</div>
-            <div id="event-detail-content-info-title" style={contentInfoTitleStyle}>内容</div>
-          </div>
-          <button
-            id="event-detail-content-info-close"
-            type="button"
-            aria-label="关闭"
-            title="关闭"
-            style={contentInfoCloseButtonStyle}
-            onClick={onClose}
-          >
-            <i className="fa-solid fa-xmark" aria-hidden="true" />
-          </button>
+  const mapBlock = hasMap ? (
+    <div id="event-detail-content-info-map" style={infoMapWrapStyle}>
+      <GoogleMapEmbed
+        placeId={detail.place_id}
+        lat={detail.lat}
+        lng={detail.lng}
+        query={detail.location}
+        height={isMobile ? 180 : 280}
+      />
+    </div>
+  ) : null;
+
+  // 完整海报（contain 不裁切）
+  const posterEl = typeof detail.event_image?.id === "number" ? (
+    <div id="event-detail-content-info-poster" style={infoPosterWrapStyle(isMobile)}>
+      <CacheMediaPlayer
+        id="event-detail-content-info-poster-media"
+        fileId={detail.event_image.id}
+        fileType={detail.event_image.file_type}
+        eventCode={detail.event_code}
+        containerStyle={infoPosterMediaContainerStyle}
+        style={infoPosterMediaStyle}
+        retryAttempts={5}
+        retryDelayMs={1200}
+      />
+    </div>
+  ) : null;
+
+  // 照片预览容器：只显示 5 张，点击进入照片 tab
+  const previewImages = (detail.album_files || []).filter((file) => !isVideoFile(file.file_type));
+  const previewFiles = (previewImages.length ? previewImages : detail.album_files || []).slice(0, 5);
+  const previewTileEls = previewFiles.map((file, index) => (
+    <div key={file.id} style={isMobile ? photosPreviewTileMobileStyle : photosPreviewTileStyle}>
+      <CacheMediaPlayer
+        id={`event-detail-content-info-photo-${file.id}`}
+        fileId={file.id}
+        fileType={file.file_type}
+        eventCode={detail.event_code}
+        containerStyle={photosPreviewTileMediaContainerStyle}
+        style={photosPreviewTileMediaStyle}
+        retryAttempts={4}
+        retryDelayMs={1200}
+      />
+      {index === previewFiles.length - 1 && photoCount > previewFiles.length ? (
+        <div id="event-detail-photo-preview-overlay" style={photosPreviewMoreOverlayStyle}>
+          +{photoCount - previewFiles.length}
+        </div>
+      ) : null}
+    </div>
+  ));
+
+  const photosPreviewEl = !photoCount ? null : isMobile ? (
+    // 手机：横向小图条 + 全宽实心按钮
+    <div id="event-detail-content-info-photos" style={photosPreviewMobileWrapStyle}>
+      <div style={photosPreviewMobileGridStyle}>{previewTileEls}</div>
+      <button type="button" style={photosViewAllMobileBtnStyle} onClick={onOpenPhotos}>
+        <i className="fa-solid fa-images" aria-hidden="true" />
+        查看全部照片 · {photoCount} 张
+      </button>
+    </div>
+  ) : (
+    // 电脑：卡片区 + 描边胶囊按钮
+    <section id="event-detail-content-info-photos" style={contentInfoSectionStyle}>
+      <div style={contentInfoSectionHeaderStyle}>
+        <div style={contentInfoSectionIconStyle}><i className="fa-solid fa-images" aria-hidden="true" /></div>
+        <div style={contentInfoSectionHeadingStyle}>活动照片 · {photoCount} 张</div>
+      </div>
+      <div style={photosPreviewGridStyle}>{previewTileEls}</div>
+      <button type="button" style={photosViewAllBtnStyle} onClick={onOpenPhotos}>
+        查看全部照片 →
+      </button>
+    </section>
+  );
+
+  const settingsBtnEl = onOpenSettings ? (
+    <button
+      id="event-detail-content-info-settings"
+      type="button"
+      style={isMobile ? infoSettingsMobileBtnStyle : infoSettingsBtnStyle}
+      onClick={onOpenSettings}
+    >
+      <i className="fa-solid fa-gear" aria-hidden="true" />
+      活动设置
+    </button>
+  ) : null;
+
+  // ------- 手机版：极简 -------
+  if (isMobile) {
+    return (
+      <div id="event-detail-content-info-panel" style={infoMobilePanelStyle}>
+        {posterEl}
+        <div id="event-detail-content-info-mobile-list" style={infoMobileListStyle}>
+          <InfoRow id="event-detail-content-info-time-row" icon="fa-solid fa-clock" label="时间" value={timeText} isMobile />
+          {detail.location ? (
+            <InfoRow id="event-detail-content-info-location-row" icon="fa-solid fa-location-dot" label="地点" value={detail.location} isMobile />
+          ) : null}
+          <InfoRow id="event-detail-content-info-type-row" icon="fa-solid fa-layer-group" label="类型" value={detail.type || "-"} isMobile />
+          <InfoRow id="event-detail-content-info-target-row" icon="fa-solid fa-users" label="对象" value={detail.target || "-"} isMobile />
+          <InfoRow id="event-detail-content-info-photos-row" icon="fa-solid fa-images" label="照片" value={`${photoCount} 张`} isMobile />
+          <InfoRow id="event-detail-content-info-checkin-row" icon="fa-solid fa-clipboard-check" label="签到" value={`${checkinCount} 人`} isMobile />
         </div>
 
-        <div id="event-detail-content-info-body" style={contentInfoBodyStyle}>
+        {mapBlock}
+
+        {purpose ? <p id="event-detail-content-info-purpose" style={infoPurposeStyle}>{purpose}</p> : null}
+
+        {hasBrochure ? (
+          <button
+            id="event-detail-content-info-brochure-open"
+            type="button"
+            style={infoBrochureButtonStyle}
+            onClick={() =>
+              openBrochurePreviewModal({
+                file_name: detail.brochure_name || undefined,
+                file_path: detail.brochure_path || "",
+                mime_type: detail.brochure_mime || undefined,
+              })
+            }
+          >
+            <i className="fa-solid fa-file-lines" aria-hidden="true" />
+            查看简章
+          </button>
+        ) : null}
+
+        {photosPreviewEl}
+        {settingsBtnEl}
+      </div>
+    );
+  }
+
+  // ------- 电脑版：完整 -------
+  return (
+    <div id="event-detail-content-info-panel" style={infoDesktopPanelStyle}>
+      <div id="event-detail-content-info-header" style={contentInfoHeaderStyle}>
+        <div id="event-detail-content-info-title-block" style={contentInfoTitleBlockStyle}>
+          <div id="event-detail-content-info-kicker" style={contentInfoKickerStyle}>活动内容</div>
+          <div id="event-detail-content-info-title" style={contentInfoTitleStyle}>{detail.event_name || `活动 #${detail.id}`}</div>
+        </div>
+      </div>
+
+      {posterEl}
+
+      <div id="event-detail-content-info-columns" style={infoDesktopGridStyle}>
+        <div style={infoDesktopColStyle}>
           <section id="event-detail-content-info-summary-section" style={contentInfoSectionStyle}>
-            <div id="event-detail-content-info-summary-header" style={contentInfoSectionHeaderStyle}>
-              <div id="event-detail-content-info-summary-icon" style={contentInfoSectionIconStyle}>
-                <i className="fa-solid fa-list-check" aria-hidden="true" />
-              </div>
-              <div id="event-detail-content-info-summary-heading" style={contentInfoSectionHeadingStyle}>活动信息</div>
+            <div style={contentInfoSectionHeaderStyle}>
+              <div style={contentInfoSectionIconStyle}><i className="fa-solid fa-list-check" aria-hidden="true" /></div>
+              <div style={contentInfoSectionHeadingStyle}>活动信息</div>
             </div>
-            <div id="event-detail-content-info-grid" style={contentInfoGridStyle(isMobile)}>
-              <InfoRow id="event-detail-content-info-photos-row" icon="fa-solid fa-images" label="活动照片" value={`${photoCount} 张`} isMobile={isMobile} />
-              <InfoRow id="event-detail-content-info-creator-row" icon="fa-solid fa-user" label="创建者" value={detail.display_name || detail.username || "-"} isMobile={isMobile} />
-              <InfoRow id="event-detail-content-info-type-row" icon="fa-solid fa-layer-group" label="类型" value={detail.type || "-"} isMobile={isMobile} />
-              <InfoRow id="event-detail-content-info-target-row" icon="fa-solid fa-users" label="对象" value={detail.target || "-"} isMobile={isMobile} />
-              <InfoRow id="event-detail-content-info-organizers-row" icon="fa-solid fa-people-group" label="筹备团队" value={organizers} isMobile={isMobile} />
+            <div style={contentInfoGridStyle(false)}>
+              <InfoRow id="event-detail-content-info-time-row" icon="fa-solid fa-clock" label="时间" value={timeText} isMobile={false} />
+              <InfoRow id="event-detail-content-info-location-row" icon="fa-solid fa-location-dot" label="地点" value={detail.location || "-"} isMobile={false} />
+              <InfoRow id="event-detail-content-info-type-row" icon="fa-solid fa-layer-group" label="类型" value={detail.type || "-"} isMobile={false} />
+              <InfoRow id="event-detail-content-info-target-row" icon="fa-solid fa-users" label="对象" value={detail.target || "-"} isMobile={false} />
+              <InfoRow id="event-detail-content-info-code-row" icon="fa-solid fa-hashtag" label="活动编号" value={detail.event_code || "-"} isMobile={false} />
+              <InfoRow id="event-detail-content-info-creator-row" icon="fa-solid fa-user" label="创建者" value={detail.display_name || detail.username || "-"} isMobile={false} />
+              <InfoRow id="event-detail-content-info-organizers-row" icon="fa-solid fa-people-group" label="筹备团队" value={organizers} isMobile={false} />
+              <InfoRow id="event-detail-content-info-photos-row" icon="fa-solid fa-images" label="活动照片" value={`${photoCount} 张`} isMobile={false} />
+              <InfoRow id="event-detail-content-info-checkin-row" icon="fa-solid fa-clipboard-check" label="签到人数" value={`${checkinCount} 人`} isMobile={false} />
             </div>
           </section>
 
-          <section id="event-detail-content-info-brochure-section" style={contentInfoSectionStyle}>
-            <div id="event-detail-content-info-brochure-header" style={contentInfoSectionHeaderStyle}>
-              <div id="event-detail-content-info-brochure-icon" style={contentInfoSectionIconStyle}>
-                <i className="fa-solid fa-file-lines" aria-hidden="true" />
+          {purpose ? (
+            <section id="event-detail-content-info-purpose-section" style={contentInfoSectionStyle}>
+              <div style={contentInfoSectionHeaderStyle}>
+                <div style={contentInfoSectionIconStyle}><i className="fa-solid fa-quote-left" aria-hidden="true" /></div>
+                <div style={contentInfoSectionHeadingStyle}>简介</div>
               </div>
-              <div id="event-detail-content-info-brochure-heading" style={contentInfoSectionHeadingStyle}>简章</div>
+              <p style={infoPurposeStyle}>{purpose}</p>
+            </section>
+          ) : null}
+        </div>
+
+        <div style={infoDesktopColStyle}>
+          {mapBlock ? (
+            <section id="event-detail-content-info-map-section" style={contentInfoSectionStyle}>
+              <div style={contentInfoSectionHeaderStyle}>
+                <div style={contentInfoSectionIconStyle}><i className="fa-solid fa-map-location-dot" aria-hidden="true" /></div>
+                <div style={contentInfoSectionHeadingStyle}>{detail.location || "活动地点"}</div>
+              </div>
+              {mapBlock}
+            </section>
+          ) : null}
+
+          <section id="event-detail-content-info-brochure-section" style={contentInfoSectionStyle}>
+            <div style={contentInfoSectionHeaderStyle}>
+              <div style={contentInfoSectionIconStyle}><i className="fa-solid fa-file-lines" aria-hidden="true" /></div>
+              <div style={contentInfoSectionHeadingStyle}>简章</div>
             </div>
-            <div id="event-detail-content-info-brochure-card" style={contentInfoBrochureCardStyle(hasBrochure, isMobile)}>
-              <div id="event-detail-content-info-brochure-meta" style={contentInfoBrochureMetaStyle}>
-                <div id="event-detail-content-info-brochure-name" style={contentInfoBrochureNameStyle}>
-                  {detail.brochure_name || (hasBrochure ? "活动文件" : "未上传简章")}
-                </div>
-                <div id="event-detail-content-info-brochure-mime" style={contentInfoBrochureMimeStyle}>
-                  {hasBrochure ? detail.brochure_mime || "可以预览或下载" : "暂无简章文件"}
-                </div>
+            <div style={contentInfoBrochureCardStyle(hasBrochure, false)}>
+              <div style={contentInfoBrochureMetaStyle}>
+                <div style={contentInfoBrochureNameStyle}>{detail.brochure_name || (hasBrochure ? "活动文件" : "未上传简章")}</div>
+                <div style={contentInfoBrochureMimeStyle}>{hasBrochure ? detail.brochure_mime || "可以预览或下载" : "暂无简章文件"}</div>
               </div>
               {hasBrochure ? (
-                <div id="event-detail-content-info-brochure-actions" style={contentInfoBrochureActionsStyle}>
+                <div style={contentInfoBrochureActionsStyle}>
                   <button
-                    id="event-detail-content-info-brochure-preview"
                     type="button"
                     aria-label="预览简章"
                     title="预览简章"
@@ -642,25 +767,49 @@ function EventContentInfoModal({
                   >
                     <i className="fa-solid fa-eye" aria-hidden="true" />
                   </button>
-                  <button
-                    id="event-detail-content-info-brochure-download"
-                    type="button"
-                    aria-label="下载简章"
-                    title="下载简章"
-                    style={contentInfoActionButtonStyle}
-                    onClick={onDownloadBrochure}
-                  >
+                  <button type="button" aria-label="下载简章" title="下载简章" style={contentInfoActionButtonStyle} onClick={onDownloadBrochure}>
                     <i className="fa-solid fa-download" aria-hidden="true" />
                   </button>
                 </div>
               ) : null}
             </div>
           </section>
+
+          {attachments.length ? (
+            <section id="event-detail-content-info-attachments-section" style={contentInfoSectionStyle}>
+              <div style={contentInfoSectionHeaderStyle}>
+                <div style={contentInfoSectionIconStyle}><i className="fa-solid fa-paperclip" aria-hidden="true" /></div>
+                <div style={contentInfoSectionHeadingStyle}>附件 · {attachments.length}</div>
+              </div>
+              <div style={infoAttachmentListStyle}>
+                {attachments.map((file) => (
+                  <button
+                    key={file.id}
+                    type="button"
+                    style={infoAttachmentRowStyle}
+                    title={file.file_name || "附件"}
+                    onClick={() =>
+                      openBrochurePreviewModal({
+                        file_name: file.file_name || undefined,
+                        file_path: file.file_path || "",
+                        mime_type: file.mime_type || undefined,
+                      })
+                    }
+                  >
+                    <i className="fa-solid fa-file" aria-hidden="true" style={{ color: "var(--x-color-accent)" }} />
+                    <span style={infoAttachmentNameStyle}>{file.file_name || "附件"}</span>
+                    <i className="fa-solid fa-eye" aria-hidden="true" style={{ color: "var(--x-color-ink-muted)" }} />
+                  </button>
+                ))}
+              </div>
+            </section>
+          ) : null}
         </div>
       </div>
+
+      {photosPreviewEl}
+      {settingsBtnEl}
     </div>
-    </>,
-    document.body,
   );
 }
 
@@ -690,20 +839,22 @@ function InfoRow({
   );
 }
 
-function IconToolbarButton({
+function TabButton({
   id,
   label,
   icon,
+  color,
+  iconOnly = false,
   active = false,
-  accent = false,
   disabled = false,
   onClick,
 }: {
   id: string;
   label: string;
   icon: string;
+  color: string;
+  iconOnly?: boolean;
   active?: boolean;
-  accent?: boolean;
   disabled?: boolean;
   onClick: () => void;
 }) {
@@ -713,11 +864,12 @@ function IconToolbarButton({
       type="button"
       aria-label={label}
       title={label}
-      style={iconToolbarButtonStyle(disabled, active, accent)}
+      style={tabButtonStyle(color, active, disabled, iconOnly)}
       disabled={disabled}
       onClick={onClick}
     >
-      <i className={icon} aria-hidden="true" style={toolbarIconStyle} />
+      <i className={icon} aria-hidden="true" style={tabIconStyle} />
+      {iconOnly ? null : <span style={tabLabelStyle}>{label}</span>}
     </button>
   );
 }
@@ -801,22 +953,19 @@ function isUsableDocumentImage(url: string) {
   return Boolean(url && !url.includes("broken-image.png"));
 }
 
-function heroStyle(hasCover: boolean, isMobile: boolean): CSSProperties {
+function heroStyle(_hasCover: boolean, _isMobile: boolean): CSSProperties {
   return {
-    minHeight: isMobile ? "42vh" : "58vh",
+    height: "80vh",
+    minHeight: "80vh",
     position: "relative",
     overflow: "hidden",
     display: "grid",
     placeItems: "center",
-    background: hasCover
-      ? "linear-gradient(135deg, rgba(18,52,59,0.7), rgba(15,118,110,0.52), rgba(29,78,216,0.4))"
-      : "linear-gradient(135deg, var(--x-color-nav-start), var(--x-color-nav-end))",
+    // 冷色兜底（有海报时被照片覆盖）
+    background:
+      "linear-gradient(160deg, rgba(240,249,255,0.98), rgba(217,243,239,0.9), rgba(238,243,249,0.94))",
   };
 }
-
-const heroShellStyle: CSSProperties = {
-  position: "relative",
-};
 
 const heroMediaLayerStyle: CSSProperties = {
   position: "absolute",
@@ -836,21 +985,23 @@ const heroMediaStyle: CSSProperties = {
   width: "100%",
   height: "100%",
   objectFit: "cover",
+  objectPosition: "center 25%",
   display: "block",
 };
 
 const pageStyle: CSSProperties = {
   minHeight: "calc(100vh - 60px)",
-  background: "#eef9ff",
-  paddingBottom: "32px",
+  background: "linear-gradient(180deg, #eef3f9, #f8fcff)",
+  paddingBottom: "40px",
 };
 
 function heroOverlayStyle(hovered: boolean): CSSProperties {
   return {
     position: "absolute",
     inset: 0,
-    background: "linear-gradient(to bottom, rgba(14,116,144,0.08), rgba(214,242,255,0.5))",
-    backdropFilter: `blur(${hovered ? 1 : 6}px)`,
+    // 全透明，仅保留模糊
+    background: "transparent",
+    backdropFilter: `blur(${hovered ? 0.5 : 3}px)`,
     zIndex: 1,
   };
 }
@@ -858,143 +1009,175 @@ function heroOverlayStyle(hovered: boolean): CSSProperties {
 const heroContentStyle: CSSProperties = {
   position: "relative",
   zIndex: 2,
-  padding: "24px",
+  maxWidth: "760px",
+  margin: "0 24px",
+  padding: "32px 36px",
   textAlign: "center",
   display: "grid",
-  gap: "12px",
-  color: "rgba(12,74,110,0.96)",
-  textShadow: "0 1px 18px rgba(255,255,255,0.72)",
+  gap: "14px",
+  color: "var(--x-color-ink)",
+  background: "rgba(255,255,255,0.55)",
+  borderRadius: "var(--x-radius-lg)",
+  border: "1px solid rgba(255,255,255,0.6)",
+  boxShadow: "0 16px 40px var(--x-color-shadow-soft)",
+  backdropFilter: "blur(8px)",
 };
 
 const heroEyebrowStyle: CSSProperties = {
-  fontSize: "12px",
-  letterSpacing: "0.18em",
-  textTransform: "uppercase",
-  opacity: 0.8,
+  fontFamily: "var(--x-font-serif)",
+  fontSize: "13px",
+  letterSpacing: "0.32em",
+  textIndent: "0.32em",
+  color: "var(--x-color-accent-strong)",
 };
 
 const heroTitleStyle: CSSProperties = {
   margin: 0,
-  fontSize: "clamp(32px, 5vw, 52px)",
+  fontFamily: "var(--x-font-serif)",
+  fontWeight: 500,
+  fontSize: "clamp(28px, 5vw, 46px)",
+  lineHeight: 1.28,
+  letterSpacing: "0.04em",
+  color: "var(--x-color-ink)",
 };
 
 const heroMetaStyle: CSSProperties = {
   margin: 0,
-  fontSize: "16px",
-  opacity: 0.88,
+  fontSize: "15px",
+  letterSpacing: "0.02em",
+  color: "var(--x-color-ink-muted)",
 };
 
 const heroBodyStyle: CSSProperties = {
-  margin: "0 auto",
-  maxWidth: "60ch",
-  lineHeight: 1.7,
-  opacity: 0.92,
+  margin: "4px auto 0",
+  maxWidth: "58ch",
+  fontSize: "14.5px",
+  lineHeight: 1.8,
+  color: "var(--x-color-ink-muted)",
+  display: "-webkit-box",
+  WebkitLineClamp: 3,
+  WebkitBoxOrient: "vertical",
+  overflow: "hidden",
 };
 
-const glassContainerStyle: CSSProperties = {
-  boxSizing: "border-box",
-  borderRadius: 0,
-  background: "linear-gradient(180deg, rgba(255,255,255,0.64), rgba(232,247,255,0.5))",
-  border: "1px solid rgba(255,255,255,0.14)",
-  boxShadow: "0 24px 60px rgba(14,116,144,0.12), inset 0 1px 0 rgba(255,255,255,0.1)",
-  backdropFilter: "blur(22px) saturate(140%)",
-};
+const TAB_TOOLBAR_HEIGHT = 46;
 
-const glassInsetStyle: CSSProperties = {
-  boxSizing: "border-box",
-  borderRadius: 0,
-  background: "rgba(255,255,255,0.48)",
-  border: "1px solid rgba(255,255,255,0.11)",
-  boxShadow: "inset 0 1px 0 rgba(255,255,255,0.06), 0 12px 28px rgba(14,116,144,0.08)",
-  backdropFilter: "blur(14px) saturate(130%)",
-};
+const TAB_COLORS = {
+  home: "#e7e0d3",
+  prev: "#d8e6de",
+  next: "#e2dced",
+  content: "#f0e3d2",
+  share: "#d7e5ef",
+  photos: "#ecdcd6",
+  checkin: "#dde8d6",
+  upload: "#f1dede",
+  flow: "#dcd9ee",
+} as const;
 
-function toolbarStyle(isMobile: boolean, isNarrowWidth: boolean): CSSProperties {
+function toolbarStyle(isMobile: boolean, _isNarrowWidth: boolean): CSSProperties {
+  // 书签风格：section 全透明，向上覆盖自身高度压在 hero 底部
+  // 手机：两行 Tab，每行铺满宽度；电脑：单行
+  const height = isMobile ? 88 : TAB_TOOLBAR_HEIGHT;
   return {
-    position: "absolute",
-    left: 0,
-    right: 0,
-    bottom: 0,
-    zIndex: 4,
-    maxWidth: "none",
+    position: "relative",
+    zIndex: 5,
     width: "100%",
+    height: `${height}px`,
+    marginTop: `-${height}px`,
     boxSizing: "border-box",
-    margin: 0,
-    padding: isNarrowWidth ? "0 0 12px" : isMobile ? "0 14px 14px" : "0 20px 18px",
+    padding: isMobile ? "0" : "0 8px 0 12px",
     display: "flex",
-    justifyContent: "space-between",
-    gap: "12px",
-    flexWrap: "wrap",
-    alignItems: isMobile ? "stretch" : "center",
     flexDirection: isMobile ? "column" : "row",
+    justifyContent: isMobile ? "flex-end" : "flex-start",
+    alignItems: isMobile ? "stretch" : "flex-end",
+    gap: isMobile ? "0" : "3px",
+    flexWrap: "nowrap",
+    overflowX: isMobile ? "hidden" : "auto",
     background: "transparent",
-    border: "none",
-    boxShadow: "none",
-    backdropFilter: "none",
   };
 }
 
-const toolbarGroupStyle: CSSProperties = {
-  display: "flex",
-  gap: "8px",
-  flexWrap: "wrap",
-  alignItems: "center",
-  padding: "8px",
-  borderRadius: "999px",
-  background: "rgba(255,255,255,0.56)",
-  border: "1px solid rgba(255,255,255,0.14)",
-  boxShadow: "0 16px 38px rgba(14,116,144,0.14), inset 0 1px 0 rgba(255,255,255,0.08)",
-  backdropFilter: "blur(18px) saturate(140%)",
+function toolbarGroupStyle(isMobile: boolean): CSSProperties {
+  if (!isMobile) {
+    // 电脑：不生成额外盒子，子按钮直接参与单行排列
+    return { display: "contents" };
+  }
+  // 手机：一行铺满，每个 tab 等宽、无间隙
+  return {
+    flex: 1,
+    display: "flex",
+    flexDirection: "row",
+    alignItems: "stretch",
+    gap: "0",
+    width: "100%",
+  };
+}
+
+function tabButtonStyle(color: string, active: boolean, disabled: boolean, iconOnly = false): CSSProperties {
+  return {
+    display: "inline-flex",
+    alignItems: "center",
+    justifyContent: "center",
+    // 手机：每个 tab 等宽铺满、撑满整行高度
+    flex: iconOnly ? "1 1 0" : undefined,
+    minWidth: iconOnly ? 0 : undefined,
+    height: iconOnly ? "100%" : undefined,
+    gap: iconOnly ? 0 : "7px",
+    padding: iconOnly ? "0" : active ? "9px 16px" : "8px 14px",
+    borderTopLeftRadius: iconOnly ? 0 : "10px",
+    borderTopRightRadius: iconOnly ? 0 : "10px",
+    borderBottomLeftRadius: 0,
+    borderBottomRightRadius: 0,
+    borderTop: active ? "3px solid var(--x-color-accent)" : "3px solid transparent",
+    borderLeft: "none",
+    borderRight: "none",
+    borderBottom: "none",
+    background: color,
+    color: "var(--x-color-ink)",
+    fontSize: "14px",
+    fontWeight: active ? 600 : 500,
+    whiteSpace: "nowrap",
+    cursor: disabled ? "not-allowed" : "pointer",
+    opacity: disabled ? 0.45 : 1,
+    boxShadow: active
+      ? "0 -6px 16px var(--x-color-shadow)"
+      : "0 -3px 8px var(--x-color-shadow-soft)",
+    transition: "opacity 160ms ease, padding 160ms ease, transform 160ms ease",
+  };
+}
+
+const tabIconStyle: CSSProperties = {
+  fontSize: "15px",
+  lineHeight: 1,
+  pointerEvents: "none",
 };
 
-function iconToolbarButtonStyle(disabled: boolean, active = false, accent = false): CSSProperties {
-  const isActive = active || accent;
-  return {
-    width: "42px",
-    height: "42px",
-    padding: 0,
-    borderRadius: "999px",
-    border: isActive ? "1px solid rgba(255,255,255,0.24)" : "1px solid rgba(255,255,255,0.2)",
-    background: disabled
-      ? "rgba(125,211,252,0.18)"
-      : isActive
-        ? "linear-gradient(135deg, rgba(14,165,233,0.78), rgba(125,211,252,0.62))"
-        : "rgba(255,255,255,0.58)",
-    color: disabled ? "rgba(70,120,158,0.32)" : isActive ? "rgba(3,105,161,0.98)" : "rgba(31,78,121,0.9)",
-    display: "grid",
-    placeItems: "center",
-    cursor: disabled ? "not-allowed" : "pointer",
-    boxShadow: disabled ? "none" : isActive ? "0 14px 32px rgba(56,189,248,0.22)" : "0 10px 24px rgba(14,116,144,0.12)",
-    backdropFilter: "blur(14px) saturate(130%)",
-    transition: "transform 170ms ease, background 170ms ease, border-color 170ms ease, color 170ms ease",
-  };
-}
-
-const toolbarIconStyle: CSSProperties = {
-  fontSize: "17px",
+const tabLabelStyle: CSSProperties = {
   lineHeight: 1,
   pointerEvents: "none",
 };
 
 const eventDetailToolbarInteractionStyle = `
 #event-detail-toolbar button:not(:disabled):hover {
-  transform: translateY(-2px) scale(1.08);
+  opacity: 1;
+  transform: translateY(-2px);
 }
 
 #event-detail-toolbar button:focus-visible {
-  outline: 2px solid rgba(15,118,110,0.48);
-  outline-offset: 3px;
+  outline: 2px solid var(--x-color-accent-border);
+  outline-offset: -2px;
 }
 `;
 
-function contentWrapStyle(isMobile: boolean, isNarrowWidth: boolean): CSSProperties {
+function contentWrapStyle(_isMobile: boolean, _view: EventDetailView): CSSProperties {
+  // 内容区铺满左右，无 padding / margin；书签 Tab 底部紧贴此面板
   return {
     width: "100%",
+    minHeight: "1080px",
     boxSizing: "border-box",
     margin: 0,
     padding: 0,
-    display: "grid",
-    gap: 0,
+    background: "var(--x-color-panel)",
   };
 }
 
@@ -1002,86 +1185,292 @@ const placeholderStyle: CSSProperties = {
   minHeight: "calc(100vh - 60px)",
   display: "grid",
   placeItems: "center",
-  background: "#eef9ff",
-  color: "rgba(70,120,158,0.86)",
+  background: "linear-gradient(180deg, #eef3f9, #f8fcff)",
+  color: "var(--x-color-ink-muted)",
 };
 
 const errorStyle: CSSProperties = {
   ...placeholderStyle,
-  color: "rgba(190,18,60,0.86)",
+  color: "var(--x-color-danger)",
 };
 
-const contentInfoAnimationStyle = `
-@keyframes event-content-info-overlay-in {
-  from { opacity: 0; }
-  to { opacity: 1; }
-}
+const contentInfoPanelStyle: CSSProperties = {
+  display: "grid",
+  gap: "16px",
+  width: "100%",
+  boxSizing: "border-box",
+};
 
-@keyframes event-content-info-dialog-in {
-  from {
-    opacity: 0;
-    transform: translateY(18px) scale(0.965);
-  }
-  to {
-    opacity: 1;
-    transform: translateY(0) scale(1);
-  }
-}
+const infoMobilePanelStyle: CSSProperties = {
+  display: "grid",
+  gap: "14px",
+  width: "100%",
+  boxSizing: "border-box",
+  padding: "16px 14px",
+};
 
-@keyframes event-content-info-section-in {
-  from {
-    opacity: 0;
-    transform: translateY(8px);
-  }
-  to {
-    opacity: 1;
-    transform: translateY(0);
-  }
-}
+const infoMobileListStyle: CSSProperties = {
+  display: "grid",
+  gap: "8px",
+};
 
-#event-detail-content-info-dialog button:not(:disabled):hover {
-  transform: translateY(-2px) scale(1.08);
-  background: rgba(255,255,255,0.82) !important;
-  border-color: rgba(56,189,248,0.44) !important;
-  color: rgba(3,105,161,0.98) !important;
-}
+const infoDesktopPanelStyle: CSSProperties = {
+  display: "grid",
+  gap: "18px",
+  width: "100%",
+  boxSizing: "border-box",
+  maxWidth: "1180px",
+  margin: "0 auto",
+  padding: "28px 24px",
+};
 
-#event-detail-content-info-dialog button:focus-visible {
-  outline: 2px solid rgba(56,189,248,0.7);
-  outline-offset: 3px;
-}
-`;
+const infoDesktopGridStyle: CSSProperties = {
+  display: "grid",
+  gridTemplateColumns: "minmax(0, 1.15fr) minmax(0, 1fr)",
+  gap: "18px",
+  alignItems: "start",
+};
 
-function contentInfoOverlayStyle(isMobile: boolean): CSSProperties {
+const infoDesktopColStyle: CSSProperties = {
+  display: "grid",
+  gap: "18px",
+  alignContent: "start",
+  minWidth: 0,
+};
+
+const infoMapWrapStyle: CSSProperties = {
+  width: "100%",
+};
+
+const infoPurposeStyle: CSSProperties = {
+  margin: 0,
+  fontSize: "14.5px",
+  lineHeight: 1.8,
+  color: "var(--x-color-ink-muted)",
+  whiteSpace: "pre-wrap",
+};
+
+const infoBrochureButtonStyle: CSSProperties = {
+  display: "inline-flex",
+  alignItems: "center",
+  justifyContent: "center",
+  gap: "8px",
+  width: "100%",
+  padding: "12px 16px",
+  borderRadius: "var(--x-radius-md)",
+  border: "none",
+  background: "var(--x-color-accent)",
+  color: "#ffffff",
+  fontSize: "15px",
+  fontWeight: 600,
+  cursor: "pointer",
+};
+
+const infoAttachmentListStyle: CSSProperties = {
+  display: "grid",
+  gap: "8px",
+};
+
+const infoAttachmentRowStyle: CSSProperties = {
+  display: "flex",
+  alignItems: "center",
+  gap: "10px",
+  width: "100%",
+  padding: "10px 12px",
+  borderRadius: "var(--x-radius-sm)",
+  border: "1px solid var(--x-color-line)",
+  background: "var(--x-color-panel)",
+  cursor: "pointer",
+  textAlign: "left",
+};
+
+const infoAttachmentNameStyle: CSSProperties = {
+  flex: 1,
+  minWidth: 0,
+  fontSize: "13.5px",
+  color: "var(--x-color-ink)",
+  whiteSpace: "nowrap",
+  overflow: "hidden",
+  textOverflow: "ellipsis",
+};
+
+// —— 完整海报 ——
+function infoPosterWrapStyle(isMobile: boolean): CSSProperties {
   return {
-    position: "fixed",
-    inset: 0,
-    zIndex: 2800,
-    display: "grid",
-    placeItems: isMobile ? "end stretch" : "center",
-    padding: isMobile ? "12px 0 0" : "24px",
-    background: "rgba(214,242,255,0.64)",
-    backdropFilter: "blur(10px)",
-    animation: "event-content-info-overlay-in 180ms ease-out both",
+    position: "relative",
+    width: "100%",
+    height: isMobile ? "300px" : "460px",
+    borderRadius: "var(--x-radius-md)",
+    overflow: "hidden",
+    background: "var(--x-color-canvas-alt)",
+    border: "1px solid var(--x-color-line)",
   };
 }
 
-function contentInfoDialogStyle(isMobile: boolean): CSSProperties {
-  return {
-    width: isMobile ? "100%" : "min(760px, 92vw)",
-    maxHeight: isMobile ? "min(88dvh, 760px)" : "86vh",
-    overflow: "auto",
-    boxSizing: "border-box",
-    padding: isMobile ? "18px 16px max(18px, env(safe-area-inset-bottom))" : "22px",
-    borderRadius: 0,
-    background: "linear-gradient(180deg, rgba(255,255,255,0.7), rgba(232,247,255,0.58))",
-    border: "1px solid rgba(255,255,255,0.14)",
-    boxShadow: "0 30px 90px rgba(14,116,144,0.18), inset 0 1px 0 rgba(255,255,255,0.12)",
-    color: "rgba(31,78,121,0.92)",
-    backdropFilter: "blur(24px) saturate(140%)",
-    animation: "event-content-info-dialog-in 240ms cubic-bezier(0.2, 0.8, 0.2, 1) both",
-  };
-}
+const infoPosterMediaContainerStyle: CSSProperties = {
+  position: "absolute",
+  inset: 0,
+};
+
+const infoPosterMediaStyle: CSSProperties = {
+  width: "100%",
+  height: "100%",
+  objectFit: "contain",
+  display: "block",
+};
+
+// —— 照片预览容器（5 张，点击进入照片 tab）——
+const photosPreviewCardStyle: CSSProperties = {
+  display: "grid",
+  gap: "12px",
+  padding: "16px",
+  borderRadius: "var(--x-radius-md)",
+  background: "var(--x-color-panel-alt)",
+  border: "1px solid var(--x-color-line)",
+  cursor: "pointer",
+};
+
+const photosPreviewHeaderStyle: CSSProperties = {
+  display: "flex",
+  alignItems: "baseline",
+  justifyContent: "space-between",
+  gap: "12px",
+};
+
+const photosPreviewTitleStyle: CSSProperties = {
+  fontFamily: "var(--x-font-serif)",
+  fontSize: "15px",
+  fontWeight: 500,
+  color: "var(--x-color-ink)",
+};
+
+const photosPreviewLinkStyle: CSSProperties = {
+  fontSize: "13px",
+  fontWeight: 600,
+  color: "var(--x-color-accent-strong)",
+};
+
+const photosPreviewGridStyle: CSSProperties = {
+  display: "grid",
+  gridTemplateColumns: "repeat(5, 1fr)",
+  gap: "8px",
+};
+
+const photosPreviewTileStyle: CSSProperties = {
+  position: "relative",
+  aspectRatio: "1 / 1",
+  borderRadius: "var(--x-radius-sm)",
+  overflow: "hidden",
+  background: "var(--x-color-canvas-alt)",
+};
+
+const photosPreviewTileMediaContainerStyle: CSSProperties = {
+  position: "absolute",
+  inset: 0,
+};
+
+const photosPreviewTileMediaStyle: CSSProperties = {
+  width: "100%",
+  height: "100%",
+  objectFit: "cover",
+  objectPosition: "center 25%",
+  display: "block",
+};
+
+const photosPreviewMoreOverlayStyle: CSSProperties = {
+  position: "absolute",
+  inset: 0,
+  display: "grid",
+  placeItems: "center",
+  background: "rgba(17, 94, 89, 0.62)",
+  color: "#ffffff",
+  fontSize: "18px",
+  fontWeight: 700,
+  letterSpacing: "0.02em",
+};
+
+// 电脑「查看全部」描边胶囊按钮
+const photosViewAllBtnStyle: CSSProperties = {
+  justifySelf: "start",
+  display: "inline-flex",
+  alignItems: "center",
+  gap: "6px",
+  padding: "9px 18px",
+  borderRadius: "999px",
+  border: "1px solid var(--x-color-accent-border)",
+  background: "var(--x-color-accent-soft)",
+  color: "var(--x-color-accent-strong)",
+  fontSize: "13.5px",
+  fontWeight: 600,
+  cursor: "pointer",
+};
+
+// 活动设置按钮（登陆可见）
+const infoSettingsBtnStyle: CSSProperties = {
+  justifySelf: "start",
+  display: "inline-flex",
+  alignItems: "center",
+  gap: "8px",
+  padding: "10px 20px",
+  borderRadius: "999px",
+  border: "1px solid var(--x-color-line)",
+  background: "var(--x-color-panel)",
+  color: "var(--x-color-ink)",
+  fontSize: "14px",
+  fontWeight: 600,
+  cursor: "pointer",
+};
+
+const infoSettingsMobileBtnStyle: CSSProperties = {
+  display: "inline-flex",
+  alignItems: "center",
+  justifyContent: "center",
+  gap: "8px",
+  width: "100%",
+  padding: "12px 16px",
+  borderRadius: "var(--x-radius-md)",
+  border: "1px solid var(--x-color-line)",
+  background: "var(--x-color-panel)",
+  color: "var(--x-color-ink)",
+  fontSize: "15px",
+  fontWeight: 600,
+  cursor: "pointer",
+};
+
+// 手机照片预览
+const photosPreviewMobileWrapStyle: CSSProperties = {
+  display: "grid",
+  gap: "10px",
+};
+
+const photosPreviewMobileGridStyle: CSSProperties = {
+  display: "grid",
+  gridTemplateColumns: "repeat(5, 1fr)",
+  gap: "3px",
+};
+
+const photosPreviewTileMobileStyle: CSSProperties = {
+  position: "relative",
+  aspectRatio: "1 / 1",
+  overflow: "hidden",
+  background: "var(--x-color-canvas-alt)",
+};
+
+const photosViewAllMobileBtnStyle: CSSProperties = {
+  display: "inline-flex",
+  alignItems: "center",
+  justifyContent: "center",
+  gap: "8px",
+  width: "100%",
+  padding: "13px 16px",
+  borderRadius: "var(--x-radius-md)",
+  border: "none",
+  background: "var(--x-color-accent)",
+  color: "#ffffff",
+  fontSize: "15px",
+  fontWeight: 600,
+  cursor: "pointer",
+};
 
 const contentInfoHeaderStyle: CSSProperties = {
   display: "flex",
@@ -1097,34 +1486,18 @@ const contentInfoTitleBlockStyle: CSSProperties = {
 };
 
 const contentInfoKickerStyle: CSSProperties = {
-  fontSize: "11px",
+  fontSize: "12px",
   lineHeight: 1,
-  letterSpacing: "0.16em",
-  textTransform: "uppercase",
-  color: "rgba(14,165,233,0.82)",
+  letterSpacing: "0.22em",
+  color: "var(--x-color-accent-strong)",
 };
 
 const contentInfoTitleStyle: CSSProperties = {
+  fontFamily: "var(--x-font-serif)",
   fontSize: "22px",
   lineHeight: 1.15,
-  fontWeight: 850,
-  color: "rgba(12,74,110,0.98)",
-};
-
-const contentInfoCloseButtonStyle: CSSProperties = {
-  width: "40px",
-  height: "40px",
-  padding: 0,
-  borderRadius: "999px",
-  border: "1px solid rgba(125,211,252,0.26)",
-  background: "rgba(255,255,255,0.6)",
-  color: "rgba(31,78,121,0.9)",
-  display: "grid",
-  placeItems: "center",
-  cursor: "pointer",
-  boxShadow: "0 12px 28px rgba(14,116,144,0.14)",
-  backdropFilter: "blur(14px)",
-  transition: "transform 170ms ease, background 170ms ease, border-color 170ms ease, color 170ms ease",
+  fontWeight: 500,
+  color: "var(--x-color-ink)",
 };
 
 const contentInfoBodyStyle: CSSProperties = {
@@ -1136,12 +1509,10 @@ const contentInfoSectionStyle: CSSProperties = {
   display: "grid",
   gap: "14px",
   padding: "16px",
-  borderRadius: 0,
-  background: "rgba(255,255,255,0.5)",
-  border: "1px solid rgba(255,255,255,0.12)",
-  boxShadow: "inset 0 1px 0 rgba(255,255,255,0.08), 0 16px 34px rgba(14,116,144,0.08)",
-  backdropFilter: "blur(16px) saturate(130%)",
-  animation: "event-content-info-section-in 220ms ease both",
+  borderRadius: "var(--x-radius-md)",
+  background: "var(--x-color-panel-alt)",
+  border: "1px solid var(--x-color-line)",
+  boxShadow: "0 10px 24px var(--x-color-shadow-soft)",
 };
 
 const contentInfoSectionHeaderStyle: CSSProperties = {
@@ -1156,16 +1527,16 @@ const contentInfoSectionIconStyle: CSSProperties = {
   borderRadius: "999px",
   display: "grid",
   placeItems: "center",
-  background: "rgba(14,165,233,0.13)",
-  border: "1px solid rgba(56,189,248,0.22)",
-  color: "rgba(14,165,233,0.94)",
-  boxShadow: "0 10px 24px rgba(14,116,144,0.1)",
+  background: "var(--x-color-accent-soft)",
+  border: "1px solid var(--x-color-accent-border)",
+  color: "var(--x-color-accent-strong)",
 };
 
 const contentInfoSectionHeadingStyle: CSSProperties = {
-  fontSize: "14px",
-  fontWeight: 850,
-  color: "rgba(12,74,110,0.96)",
+  fontFamily: "var(--x-font-serif)",
+  fontSize: "15px",
+  fontWeight: 500,
+  color: "var(--x-color-ink)",
 };
 
 function contentInfoGridStyle(isMobile: boolean): CSSProperties {
@@ -1183,11 +1554,9 @@ function contentInfoRowStyle(isMobile: boolean): CSSProperties {
     justifyContent: "space-between",
     gap: "12px",
     padding: "12px",
-    borderRadius: 0,
-    background: "rgba(232,247,255,0.42)",
-    border: "1px solid rgba(255,255,255,0.1)",
-    boxShadow: "inset 0 1px 0 rgba(255,255,255,0.05)",
-    backdropFilter: "blur(12px)",
+    borderRadius: "var(--x-radius-sm)",
+    background: "var(--x-color-panel)",
+    border: "1px solid var(--x-color-line)",
     flexDirection: isMobile ? "column" : "row",
     alignItems: isMobile ? "flex-start" : "center",
   };
@@ -1207,23 +1576,23 @@ const contentInfoRowIconStyle: CSSProperties = {
   display: "grid",
   placeItems: "center",
   borderRadius: "999px",
-  background: "rgba(56,189,248,0.1)",
-  color: "rgba(14,165,233,0.9)",
+  background: "var(--x-color-accent-soft)",
+  color: "var(--x-color-accent-strong)",
   fontSize: "12px",
 };
 
 const contentInfoLabelStyle: CSSProperties = {
-  color: "rgba(70,120,158,0.9)",
+  color: "var(--x-color-ink-muted)",
   fontSize: "13px",
-  fontWeight: 800,
+  fontWeight: 600,
 };
 
 function contentInfoValueStyle(isMobile: boolean): CSSProperties {
   return {
     minWidth: 0,
-    color: "rgba(12,74,110,0.94)",
+    color: "var(--x-color-ink)",
     fontSize: "14px",
-    fontWeight: 750,
+    fontWeight: 600,
     textAlign: isMobile ? "left" : "right",
     overflowWrap: "anywhere",
   };
@@ -1237,13 +1606,10 @@ function contentInfoBrochureCardStyle(hasBrochure: boolean, isMobile: boolean): 
     alignItems: isMobile ? "flex-start" : "center",
     flexDirection: isMobile ? "column" : "row",
     padding: "14px",
-    borderRadius: 0,
-    background: hasBrochure
-      ? "linear-gradient(135deg, rgba(56,189,248,0.18), rgba(255,255,255,0.48))"
-      : "rgba(255,255,255,0.44)",
-    border: hasBrochure ? "1px solid rgba(56,189,248,0.26)" : "1px solid rgba(255,255,255,0.1)",
-    boxShadow: hasBrochure ? "0 16px 34px rgba(14,116,144,0.12), inset 0 1px 0 rgba(255,255,255,0.08)" : "inset 0 1px 0 rgba(255,255,255,0.05)",
-    backdropFilter: "blur(14px)",
+    borderRadius: "var(--x-radius-md)",
+    background: hasBrochure ? "var(--x-color-accent-soft)" : "var(--x-color-panel)",
+    border: hasBrochure ? "1px solid var(--x-color-accent-border)" : "1px solid var(--x-color-line)",
+    boxShadow: hasBrochure ? "0 12px 26px var(--x-color-shadow-soft)" : "none",
   };
 }
 
@@ -1256,14 +1622,14 @@ const contentInfoBrochureMetaStyle: CSSProperties = {
 const contentInfoBrochureNameStyle: CSSProperties = {
   minWidth: 0,
   fontSize: "15px",
-  fontWeight: 850,
-  color: "rgba(12,74,110,0.96)",
+  fontWeight: 600,
+  color: "var(--x-color-ink)",
   overflowWrap: "anywhere",
 };
 
 const contentInfoBrochureMimeStyle: CSSProperties = {
   fontSize: "12px",
-  color: "rgba(70,120,158,0.84)",
+  color: "var(--x-color-ink-muted)",
 };
 
 const contentInfoBrochureActionsStyle: CSSProperties = {
@@ -1278,13 +1644,12 @@ const contentInfoActionButtonStyle: CSSProperties = {
   height: "40px",
   padding: 0,
   borderRadius: "999px",
-  border: "1px solid rgba(56,189,248,0.22)",
-  background: "rgba(255,255,255,0.58)",
-  color: "rgba(31,78,121,0.92)",
+  border: "1px solid var(--x-color-accent-border)",
+  background: "var(--x-color-panel)",
+  color: "var(--x-color-accent-strong)",
   display: "grid",
   placeItems: "center",
   cursor: "pointer",
-  boxShadow: "0 12px 26px rgba(14,116,144,0.12)",
-  backdropFilter: "blur(14px) saturate(130%)",
+  boxShadow: "0 8px 18px var(--x-color-shadow-soft)",
   transition: "transform 170ms ease, background 170ms ease, border-color 170ms ease, color 170ms ease",
 };

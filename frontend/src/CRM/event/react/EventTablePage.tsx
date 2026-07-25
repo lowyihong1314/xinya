@@ -87,8 +87,10 @@ export function EventTablePage() {
       onCreateEventsBatch={(payloads) => actions.createEventsBatch(payloads)}
       onUpdateEvent={(patch) => void actions.updateEvent(patch)}
       onUploadPoster={(file) => void actions.uploadPoster(file)}
+      onSetPoster={(fileId) => void actions.setPoster(fileId)}
       onUploadBrochure={(file) => void actions.uploadBrochure(file)}
       onRemoveBrochure={() => void actions.removeBrochure()}
+      onSetBrochure={(fileId) => void actions.setBrochure(fileId)}
       onUploadAttachment={(files) => void actions.uploadAttachment(files)}
       onRemoveAttachment={(fileId) => void actions.removeAttachment(fileId)}
       onDeleteEvent={() => {

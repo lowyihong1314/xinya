@@ -69,6 +69,21 @@ export async function uploadEventBrochure(eventId: number, file: File) {
   return parseJson<{ status?: string; data?: EventRecord; message?: string }>(response);
 }
 
+export async function setEventPosterFile(eventId: number, fileId: number) {
+  return setSharedEventPoster(eventId, fileId);
+}
+
+export async function setEventBrochure(eventId: number, fileId: number | null) {
+  const response = await apiFetch(`/api/event_data/set_brochure/${eventId}`, {
+    method: "POST",
+    credentials: "include",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ file_id: fileId }),
+  });
+
+  return parseJson<{ status?: string; data?: EventRecord; message?: string }>(response);
+}
+
 export async function uploadEventFile(eventId: number, file: File) {
   const formData = new FormData();
   formData.append("file", file);

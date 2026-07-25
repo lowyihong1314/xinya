@@ -13,6 +13,8 @@ import {
   deleteEvent,
   deleteEventFile,
   saveEvent,
+  setEventBrochure,
+  setEventPosterFile,
   uploadEventBrochure,
   uploadEventFile,
   uploadEventPoster,
@@ -432,6 +434,23 @@ export function useEventTableController(options?: { preferredEventId?: number | 
     }
   }
 
+  async function setPoster(fileId: number) {
+    if (!selectedEventId) {
+      return;
+    }
+    await flushPendingEventChanges();
+    setUploadingPoster(true);
+    try {
+      await setEventPosterFile(selectedEventId, fileId);
+      await refreshEvents();
+      setToast({ type: "success", text: "已设为活动海报" });
+    } catch (err) {
+      setToast({ type: "error", text: err instanceof Error ? err.message : "设置海报失败" });
+    } finally {
+      setUploadingPoster(false);
+    }
+  }
+
   async function removeBrochure() {
     if (!selectedEventId) {
       return;
@@ -439,14 +458,28 @@ export function useEventTableController(options?: { preferredEventId?: number | 
     await flushPendingEventChanges();
     setUploadingBrochure(true);
     try {
-      await saveEvent({
-        event_id: selectedEventId,
-        brochure_path: null,
-      });
+      await setEventBrochure(selectedEventId, null);
       await refreshEvents();
-      setToast({ type: "success", text: "简章已移除" });
+      setToast({ type: "success", text: "已取消简章" });
     } catch (err) {
-      setToast({ type: "error", text: err instanceof Error ? err.message : "移除失败" });
+      setToast({ type: "error", text: err instanceof Error ? err.message : "操作失败" });
+    } finally {
+      setUploadingBrochure(false);
+    }
+  }
+
+  async function setBrochure(fileId: number) {
+    if (!selectedEventId) {
+      return;
+    }
+    await flushPendingEventChanges();
+    setUploadingBrochure(true);
+    try {
+      await setEventBrochure(selectedEventId, fileId);
+      await refreshEvents();
+      setToast({ type: "success", text: "已设为简章" });
+    } catch (err) {
+      setToast({ type: "error", text: err instanceof Error ? err.message : "设置失败" });
     } finally {
       setUploadingBrochure(false);
     }
@@ -545,8 +578,10 @@ export function useEventTableController(options?: { preferredEventId?: number | 
       createEventsBatch,
       removeSelectedEvent,
       uploadPoster,
+      setPoster,
       uploadBrochure,
       removeBrochure,
+      setBrochure,
       uploadAttachment,
       removeAttachment,
       addOrganizers,

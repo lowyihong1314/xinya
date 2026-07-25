@@ -10,6 +10,11 @@ import { downloadUrlOrShare } from "../../../js/browserActions";
 import { show_alert } from "../../../js/show_alert";
 import { openBrochurePreviewModal } from "../../../event/shared/brochurePreview";
 import { buildEventTypeChoices } from "../../../event/shared/eventTypes";
+import { fetchEventDetail } from "../../../event/shared/api";
+import type { EventDetailRecord } from "../../../event/shared/types";
+import { PhotoGrid } from "../../../album/react/PhotoGrid";
+import { UploadMediaModal } from "../../../album/react/UploadMediaModal";
+import { useUserState } from "../../../app/UserState";
 import { TablePagination, usePagedRows } from "../../shared/TablePagination";
 import { EventAgentTab } from "./EventAgentTab";
 import { EventBudgetTab } from "./EventBudgetTab";
@@ -38,7 +43,8 @@ type CreateDraft = {
 
 const TABS: { key: string; label: string; icon: string }[] = [
   { key: "settings", label: "基本设置", icon: "fa-solid fa-sliders" },
-  { key: "media", label: "海报与附件", icon: "fa-solid fa-image" },
+  { key: "poster", label: "海报", icon: "fa-solid fa-image" },
+  { key: "files", label: "附件", icon: "fa-solid fa-paperclip" },
   { key: "organizers", label: "组织者", icon: "fa-solid fa-users" },
   { key: "checkin", label: "签到", icon: "fa-solid fa-clipboard-check" },
   { key: "flow", label: "流程", icon: "fa-solid fa-list-ol" },
@@ -96,8 +102,10 @@ export function EventTableView(props: {
   onCreateEventsBatch: (payloads: EventCreatePayload[]) => Promise<number>;
   onUpdateEvent: (patch: EventMutationPayload) => void;
   onUploadPoster: (file: File) => void;
+  onSetPoster: (fileId: number) => void;
   onUploadBrochure: (file: File) => void;
   onRemoveBrochure: () => void;
+  onSetBrochure: (fileId: number) => void;
   onUploadAttachment: (files: File[]) => void;
   onRemoveAttachment: (fileId: number) => void;
   onDeleteEvent: () => void;
@@ -340,20 +348,23 @@ export function EventTableView(props: {
             <div style={bodyStyle}>
               {!event ? (
                 <div style={emptyStyle}>加载中…</div>
-              ) : props.activeTab === "media" ? (
-                <MediaTab
+              ) : props.activeTab === "poster" ? (
+                <PosterTab
                   event={event}
                   canEditEvent={canEditEvent}
                   imageUrl={props.imageUrl}
-                  posterUploading={props.posterUploading}
+                  onSetPoster={props.onSetPoster}
+                  onRefresh={props.onRefresh}
+                />
+              ) : props.activeTab === "files" ? (
+                <AttachmentsTab
+                  event={event}
+                  canEditEvent={canEditEvent}
                   brochureUploading={props.brochureUploading}
                   attachmentUploading={props.attachmentUploading}
-                  posterInputRef={posterInputRef}
-                  brochureInputRef={brochureInputRef}
                   attachmentInputRef={attachmentInputRef}
-                  onUploadPoster={props.onUploadPoster}
-                  onUploadBrochure={props.onUploadBrochure}
                   onRemoveBrochure={props.onRemoveBrochure}
+                  onSetBrochure={props.onSetBrochure}
                   onUploadAttachment={props.onUploadAttachment}
                   onRemoveAttachment={props.onRemoveAttachment}
                   onDownload={handleDownloadEventFile}
@@ -371,15 +382,21 @@ export function EventTableView(props: {
               ) : props.activeTab === "agent" ? (
                 <EventAgentTab eventId={event.id} canEdit={canEditEvent} isMobile={isMobile} onApplied={props.onRefresh} />
               ) : (
-                <div style={detailGridStyle(isMobile)}>
-                  <EditableFact label="活动名称" value={event.event_name || ""} editable={canEditEvent} onSave={(v) => props.onUpdateEvent({ event_name: v })} />
-                  <EditableFact label="类型" value={event.type || ""} editable={canEditEvent} onSave={(v) => props.onUpdateEvent({ type: v })} />
-                  <EditableFact label="开始时间" value={toDatetimeLocal(event.datetime)} kind="datetime" editable={canEditEvent} onSave={(v) => props.onUpdateEvent({ datetime: v || null })} />
-                  <EditableFact label="结束时间" value={toDatetimeLocal(event.end_datetime)} kind="datetime" editable={canEditEvent} onSave={(v) => props.onUpdateEvent({ end_datetime: v || null })} />
-                  <LocationFact event={event} editable={canEditEvent} onUpdate={props.onUpdateEvent} />
-                  <EditableFact label="对象" value={event.target || ""} editable={canEditEvent} onSave={(v) => props.onUpdateEvent({ target: v })} />
-                  <EditableFact label="活动说明" value={event.purpose || ""} kind="textarea" editable={canEditEvent} onSave={(v) => props.onUpdateEvent({ purpose: v })} />
-                </div>
+                <>
+                  <div style={detailGridStyle(isMobile)}>
+                    <EditableFact label="活动名称" value={event.event_name || ""} editable={canEditEvent} onSave={(v) => props.onUpdateEvent({ event_name: v })} />
+                    <EditableFact label="类型" value={event.type || ""} editable={canEditEvent} onSave={(v) => props.onUpdateEvent({ type: v })} />
+                    <EditableFact label="开始时间" value={toDatetimeLocal(event.datetime)} kind="datetime" editable={canEditEvent} onSave={(v) => props.onUpdateEvent({ datetime: v || null })} />
+                    <EditableFact label="结束时间" value={toDatetimeLocal(event.end_datetime)} kind="datetime" editable={canEditEvent} onSave={(v) => props.onUpdateEvent({ end_datetime: v || null })} />
+                    <LocationFact event={event} editable={canEditEvent} onUpdate={props.onUpdateEvent} />
+                    <EditableFact label="对象" value={event.target || ""} editable={canEditEvent} onSave={(v) => props.onUpdateEvent({ target: v })} />
+                    <EditableFact label="活动说明" value={event.purpose || ""} kind="textarea" editable={canEditEvent} onSave={(v) => props.onUpdateEvent({ purpose: v })} />
+                  </div>
+                  <a href={`#/event/${event.id}`} style={viewEventLinkStyle}>
+                    <i className="fa-solid fa-arrow-up-right-from-square" aria-hidden="true" />
+                    查看活动页
+                  </a>
+                </>
               )}
             </div>
           </>
@@ -484,39 +501,44 @@ export function EventTableView(props: {
   );
 }
 
-function MediaTab({
+function PosterTab({
   event,
   canEditEvent,
   imageUrl,
-  posterUploading,
-  brochureUploading,
-  attachmentUploading,
-  posterInputRef,
-  brochureInputRef,
-  attachmentInputRef,
-  onUploadPoster,
-  onUploadBrochure,
-  onRemoveBrochure,
-  onUploadAttachment,
-  onRemoveAttachment,
-  onDownload,
+  onSetPoster,
+  onRefresh,
 }: {
   event: EventRecord;
   canEditEvent: boolean;
   imageUrl: string | null;
-  posterUploading: boolean;
-  brochureUploading: boolean;
-  attachmentUploading: boolean;
-  posterInputRef: RefObject<HTMLInputElement | null>;
-  brochureInputRef: RefObject<HTMLInputElement | null>;
-  attachmentInputRef: RefObject<HTMLInputElement | null>;
-  onUploadPoster: (file: File) => void;
-  onUploadBrochure: (file: File) => void;
-  onRemoveBrochure: () => void;
-  onUploadAttachment: (files: File[]) => void;
-  onRemoveAttachment: (fileId: number) => void;
-  onDownload: (filePath: string, fileName?: string | null, mimeType?: string | null) => void;
+  onSetPoster: (fileId: number) => void;
+  onRefresh: () => void;
 }) {
+  const { isMobile } = useUserState();
+  const [detail, setDetail] = useState<EventDetailRecord | null>(null);
+  const [showUpload, setShowUpload] = useState(false);
+
+  const loadDetail = () => {
+    return fetchEventDetail(event.id)
+      .then((payload) => setDetail(payload.data ?? null))
+      .catch(() => setDetail(null));
+  };
+
+  useEffect(() => {
+    let active = true;
+    setDetail(null);
+    fetchEventDetail(event.id)
+      .then((payload) => {
+        if (active) setDetail(payload.data ?? null);
+      })
+      .catch(() => {
+        if (active) setDetail(null);
+      });
+    return () => {
+      active = false;
+    };
+  }, [event.id, event.event_image?.id]);
+
   return (
     <div style={sectionBodyStyle}>
       {/* Poster */}
@@ -533,7 +555,7 @@ function MediaTab({
         <div style={attachmentMetaWrapStyle}>
           <div style={attachmentTitleStyle}>活动海报 / 封面</div>
           <div style={attachmentSubtitleStyle}>
-            {event.event_image?.id ? `当前封面来自活动 album，图片 ID #${event.event_image.id}` : "上传图片后会自动进入活动 album，并切换为当前 event_image。"}
+            {event.event_image?.id ? "点下方相册照片即可设为海报；或上传新文件。" : "上传文件到相册，然后在下方点选一张作为海报。"}
           </div>
           <div style={attachmentActionRowStyle}>
             {imageUrl ? (
@@ -542,88 +564,80 @@ function MediaTab({
               </button>
             ) : null}
             {canEditEvent ? (
-              <>
-                <button type="button" style={btnStyle} disabled={posterUploading} onClick={() => posterInputRef.current?.click()}>
-                  {posterUploading ? "上传中…" : event.event_image?.id ? "替换海报" : "上传海报"}
-                </button>
-                <input
-                  ref={posterInputRef}
-                  type="file"
-                  accept="image/*,.heic,.heif"
-                  style={hiddenInputStyle}
-                  onChange={(e) => {
-                    const file = e.target.files?.[0];
-                    if (file) onUploadPoster(file);
-                    e.target.value = "";
-                  }}
-                />
-              </>
+              <button type="button" style={primaryButtonStyle} onClick={() => setShowUpload(true)}>
+                上传文件
+              </button>
             ) : null}
           </div>
         </div>
       </div>
 
-      {/* Brochure */}
-      <div style={attachmentCardStyle}>
-        <div style={attachmentMetaWrapStyle}>
-          <div style={attachmentTitleStyle}>{event.brochure_name || "未上传简章"}</div>
-          <div style={attachmentSubtitleStyle}>
-            {event.brochure_path ? event.brochure_mime || "点击预览 / 下载" : "支持 PDF / PPT / PPTX / XLS / XLSX / DOC / DOCX"}
-          </div>
-        </div>
-        <div style={attachmentActionRowStyle}>
-          {event.brochure_path ? (
-            <button
-              type="button"
-              style={btnStyle}
-              onClick={() =>
-                openBrochurePreviewModal({
-                  file_name: event.brochure_name || undefined,
-                  file_path: event.brochure_path || "",
-                  mime_type: event.brochure_mime || undefined,
-                })
-              }
-            >
-              预览
-            </button>
-          ) : null}
-          {event.brochure_path ? (
-            <button type="button" style={btnStyle} onClick={() => onDownload(event.brochure_path || "", event.brochure_name, event.brochure_mime)}>
-              下载
-            </button>
-          ) : null}
-          {canEditEvent ? (
-            <>
-              <button type="button" style={btnStyle} disabled={brochureUploading} onClick={() => brochureInputRef.current?.click()}>
-                {brochureUploading ? "上传中…" : event.brochure_path ? "替换文件" : "上传文件"}
-              </button>
-              {event.brochure_path ? (
-                <button type="button" style={dangerButtonStyle} disabled={brochureUploading} onClick={onRemoveBrochure}>
-                  移除
-                </button>
-              ) : null}
-              <input
-                ref={brochureInputRef}
-                type="file"
-                accept=".pdf,.ppt,.pptx,.xls,.xlsx,.doc,.docx,.dox"
-                style={hiddenInputStyle}
-                onChange={(e) => {
-                  const file = e.target.files?.[0];
-                  if (file) onUploadBrochure(file);
-                  e.target.value = "";
-                }}
-              />
-            </>
-          ) : null}
-        </div>
-      </div>
+      {/* 活动相册（海报下方，分页；点选一张设为海报） */}
+      {canEditEvent ? <div style={attachmentSubtitleStyle}>点一张照片设为活动海报</div> : null}
+      {detail && (detail.album_files || []).length ? (
+        <PhotoGrid
+          detail={detail}
+          isMobile={isMobile}
+          canEditEvent={canEditEvent}
+          hideHeader
+          paged
+          onPickPhoto={canEditEvent ? onSetPoster : undefined}
+          selectedPhotoId={event.event_image?.id ?? null}
+        />
+      ) : detail ? (
+        <div style={emptyInlineStyle}>还没有活动照片。</div>
+      ) : (
+        <div style={emptyInlineStyle}>读取相册中…</div>
+      )}
 
-      {/* Attachments */}
+      {showUpload ? (
+        <UploadMediaModal
+          eventId={event.id}
+          eventName={event.event_name}
+          onClose={() => setShowUpload(false)}
+          onUploaded={async () => {
+            await loadDetail();
+            onRefresh();
+          }}
+        />
+      ) : null}
+    </div>
+  );
+}
+
+function AttachmentsTab({
+  event,
+  canEditEvent,
+  brochureUploading,
+  attachmentUploading,
+  attachmentInputRef,
+  onRemoveBrochure,
+  onSetBrochure,
+  onUploadAttachment,
+  onRemoveAttachment,
+  onDownload,
+}: {
+  event: EventRecord;
+  canEditEvent: boolean;
+  brochureUploading: boolean;
+  attachmentUploading: boolean;
+  attachmentInputRef: RefObject<HTMLInputElement | null>;
+  onRemoveBrochure: () => void;
+  onSetBrochure: (fileId: number) => void;
+  onUploadAttachment: (files: File[]) => void;
+  onRemoveAttachment: (fileId: number) => void;
+  onDownload: (filePath: string, fileName?: string | null, mimeType?: string | null) => void;
+}) {
+  return (
+    <div style={sectionBodyStyle}>
+      {/* Attachments（含简章：简章 = 被选中的某个附件） */}
       <div style={sectionTitleStyle}>活动附件</div>
       <div style={attachmentCardStyle}>
         <div style={attachmentMetaWrapStyle}>
           <div style={attachmentTitleStyle}>每个活动可上传多个附件</div>
-          <div style={attachmentSubtitleStyle}>可用来放流程单、报名表、海报原档、赞助资料等</div>
+          <div style={attachmentSubtitleStyle}>
+            可用来放流程单、报名表、海报原档、赞助资料等；文档类（PDF/PPT/Word/Excel）可「设为简章」
+          </div>
         </div>
         <div style={attachmentActionRowStyle}>
           {canEditEvent ? (
@@ -647,31 +661,47 @@ function MediaTab({
         </div>
       </div>
       {(event.event_files || []).length ? (
-        event.event_files!.map((file) => (
-          <div key={file.id} style={attachmentCardStyle}>
-            <div style={attachmentMetaWrapStyle}>
-              <div style={attachmentTitleStyle}>{file.file_name || `附件 #${file.id}`}</div>
-              <div style={attachmentSubtitleStyle}>
-                {file.mime_type || "未知类型"}
-                {file.user_name ? ` · 上传者 ${file.user_name}` : ""}
-                {file.created_at ? ` · ${file.created_at.replace("T", " ").slice(0, 16)}` : ""}
+        event.event_files!.map((file) => {
+          const isBrochure = event.brochure_file_id != null && event.brochure_file_id === file.id;
+          const isDoc = /\.(pdf|ppt|pptx|xls|xlsx|doc|docx|dox)$/i.test(file.file_name || file.file_path || "");
+          return (
+            <div key={file.id} style={attachmentCardStyle}>
+              <div style={attachmentMetaWrapStyle}>
+                <div style={attachmentTitleStyle}>
+                  {file.file_name || `附件 #${file.id}`}
+                  {isBrochure ? <span style={brochureBadgeStyle}>简章</span> : null}
+                </div>
+                <div style={attachmentSubtitleStyle}>
+                  {file.mime_type || "未知类型"}
+                  {file.user_name ? ` · 上传者 ${file.user_name}` : ""}
+                  {file.created_at ? ` · ${file.created_at.replace("T", " ").slice(0, 16)}` : ""}
+                </div>
+              </div>
+              <div style={attachmentActionRowStyle}>
+                <button type="button" style={btnStyle} onClick={() => openPreviewModal({ file_name: file.file_name, file_path: file.file_path, mime_type: file.mime_type || undefined })}>
+                  预览
+                </button>
+                <button type="button" style={btnStyle} onClick={() => onDownload(file.file_path, file.file_name, file.mime_type)}>
+                  下载
+                </button>
+                {canEditEvent && isBrochure ? (
+                  <button type="button" style={brochureActiveBtnStyle} disabled={brochureUploading} onClick={onRemoveBrochure}>
+                    ✓ 简章（取消）
+                  </button>
+                ) : canEditEvent && isDoc ? (
+                  <button type="button" style={btnStyle} disabled={brochureUploading} onClick={() => onSetBrochure(file.id)}>
+                    设为简章
+                  </button>
+                ) : null}
+                {canEditEvent ? (
+                  <button type="button" style={dangerButtonStyle} onClick={() => onRemoveAttachment(file.id)}>
+                    删除
+                  </button>
+                ) : null}
               </div>
             </div>
-            <div style={attachmentActionRowStyle}>
-              <button type="button" style={btnStyle} onClick={() => openPreviewModal({ file_name: file.file_name, file_path: file.file_path, mime_type: file.mime_type || undefined })}>
-                预览
-              </button>
-              <button type="button" style={btnStyle} onClick={() => onDownload(file.file_path, file.file_name, file.mime_type)}>
-                下载
-              </button>
-              {canEditEvent ? (
-                <button type="button" style={dangerButtonStyle} onClick={() => onRemoveAttachment(file.id)}>
-                  删除
-                </button>
-              ) : null}
-            </div>
-          </div>
-        ))
+          );
+        })
       ) : (
         <div style={emptyInlineStyle}>还没有活动附件。</div>
       )}
@@ -914,6 +944,7 @@ const TABLE_CSS = `
 `;
 
 const pageStyle: CSSProperties = { display: "grid", gap: "16px" };
+const viewEventLinkStyle: CSSProperties = { justifySelf: "start", marginTop: "16px", display: "inline-flex", alignItems: "center", gap: "8px", padding: "10px 20px", borderRadius: "999px", border: "1px solid var(--x-color-accent-border)", background: "var(--x-color-accent-soft)", color: "var(--x-color-accent-strong)", fontSize: "14px", fontWeight: 600, textDecoration: "none", cursor: "pointer" };
 const panelStyle: CSSProperties = { borderRadius: "12px", background: "var(--x-color-panel)", border: "1px solid var(--x-color-line)", boxShadow: "0 1px 2px var(--x-color-shadow-soft)", overflow: "hidden" };
 
 function toolbarStyle(isMobile: boolean): CSSProperties {
@@ -954,6 +985,8 @@ const tabActiveStyle: CSSProperties = { ...tabStyle, border: "1px solid var(--x-
 const btnStyle: CSSProperties = { padding: "8px 14px", borderRadius: "8px", border: "1px solid var(--x-color-line)", background: "var(--x-color-panel)", color: "var(--x-color-ink)", fontWeight: 600, fontSize: "13px", cursor: "pointer", whiteSpace: "nowrap" };
 const primaryButtonStyle: CSSProperties = { padding: "9px 18px", borderRadius: "8px", border: "1px solid var(--x-color-accent-strong)", background: "var(--x-color-accent)", color: "white", fontWeight: 700, fontSize: "13px", cursor: "pointer" };
 const dangerButtonStyle: CSSProperties = { padding: "8px 14px", borderRadius: "8px", border: "1px solid var(--x-color-danger-border)", background: "var(--x-color-danger-soft)", color: "var(--x-color-danger)", fontWeight: 700, fontSize: "13px", cursor: "pointer", whiteSpace: "nowrap" };
+const brochureActiveBtnStyle: CSSProperties = { padding: "8px 14px", borderRadius: "8px", border: "1px solid var(--x-color-accent-border)", background: "var(--x-color-accent-soft)", color: "var(--x-color-accent-strong)", fontWeight: 700, fontSize: "13px", cursor: "pointer", whiteSpace: "nowrap" };
+const brochureBadgeStyle: CSSProperties = { marginLeft: "8px", padding: "2px 8px", borderRadius: "999px", background: "var(--x-color-accent)", color: "#ffffff", fontSize: "11px", fontWeight: 600, verticalAlign: "middle" };
 
 const errorStyle: CSSProperties = { margin: "0", padding: "10px 14px", borderRadius: "8px", background: "var(--x-color-danger-soft)", border: "1px solid var(--x-color-danger-border)", color: "var(--x-color-danger)", fontSize: "13px" };
 const successStyle: CSSProperties = { margin: "0", padding: "10px 14px", borderRadius: "8px", background: "var(--x-color-success-soft)", border: "1px solid rgba(21,128,61,0.28)", color: "var(--x-color-success)", fontSize: "13px" };

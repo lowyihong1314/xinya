@@ -25,6 +25,7 @@ type UploadMediaModalProps = {
   eventName?: string;
   onClose: () => void;
   onUploaded: () => Promise<void> | void;
+  embedded?: boolean;
 };
 
 const ACCEPTED_EXTENSIONS = new Set([
@@ -58,6 +59,7 @@ export function UploadMediaModal({
   eventName,
   onClose,
   onUploaded,
+  embedded = false,
 }: UploadMediaModalProps) {
   const { isMobile } = useUserState();
   const [queue, setQueue] = useState<UploadQueueItem[]>([]);
@@ -66,6 +68,7 @@ export function UploadMediaModal({
   const [nativeStatus, setNativeStatus] = useState<NativeAlbumUploadStatus | null>(null);
   const [nativeBusy, setNativeBusy] = useState(false);
   const [captureOpen, setCaptureOpen] = useState(false);
+  const [uploadPage, setUploadPage] = useState(0);
   const queueRef = useRef<UploadQueueItem[]>([]);
   const nativeRefreshedJobsRef = useRef<Set<string>>(new Set());
 
@@ -91,6 +94,12 @@ export function UploadMediaModal({
   const useNativeAlbumUpload = IS_APK && isMobileNativeRuntime();
   const nativeUploadActive = isNativeUploadActive(nativeStatus);
   const nativeProgress = getNativeUploadProgress(nativeStatus);
+
+  // 电脑版队列分页
+  const UPLOAD_PAGE_SIZE = 12;
+  const queuePageCount = Math.max(1, Math.ceil(queue.length / UPLOAD_PAGE_SIZE));
+  const safeUploadPage = Math.min(uploadPage, queuePageCount - 1);
+  const pagedQueue = queue.slice(safeUploadPage * UPLOAD_PAGE_SIZE, safeUploadPage * UPLOAD_PAGE_SIZE + UPLOAD_PAGE_SIZE);
 
   useEffect(() => {
     if (!useNativeAlbumUpload) {
@@ -362,22 +371,23 @@ export function UploadMediaModal({
     );
   }
 
-  return (
-    <div style={overlayStyle(isMobile)} onClick={onClose}>
-      <div style={modalStyle(isMobile)} onClick={(event) => event.stopPropagation()}>
-        <>
-            <div style={headerStyle(isMobile)}>
-              <div>
-                <div style={eyebrowStyle}>Media Upload</div>
-                <h2 style={titleStyle(isMobile)}>上传文件</h2>
-                <p style={copyStyle}>{eventName || `活动 #${eventId}`}</p>
-              </div>
-              <button type="button" style={closeButtonStyle(isMobile)} onClick={onClose}>
-                关闭
-              </button>
-            </div>
+  const headerEl = (
+    <div style={headerStyle(isMobile)}>
+      <div>
+        <div style={eyebrowStyle}>上传照片</div>
+        <h2 style={titleStyle(isMobile)}>上传文件</h2>
+        <p style={copyStyle}>{eventName || `活动 #${eventId}`}</p>
+      </div>
+      {embedded ? null : (
+        <button type="button" style={closeButtonStyle(isMobile)} onClick={onClose}>
+          关闭
+        </button>
+      )}
+    </div>
+  );
 
-            <div style={bodyStyle(isMobile)}>
+  const pickerEl = (
+    <>
               {useNativeAlbumUpload ? (
                 <div style={nativeActionGridStyle(isMobile)}>
                   <button
@@ -426,7 +436,11 @@ export function UploadMediaModal({
                   ) : null}
                 </div>
               )}
+    </>
+  );
 
+  const bodyExtrasEl = (
+    <>
               {toast ? <div style={toastStyle}>{toast}</div> : null}
 
               {useNativeAlbumUpload ? (
@@ -514,50 +528,177 @@ export function UploadMediaModal({
                   </div>
                 </>
               )}
-            </div>
+    </>
+  );
 
-            <div style={footerStyle(isMobile)}>
-              {useNativeAlbumUpload ? (
-                <>
-                  <button type="button" style={secondaryButtonStyle(isMobile)} onClick={onClose}>
-                    {nativeUploadActive ? "关闭并后台等待" : "关闭"}
-                  </button>
-                  {nativeUploadActive ? (
+  const footerEl = (
+    <div style={footerStyle(isMobile)}>
+      {useNativeAlbumUpload ? (
+        <>
+          <button type="button" style={secondaryButtonStyle(isMobile)} onClick={onClose}>
+            {nativeUploadActive ? "关闭并后台等待" : "关闭"}
+          </button>
+          {nativeUploadActive ? (
+            <button
+              type="button"
+              style={dangerFooterButtonStyle(isMobile)}
+              onClick={() => void handleNativeCancel()}
+              disabled={nativeBusy}
+            >
+              取消后台上传
+            </button>
+          ) : null}
+          <button
+            type="button"
+            style={primaryButtonStyle(isMobile)}
+            disabled={nativeBusy || nativeUploadActive}
+            onClick={() => void handleNativePickAndUpload()}
+          >
+            {nativeBusy ? "打开中…" : "选择并后台上传"}
+          </button>
+        </>
+      ) : (
+        <>
+          <button type="button" style={secondaryButtonStyle(isMobile)} onClick={onClose}>
+            取消
+          </button>
+          <button
+            type="button"
+            style={primaryButtonStyle(isMobile)}
+            disabled={uploading || !queue.some((item) => item.status !== "success")}
+            onClick={() => void handleUpload()}
+          >
+            {uploading ? "上传中…" : "开始上传"}
+          </button>
+        </>
+      )}
+    </div>
+  );
+
+  const content = isMobile ? (
+    // 手机极简：竖向堆叠
+    <>
+      {headerEl}
+      <div style={bodyStyle(true)}>
+        {pickerEl}
+        {bodyExtrasEl}
+      </div>
+      {footerEl}
+    </>
+  ) : (
+    // 电脑完整：整块固定高度；待处理文件 card 网格铺满 + 分页；底部统一操作栏
+    <>
+      {headerEl}
+      <div style={deskQueueScrollStyle}>
+        {toast ? <div style={toastStyle}>{toast}</div> : null}
+        <div style={queueHeaderStyle}>
+          <span>{queue.length} 个待处理文件</span>
+          <span>成功 {stats.successCount} / 失败 {stats.failedCount}</span>
+        </div>
+        {!queue.length ? (
+          <div style={placeholderStyle}>当前还没有选择文件，点下方「选择图片或视频」</div>
+        ) : (
+          <div style={deskQueueGridStyle}>
+            {pagedQueue.map((item) => (
+              <div key={item.id} style={deskQueueCardStyle(item.status)}>
+                <div style={deskCardMediaStyle}>
+                  {item.previewUrl ? (
+                    <CachedImage src={item.previewUrl} alt={item.file.name} style={deskCardImgStyle} />
+                  ) : (
+                    <span style={deskCardVideoStyle}>VIDEO</span>
+                  )}
+                </div>
+                <div style={deskCardBodyStyle}>
+                  <div style={deskCardNameStyle}>{item.file.name}</div>
+                  <div style={fileSubStyle}>
+                    {(item.file.size / 1024 / 1024).toFixed(2)} MB{item.error ? ` · ${item.error}` : ""}
+                  </div>
+                  <div style={progressRowStyle}>
+                    <div style={progressTrackStyle}>
+                      <div style={progressFillStyle(item.progress, item.status)} />
+                    </div>
+                    <div style={progressTextStyle(item.status)}>{item.progress}%</div>
+                  </div>
+                  <div style={deskCardFootRowStyle}>
+                    <span style={statusStyle(item.status)}>{statusLabel(item.status)}</span>
                     <button
                       type="button"
-                      style={dangerFooterButtonStyle(isMobile)}
-                      onClick={() => void handleNativeCancel()}
-                      disabled={nativeBusy}
+                      style={deskCardRemoveStyle}
+                      onClick={() => removeItem(item.id)}
+                      disabled={uploading && item.status === "uploading"}
                     >
-                      取消后台上传
+                      移除
                     </button>
-                  ) : null}
-                  <button
-                    type="button"
-                    style={primaryButtonStyle(isMobile)}
-                    disabled={nativeBusy || nativeUploadActive}
-                    onClick={() => void handleNativePickAndUpload()}
-                  >
-                    {nativeBusy ? "打开中…" : "选择并后台上传"}
-                  </button>
-                </>
-              ) : (
-                <>
-                  <button type="button" style={secondaryButtonStyle(isMobile)} onClick={onClose}>
-                    取消
-                  </button>
-                  <button
-                    type="button"
-                    style={primaryButtonStyle(isMobile)}
-                    disabled={uploading || !queue.some((item) => item.status !== "success")}
-                    onClick={() => void handleUpload()}
-                  >
-                    {uploading ? "上传中…" : "开始上传"}
-                  </button>
-                </>
-              )}
-            </div>
-        </>
+                  </div>
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+
+      <div style={deskBottomStyle}>
+        {queuePageCount > 1 ? (
+          <div style={deskPagerStyle}>
+            <button
+              type="button"
+              style={deskPagerBtnStyle(safeUploadPage === 0)}
+              disabled={safeUploadPage === 0}
+              onClick={() => setUploadPage((p) => Math.max(0, p - 1))}
+            >
+              ◀ 上一页
+            </button>
+            <span style={deskPagerLabelStyle}>{safeUploadPage + 1} / {queuePageCount}</span>
+            <button
+              type="button"
+              style={deskPagerBtnStyle(safeUploadPage >= queuePageCount - 1)}
+              disabled={safeUploadPage >= queuePageCount - 1}
+              onClick={() => setUploadPage((p) => Math.min(queuePageCount - 1, p + 1))}
+            >
+              下一页 ▶
+            </button>
+          </div>
+        ) : null}
+        <div style={deskFooterStyle}>
+          <label style={deskFooterPickerStyle}>
+            <input
+              type="file"
+              multiple
+              accept="image/*,video/*"
+              style={{ display: "none" }}
+              onChange={(event) => {
+                addFiles(event.target.files);
+                event.currentTarget.value = "";
+              }}
+            />
+            <i className="fa-solid fa-plus" aria-hidden="true" />
+            选择图片或视频
+          </label>
+          <div style={{ flex: 1 }} />
+          <button type="button" style={secondaryButtonStyle(false)} onClick={onClose}>
+            取消
+          </button>
+          <button
+            type="button"
+            style={primaryButtonStyle(false)}
+            disabled={uploading || !queue.some((item) => item.status !== "success")}
+            onClick={() => void handleUpload()}
+          >
+            {uploading ? "上传中…" : "开始上传"}
+          </button>
+        </div>
+      </div>
+    </>
+  );
+
+  if (embedded) {
+    return <div style={modalStyle(isMobile, true)}>{content}</div>;
+  }
+
+  return (
+    <div style={overlayStyle(isMobile)} onClick={onClose}>
+      <div style={modalStyle(isMobile, false)} onClick={(event) => event.stopPropagation()}>
+        {content}
       </div>
     </div>
   );
@@ -623,11 +764,11 @@ function overlayStyle(isMobile: boolean): CSSProperties {
     position: "fixed",
     inset: 0,
     zIndex: 5000,
-    background: "rgba(214,242,255,0.66)",
+    background: "rgba(15,23,42,0.32)",
     display: "grid",
     placeItems: "center",
     padding: isMobile ? "10px" : "24px",
-    backdropFilter: "blur(10px)",
+    backdropFilter: "blur(8px)",
   };
 }
 
@@ -635,21 +776,47 @@ const captureFullscreenStyle: CSSProperties = {
   position: "fixed",
   inset: 0,
   zIndex: 5100,
-  background: "#eef9ff",
+  background: "var(--x-color-canvas)",
   overflow: "hidden",
 };
 
-function modalStyle(isMobile: boolean): CSSProperties {
+function modalStyle(isMobile: boolean, embedded: boolean): CSSProperties {
+  if (embedded) {
+    if (!isMobile) {
+      // 电脑：整块固定高度、无圆角；行 = 头 / 队列(滚动) / 底部操作
+      return {
+        width: "100%",
+        height: "760px",
+        borderRadius: 0,
+        background: "var(--x-color-panel)",
+        border: "1px solid var(--x-color-line)",
+        color: "var(--x-color-ink)",
+        display: "grid",
+        gridTemplateRows: "auto 1fr auto",
+        overflow: "hidden",
+      };
+    }
+    return {
+      width: "100%",
+      borderRadius: "var(--x-radius-lg)",
+      background: "var(--x-color-panel)",
+      border: "1px solid var(--x-color-line)",
+      boxShadow: "0 16px 40px var(--x-color-shadow-soft)",
+      color: "var(--x-color-ink)",
+      display: "grid",
+      gridTemplateRows: "auto auto auto",
+    };
+  }
   return {
     width: "min(920px, 100%)",
     maxHeight: isMobile ? "94vh" : "90vh",
     overflow: "hidden",
-    borderRadius: 0,
-    background: "linear-gradient(180deg, rgba(255,255,255,0.72), rgba(232,247,255,0.6))",
-    border: "1px solid rgba(255,255,255,0.14)",
-    boxShadow: "0 30px 90px rgba(14,116,144,0.18), inset 0 1px 0 rgba(255,255,255,0.12)",
-    color: "rgba(31,78,121,0.92)",
-    backdropFilter: "blur(24px) saturate(140%)",
+    borderRadius: "var(--x-radius-lg)",
+    background: "var(--x-color-panel)",
+    border: "1px solid var(--x-color-line)",
+    boxShadow: "0 16px 40px var(--x-color-shadow-soft)",
+    color: "var(--x-color-ink)",
+    backdropFilter: "blur(8px) saturate(140%)",
     display: "grid",
     gridTemplateRows: "auto minmax(0, 1fr) auto",
   };
@@ -663,28 +830,29 @@ function headerStyle(isMobile: boolean): CSSProperties {
     gap: "16px",
     alignItems: "start",
     flexDirection: isMobile ? "column" : "row",
-    borderBottom: "1px solid rgba(255,255,255,0.1)",
+    borderBottom: "1px solid var(--x-color-line)",
   };
 }
 
 const eyebrowStyle: CSSProperties = {
   fontSize: "12px",
   letterSpacing: "0.16em",
-  textTransform: "uppercase",
-  color: "rgba(14,165,233,0.82)",
+  color: "var(--x-color-accent)",
 };
 
 function titleStyle(isMobile: boolean): CSSProperties {
   return {
     margin: "8px 0 4px",
     fontSize: isMobile ? "22px" : "28px",
-    color: "rgba(12,74,110,0.98)",
+    fontFamily: "var(--x-font-serif)",
+    fontWeight: 500,
+    color: "var(--x-color-ink)",
   };
 }
 
 const copyStyle: CSSProperties = {
   margin: 0,
-  color: "rgba(70,120,158,0.86)",
+  color: "var(--x-color-ink-muted)",
 };
 
 function bodyStyle(isMobile: boolean): CSSProperties {
@@ -696,18 +864,188 @@ function bodyStyle(isMobile: boolean): CSSProperties {
   };
 }
 
+// 电脑完整版：两列（左选择区 / 右队列）
+const desktopBodyStyle: CSSProperties = {
+  padding: "22px 24px",
+  display: "grid",
+  gridTemplateColumns: "minmax(0, 320px) minmax(0, 1fr)",
+  gap: "20px",
+  alignItems: "start",
+};
+
+const desktopPickerColStyle: CSSProperties = {
+  display: "grid",
+  gap: "12px",
+  alignContent: "start",
+  minWidth: 0,
+};
+
+const desktopQueueColStyle: CSSProperties = {
+  display: "grid",
+  gap: "12px",
+  alignContent: "start",
+  minWidth: 0,
+};
+
+// —— 电脑版：队列滚动区 + card 网格 + 分页 + 底部操作 ——
+const deskQueueScrollStyle: CSSProperties = {
+  overflowY: "auto",
+  padding: "18px 22px",
+  display: "grid",
+  gap: "14px",
+  alignContent: "start",
+};
+
+const deskQueueGridStyle: CSSProperties = {
+  display: "grid",
+  gridTemplateColumns: "repeat(auto-fill, 184px)",
+  gap: "14px",
+  justifyContent: "start",
+};
+
+function deskQueueCardStyle(status: UploadQueueItem["status"]): CSSProperties {
+  const border =
+    status === "success"
+      ? "var(--x-color-success)"
+      : status === "error"
+        ? "var(--x-color-danger-border)"
+        : "var(--x-color-line)";
+  return {
+    width: "184px",
+    display: "grid",
+    gridTemplateRows: "auto auto",
+    borderRadius: "var(--x-radius-md)",
+    border: `1px solid ${border}`,
+    background: "var(--x-color-panel)",
+    boxShadow: "0 8px 20px var(--x-color-shadow-soft)",
+    overflow: "hidden",
+  };
+}
+
+const deskCardMediaStyle: CSSProperties = {
+  position: "relative",
+  width: "100%",
+  aspectRatio: "4 / 3",
+  display: "grid",
+  placeItems: "center",
+  background: "var(--x-color-canvas-alt)",
+  overflow: "hidden",
+};
+
+const deskCardImgStyle: CSSProperties = {
+  width: "100%",
+  height: "100%",
+  objectFit: "cover",
+  objectPosition: "center 25%",
+  display: "block",
+};
+
+const deskCardVideoStyle: CSSProperties = {
+  fontSize: "12px",
+  fontWeight: 700,
+  letterSpacing: "0.08em",
+  color: "var(--x-color-ink-muted)",
+};
+
+const deskCardBodyStyle: CSSProperties = {
+  display: "grid",
+  gap: "6px",
+  padding: "10px 12px 12px",
+};
+
+const deskCardNameStyle: CSSProperties = {
+  fontSize: "13px",
+  fontWeight: 600,
+  color: "var(--x-color-ink)",
+  whiteSpace: "nowrap",
+  overflow: "hidden",
+  textOverflow: "ellipsis",
+};
+
+const deskCardFootRowStyle: CSSProperties = {
+  display: "flex",
+  alignItems: "center",
+  justifyContent: "space-between",
+  gap: "8px",
+  marginTop: "2px",
+};
+
+const deskCardRemoveStyle: CSSProperties = {
+  padding: "5px 12px",
+  borderRadius: "999px",
+  border: "1px solid var(--x-color-line)",
+  background: "var(--x-color-panel)",
+  color: "var(--x-color-ink-muted)",
+  fontSize: "12px",
+  cursor: "pointer",
+};
+
+const deskBottomStyle: CSSProperties = {
+  display: "grid",
+  gap: "10px",
+  padding: "12px 22px 16px",
+  borderTop: "1px solid var(--x-color-line)",
+  background: "var(--x-color-panel)",
+};
+
+const deskPagerStyle: CSSProperties = {
+  display: "flex",
+  alignItems: "center",
+  justifyContent: "center",
+  gap: "14px",
+};
+
+function deskPagerBtnStyle(disabled: boolean): CSSProperties {
+  return {
+    padding: "8px 16px",
+    borderRadius: "999px",
+    border: "1px solid var(--x-color-line)",
+    background: disabled ? "transparent" : "var(--x-color-panel)",
+    color: disabled ? "var(--x-color-ink-muted)" : "var(--x-color-accent-strong)",
+    fontSize: "13px",
+    cursor: disabled ? "default" : "pointer",
+    opacity: disabled ? 0.45 : 1,
+  };
+}
+
+const deskPagerLabelStyle: CSSProperties = {
+  fontSize: "13px",
+  color: "var(--x-color-ink-muted)",
+  minWidth: "56px",
+  textAlign: "center",
+};
+
+const deskFooterStyle: CSSProperties = {
+  display: "flex",
+  alignItems: "center",
+  gap: "10px",
+  flexWrap: "wrap",
+};
+
+const deskFooterPickerStyle: CSSProperties = {
+  display: "inline-flex",
+  alignItems: "center",
+  gap: "8px",
+  padding: "10px 18px",
+  borderRadius: "var(--x-radius-md)",
+  border: "1px dashed var(--x-color-accent-border)",
+  background: "var(--x-color-accent-soft)",
+  color: "var(--x-color-accent-strong)",
+  fontSize: "14px",
+  fontWeight: 600,
+  cursor: "pointer",
+};
+
 function dropzoneStyle(isMobile: boolean): CSSProperties {
   return {
     display: "grid",
     gridColumn: isMobile ? "1 / -1" : undefined,
     gap: "8px",
     padding: isMobile ? "16px" : "20px",
-    borderRadius: 0,
-    border: "1px dashed rgba(56,189,248,0.36)",
-    background: "linear-gradient(135deg, rgba(56,189,248,0.18), rgba(255,255,255,0.48))",
+    borderRadius: "var(--x-radius-md)",
+    border: "1px dashed var(--x-color-accent-border)",
+    background: "var(--x-color-accent-soft)",
     cursor: "pointer",
-    boxShadow: "inset 0 1px 0 rgba(255,255,255,0.08)",
-    backdropFilter: "blur(14px)",
   };
 }
 
@@ -736,12 +1074,12 @@ function captureButtonStyle(isMobile: boolean, disabled: boolean): CSSProperties
   return {
     padding: isMobile ? "12px" : "0 18px",
     minHeight: isMobile ? "48px" : undefined,
-    borderRadius: 0,
-    border: "1px solid rgba(255,255,255,0.14)",
-    background: "rgba(255,255,255,0.6)",
-    color: "rgba(31,78,121,0.9)",
+    borderRadius: "var(--x-radius-md)",
+    border: "1px solid var(--x-color-line)",
+    background: "var(--x-color-panel-alt)",
+    color: "var(--x-color-ink)",
     font: "inherit",
-    fontWeight: 800,
+    fontWeight: 700,
     cursor: disabled ? "not-allowed" : "pointer",
     opacity: disabled ? 0.68 : 1,
   };
@@ -751,29 +1089,28 @@ function dropTitleStyle(isMobile: boolean): CSSProperties {
   return {
     fontSize: isMobile ? "16px" : "18px",
     fontWeight: 700,
-    color: "rgba(14,165,233,0.94)",
+    color: "var(--x-color-accent-strong)",
   };
 }
 
 const dropCopyStyle: CSSProperties = {
-  color: "rgba(70,120,158,0.86)",
+  color: "var(--x-color-ink-muted)",
   lineHeight: 1.6,
 };
 
 const toastStyle: CSSProperties = {
   padding: "12px 14px",
-  borderRadius: 0,
-  border: "1px solid rgba(250,204,21,0.26)",
-  background: "rgba(113,63,18,0.24)",
-  color: "rgba(254,240,138,0.96)",
-  backdropFilter: "blur(12px)",
+  borderRadius: "var(--x-radius-md)",
+  border: "1px solid var(--x-color-warning-border)",
+  background: "var(--x-color-warning-soft)",
+  color: "var(--x-color-warning)",
 };
 
 const queueHeaderStyle: CSSProperties = {
   display: "flex",
   justifyContent: "space-between",
   gap: "12px",
-  color: "rgba(70,120,158,0.86)",
+  color: "var(--x-color-ink-muted)",
   fontSize: "13px",
   flexWrap: "wrap",
 };
@@ -786,27 +1123,25 @@ const queueStyle: CSSProperties = {
 function queueItemStyle(status: UploadQueueItem["status"], isMobile: boolean): CSSProperties {
   const background =
     status === "error"
-      ? "rgba(255,241,242,0.86)"
+      ? "var(--x-color-danger-soft)"
       : status === "success"
-        ? "rgba(219,245,235,0.74)"
-        : "rgba(255,255,255,0.5)";
+        ? "var(--x-color-success-soft)"
+        : "var(--x-color-panel-alt)";
   const border =
     status === "error"
-      ? "1px solid rgba(244,63,94,0.24)"
+      ? "1px solid var(--x-color-danger-border)"
       : status === "success"
-        ? "1px solid rgba(56,189,248,0.28)"
-        : "1px solid rgba(255,255,255,0.12)";
+        ? "1px solid var(--x-color-success-border)"
+        : "1px solid var(--x-color-line)";
   return {
     display: "grid",
     gridTemplateColumns: isMobile ? "56px minmax(0, 1fr)" : "72px minmax(0, 1fr) auto",
     gap: isMobile ? "10px" : "14px",
     alignItems: isMobile ? "start" : "center",
     padding: isMobile ? "10px" : "12px",
-    borderRadius: 0,
+    borderRadius: "var(--x-radius-md)",
     background,
     border,
-    boxShadow: "inset 0 1px 0 rgba(255,255,255,0.06)",
-    backdropFilter: "blur(12px)",
   };
 }
 
@@ -815,8 +1150,8 @@ function previewImageStyle(isMobile: boolean): CSSProperties {
     width: isMobile ? "56px" : "72px",
     height: isMobile ? "56px" : "72px",
     objectFit: "cover",
-    borderRadius: 0,
-    background: "#eef9ff",
+    borderRadius: "var(--x-radius-md)",
+    background: "var(--x-color-canvas-alt)",
   };
 }
 
@@ -824,9 +1159,9 @@ function videoTileStyle(isMobile: boolean): CSSProperties {
   return {
     width: isMobile ? "56px" : "72px",
     height: isMobile ? "56px" : "72px",
-    borderRadius: 0,
-    background: "linear-gradient(135deg, rgba(56,189,248,0.72), rgba(125,211,252,0.56))",
-    color: "rgba(3,105,161,0.98)",
+    borderRadius: "var(--x-radius-md)",
+    background: "var(--x-color-accent-soft)",
+    color: "var(--x-color-accent-strong)",
     display: "grid",
     placeItems: "center",
     fontSize: "12px",
@@ -855,7 +1190,7 @@ function fileNameStyle(isMobile: boolean): CSSProperties {
   return {
     fontSize: isMobile ? "14px" : "15px",
     fontWeight: 700,
-    color: "rgba(12,74,110,0.96)",
+    color: "var(--x-color-ink)",
     whiteSpace: isMobile ? "normal" : "nowrap",
     overflow: "hidden",
     textOverflow: "ellipsis",
@@ -865,7 +1200,7 @@ function fileNameStyle(isMobile: boolean): CSSProperties {
 
 const fileSubStyle: CSSProperties = {
   fontSize: "13px",
-  color: "rgba(70,120,158,0.86)",
+  color: "var(--x-color-ink-muted)",
   wordBreak: "break-word",
 };
 
@@ -876,8 +1211,8 @@ function statusStyle(status: UploadQueueItem["status"]): CSSProperties {
       : status === "error"
         ? "rgba(190,18,60,0.86)"
         : status === "uploading"
-          ? "rgba(14,165,233,0.96)"
-          : "rgba(70,120,158,0.86)";
+          ? "var(--x-color-accent)"
+          : "var(--x-color-ink-muted)";
   return {
     display: "inline-flex",
     alignItems: "center",
@@ -911,8 +1246,8 @@ const progressTrackStyle: CSSProperties = {
   height: "8px",
   borderRadius: "999px",
   overflow: "hidden",
-  background: "rgba(125,211,252,0.22)",
-  boxShadow: "inset 0 1px 2px rgba(14,116,144,0.12)",
+  background: "var(--x-color-accent-soft)",
+  boxShadow: "inset 0 1px 2px var(--x-color-shadow-soft)",
 };
 
 function progressFillStyle(progress: number, status: UploadQueueItem["status"]): CSSProperties {
@@ -922,10 +1257,10 @@ function progressFillStyle(progress: number, status: UploadQueueItem["status"]):
     borderRadius: "999px",
     background:
       status === "success"
-        ? "linear-gradient(90deg, rgba(16,185,129,0.9), #34d399)"
+        ? "linear-gradient(90deg, rgba(16,185,129,0.9), var(--x-color-success))"
         : status === "error"
-          ? "linear-gradient(90deg, rgba(244,63,94,0.76), #fb7185)"
-          : "linear-gradient(90deg, rgba(14,165,233,0.9), rgba(14,165,233,0.82))",
+          ? "linear-gradient(90deg, rgba(244,63,94,0.76), var(--x-color-danger))"
+          : "linear-gradient(90deg, var(--x-color-accent), var(--x-color-accent))",
     transition: "width 180ms ease",
   };
 }
@@ -942,8 +1277,8 @@ function progressTextStyle(status: UploadQueueItem["status"]): CSSProperties {
         : status === "error"
           ? "rgba(190,18,60,0.86)"
           : status === "uploading"
-            ? "rgba(14,165,233,0.96)"
-            : "rgba(70,120,158,0.86)",
+            ? "var(--x-color-accent)"
+            : "var(--x-color-ink-muted)",
   };
 }
 
@@ -963,10 +1298,10 @@ function removeButtonStyle(isMobile: boolean): CSSProperties {
 
 const placeholderStyle: CSSProperties = {
   padding: "18px",
-  borderRadius: 0,
+  borderRadius: "var(--x-radius-md)",
   background: "rgba(255,255,255,0.46)",
   border: "1px solid rgba(255,255,255,0.1)",
-  color: "rgba(70,120,158,0.86)",
+  color: "var(--x-color-ink-muted)",
   backdropFilter: "blur(12px)",
 };
 
@@ -974,7 +1309,7 @@ const nativePanelStyle: CSSProperties = {
   display: "grid",
   gap: "14px",
   padding: "14px",
-  borderRadius: 0,
+  borderRadius: "var(--x-radius-md)",
   background: "rgba(255,255,255,0.48)",
   border: "1px solid rgba(255,255,255,0.12)",
   boxShadow: "inset 0 1px 0 rgba(255,255,255,0.06)",
@@ -994,7 +1329,7 @@ function nativeHeaderStyle(isMobile: boolean): CSSProperties {
 const nativeTitleStyle: CSSProperties = {
   fontSize: "16px",
   fontWeight: 800,
-  color: "rgba(12,74,110,0.96)",
+  color: "var(--x-color-ink)",
 };
 
 function nativeMetaGridStyle(isMobile: boolean): CSSProperties {
@@ -1013,7 +1348,7 @@ const nativeMetaItemStyle: CSSProperties = {
 
 const nativeMetaLabelStyle: CSSProperties = {
   fontSize: "12px",
-  color: "rgba(70,120,158,0.86)",
+  color: "var(--x-color-ink-muted)",
 };
 
 const nativeErrorStyle: CSSProperties = {
@@ -1039,11 +1374,11 @@ function secondaryButtonStyle(isMobile: boolean): CSSProperties {
     borderRadius: "999px",
     border: "1px solid rgba(255,255,255,0.14)",
     background: "rgba(255,255,255,0.6)",
-    color: "rgba(31,78,121,0.9)",
+    color: "var(--x-color-ink)",
     fontWeight: 700,
     cursor: "pointer",
     width: isMobile ? "100%" : undefined,
-    boxShadow: "0 12px 28px rgba(14,116,144,0.12)",
+    boxShadow: "0 12px 28px var(--x-color-shadow-soft)",
     backdropFilter: "blur(14px)",
   };
 }
@@ -1052,13 +1387,13 @@ function primaryButtonStyle(isMobile: boolean): CSSProperties {
   return {
     padding: "12px 18px",
     borderRadius: "999px",
-    border: "1px solid rgba(56,189,248,0.28)",
-    background: "linear-gradient(135deg, rgba(14,165,233,0.78), rgba(125,211,252,0.62))",
-    color: "rgba(3,105,161,0.98)",
+    border: "1px solid var(--x-color-accent-border)",
+    background: "linear-gradient(135deg, var(--x-color-accent), var(--x-color-accent-soft))",
+    color: "var(--x-color-accent-strong)",
     fontWeight: 700,
     cursor: "pointer",
     width: isMobile ? "100%" : undefined,
-    boxShadow: "0 14px 32px rgba(56,189,248,0.22)",
+    boxShadow: "0 14px 32px var(--x-color-accent-border)",
     backdropFilter: "blur(14px)",
   };
 }
@@ -1073,7 +1408,7 @@ function dangerFooterButtonStyle(isMobile: boolean): CSSProperties {
     fontWeight: 700,
     cursor: "pointer",
     width: isMobile ? "100%" : undefined,
-    boxShadow: "0 12px 28px rgba(14,116,144,0.12)",
+    boxShadow: "0 12px 28px var(--x-color-shadow-soft)",
     backdropFilter: "blur(14px)",
   };
 }

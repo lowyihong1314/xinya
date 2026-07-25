@@ -42,8 +42,7 @@ function DesktopEventCheckInPanel({
   const [error, setError] = useState<string | null>(null);
   const [query, setQuery] = useState("");
   const [selectedDate, setSelectedDate] = useState(() => clampDateToRange(new Date().toISOString().slice(0, 10), minDate, maxDate));
-  const [selectedUserId, setSelectedUserId] = useState<number | null>(null);
-  const [saving, setSaving] = useState(false);
+  const [savingId, setSavingId] = useState<number | null>(null);
 
   useEffect(() => {
     setSelectedDate((current) => clampDateToRange(current, minDate, maxDate));
@@ -114,69 +113,45 @@ function DesktopEventCheckInPanel({
     );
   }, [checkInMap, query, users]);
 
-  const selectedUser =
-    users.find((user) => user.id === selectedUserId) ||
-    filteredUsers[0] ||
-    null;
+  const checkedCount = selectedDayCheckIns.length;
 
-  useEffect(() => {
-    if (!selectedUser && selectedUserId !== null) {
-      setSelectedUserId(null);
-      return;
-    }
-    if (!selectedUserId && filteredUsers[0]) {
-      setSelectedUserId(filteredUsers[0].id);
-    }
-  }, [filteredUsers, selectedUser, selectedUserId]);
-
-  const selectedCheckIn = selectedUser ? checkInMap.get(selectedUser.id) || null : null;
-
-  async function handleCheckIn() {
-    if (!selectedUser) {
-      return;
-    }
-    setSaving(true);
+  async function toggle(target: UserRecord) {
+    const existing = checkInMap.get(target.id) || null;
+    setSavingId(target.id);
     setError(null);
     try {
-      await saveEventCheckIn({
-        event_id: detail.id,
-        user_id: selectedUser.id,
-        check_in_date: selectedDate,
-        valid_user_id: currentUserId,
-      });
+      if (existing?.id) {
+        await deleteEventCheckIn(existing.id);
+      } else {
+        await saveEventCheckIn({
+          event_id: detail.id,
+          user_id: target.id,
+          check_in_date: selectedDate,
+          valid_user_id: currentUserId,
+        });
+      }
       await onChanged();
     } catch (err) {
-      setError(err instanceof Error ? err.message : "签到失败");
+      setError(err instanceof Error ? err.message : "操作失败");
     } finally {
-      setSaving(false);
-    }
-  }
-
-  async function handleRollback() {
-    if (!selectedCheckIn?.id) {
-      return;
-    }
-    setSaving(true);
-    setError(null);
-    try {
-      await deleteEventCheckIn(selectedCheckIn.id);
-      await onChanged();
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "撤回签到失败");
-    } finally {
-      setSaving(false);
+      setSavingId(null);
     }
   }
 
   return (
-    <section id="event-detail-checkin-panel" className="event-checkin" style={wrapStyle(isMobile)}>
-      <div id="event-detail-checkin-toolbar" className="event-checkin__toolbar" style={toolbarStyle(isMobile)}>
+    <section id="event-detail-checkin-panel" className="event-checkin" style={deskWrapStyle}>
+      <div id="event-detail-checkin-statsbar" style={deskStatsBarStyle}>
+        <div id="event-detail-checkin-stat" style={deskStatChipStyle}>
+          <span style={deskStatNumStyle}>{checkedCount}</span>
+          <span style={deskStatLabelStyle}>/ {users.length} 人已签到</span>
+        </div>
+        <div style={{ flex: 1 }} />
         <input
           className="event-checkin__search"
           value={query}
           onChange={(event) => setQuery(event.target.value)}
           placeholder="搜索成员"
-          style={searchStyle}
+          style={deskSearchStyle}
         />
         <input
           className="event-checkin__date"
@@ -189,92 +164,42 @@ function DesktopEventCheckInPanel({
         />
       </div>
 
-      {error ? <div id="event-detail-checkin-error" className="event-checkin__error" style={errorStyle}>{error}</div> : null}
+      {error ? <div id="event-detail-checkin-error" style={errorStyle}>{error}</div> : null}
 
-      <div id="event-detail-checkin-content" className="event-checkin__content" style={contentStyle(isMobile)}>
-        <div id="event-detail-checkin-user-grid" className="event-checkin__grid" style={gridStyle}>
-          {loadingUsers ? <div id="event-detail-checkin-loading-users" style={placeholderStyle}>读取成员中…</div> : null}
-          {!loadingUsers &&
-            filteredUsers.map((user) => {
-              const checkIn = checkInMap.get(user.id) || null;
-              const checked = Boolean(checkIn);
-              const active = selectedUser?.id === user.id;
-              return (
-                <button
-                  key={user.id}
-                  type="button"
-                  className="event-checkin__user-card"
-                  style={userCardStyle(active)}
-                  onClick={() => setSelectedUserId(user.id)}
-                >
-                  <CachedImage
-                    src={`/api/user_control/get_profile_image/${user.id}`}
-                    cacheKey={`event-checkin-user:${user.id}`}
-                    resolveRelativeToApi
-                    alt=""
-                    style={avatarStyle(checked)}
-                  />
-                  <div id={`event-detail-checkin-user-${user.id}-name`} style={userNameStyle}>{user.display_name || user.username || `用户 ${user.id}`}</div>
-                  <div id={`event-detail-checkin-user-${user.id}-meta`} style={userMetaStyle}>{checked ? checkInHelperLabel(checkIn) : "未签到"}</div>
-                </button>
-              );
-            })}
-        </div>
-
-        <div id="event-detail-checkin-side-panel" className="event-checkin__side" style={sideStyle}>
-          {selectedUser ? (
-            <>
-              <div id="event-detail-checkin-selected-header" style={sideHeaderStyle}>
+      <div id="event-detail-checkin-user-grid" style={deskGridStyle}>
+        {loadingUsers ? <div id="event-detail-checkin-loading-users" style={placeholderStyle}>读取成员中…</div> : null}
+        {!loadingUsers && !filteredUsers.length ? <div style={placeholderStyle}>没有匹配的成员</div> : null}
+        {!loadingUsers &&
+          filteredUsers.map((member) => {
+            const checkIn = checkInMap.get(member.id) || null;
+            const checked = Boolean(checkIn);
+            const busy = savingId === member.id;
+            return (
+              <div key={member.id} className="event-checkin__user-card" style={deskCardStyle(checked)}>
                 <CachedImage
-                  src={`/api/user_control/get_profile_image/${selectedUser.id}`}
-                  cacheKey={`event-checkin-selected-user:${selectedUser.id}`}
+                  src={`/api/user_control/get_profile_image/${member.id}`}
+                  cacheKey={`event-checkin-user:${member.id}`}
                   resolveRelativeToApi
                   alt=""
-                  style={sideAvatarStyle(Boolean(selectedCheckIn))}
+                  style={avatarStyle(checked)}
                 />
-                <div id="event-detail-checkin-selected-text">
-                  <div id="event-detail-checkin-selected-title" style={sideTitleStyle}>{selectedUser.display_name || selectedUser.username || `用户 ${selectedUser.id}`}</div>
-                  <div id="event-detail-checkin-selected-meta" style={sideMetaStyle}>
-                    {selectedCheckIn
-                      ? `已于 ${formatDateTime(selectedCheckIn.check_in_time)} 签到 · ${checkInHelperLabel(selectedCheckIn)}`
-                      : `${selectedDate} 尚未签到`}
-                  </div>
+                <div id={`event-detail-checkin-user-${member.id}-name`} style={userNameStyle}>{member.display_name || member.username || `用户 ${member.id}`}</div>
+                <div id={`event-detail-checkin-user-${member.id}-meta`} style={userMetaStyle}>
+                  {checked
+                    ? `${formatDateTime(checkIn?.check_in_time) || "已签到"} · ${checkInHelperLabel(checkIn)}`
+                    : "未签到"}
                 </div>
+                <button
+                  type="button"
+                  style={checked ? deskUndoBtnStyle : deskGoBtnStyle}
+                  disabled={busy}
+                  onClick={() => void toggle(member)}
+                >
+                  {busy ? "…" : checked ? "撤回" : "签到"}
+                </button>
               </div>
-
-              <div id="event-detail-checkin-info-card" style={infoCardStyle}>
-                <div id="event-detail-checkin-info-date-row" style={infoRowStyle}>
-                  <span style={infoLabelStyle}>签到日期</span>
-                  <span style={infoValueStyle}>{selectedDate}</span>
-                </div>
-                <div id="event-detail-checkin-info-status-row" style={infoRowStyle}>
-                  <span style={infoLabelStyle}>状态</span>
-                  <span style={infoValueStyle}>{selectedCheckIn ? "已签到" : "未签到"}</span>
-                </div>
-                {selectedCheckIn ? (
-                  <div id="event-detail-checkin-info-helper-row" style={infoRowStyle}>
-                    <span style={infoLabelStyle}>帮签人</span>
-                    <span style={infoValueStyle}>{selectedCheckIn.valid_user_name || "-"}</span>
-                  </div>
-                ) : null}
-              </div>
-
-              <div id="event-detail-checkin-actions" style={actionStyle}>
-                {!selectedCheckIn ? (
-                  <button type="button" style={primaryButtonStyle} onClick={() => void handleCheckIn()} disabled={saving}>
-                    {saving ? "签到中…" : "帮他签到"}
-                  </button>
-                ) : (
-                  <button type="button" style={dangerButtonStyle} onClick={() => void handleRollback()} disabled={saving}>
-                    {saving ? "处理中…" : "撤回签到"}
-                  </button>
-                )}
-              </div>
-            </>
-          ) : (
-            <div id="event-detail-checkin-empty-selection" style={placeholderStyle}>请选择一个成员</div>
-          )}
-        </div>
+            );
+          })}
       </div>
     </section>
   );
@@ -546,27 +471,120 @@ function checkInHelperLabel(checkIn?: EventCheckInRecord | null) {
 
 const glassContainerStyle: CSSProperties = {
   boxSizing: "border-box",
-  borderRadius: 0,
-  background: "linear-gradient(180deg, rgba(255,255,255,0.64), rgba(232,247,255,0.5))",
-  border: "1px solid rgba(255,255,255,0.14)",
-  boxShadow: "0 24px 60px rgba(14,116,144,0.12), inset 0 1px 0 rgba(255,255,255,0.1)",
+  borderRadius: "var(--x-radius-md)",
+  background: "linear-gradient(180deg, var(--x-color-panel), var(--x-color-panel-alt))",
+  border: "1px solid var(--x-color-line)",
+  boxShadow: "0 24px 60px var(--x-color-shadow-soft), inset 0 1px 0 var(--x-color-line)",
   backdropFilter: "blur(22px) saturate(140%)",
-  color: "rgba(31,78,121,0.92)",
+  color: "var(--x-color-ink)",
 };
 
 const glassInsetStyle: CSSProperties = {
   boxSizing: "border-box",
-  background: "rgba(255,255,255,0.48)",
-  border: "1px solid rgba(255,255,255,0.11)",
-  boxShadow: "inset 0 1px 0 rgba(255,255,255,0.06), 0 12px 28px rgba(14,116,144,0.08)",
+  background: "var(--x-color-panel)",
+  border: "1px solid var(--x-color-line)",
+  boxShadow: "inset 0 1px 0 var(--x-color-line), 0 12px 28px var(--x-color-shadow-soft)",
   backdropFilter: "blur(14px) saturate(130%)",
 };
 
 const glassButtonStyle: CSSProperties = {
-  border: "1px solid rgba(255,255,255,0.14)",
-  background: "rgba(255,255,255,0.6)",
-  boxShadow: "0 12px 28px rgba(14,116,144,0.12)",
+  border: "1px solid var(--x-color-line)",
+  background: "var(--x-color-panel)",
+  boxShadow: "0 12px 28px var(--x-color-shadow-soft)",
   backdropFilter: "blur(14px) saturate(130%)",
+};
+
+// —— 电脑版签到（统计头 + 内联切换网格）——
+const deskWrapStyle: CSSProperties = {
+  display: "grid",
+  gap: "16px",
+  padding: "22px 24px",
+  minHeight: "680px",
+};
+
+const deskStatsBarStyle: CSSProperties = {
+  display: "flex",
+  alignItems: "center",
+  gap: "12px",
+  flexWrap: "wrap",
+  paddingBottom: "14px",
+  borderBottom: "1px solid var(--x-color-line)",
+};
+
+const deskStatChipStyle: CSSProperties = {
+  display: "inline-flex",
+  alignItems: "baseline",
+  gap: "6px",
+  padding: "8px 14px",
+  borderRadius: "999px",
+  background: "var(--x-color-accent-soft)",
+  border: "1px solid var(--x-color-accent-border)",
+};
+
+const deskStatNumStyle: CSSProperties = {
+  fontSize: "20px",
+  fontWeight: 700,
+  color: "var(--x-color-accent-strong)",
+  lineHeight: 1,
+};
+
+const deskStatLabelStyle: CSSProperties = {
+  fontSize: "13px",
+  color: "var(--x-color-ink-muted)",
+};
+
+const deskSearchStyle: CSSProperties = {
+  minWidth: "180px",
+  padding: "10px 14px",
+  borderRadius: "var(--x-radius-md)",
+  border: "1px solid var(--x-color-line)",
+  background: "var(--x-color-panel)",
+  color: "var(--x-color-ink)",
+  boxSizing: "border-box",
+};
+
+const deskGridStyle: CSSProperties = {
+  display: "grid",
+  gridTemplateColumns: "repeat(auto-fill, minmax(150px, 1fr))",
+  gap: "14px",
+  alignContent: "start",
+};
+
+function deskCardStyle(checked: boolean): CSSProperties {
+  return {
+    display: "grid",
+    justifyItems: "center",
+    gap: "8px",
+    padding: "16px 12px 12px",
+    borderRadius: "var(--x-radius-md)",
+    border: checked ? "1px solid var(--x-color-accent-border)" : "1px solid var(--x-color-line)",
+    background: checked ? "var(--x-color-accent-soft)" : "var(--x-color-panel)",
+    boxShadow: "0 8px 20px var(--x-color-shadow-soft)",
+  };
+}
+
+const deskGoBtnStyle: CSSProperties = {
+  width: "100%",
+  padding: "8px 0",
+  borderRadius: "var(--x-radius-sm)",
+  border: "none",
+  background: "var(--x-color-accent)",
+  color: "#ffffff",
+  fontSize: "13px",
+  fontWeight: 600,
+  cursor: "pointer",
+};
+
+const deskUndoBtnStyle: CSSProperties = {
+  width: "100%",
+  padding: "8px 0",
+  borderRadius: "var(--x-radius-sm)",
+  border: "1px solid var(--x-color-line)",
+  background: "var(--x-color-panel)",
+  color: "var(--x-color-ink-muted)",
+  fontSize: "13px",
+  fontWeight: 600,
+  cursor: "pointer",
 };
 
 function wrapStyle(isMobile: boolean): CSSProperties {
@@ -592,17 +610,17 @@ const searchStyle: CSSProperties = {
   flex: 1,
   minWidth: 0,
   padding: "12px 14px",
-  borderRadius: 0,
+  borderRadius: "var(--x-radius-md)",
   ...glassButtonStyle,
-  color: "rgba(12,74,110,0.94)",
+  color: "var(--x-color-ink)",
   boxSizing: "border-box",
 };
 
 const dateStyle: CSSProperties = {
   padding: "12px 14px",
-  borderRadius: 0,
+  borderRadius: "var(--x-radius-md)",
   ...glassButtonStyle,
-  color: "rgba(12,74,110,0.94)",
+  color: "var(--x-color-ink)",
   boxSizing: "border-box",
 };
 
@@ -628,10 +646,10 @@ function userCardStyle(active: boolean): CSSProperties {
     gap: "8px",
     justifyItems: "center",
     padding: "12px 10px",
-    borderRadius: 0,
-    border: active ? "1px solid rgba(56,189,248,0.34)" : "1px solid rgba(255,255,255,0.1)",
-    background: active ? "rgba(56,189,248,0.18)" : "rgba(255,255,255,0.46)",
-    boxShadow: active ? "0 14px 30px rgba(56,189,248,0.16), inset 0 1px 0 rgba(255,255,255,0.08)" : "inset 0 1px 0 rgba(255,255,255,0.05)",
+    borderRadius: "var(--x-radius-md)",
+    border: active ? "1px solid var(--x-color-accent-border)" : "1px solid var(--x-color-line)",
+    background: active ? "var(--x-color-accent-border)" : "var(--x-color-panel)",
+    boxShadow: active ? "0 14px 30px var(--x-color-accent-border), inset 0 1px 0 var(--x-color-line)" : "inset 0 1px 0 var(--x-color-line)",
     backdropFilter: "blur(14px)",
     cursor: "pointer",
   };
@@ -645,21 +663,21 @@ function avatarStyle(checked: boolean): CSSProperties {
     objectFit: "cover",
     filter: checked ? "none" : "grayscale(1) brightness(0.88)",
     opacity: checked ? 1 : 0.75,
-    border: checked ? "2px solid rgba(5,150,105,0.72)" : "2px solid rgba(125,211,252,0.3)",
+    border: checked ? "2px solid var(--x-color-success)" : "2px solid var(--x-color-accent-soft)",
   };
 }
 
 const userNameStyle: CSSProperties = {
   fontSize: "13px",
   fontWeight: 700,
-  color: "rgba(12,74,110,0.94)",
+  color: "var(--x-color-ink)",
   textAlign: "center",
   lineHeight: 1.4,
 };
 
 const userMetaStyle: CSSProperties = {
   fontSize: "11px",
-  color: "rgba(70,120,158,0.86)",
+  color: "var(--x-color-ink-muted)",
 };
 
 const sideStyle: CSSProperties = {
@@ -667,7 +685,7 @@ const sideStyle: CSSProperties = {
   gap: "14px",
   alignContent: "start",
   padding: "16px",
-  borderRadius: 0,
+  borderRadius: "var(--x-radius-md)",
   ...glassInsetStyle,
 };
 
@@ -683,28 +701,28 @@ function sideAvatarStyle(checked: boolean): CSSProperties {
     height: "74px",
     borderRadius: "50%",
     objectFit: "cover",
-    border: checked ? "2px solid rgba(5,150,105,0.72)" : "2px solid rgba(125,211,252,0.3)",
+    border: checked ? "2px solid var(--x-color-success)" : "2px solid var(--x-color-accent-soft)",
   };
 }
 
 const sideTitleStyle: CSSProperties = {
   fontSize: "18px",
   fontWeight: 800,
-  color: "rgba(12,74,110,0.96)",
+  color: "var(--x-color-ink)",
 };
 
 const sideMetaStyle: CSSProperties = {
   marginTop: "4px",
   fontSize: "12px",
   lineHeight: 1.6,
-  color: "rgba(70,120,158,0.86)",
+  color: "var(--x-color-ink-muted)",
 };
 
 const infoCardStyle: CSSProperties = {
   display: "grid",
   gap: "10px",
   padding: "14px",
-  borderRadius: 0,
+  borderRadius: "var(--x-radius-md)",
   ...glassInsetStyle,
 };
 
@@ -717,12 +735,12 @@ const infoRowStyle: CSSProperties = {
 const infoLabelStyle: CSSProperties = {
   fontSize: "12px",
   fontWeight: 700,
-  color: "rgba(70,120,158,0.86)",
+  color: "var(--x-color-ink-muted)",
 };
 
 const infoValueStyle: CSSProperties = {
   fontSize: "13px",
-  color: "rgba(12,74,110,0.94)",
+  color: "var(--x-color-ink)",
 };
 
 const actionStyle: CSSProperties = {
@@ -733,24 +751,24 @@ const actionStyle: CSSProperties = {
 const primaryButtonStyle: CSSProperties = {
   padding: "12px 18px",
   borderRadius: "999px",
-  border: "1px solid rgba(56,189,248,0.28)",
-  background: "linear-gradient(135deg, rgba(14,165,233,0.78), rgba(125,211,252,0.62))",
-  color: "rgba(3,105,161,0.98)",
+  border: "1px solid var(--x-color-accent-border)",
+  background: "linear-gradient(135deg, var(--x-color-accent), var(--x-color-accent-soft))",
+  color: "var(--x-color-accent-strong)",
   fontWeight: 700,
   cursor: "pointer",
-  boxShadow: "0 14px 32px rgba(56,189,248,0.22)",
+  boxShadow: "0 14px 32px var(--x-color-accent-border)",
   backdropFilter: "blur(14px)",
 };
 
 const dangerButtonStyle: CSSProperties = {
   padding: "12px 18px",
   borderRadius: "999px",
-  border: "1px solid rgba(244,63,94,0.24)",
-  background: "rgba(255,241,242,0.82)",
-  color: "rgba(159,18,57,0.86)",
+  border: "1px solid var(--x-color-danger-border)",
+  background: "var(--x-color-danger-soft)",
+  color: "var(--x-color-danger)",
   fontWeight: 700,
   cursor: "pointer",
-  boxShadow: "0 12px 28px rgba(14,116,144,0.12)",
+  boxShadow: "0 12px 28px var(--x-color-shadow-soft)",
   backdropFilter: "blur(14px)",
 };
 
@@ -758,16 +776,16 @@ const placeholderStyle: CSSProperties = {
   minHeight: "140px",
   display: "grid",
   placeItems: "center",
-  color: "rgba(70,120,158,0.86)",
+  color: "var(--x-color-ink-muted)",
 };
 
 const errorStyle: CSSProperties = {
   padding: "12px 14px",
-  borderRadius: 0,
-  border: "1px solid rgba(244,63,94,0.24)",
-  background: "rgba(255,241,242,0.86)",
-  color: "rgba(159,18,57,0.86)",
-  boxShadow: "0 12px 28px rgba(14,116,144,0.08)",
+  borderRadius: "var(--x-radius-md)",
+  border: "1px solid var(--x-color-danger-border)",
+  background: "var(--x-color-danger-soft)",
+  color: "var(--x-color-danger)",
+  boxShadow: "0 12px 28px var(--x-color-shadow-soft)",
   backdropFilter: "blur(14px)",
 };
 
@@ -775,7 +793,7 @@ const secondaryButtonStyle: CSSProperties = {
   padding: "12px 18px",
   borderRadius: "999px",
   ...glassButtonStyle,
-  color: "rgba(31,78,121,0.9)",
+  color: "var(--x-color-ink)",
   fontWeight: 700,
   cursor: "pointer",
 };
@@ -797,7 +815,7 @@ const mobileHeaderStyle: CSSProperties = {
 const mobileEyebrowStyle: CSSProperties = {
   fontSize: "11px",
   fontWeight: 800,
-  color: "rgba(14,165,233,0.9)",
+  color: "var(--x-color-accent)",
   textTransform: "uppercase",
   letterSpacing: 0,
 };
@@ -806,13 +824,13 @@ const mobileTitleStyle: CSSProperties = {
   fontSize: "20px",
   lineHeight: 1.25,
   fontWeight: 850,
-  color: "rgba(12,74,110,0.96)",
+  color: "var(--x-color-ink)",
 };
 
 const mobileHintStyle: CSSProperties = {
   fontSize: "13px",
   lineHeight: 1.6,
-  color: "rgba(70,120,158,0.86)",
+  color: "var(--x-color-ink-muted)",
 };
 
 const mobileUserPillStyle: CSSProperties = {
@@ -821,7 +839,7 @@ const mobileUserPillStyle: CSSProperties = {
   padding: "7px 12px",
   borderRadius: "999px",
   ...glassButtonStyle,
-  color: "rgba(31,78,121,0.9)",
+  color: "var(--x-color-ink)",
   fontSize: "12px",
   fontWeight: 750,
   overflow: "hidden",
@@ -835,17 +853,17 @@ const mobileTabStyle: CSSProperties = {
   gridTemplateColumns: "1fr 1fr",
   gap: "6px",
   padding: "4px",
-  borderRadius: 0,
+  borderRadius: "var(--x-radius-md)",
   ...glassInsetStyle,
 };
 
 function mobileTabButtonStyle(active: boolean): CSSProperties {
   return {
     minHeight: "40px",
-    borderRadius: 0,
-    border: active ? "1px solid rgba(56,189,248,0.3)" : "1px solid transparent",
-    background: active ? "rgba(56,189,248,0.18)" : "transparent",
-    color: active ? "rgba(14,165,233,0.96)" : "rgba(70,120,158,0.86)",
+    borderRadius: "var(--x-radius-md)",
+    border: active ? "1px solid var(--x-color-accent-border)" : "1px solid transparent",
+    background: active ? "var(--x-color-accent-border)" : "transparent",
+    color: active ? "var(--x-color-accent)" : "var(--x-color-ink-muted)",
     fontSize: "14px",
     fontWeight: 800,
     cursor: "pointer",
@@ -854,10 +872,10 @@ function mobileTabButtonStyle(active: boolean): CSSProperties {
 
 const mobileSuccessStyle: CSSProperties = {
   padding: "12px 14px",
-  borderRadius: 0,
-  border: "1px solid rgba(52,211,153,0.26)",
-  background: "rgba(219,245,235,0.7)",
-  color: "rgba(6,95,70,0.88)",
+  borderRadius: "var(--x-radius-md)",
+  border: "1px solid var(--x-color-success-soft)",
+  background: "var(--x-color-success-soft)",
+  color: "var(--x-color-success)",
   fontSize: "13px",
   fontWeight: 750,
 };
@@ -872,10 +890,10 @@ const scannerFrameStyle: CSSProperties = {
   width: "100%",
   aspectRatio: "1 / 1",
   overflow: "hidden",
-  borderRadius: 0,
-  background: "#e0f5ff",
-  border: "1px solid rgba(255,255,255,0.14)",
-  boxShadow: "0 14px 32px rgba(14,116,144,0.14)",
+  borderRadius: "var(--x-radius-md)",
+  background: "var(--x-color-accent-soft)",
+  border: "1px solid var(--x-color-line)",
+  boxShadow: "0 14px 32px var(--x-color-shadow-soft)",
 };
 
 const scannerVideoStyle: CSSProperties = {
@@ -888,9 +906,9 @@ const scannerVideoStyle: CSSProperties = {
 const scannerOverlayStyle: CSSProperties = {
   position: "absolute",
   inset: "14%",
-  border: "2px solid rgba(255,255,255,0.92)",
-  borderRadius: 0,
-  boxShadow: "0 0 0 999px rgba(3,105,161,0.18)",
+  border: "2px solid var(--x-color-panel)",
+  borderRadius: "var(--x-radius-md)",
+  boxShadow: "0 0 0 999px var(--x-color-accent-tint)",
   pointerEvents: "none",
 };
 
@@ -904,9 +922,9 @@ const manualScanStyle: CSSProperties = {
 const manualInputStyle: CSSProperties = {
   minWidth: 0,
   padding: "12px 14px",
-  borderRadius: 0,
+  borderRadius: "var(--x-radius-md)",
   ...glassButtonStyle,
-  color: "rgba(12,74,110,0.94)",
+  color: "var(--x-color-ink)",
   boxSizing: "border-box",
 };
 
@@ -923,10 +941,10 @@ const qrBoxStyle: CSSProperties = {
   display: "grid",
   placeItems: "center",
   padding: "12px",
-  borderRadius: 0,
-  background: "rgba(255,255,255,0.9)",
-  border: "1px solid rgba(255,255,255,0.18)",
-  boxShadow: "0 14px 32px rgba(14,116,144,0.12)",
+  borderRadius: "var(--x-radius-md)",
+  background: "var(--x-color-panel)",
+  border: "1px solid var(--x-color-line)",
+  boxShadow: "0 14px 32px var(--x-color-shadow-soft)",
   backdropFilter: "blur(14px)",
   boxSizing: "border-box",
 };

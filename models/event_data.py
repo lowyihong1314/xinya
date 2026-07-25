@@ -50,7 +50,23 @@ class EventData(db.Model):
         lazy="joined"
     )
     target = db.Column(db.Text, nullable=True)  # 对象
-    brochure_path = db.Column(db.String(255), nullable=True)
+    # 简章 = 被选中的某个活动附件（event_file）。指向 event_file.id。
+    brochure_file_id = db.Column(
+        db.Integer,
+        db.ForeignKey(
+            "event_file.id",
+            name="fk_event_brochure_file",
+            use_alter=True,
+            ondelete="SET NULL",
+            onupdate="CASCADE",
+        ),
+        nullable=True,
+    )
+    brochure_file = db.relationship(
+        "EventFile",
+        foreign_keys=[brochure_file_id],
+        post_update=True,
+    )
     purpose = db.Column(db.Text, nullable=True)
     folder_name = db.Column(db.String(255), nullable=True)
     image_path = db.Column(db.String(255), nullable=True)
@@ -111,9 +127,11 @@ class EventData(db.Model):
             "lng": self.lng,
             "purpose": self.purpose,
             "target": self.target,   # ⭐ 对象
-            "brochure_path": self.brochure_path,
-            "brochure_name": os.path.basename(self.brochure_path) if self.brochure_path else None,
-            "brochure_mime": mimetypes.guess_type(self.brochure_path or "")[0] if self.brochure_path else None,
+            # 简章 = 被选中的活动附件；派生字段保持向后兼容（前端仍读 brochure_path/name/mime）
+            "brochure_file_id": self.brochure_file_id,
+            "brochure_path": self.brochure_file.file_path if self.brochure_file else None,
+            "brochure_name": self.brochure_file.file_name if self.brochure_file else None,
+            "brochure_mime": self.brochure_file.mime_type if self.brochure_file else None,
             "folder_name": self.folder_name,
 
             "type": self.type,
