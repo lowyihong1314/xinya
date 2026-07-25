@@ -345,6 +345,34 @@ export function useEventTableController(options?: { preferredEventId?: number | 
     }
   }
 
+  // 批量创建（佛学班列表式）：逐条创建、刷新一次、不跳转，返回成功条数。
+  async function createEventsBatch(payloads: EventCreatePayload[]) {
+    if (!payloads.length) return 0;
+    await flushPendingEventChanges();
+    setCreating(true);
+    let ok = 0;
+    const failed: string[] = [];
+    try {
+      for (const payload of payloads) {
+        try {
+          await createEvent(payload);
+          ok += 1;
+        } catch {
+          failed.push(payload.event_name);
+        }
+      }
+      await refreshEvents();
+      setToast(
+        failed.length
+          ? { type: "error", text: `已创建 ${ok} 条，失败 ${failed.length} 条` }
+          : { type: "success", text: `已创建 ${ok} 条活动` },
+      );
+    } finally {
+      setCreating(false);
+    }
+    return ok;
+  }
+
   async function removeSelectedEvent() {
     if (!selectedEvent) {
       return false;
@@ -514,6 +542,7 @@ export function useEventTableController(options?: { preferredEventId?: number | 
       loadEvents,
       updateEvent,
       createNewEvent,
+      createEventsBatch,
       removeSelectedEvent,
       uploadPoster,
       uploadBrochure,

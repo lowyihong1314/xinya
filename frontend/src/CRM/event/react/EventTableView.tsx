@@ -3,6 +3,7 @@ import { useEffect, useRef, useState, type CSSProperties, type FormEvent, type R
 import { CachedImage } from "../../../components/CachedMedia";
 import { GoogleMapEmbed } from "../../../components/GoogleMapEmbed";
 import { GooglePlaceInput } from "./GooglePlaceInput";
+import { BuddhistBatchCreateModal } from "./BuddhistBatchCreateModal";
 import { smartImageURL } from "../../../js/get_img";
 import { openPreviewModal } from "../../../js/attachment_preview";
 import { downloadUrlOrShare } from "../../../js/browserActions";
@@ -92,6 +93,7 @@ export function EventTableView(props: {
     payload: EventCreatePayload,
     media?: { poster?: File | null; brochure?: File | null; attachments?: File[] },
   ) => Promise<boolean>;
+  onCreateEventsBatch: (payloads: EventCreatePayload[]) => Promise<number>;
   onUpdateEvent: (patch: EventMutationPayload) => void;
   onUploadPoster: (file: File) => void;
   onUploadBrochure: (file: File) => void;
@@ -104,6 +106,7 @@ export function EventTableView(props: {
   const isMobile = props.isMobile ?? false;
   const canEditEvent = props.canEditEvent ?? false;
   const [createOpen, setCreateOpen] = useState(false);
+  const [batchOpen, setBatchOpen] = useState(false);
   const [draft, setDraft] = useState<CreateDraft>(() => createDefaultDraft());
   const [createError, setCreateError] = useState<string | null>(null);
   const posterInputRef = useRef<HTMLInputElement | null>(null);
@@ -197,17 +200,23 @@ export function EventTableView(props: {
                   {props.loading ? "刷新中…" : "刷新"}
                 </button>
                 {canEditEvent ? (
-                  <button
-                    type="button"
-                    style={primaryButtonStyle}
-                    onClick={() => {
-                      setDraft(createDefaultDraft());
-                      setCreateError(null);
-                      setCreateOpen(true);
-                    }}
-                  >
-                    新建活动
-                  </button>
+                  props.buddhistOnly ? (
+                    <button type="button" style={primaryButtonStyle} onClick={() => setBatchOpen(true)}>
+                      批量新建佛学班
+                    </button>
+                  ) : (
+                    <button
+                      type="button"
+                      style={primaryButtonStyle}
+                      onClick={() => {
+                        setDraft(createDefaultDraft());
+                        setCreateError(null);
+                        setCreateOpen(true);
+                      }}
+                    >
+                      新建活动
+                    </button>
+                  )
                 ) : null}
               </div>
             </div>
@@ -376,6 +385,14 @@ export function EventTableView(props: {
           </>
         )}
       </section>
+
+      {batchOpen ? (
+        <BuddhistBatchCreateModal
+          creating={props.creating}
+          onClose={() => setBatchOpen(false)}
+          onSubmit={props.onCreateEventsBatch}
+        />
+      ) : null}
 
       {createOpen ? (
         <div style={modalOverlayStyle} onClick={() => !props.creating && setCreateOpen(false)}>

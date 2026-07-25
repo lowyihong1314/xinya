@@ -84,6 +84,7 @@ export function EventTablePage() {
         if (id) selectEvent(id);
         return Boolean(id);
       }}
+      onCreateEventsBatch={(payloads) => actions.createEventsBatch(payloads)}
       onUpdateEvent={(patch) => void actions.updateEvent(patch)}
       onUploadPoster={(file) => void actions.uploadPoster(file)}
       onUploadBrochure={(file) => void actions.uploadBrochure(file)}
