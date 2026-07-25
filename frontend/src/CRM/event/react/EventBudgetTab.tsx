@@ -58,7 +58,7 @@ export function EventBudgetTab({
   const [error, setError] = useState("");
   const [niE, setNiE] = useState({ category: "", budget_amount: "", actual_amount: "" });
   const [niI, setNiI] = useState({ category: "", budget_amount: "", actual_amount: "" });
-  const [claimFor, setClaimFor] = useState<BudgetItem | null>(null);
+  const [newClaimOpen, setNewClaimOpen] = useState(false);
 
   async function load() {
     setLoading(true);
@@ -136,25 +136,12 @@ export function EventBudgetTab({
     return { incB, incA, expB, expA, netB: incB - expB, netA: incA - expA };
   }, [income, expense]);
 
-  function claimAction(it: BudgetItem): ReactNode {
-    const status = it.claim?.status;
-    if (it.claim) {
-      if (status === "rejected") {
-        return (
-          <div style={{ display: "flex", gap: 6, flexShrink: 0 }}>
-            <button type="button" style={linkBtnStyle} onClick={() => navigate(`/crm/finance?account_router=claim_req&claim_id=${it.claim!.id}`)}>查看</button>
-            {canSubmitClaim ? <button type="button" style={claimBtnStyle} onClick={() => setClaimFor(it)}>重新提交</button> : null}
-          </div>
-        );
-      }
-      return (
-        <button type="button" style={linkBtnStyle} onClick={() => navigate(`/crm/finance?account_router=claim_req&claim_id=${it.claim!.id}`)}>查看报销</button>
-      );
-    }
-    if (canSubmitClaim) {
-      return <button type="button" style={claimBtnStyle} onClick={() => setClaimFor(it)}>提交报销</button>;
-    }
-    return null;
+  // 报销行（source=claim，只读）：显示「查看」跳到报销详情。手动支出行无按钮。
+  function claimView(it: BudgetItem): ReactNode {
+    if (it.source !== "claim" || !it.claim) return null;
+    return (
+      <button type="button" style={linkBtnStyle} onClick={() => navigate(`/crm/finance?account_router=claim_req&claim_id=${it.claim!.id}`)}>查看</button>
+    );
   }
 
   return (
@@ -204,7 +191,10 @@ export function EventBudgetTab({
       <section style={sectionStyle}>
         <div style={headRowStyle}>
           <div style={{ fontWeight: 800, fontSize: 15 }}>支出</div>
-          <div style={mutedStyle}>预算 {fmt(totals.expB)} · 实际 {fmt(totals.expA)}</div>
+          <div style={{ display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap" }}>
+            <div style={mutedStyle}>预算 {fmt(totals.expB)} · 实际 {fmt(totals.expA)}</div>
+            {canSubmitClaim ? <button type="button" style={claimBtnStyle} onClick={() => setNewClaimOpen(true)}>+ 新建报销</button> : null}
+          </div>
         </div>
 
         {expense.length ? (
@@ -213,7 +203,7 @@ export function EventBudgetTab({
               const tone = claimTone(it.claim?.status);
               return (
                 <EditableRow key={it.id} it={it} isMobile={isMobile} canEdit={canEdit} locked={!!it.locked} tone={tone}
-                  onPatch={patch} onRemove={remove} action={claimAction(it)} />
+                  onPatch={patch} onRemove={remove} action={claimView(it)} />
               );
             })}
           </div>
@@ -234,12 +224,11 @@ export function EventBudgetTab({
         <span style={{ fontFamily: "var(--x-font-mono)", fontSize: 12.5, color: "var(--x-color-ink-muted)" }}>预算 {fmt(totals.netB)}</span>
       </div>
 
-      {claimFor ? (
+      {newClaimOpen ? (
         <ClaimCreateModal
           eventId={eventId}
           eventName={eventName}
-          budgetLine={{ id: Number(claimFor.id), category: claimFor.category, amount: claimFor.actual_amount ?? claimFor.budget_amount }}
-          onClose={() => setClaimFor(null)}
+          onClose={() => setNewClaimOpen(false)}
           onSuccess={() => void load()}
         />
       ) : null}

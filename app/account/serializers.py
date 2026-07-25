@@ -30,8 +30,6 @@ def serialize_request_data(request_obj, with_children=True):
         else None,
         "event_id": request_obj.event_id,
         "event_name": request_obj.event.event_name if request_obj.event else None,
-        "event_budget_id": request_obj.event_budget_id,
-        "event_budget_category": request_obj.event_budget.category if request_obj.event_budget else None,
         "created_at": request_obj.created_at.isoformat()
         if request_obj.created_at
         else None,

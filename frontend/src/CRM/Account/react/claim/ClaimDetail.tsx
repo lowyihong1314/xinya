@@ -90,10 +90,6 @@ export function ClaimDetail({
   const [savingEvent, setSavingEvent] = useState(false);
   const [eventFeedback, setEventFeedback] = useState("");
   const [eventError, setEventError] = useState("");
-  const [budgetLines, setBudgetLines] = useState<{ id: number; type?: string; category: string }[]>([]);
-  const [savingBudget, setSavingBudget] = useState(false);
-  const [budgetFeedback, setBudgetFeedback] = useState("");
-  const [budgetError, setBudgetError] = useState("");
   const [editingClaim, setEditingClaim] = useState(false);
   const [editDraft, setEditDraft] = useState<ClaimEditDraft>(() => buildEditDraft(claim));
   const [savingClaim, setSavingClaim] = useState(false);
@@ -209,40 +205,6 @@ export function ClaimDetail({
       setEventError(error instanceof Error ? error.message : "更新活动失败");
     } finally {
       setSavingEvent(false);
-    }
-  }
-
-  // 拉取所关联活动的「支出」预算行，供关联预算行选择器使用。
-  useEffect(() => {
-    if (!claim.event_id) {
-      setBudgetLines([]);
-      return;
-    }
-    let active = true;
-    void apiFetch(`/api/event_data/event_budget/list/${claim.event_id}`, { credentials: "include" })
-      .then((r) => r.json())
-      .then((d) => {
-        if (!active) return;
-        const rows = Array.isArray(d?.data) ? d.data : [];
-        setBudgetLines(rows.filter((x: { id: unknown; type?: string }) => typeof x.id === "number" && (x.type ?? "expense") === "expense"));
-      })
-      .catch(() => { if (active) setBudgetLines([]); });
-    return () => { active = false; };
-  }, [claim.event_id]);
-
-  async function handleLinkBudget(budgetId: number | null) {
-    if (savingBudget) return;
-    setSavingBudget(true);
-    setBudgetFeedback("");
-    setBudgetError("");
-    try {
-      const updated = await updateClaim(claim.id, { event_budget_id: budgetId });
-      onClaimUpdated(updated);
-      setBudgetFeedback(budgetId ? "已关联预算行" : "已清除预算行");
-    } catch (error) {
-      setBudgetError(error instanceof Error ? error.message : "更新预算行失败");
-    } finally {
-      setSavingBudget(false);
     }
   }
 
@@ -521,48 +483,14 @@ export function ClaimDetail({
               ) : (
                 <FieldValue value={claim.event_id ? `${claim.event_name || "未命名活动"} (#${claim.event_id})` : "-"} />
               )}
+              {claim.event_id ? (
+                <button type="button" style={{ ...buttonSecondaryStyle, marginTop: 4 }} onClick={() => navigate(`/crm/event_table?event_id=${claim.event_id}&event_tab=budget`)}>
+                  查看活动预算
+                </button>
+              ) : null}
               {eventFeedback ? <span style={{ ...chipStyle, color: "var(--x-color-success)" }}>{eventFeedback}</span> : null}
               {eventError ? <span style={{ ...chipStyle, color: "var(--x-color-danger)" }}>{eventError}</span> : null}
             </Field>
-
-            {claim.event_id ? (
-              <Field label="关联预算行">
-                <div style={{ display: "flex", gap: "6px", flexWrap: "wrap", alignItems: "center" }}>
-                  {claim.event_budget_id ? (
-                    <>
-                      <span style={{ ...chipStyle, background: "var(--x-color-accent-tint)", color: "var(--x-color-accent-strong)" }}>
-                        预算 · {claim.event_budget_category || `#${claim.event_budget_id}`}
-                      </span>
-                      <button type="button" style={buttonSecondaryStyle} onClick={() => navigate(`/crm/event_table?event_id=${claim.event_id}&event_tab=budget`)}>
-                        查看预算
-                      </button>
-                      {canEditEvent ? (
-                        <button type="button" style={disabledStyle(buttonGhostStyle, savingBudget)} disabled={savingBudget} onClick={() => void handleLinkBudget(null)}>清除</button>
-                      ) : null}
-                    </>
-                  ) : canEditEvent ? (
-                    <>
-                      <select
-                        style={inputStyle}
-                        value=""
-                        disabled={savingBudget || !budgetLines.length}
-                        onChange={(e) => { const v = Number(e.target.value); if (v) void handleLinkBudget(v); }}
-                      >
-                        <option value="">{budgetLines.length ? "关联到某条支出行…" : "该活动暂无支出行"}</option>
-                        {budgetLines.map((line) => (
-                          <option key={line.id} value={line.id}>{line.category}</option>
-                        ))}
-                      </select>
-                      {savingBudget ? <span style={chipStyle}>保存中…</span> : null}
-                    </>
-                  ) : (
-                    <span style={{ ...chipStyle, color: "var(--x-color-ink-muted)" }}>未关联预算行</span>
-                  )}
-                </div>
-                {budgetFeedback ? <span style={{ ...chipStyle, color: "var(--x-color-success)" }}>{budgetFeedback}</span> : null}
-                {budgetError ? <span style={{ ...chipStyle, color: "var(--x-color-danger)" }}>{budgetError}</span> : null}
-              </Field>
-            ) : null}
 
             <Field label="用途说明">
               {editingClaim ? (

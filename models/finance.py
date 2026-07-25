@@ -52,19 +52,6 @@ class ReimbursementRequest(db.Model):
     )
     event = db.relationship("EventData", foreign_keys=[event_id])
 
-    # 关联活动财政预算行（可为空）：从某条预算支出行发起的报销
-    event_budget_id = db.Column(
-        db.Integer,
-        db.ForeignKey("event_budget_data.id", ondelete="SET NULL", onupdate="CASCADE"),
-        nullable=True,
-        index=True,
-    )
-    event_budget = db.relationship(
-        "EventBudgetData",
-        foreign_keys=[event_budget_id],
-        backref=db.backref("claims", passive_deletes=True),
-    )
-
     # 状态：draft / submitted / rejected / approved / paid(optional)
     status = db.Column(db.String(32), default="draft", nullable=False)
 

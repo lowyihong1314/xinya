@@ -896,17 +896,32 @@ def _claim_status_from_request(req):
     return "pending"
 
 
-def _budget_line_claim(line_id):
-    """某条预算行当前关联的报销（取最新一条；被拒后重提=新建，故看最新）。"""
-    req = (
+def _event_claim_rows(event_id):
+    """把该活动的报销（按 event_id）作为只读支出行拼进预算：
+    锁定不可编辑，按报销状态上色（pending 绿 / approved 蓝 / rejected 红）。"""
+    reqs = (
         ReimbursementRequest.query
-        .filter_by(event_budget_id=line_id)
+        .filter_by(event_id=event_id)
         .order_by(ReimbursementRequest.id.desc())
-        .first()
+        .all()
     )
-    if not req:
-        return None
-    return {"id": req.id, "status": _claim_status_from_request(req), "amount": float(req.amount or 0)}
+    rows = []
+    for r in reqs:
+        label = (r.purpose or r.vendor_name or r.applicant_name or "").strip().splitlines()[0] if (r.purpose or r.vendor_name or r.applicant_name) else ""
+        rows.append({
+            "id": f"claim-{r.id}",
+            "no": 0,
+            "type": "expense",
+            "source": "claim",
+            "editable": False,
+            "locked": True,
+            "category": f"报销 · {label[:40] or ('#' + str(r.id))}",
+            "budget_amount": None,
+            "actual_amount": float(r.amount or 0),
+            "remark": r.applicant_name,
+            "claim": {"id": r.id, "status": _claim_status_from_request(r), "amount": float(r.amount or 0)},
+        })
+    return rows
 
 
 def _registration_income_rows(event):
@@ -982,13 +997,13 @@ def event_budget_list_response(event_id):
     manual = []
     for i in items:
         d = i.to_dict()
-        claim = _budget_line_claim(i.id)
-        d["claim"] = claim
-        d["locked"] = bool(claim and claim["status"] != "rejected")
+        d["source"] = "budget"
         d["editable"] = True
+        d["locked"] = False
+        d["claim"] = None
         manual.append(d)
-    # 报名收入只读行放前面（前端按 type 分区）。
-    data = _registration_income_rows(event) + manual
+    # 统一列表：报名收入(只读) + 手动预算行 + 该活动的报销(只读，按 event_id)。
+    data = _registration_income_rows(event) + manual + _event_claim_rows(event_id)
     return jsonify({"status": "success", "data": data})
 
 

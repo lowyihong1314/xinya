@@ -19,7 +19,7 @@ from app.account.serializers import serialize_request_data
 from app.paths import DATA_ROOT
 from models import db
 from models.form import RegisForm, RegisPayment
-from models.event_data import EventBudgetData, EventData
+from models.event_data import EventData
 from models.finance import (
     ReimbursementApproverData,
     ReimbursementAttachment,
@@ -686,26 +686,14 @@ def create_claim_from_form(form, files, current_user=None):
 
     sign_json_data = _normalize_sign_json(sign_json_data_raw)
 
-    event_budget_id_raw = form.get("event_budget_id")
     try:
         request_date = datetime.strptime(request_date_raw, "%Y-%m-%d").date()
         amount = float(amount_raw)
         event_id = int(event_id_raw) if event_id_raw else None
-        event_budget_id = int(event_budget_id_raw) if event_budget_id_raw else None
     except Exception as exc:
         raise ValidationError("数据格式错误") from exc
     if amount <= 0:
         raise ValidationError("金额必须大于 0")
-
-    # 关联预算行：校验其属于所选活动；活动缺省时用预算行的活动补上。
-    if event_budget_id is not None:
-        budget_line = EventBudgetData.query.get(event_budget_id)
-        if budget_line is None:
-            raise ValidationError("关联的预算行不存在")
-        if event_id is not None and budget_line.event_id != event_id:
-            raise ValidationError("关联的预算行不属于该活动")
-        if event_id is None:
-            event_id = budget_line.event_id
 
     request_obj = ReimbursementRequest(
         applicant_user_id=getattr(current_user, "id", None),
@@ -722,7 +710,6 @@ def create_claim_from_form(form, files, current_user=None):
         purchase_datetime=purchase_datetime,
         public_token=uuid.uuid4().hex,
         event_id=event_id,
-        event_budget_id=event_budget_id,
         sign_json_data=sign_json_data,
         status="submitted",
     )
@@ -900,24 +887,6 @@ def update_claim(request_id, payload, user):
                 raise ValidationError("活动不存在")
             _record_claim_change(request_obj, "event_id", request_obj.event_id, event.id, user)
             request_obj.event_id = event.id
-
-    if "event_budget_id" in payload:
-        raw_budget_id = payload.get("event_budget_id")
-        if raw_budget_id in (None, "", 0, "0"):
-            _record_claim_change(request_obj, "event_budget_id", request_obj.event_budget_id, None, user)
-            request_obj.event_budget_id = None
-        else:
-            try:
-                budget_id = int(raw_budget_id)
-            except Exception as exc:
-                raise ValidationError("event_budget_id 格式错误") from exc
-            budget_line = EventBudgetData.query.get(budget_id)
-            if not budget_line:
-                raise ValidationError("预算行不存在")
-            if request_obj.event_id is not None and budget_line.event_id != request_obj.event_id:
-                raise ValidationError("预算行不属于该活动")
-            _record_claim_change(request_obj, "event_budget_id", request_obj.event_budget_id, budget_line.id, user)
-            request_obj.event_budget_id = budget_line.id
 
     request_obj.updated_at = datetime.utcnow()
     db.session.commit()

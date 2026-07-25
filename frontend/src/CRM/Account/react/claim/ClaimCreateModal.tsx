@@ -7,32 +7,25 @@ import { ClaimCreateForm } from "./ClaimCreateForm";
 import { buildInitialCreateState, submitCreateClaim, validateCreateState } from "./submitCreate";
 import type { AccountUser } from "./types";
 
-// 从预算支出行「提交报销」弹出的自包含报销申请弹窗。
+// 活动级「新建报销」弹窗：预填并锁定活动，提交后报销以 event_id 关联该活动。
 export function ClaimCreateModal({
   eventId,
   eventName,
-  budgetLine,
   onClose,
   onSuccess,
 }: {
   eventId: number;
   eventName?: string;
-  budgetLine: { id: number; category?: string; amount?: number | null };
   onClose: () => void;
   onSuccess: () => void;
 }) {
   const { user, isMobile } = useUserState();
   const accountUser = (user as AccountUser | null) ?? null;
 
-  const [state, setState] = useState(() => {
-    const base = buildInitialCreateState(accountUser);
-    return {
-      ...base,
-      amount: budgetLine.amount != null ? String(budgetLine.amount) : "",
-      purpose: budgetLine.category || "",
-      selectedEvent: { id: eventId, event_name: eventName },
-    };
-  });
+  const [state, setState] = useState(() => ({
+    ...buildInitialCreateState(accountUser),
+    selectedEvent: { id: eventId, event_name: eventName },
+  }));
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -55,7 +48,7 @@ export function ClaimCreateModal({
     }
     setSubmitting(true);
     try {
-      await submitCreateClaim(state, accountUser, { eventBudgetId: budgetLine.id });
+      await submitCreateClaim(state, accountUser);
       onSuccess();
       onClose();
     } catch (err) {
@@ -77,8 +70,7 @@ export function ClaimCreateModal({
           aiFilling={false}
           showAiFill={false}
           lockedEvent
-          budgetLine={{ id: budgetLine.id, category: budgetLine.category }}
-          title="提交报销申请"
+          title="新建报销申请"
           backLabel="取消"
           submitLabel="提交报销"
           onBack={onClose}

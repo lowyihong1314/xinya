@@ -61,8 +61,6 @@ export type ClaimRecord = {
   purchase_datetime?: string | null;
   event_id?: number;
   event_name?: string;
-  event_budget_id?: number | null;
-  event_budget_category?: string | null;
   created_at?: string;
   updated_at?: string;
   status?: string;
