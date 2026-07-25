@@ -25,7 +25,7 @@ type PortalEvent = {
   purpose?: string | null;
 };
 type ParticipatedEvent = PortalEvent & { accessible: boolean; state: string; state_message?: string | null; forms: PortalForm[] };
-type FlowItem = { no?: number; minutes?: number | null; title?: string | null; detail?: string | null };
+type FlowItem = { no?: number; minutes?: number | null; title?: string | null; detail?: string | null; login_only?: boolean };
 type MemberExtraField = { label?: string | null; field_value?: unknown };
 type MemberData = {
   name_cn?: string | null; name?: string | null; nric?: string | null; gender?: string | null;
@@ -480,7 +480,10 @@ function PortalView({ nric, formId }: { nric: string; formId: number }) {
                   <span style={{ fontSize: 11, opacity: 0.7 }}>{clock(end)}</span>
                 </div>
                 <div style={{ minWidth: 0 }}>
-                  <div style={{ fontWeight: 700 }}>{item.title || "（环节）"}</div>
+                  <div style={{ fontWeight: 700 }}>
+                    {item.title || "（环节）"}
+                    {item.login_only ? <span title="仅登陆可见" style={{ marginLeft: 6, fontSize: 12 }}>🔒</span> : null}
+                  </div>
                   {item.detail ? <div style={mutedStyle}>{item.detail}</div> : null}
                 </div>
               </div>

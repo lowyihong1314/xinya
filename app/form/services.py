@@ -2849,11 +2849,13 @@ def member_portal_detail(nric, form_id):
 
     latest = member.latest_data()
     flows = sorted(event.event_flows or [], key=lambda f: (f.no or 0, f.minutes or 0, f.id))
-    # 成员终端是公开入口（凭 NRIC，非登陆）：隐藏「仅登陆可见」的环节。
+    # 成员终端默认是公开入口（凭 NRIC，非登陆）：隐藏「仅登陆可见」的环节。
+    # 但若访客已登录，则连隐藏时段也一并显示（并标记 login_only）。
+    _viewer_logged_in = bool(getattr(current_user, "is_authenticated", False))
     flow = [
-        {"no": f.no, "minutes": f.minutes, "title": f.title, "detail": f.detail}
+        {"no": f.no, "minutes": f.minutes, "title": f.title, "detail": f.detail, "login_only": bool(f.login_only)}
         for f in flows
-        if not f.login_only
+        if _viewer_logged_in or not f.login_only
     ]
 
     # 付款状态：让成员终端展示，并决定是否显示「去付款」。
