@@ -8,6 +8,8 @@ import { LogoQrBadge } from "../../../components/LogoQrBadge";
 import { createMemberPayment, fetchPaymentQuote, resolveStaticUrl } from "../payApi";
 import { GoogleMapEmbed } from "../../../components/GoogleMapEmbed";
 import { TerminalScorePanel } from "./TerminalScorePanel";
+import { EventFlowInline } from "../../../CRM/event/react/EventFlowInline";
+import type { EventDetailRecord } from "../../../event/shared/types";
 import type { FormFee } from "../../../CRM/form/react/types";
 
 type PortalForm = { form_id: number; title: string };
@@ -469,27 +471,38 @@ function PortalView({ nric, formId }: { nric: string; formId: number }) {
       ) : null}
 
       {tab === "flow" ? (
-        <section style={cardStyle}>
-          <h2 style={sectionTitleStyle}>流程</h2>
-          {!flowRows.length ? <div style={hintStyle}>暂无流程。</div> : null}
-          <div style={{ display: "grid", gap: 8 }}>
-            {flowRows.map(({ start, end, item }, i) => (
-              <div key={i} style={flowRowStyle}>
-                <div style={timeBadgeStyle}>
-                  <span style={{ fontWeight: 800 }}>{clock(start)}</span>
-                  <span style={{ fontSize: 11, opacity: 0.7 }}>{clock(end)}</span>
-                </div>
-                <div style={{ minWidth: 0 }}>
-                  <div style={{ fontWeight: 700 }}>
-                    {item.title || "（环节）"}
-                    {item.login_only ? <span title="仅登陆可见" style={{ marginLeft: 6, fontSize: 12 }}>🔒</span> : null}
+        data.viewer_logged_in && ev?.id ? (
+          // 已登录：直接用 CRM 流程组件（组织者可编辑：拖动排序 / 编辑弹窗）
+          <section style={{ ...cardStyle, padding: 8 }}>
+            <EventFlowInline
+              detail={{ id: ev.id, datetime: ev.datetime ?? undefined, end_datetime: ev.end_datetime ?? undefined } as EventDetailRecord}
+              canEdit={!!data.viewer_is_organizer}
+              isMobile={typeof window !== "undefined" && window.innerWidth < 820}
+            />
+          </section>
+        ) : (
+          <section style={cardStyle}>
+            <h2 style={sectionTitleStyle}>流程</h2>
+            {!flowRows.length ? <div style={hintStyle}>暂无流程。</div> : null}
+            <div style={{ display: "grid", gap: 8 }}>
+              {flowRows.map(({ start, end, item }, i) => (
+                <div key={i} style={flowRowStyle}>
+                  <div style={timeBadgeStyle}>
+                    <span style={{ fontWeight: 800 }}>{clock(start)}</span>
+                    <span style={{ fontSize: 11, opacity: 0.7 }}>{clock(end)}</span>
                   </div>
-                  {item.detail ? <div style={mutedStyle}>{item.detail}</div> : null}
+                  <div style={{ minWidth: 0 }}>
+                    <div style={{ fontWeight: 700 }}>
+                      {item.title || "（环节）"}
+                      {item.login_only ? <span title="仅登陆可见" style={{ marginLeft: 6, fontSize: 12 }}>🔒</span> : null}
+                    </div>
+                    {item.detail ? <div style={mutedStyle}>{item.detail}</div> : null}
+                  </div>
                 </div>
-              </div>
-            ))}
-          </div>
-        </section>
+              ))}
+            </div>
+          </section>
+        )
       ) : null}
 
       {tab === "score" ? (

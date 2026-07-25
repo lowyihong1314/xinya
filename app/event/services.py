@@ -407,12 +407,29 @@ def event_flow_list_response(event_id):
     return jsonify({"status": "success", "data": items})
 
 
+def _can_edit_event_flow(event):
+    """有 event_edit 权限，或者是该活动的组织者，即可编辑流程。"""
+    if event is None:
+        return False
+    try:
+        from app.auth import get_current_user_permissions
+        if "event_edit" in (get_current_user_permissions(current_user) or set()):
+            return True
+    except Exception:  # noqa: BLE001
+        pass
+    if not getattr(current_user, "is_authenticated", False):
+        return False
+    return current_user.id in {o.id for o in (event.organizers or [])}
+
+
 def create_event_flow(data):
     event_id = as_int(data.get("event_id"))
     if not event_id:
         return jsonify({"status": "error", "message": "event_id 必填"}), 400
 
-    EventData.query.get_or_404(event_id)
+    event = EventData.query.get_or_404(event_id)
+    if not _can_edit_event_flow(event):
+        return jsonify({"status": "error", "message": "没有权限编辑此活动流程"}), 403
     max_no = (
         db.session.query(db.func.max(EventFlowData.no))
         .filter(EventFlowData.event_id == event_id)
@@ -437,6 +454,8 @@ def create_event_flow(data):
 
 def update_event_flow(flow_id, data):
     flow = EventFlowData.query.get_or_404(flow_id)
+    if not _can_edit_event_flow(flow.event):
+        return jsonify({"status": "error", "message": "没有权限编辑此活动流程"}), 403
 
     if "no" in data:
         flow.no = as_int(data.get("no")) or 0
@@ -463,6 +482,8 @@ def update_event_flow(flow_id, data):
 
 def delete_event_flow(flow_id):
     flow = EventFlowData.query.get_or_404(flow_id)
+    if not _can_edit_event_flow(flow.event):
+        return jsonify({"status": "error", "message": "没有权限编辑此活动流程"}), 403
     event_id = flow.event_id
 
     try:
@@ -493,7 +514,9 @@ def reorder_event_flow(data):
     if not isinstance(flow_ids, list) or not flow_ids:
         return jsonify({"status": "error", "message": "flow_ids 必须是非空数组"}), 400
 
-    EventData.query.get_or_404(event_id)
+    event = EventData.query.get_or_404(event_id)
+    if not _can_edit_event_flow(event):
+        return jsonify({"status": "error", "message": "没有权限编辑此活动流程"}), 403
     flows = EventFlowData.query.filter(EventFlowData.event_id == event_id).all()
     flow_map = {flow.id: flow for flow in flows}
 

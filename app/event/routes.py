@@ -83,28 +83,24 @@ def event_flow_list(event_id):
 
 @event_data_bp.route("/event_flow/new", methods=["POST"])
 @login_required
-@permission_required("event_edit")
 def event_flow_new():
     return services.create_event_flow(services.get_json_payload())
 
 
 @event_data_bp.route("/event_flow/update/<int:flow_id>", methods=["POST"])
 @login_required
-@permission_required("event_edit")
 def event_flow_update(flow_id):
     return services.update_event_flow(flow_id, services.get_json_payload())
 
 
 @event_data_bp.route("/event_flow/delete/<int:flow_id>", methods=["POST"])
 @login_required
-@permission_required("event_edit")
 def event_flow_delete(flow_id):
     return services.delete_event_flow(flow_id)
 
 
 @event_data_bp.route("/event_flow/reorder", methods=["POST"])
 @login_required
-@permission_required("event_edit")
 def event_flow_reorder():
     return services.reorder_event_flow(services.get_json_payload())
 
