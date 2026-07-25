@@ -25,6 +25,10 @@ class EventData(db.Model):
 
     event_name = db.Column(db.String(255), nullable=True)
     location = db.Column(db.Text, nullable=True)
+    # Google 地点：强制通过 Google 选择，存 place_id + 经纬度用于地图显示。
+    place_id = db.Column(db.String(255), nullable=True)
+    lat = db.Column(db.Float, nullable=True)
+    lng = db.Column(db.Float, nullable=True)
 
     user_id = db.Column(
         db.Integer,
@@ -102,6 +106,9 @@ class EventData(db.Model):
             ],
             "event_name": self.event_name,
             "location": self.location,
+            "place_id": self.place_id,
+            "lat": self.lat,
+            "lng": self.lng,
             "purpose": self.purpose,
             "target": self.target,   # ⭐ 对象
             "brochure_path": self.brochure_path,

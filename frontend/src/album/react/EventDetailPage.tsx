@@ -4,6 +4,7 @@ import { createPortal } from "react-dom";
 import { useNavigate, useParams } from "react-router-dom";
 
 import { CacheMediaPlayer } from "../../components/CacheMediaPlayer";
+import { GoogleMapEmbed } from "../../components/GoogleMapEmbed";
 import { useEventData } from "../../event/shared/EventDataContext";
 import { fetchEventDetail } from "../../event/shared/api";
 import type { EventDetailRecord } from "../../event/shared/types";
@@ -374,6 +375,12 @@ export function EventDetailPage() {
             {detail.purpose ? <p style={heroBodyStyle}>{detail.purpose}</p> : null}
           </div>
         </section>
+
+        {detail.place_id || detail.location ? (
+          <section id="event-detail-map" style={{ padding: isMobile ? "0 12px" : "0", maxWidth: 900, margin: "16px auto 0" }}>
+            <GoogleMapEmbed placeId={detail.place_id} lat={detail.lat} lng={detail.lng} query={detail.location} height={260} />
+          </section>
+        ) : null}
 
         <section id="event-detail-toolbar" style={toolbarStyle(isMobile, isNarrowWidth)}>
           <div id="event-detail-toolbar-navigation" style={toolbarGroupStyle}>

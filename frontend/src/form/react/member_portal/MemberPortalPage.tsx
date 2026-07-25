@@ -6,6 +6,7 @@ import { API_BASE } from "../../../js/apiBase";
 import { apiFetch } from "../../../js/apiFetch";
 import { LogoQrBadge } from "../../../components/LogoQrBadge";
 import { createMemberPayment, fetchPaymentQuote, resolveStaticUrl } from "../payApi";
+import { GoogleMapEmbed } from "../../../components/GoogleMapEmbed";
 import type { FormFee } from "../../../CRM/form/react/types";
 
 type PortalForm = { form_id: number; title: string };
@@ -16,6 +17,9 @@ type PortalEvent = {
   datetime?: string | null;
   end_datetime?: string | null;
   location?: string | null;
+  place_id?: string | null;
+  lat?: number | null;
+  lng?: number | null;
   target?: string | null;
   purpose?: string | null;
 };
@@ -357,6 +361,9 @@ function PortalView({ nric, formId }: { nric: string; formId: number }) {
             {ev?.target ? <Fact label="对象" value={ev.target} /> : null}
             {ev?.type ? <Fact label="类型" value={ev.type} /> : null}
           </div>
+          {ev && (ev.place_id || ev.location) ? (
+            <GoogleMapEmbed placeId={ev.place_id} lat={ev.lat} lng={ev.lng} query={ev.location} height={200} />
+          ) : null}
           {ev?.purpose ? <div style={purposeStyle}>{ev.purpose}</div> : null}
           {!posterUrl && !ev?.datetime && !ev?.location && !ev?.purpose ? <div style={hintStyle}>暂无活动信息。</div> : null}
         </section>

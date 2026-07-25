@@ -3,6 +3,7 @@ import type { CSSProperties } from "react";
 
 import { useUserState } from "../../app/UserState";
 import { CacheMediaPlayer } from "../../components/CacheMediaPlayer";
+import { GooglePlaceInput } from "../../CRM/event/react/GooglePlaceInput";
 import { useEnsureDesignTokens } from "../../theme/designTokens";
 import { saveEvent, setEventPoster, uploadEventBrochure } from "../../event/shared/api";
 import type { AlbumFile, EventDetailRecord } from "../../event/shared/types";
@@ -31,6 +32,9 @@ export function EditEventModal({ detail, onClose, onSaved }: Props) {
   const [form, setForm] = useState(() => ({
     event_name: detail.event_name || "",
     location: detail.location || "",
+    place_id: (detail.place_id ?? null) as string | null,
+    lat: (detail.lat ?? null) as number | null,
+    lng: (detail.lng ?? null) as number | null,
     purpose: detail.purpose || "",
     type: detail.type || "",
     target: detail.target || "",
@@ -72,6 +76,9 @@ export function EditEventModal({ detail, onClose, onSaved }: Props) {
         event_id: detail.id,
         event_name: form.event_name,
         location: form.location,
+        place_id: form.place_id,
+        lat: form.lat,
+        lng: form.lng,
         purpose: form.purpose,
         type: form.type,
         target: form.target,
@@ -88,6 +95,9 @@ export function EditEventModal({ detail, onClose, onSaved }: Props) {
         ...(payload.data || {}),
         event_name: form.event_name,
         location: form.location,
+        place_id: form.place_id,
+        lat: form.lat,
+        lng: form.lng,
         purpose: form.purpose,
         type: form.type,
         target: form.target,
@@ -225,7 +235,14 @@ export function EditEventModal({ detail, onClose, onSaved }: Props) {
 
         <div style={formGridStyle}>
           <Field label="活动名称" value={form.event_name} onChange={(value) => setForm((prev) => ({ ...prev, event_name: value }))} />
-          <Field label="地点" value={form.location} onChange={(value) => setForm((prev) => ({ ...prev, location: value }))} />
+          <label style={wideFieldStyle}>
+            <span style={labelStyle}>地点（Google 选择）</span>
+            <GooglePlaceInput
+              value={form.location}
+              onSelect={(v) => setForm((prev) => ({ ...prev, location: v.location, place_id: v.place_id, lat: v.lat, lng: v.lng }))}
+              onClear={() => setForm((prev) => ({ ...prev, location: "", place_id: null, lat: null, lng: null }))}
+            />
+          </label>
           <Field label="类型" value={form.type} list="album-event-type-options" onChange={(value) => setForm((prev) => ({ ...prev, type: value }))} />
           <Field label="对象" value={form.target} onChange={(value) => setForm((prev) => ({ ...prev, target: value }))} />
           <Field

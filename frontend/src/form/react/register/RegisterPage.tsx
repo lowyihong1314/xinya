@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState, type CSSProperties } from "react";
 
 import { API_BASE } from "../../../js/apiBase";
 import { LogoQrBadge } from "../../../components/LogoQrBadge";
+import { GoogleMapEmbed } from "../../../components/GoogleMapEmbed";
 import { useEnsureDesignTokens } from "../../../theme/designTokens";
 import { completeParental, registerPerson } from "./api";
 import { calcAgeFromIc } from "./nric";
@@ -444,6 +445,11 @@ function EventDetail({ form, closed, onNext }: { form: PublicForm; closed: boole
             {event.target ? <Fact label="对象" value={event.target} /> : null}
             {event.purpose ? <Fact label="目的" value={event.purpose} /> : null}
           </dl>
+          {event.place_id || event.location ? (
+            <div style={{ marginTop: 10 }}>
+              <GoogleMapEmbed placeId={event.place_id} lat={event.lat} lng={event.lng} query={event.location} height={200} />
+            </div>
+          ) : null}
         </>
       ) : null}
       {form.detail ? <div style={styles.detailText}>{form.detail}</div> : null}

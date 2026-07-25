@@ -2769,6 +2769,9 @@ def _portal_event_dict(event):
         "datetime": event.datetime.isoformat() if event.datetime else None,
         "end_datetime": event.end_datetime.isoformat() if event.end_datetime else None,
         "location": event.location,
+        "place_id": event.place_id,
+        "lat": event.lat,
+        "lng": event.lng,
         "target": event.target,
         "purpose": event.purpose,
     }

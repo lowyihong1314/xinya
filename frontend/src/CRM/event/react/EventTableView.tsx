@@ -1,6 +1,8 @@
 import { useRef, useState, type CSSProperties, type FormEvent, type RefObject } from "react";
 
 import { CachedImage } from "../../../components/CachedMedia";
+import { GoogleMapEmbed } from "../../../components/GoogleMapEmbed";
+import { GooglePlaceInput } from "./GooglePlaceInput";
 import { openPreviewModal } from "../../../js/attachment_preview";
 import { downloadUrlOrShare } from "../../../js/browserActions";
 import { show_alert } from "../../../js/show_alert";
@@ -21,6 +23,9 @@ type CreateDraft = {
   datetime: string;
   end_datetime: string;
   location: string;
+  place_id: string | null;
+  lat: number | null;
+  lng: number | null;
   type: string;
   target: string;
   purpose: string;
@@ -108,6 +113,9 @@ export function EventTableView(props: {
       datetime: draft.datetime,
       end_datetime: draft.end_datetime || undefined,
       location: draft.location.trim() || undefined,
+      place_id: draft.place_id,
+      lat: draft.lat,
+      lng: draft.lng,
       type: draft.type.trim() || undefined,
       target: draft.target.trim() || undefined,
       purpose: draft.purpose.trim() || undefined,
@@ -329,7 +337,7 @@ export function EventTableView(props: {
                   <EditableFact label="类型" value={event.type || ""} editable={canEditEvent} onSave={(v) => props.onUpdateEvent({ type: v })} />
                   <EditableFact label="开始时间" value={toDatetimeLocal(event.datetime)} kind="datetime" editable={canEditEvent} onSave={(v) => props.onUpdateEvent({ datetime: v || null })} />
                   <EditableFact label="结束时间" value={toDatetimeLocal(event.end_datetime)} kind="datetime" editable={canEditEvent} onSave={(v) => props.onUpdateEvent({ end_datetime: v || null })} />
-                  <EditableFact label="地点" value={event.location || ""} editable={canEditEvent} onSave={(v) => props.onUpdateEvent({ location: v })} />
+                  <LocationFact event={event} editable={canEditEvent} onUpdate={props.onUpdateEvent} />
                   <EditableFact label="对象" value={event.target || ""} editable={canEditEvent} onSave={(v) => props.onUpdateEvent({ target: v })} />
                   <EditableFact label="活动说明" value={event.purpose || ""} kind="textarea" editable={canEditEvent} onSave={(v) => props.onUpdateEvent({ purpose: v })} />
                 </div>
@@ -369,8 +377,12 @@ export function EventTableView(props: {
                 <input type="datetime-local" style={factInputStyle} value={draft.end_datetime} onChange={(e) => setDraft((p) => ({ ...p, end_datetime: e.target.value }))} />
               </label>
               <label style={fieldStyle}>
-                <span style={factLabelStyle}>地点</span>
-                <input style={factInputStyle} value={draft.location} onChange={(e) => setDraft((p) => ({ ...p, location: e.target.value }))} />
+                <span style={factLabelStyle}>地点（Google 选择）</span>
+                <GooglePlaceInput
+                  value={draft.location}
+                  onSelect={(v) => setDraft((p) => ({ ...p, location: v.location, place_id: v.place_id, lat: v.lat, lng: v.lng }))}
+                  onClear={() => setDraft((p) => ({ ...p, location: "", place_id: null, lat: null, lng: null }))}
+                />
               </label>
               <label style={fieldStyle}>
                 <span style={factLabelStyle}>类型</span>
@@ -652,6 +664,38 @@ function LinkedFormTab({ form, onOpenFormContent }: { form: FormRecord | null; o
   );
 }
 
+function LocationFact({
+  event,
+  editable,
+  onUpdate,
+}: {
+  event: EventRecord;
+  editable: boolean;
+  onUpdate: (patch: EventMutationPayload) => void;
+}) {
+  return (
+    <div style={{ ...factStyle, gridColumn: "1 / -1" }}>
+      <div style={factHeadStyle}>
+        <div style={factLabelStyle}>地点（Google）</div>
+      </div>
+      {editable ? (
+        <GooglePlaceInput
+          value={event.location || ""}
+          onSelect={(v) => onUpdate({ location: v.location, place_id: v.place_id, lat: v.lat, lng: v.lng })}
+          onClear={() => onUpdate({ location: "", place_id: null, lat: null, lng: null })}
+        />
+      ) : (
+        <div style={{ fontSize: "13.5px", fontWeight: 600 }}>{event.location || "未填写"}</div>
+      )}
+      {event.place_id || event.location ? (
+        <div style={{ marginTop: 8 }}>
+          <GoogleMapEmbed placeId={event.place_id} lat={event.lat} lng={event.lng} query={event.location} height={200} />
+        </div>
+      ) : null}
+    </div>
+  );
+}
+
 function EditableFact({
   label,
   value,
@@ -728,6 +772,9 @@ function createDefaultDraft(): CreateDraft {
     datetime: formatDatetimeLocal(now),
     end_datetime: formatDatetimeLocal(later),
     location: "",
+    place_id: null as string | null,
+    lat: null as number | null,
+    lng: null as number | null,
     type: "",
     target: "",
     purpose: "",

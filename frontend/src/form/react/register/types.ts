@@ -20,6 +20,9 @@ export type PublicEvent = {
   datetime?: string | null;
   end_datetime?: string | null;
   location?: string | null;
+  place_id?: string | null;
+  lat?: number | null;
+  lng?: number | null;
   target?: string | null;
   purpose?: string | null;
   brochure_path?: string | null;

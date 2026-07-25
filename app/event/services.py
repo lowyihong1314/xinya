@@ -2,6 +2,8 @@ import os
 import re
 import secrets
 import unicodedata
+
+import requests
 from datetime import date, datetime, timedelta
 
 from flask import current_app, jsonify, request
@@ -671,6 +673,9 @@ def save_event(data):
         for field in [
             "event_name",
             "location",
+            "place_id",
+            "lat",
+            "lng",
             "purpose",
             "folder_name",
             "image_path",
@@ -1040,3 +1045,92 @@ def delete_event_budget(item_id):
     db.session.delete(item)
     db.session.commit()
     return jsonify({"status": "success"})
+
+
+# =========================
+# Google 地点：Places 自动完成 / 详情代理 + 地图 Embed key
+# 地点必须通过 Google 选择（存 place_id + 经纬度），前端用 Maps Embed 显示。
+# =========================
+GOOGLE_PLACES_LANG = "zh-CN"
+
+
+def _google_geocoding_key():
+    from app.email.service import env_value
+    return env_value("GOOGLE_GEOCODING_API_KEY")
+
+
+def place_autocomplete_response(query):
+    q = (query or "").strip()
+    if not q:
+        return jsonify({"status": "success", "predictions": []})
+    key = _google_geocoding_key()
+    if not key:
+        return jsonify({"status": "error", "message": "未配置 Google API key"}), 500
+    try:
+        resp = requests.get(
+            "https://maps.googleapis.com/maps/api/place/autocomplete/json",
+            params={"input": q, "key": key, "language": GOOGLE_PLACES_LANG},
+            timeout=12,
+        )
+        data = resp.json()
+    except Exception as exc:  # noqa: BLE001
+        return jsonify({"status": "error", "message": f"Google 请求失败：{exc}"}), 502
+    status = data.get("status")
+    if status not in ("OK", "ZERO_RESULTS"):
+        return jsonify({"status": "error", "message": data.get("error_message") or status or "查询失败"}), 502
+    preds = [
+        {"place_id": p.get("place_id"), "description": p.get("description")}
+        for p in (data.get("predictions") or [])
+        if p.get("place_id")
+    ]
+    return jsonify({"status": "success", "predictions": preds})
+
+
+def place_detail_response(place_id):
+    pid = (place_id or "").strip()
+    if not pid:
+        return jsonify({"status": "error", "message": "缺少 place_id"}), 400
+    key = _google_geocoding_key()
+    if not key:
+        return jsonify({"status": "error", "message": "未配置 Google API key"}), 500
+    try:
+        resp = requests.get(
+            "https://maps.googleapis.com/maps/api/place/details/json",
+            params={
+                "place_id": pid,
+                "key": key,
+                "language": GOOGLE_PLACES_LANG,
+                "fields": "formatted_address,name,geometry,place_id",
+            },
+            timeout=12,
+        )
+        data = resp.json()
+    except Exception as exc:  # noqa: BLE001
+        return jsonify({"status": "error", "message": f"Google 请求失败：{exc}"}), 502
+    if data.get("status") != "OK":
+        return jsonify({"status": "error", "message": data.get("error_message") or data.get("status") or "查询失败"}), 502
+    r = data.get("result") or {}
+    loc = (r.get("geometry") or {}).get("location") or {}
+    name = r.get("name")
+    addr = r.get("formatted_address") or ""
+    display = addr
+    if name and addr and not addr.startswith(name):
+        display = f"{name} · {addr}"
+    elif name and not addr:
+        display = name
+    return jsonify({
+        "status": "success",
+        "place": {
+            "place_id": r.get("place_id") or pid,
+            "location": display,
+            "address": addr,
+            "name": name,
+            "lat": loc.get("lat"),
+            "lng": loc.get("lng"),
+        },
+    })
+
+
+def maps_config_response():
+    from app.email.service import env_value
+    return jsonify({"status": "success", "embed_key": env_value("VITE_GOOGLE_MAPS_EMBED_API_KEY") or ""})

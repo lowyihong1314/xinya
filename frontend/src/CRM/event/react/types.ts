@@ -26,6 +26,9 @@ export type EventRecord = {
   datetime?: string;
   end_datetime?: string;
   location?: string;
+  place_id?: string | null;
+  lat?: number | null;
+  lng?: number | null;
   type?: string;
   target?: string;
   purpose?: string;
@@ -51,6 +54,9 @@ export type EventCreatePayload = {
   datetime: string;
   end_datetime?: string;
   location?: string;
+  place_id?: string | null;
+  lat?: number | null;
+  lng?: number | null;
   type?: string;
   target?: string;
   purpose?: string;

@@ -30,6 +30,26 @@ def get_all_event():
     )
 
 
+@event_data_bp.route("/place/autocomplete", methods=["GET"])
+@login_required
+@permission_required("event_edit")
+def place_autocomplete():
+    return services.place_autocomplete_response(request.args.get("q", "", type=str))
+
+
+@event_data_bp.route("/place/detail", methods=["GET"])
+@login_required
+@permission_required("event_edit")
+def place_detail():
+    return services.place_detail_response(request.args.get("place_id", "", type=str))
+
+
+@event_data_bp.route("/maps/config", methods=["GET"])
+def maps_config():
+    # 公开：报名页/成员终端等匿名页面显示地图也需要 embed key。
+    return services.maps_config_response()
+
+
 @event_data_bp.route("/check_in/save", methods=["POST"])
 @login_required
 @permission_required("event_edit")
