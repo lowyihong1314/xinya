@@ -739,11 +739,21 @@ export function getSidebarChildren(
       ? requestedRegistrationSection
       : "membership";
     const registrationPath = buildCRMModulePath("permanent_registration");
-    return PERMANENT_REGISTRATION_CHILD_ITEMS.map((item) => ({
-      ...item,
-      to: buildPathWithParams(registrationPath, { registration_section: item.key }),
-      active: moduleActive && activeRegistrationSection === item.key,
-    }));
+    return [
+      ...PERMANENT_REGISTRATION_CHILD_ITEMS.map((item) => ({
+        ...item,
+        to: buildPathWithParams(registrationPath, { registration_section: item.key }),
+        active: moduleActive && activeRegistrationSection === item.key,
+      })),
+      {
+        key: "buddhist_events",
+        title: "佛学班活动",
+        icon: "fa-solid fa-book-open-reader",
+        description: "佛学班活动一览（活动表，仅显示佛学班）。",
+        to: buildPathWithParams(buildCRMModulePath("event_table"), { event_type: "buddhist" }),
+        active: false,
+      },
+    ];
   }
 
   return [];

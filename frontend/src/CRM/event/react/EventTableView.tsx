@@ -66,6 +66,11 @@ export function EventTableView(props: {
   query: string;
   selectedType: string;
   eventTypeOptions: Array<{ value: string; label: string }>;
+  buddhistOnly: boolean;
+  showYouth: boolean;
+  showChildren: boolean;
+  onToggleYouth: (value: boolean) => void;
+  onToggleChildren: (value: boolean) => void;
   loading: boolean;
   creating: boolean;
   posterUploading: boolean;
@@ -103,11 +108,15 @@ export function EventTableView(props: {
     props.eventTypeOptions.map((option) => option.value).filter((value) => !String(value).startsWith("__")),
   );
 
-  const paged = usePagedRows(props.events, 15, `${props.query}|${props.selectedType}`);
+  const paged = usePagedRows(props.events, 15, `${props.query}|${props.selectedType}|${props.buddhistOnly}|${props.showYouth}|${props.showChildren}`);
 
   async function handleCreateSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     setCreateError(null);
+    if (!draft.type.trim()) {
+      setCreateError("请选择或填写活动类型（必填）");
+      return;
+    }
     const success = await props.onCreateEvent({
       event_name: draft.event_name.trim(),
       datetime: draft.datetime,
@@ -116,7 +125,7 @@ export function EventTableView(props: {
       place_id: draft.place_id,
       lat: draft.lat,
       lng: draft.lng,
-      type: draft.type.trim() || undefined,
+      type: draft.type.trim(),
       target: draft.target.trim() || undefined,
       purpose: draft.purpose.trim() || undefined,
     });
@@ -207,6 +216,14 @@ export function EventTableView(props: {
                   </option>
                 ))}
               </select>
+              <label style={checkLabelStyle} title="默认隐藏，勾选显示">
+                <input type="checkbox" checked={props.showYouth} onChange={(e) => props.onToggleYouth(e.target.checked)} />
+                青少年佛学班
+              </label>
+              <label style={checkLabelStyle} title="默认隐藏，勾选显示">
+                <input type="checkbox" checked={props.showChildren} onChange={(e) => props.onToggleChildren(e.target.checked)} />
+                儿童佛学班
+              </label>
             </div>
 
             {props.loading && !props.events.length ? (
@@ -388,8 +405,8 @@ export function EventTableView(props: {
                 />
               </label>
               <label style={fieldStyle}>
-                <span style={factLabelStyle}>类型</span>
-                <input list="event-type-options" style={factInputStyle} value={draft.type} onChange={(e) => setDraft((p) => ({ ...p, type: e.target.value }))} />
+                <span style={factLabelStyle}>类型 *</span>
+                <input list="event-type-options" style={factInputStyle} value={draft.type} placeholder="必填" onChange={(e) => setDraft((p) => ({ ...p, type: e.target.value }))} />
               </label>
               <label style={fieldStyle}>
                 <span style={factLabelStyle}>对象</span>
@@ -864,6 +881,7 @@ function filterRowStyle(isMobile: boolean): CSSProperties {
 }
 const searchInputStyle: CSSProperties = { flex: "1 1 220px", minHeight: "34px", padding: "7px 10px", borderRadius: "8px", border: "1px solid var(--x-color-line)", background: "var(--x-color-panel)", color: "var(--x-color-ink)", fontSize: "13px", boxSizing: "border-box" };
 const selectStyle: CSSProperties = { minHeight: "34px", padding: "7px 10px", borderRadius: "8px", border: "1px solid var(--x-color-line)", background: "var(--x-color-panel)", color: "var(--x-color-ink)", fontSize: "13px", boxSizing: "border-box" };
+const checkLabelStyle: CSSProperties = { display: "inline-flex", alignItems: "center", gap: "5px", fontSize: "12.5px", color: "var(--x-color-ink)", whiteSpace: "nowrap", cursor: "pointer", userSelect: "none" };
 
 const tabBarWrapStyle: CSSProperties = { padding: "10px 14px", borderBottom: "1px solid var(--x-color-line-soft)", overflowX: "auto" };
 const linkedHeadRowStyle: CSSProperties = { display: "flex", alignItems: "center", gap: "6px", flexWrap: "wrap", marginTop: "5px" };

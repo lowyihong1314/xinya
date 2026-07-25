@@ -21,8 +21,10 @@ export function EventTablePage() {
       ? Number(rawEventId)
       : null;
   const activeTab = searchParams.get("event_tab") || DEFAULT_EVENT_TAB;
+  // 佛学班入口：?event_type=buddhist → 只显示两种佛学班。
+  const buddhistOnly = searchParams.get("event_type") === "buddhist";
 
-  const { state, actions } = useEventTableController({ preferredEventId: selectedEventId });
+  const { state, actions } = useEventTableController({ preferredEventId: selectedEventId, buddhistOnly });
   const canEditEvent = hasUserPermission(user, "event_edit");
 
   function selectEvent(eventId: number) {
@@ -58,6 +60,11 @@ export function EventTablePage() {
       query={state.query}
       selectedType={state.selectedType}
       eventTypeOptions={state.eventTypeOptions}
+      buddhistOnly={state.buddhistOnly}
+      showYouth={state.showYouth}
+      showChildren={state.showChildren}
+      onToggleYouth={actions.setShowYouth}
+      onToggleChildren={actions.setShowChildren}
       loading={state.loading}
       creating={state.creating}
       posterUploading={state.uploadingPoster}

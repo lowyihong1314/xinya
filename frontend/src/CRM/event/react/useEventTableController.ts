@@ -3,7 +3,7 @@ import { startTransition, useEffect, useMemo, useState } from "react";
 import { smartImageURL } from "../../../js/get_img";
 import { showConfirmDialog } from "../../../js/dialogs";
 import { useEventData } from "../../../event/shared/EventDataContext";
-import { buildEventTypeChoices } from "../../../event/shared/eventTypes";
+import { buildEventTypeChoices, BUDDHIST_CLASS_TYPES } from "../../../event/shared/eventTypes";
 import { useDebouncedAutosave } from "../../shared/useDebouncedAutosave";
 import { select_users_modal } from "../../select_users_modal";
 import { fetchForms } from "../../form/react/api";
@@ -25,11 +25,19 @@ const ALL_EVENT_TYPE_FILTER = "__all__";
 const BLANK_EVENT_TYPE_FILTER = "__blank__";
 const EVENT_EDITOR_DEBOUNCE_MS = 600;
 
-export function useEventTableController(options?: { preferredEventId?: number | null }) {
+export function useEventTableController(options?: { preferredEventId?: number | null; buddhistOnly?: boolean }) {
   const preferredEventId = options?.preferredEventId ?? null;
+  const buddhistOnly = options?.buddhistOnly ?? false;
   const { events, loading, error, refreshEvents } = useEventData();
   const [query, setQuery] = useState("");
   const [selectedType, setSelectedType] = useState(ALL_EVENT_TYPE_FILTER);
+  // 佛学班可见性：默认隐藏两种佛学班；佛学班入口(buddhistOnly)则默认都显示。
+  const [showYouth, setShowYouth] = useState(buddhistOnly);
+  const [showChildren, setShowChildren] = useState(buddhistOnly);
+  useEffect(() => {
+    setShowYouth(buddhistOnly);
+    setShowChildren(buddhistOnly);
+  }, [buddhistOnly]);
   const [selectedEventId, setSelectedEventId] = useState<number | null>(null);
   const [saving, setSaving] = useState(false);
   const [creating, setCreating] = useState(false);
@@ -146,6 +154,19 @@ export function useEventTableController(options?: { preferredEventId?: number | 
       if (!typeMatched) {
         return false;
       }
+      // 佛学班可见性规则（仅在「全部类型」下生效；选了具体类型则按具体类型显示）。
+      if (selectedType === ALL_EVENT_TYPE_FILTER) {
+        const isBuddhist = BUDDHIST_CLASS_TYPES.includes(eventType);
+        if (buddhistOnly && !isBuddhist) {
+          return false;
+        }
+        if (eventType === "青少年佛学班" && !showYouth) {
+          return false;
+        }
+        if (eventType === "儿童佛学班" && !showChildren) {
+          return false;
+        }
+      }
       if (!keyword) {
         return true;
       }
@@ -163,7 +184,7 @@ export function useEventTableController(options?: { preferredEventId?: number | 
         organizerText.includes(keyword)
       );
     });
-  }, [mergedEvents, query, selectedType]);
+  }, [mergedEvents, query, selectedType, buddhistOnly, showYouth, showChildren]);
 
   const selectedEvent = useMemo(
     () => mergedEvents.find((event) => event.id === selectedEventId) ?? null,
@@ -455,6 +476,9 @@ export function useEventTableController(options?: { preferredEventId?: number | 
       query,
       selectedType,
       eventTypeOptions,
+      buddhistOnly,
+      showYouth,
+      showChildren,
       loading,
       saving,
       creating,
@@ -468,6 +492,8 @@ export function useEventTableController(options?: { preferredEventId?: number | 
     actions: {
       setQuery,
       setSelectedType,
+      setShowYouth,
+      setShowChildren,
       loadEvents,
       updateEvent,
       createNewEvent,
