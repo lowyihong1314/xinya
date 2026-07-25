@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { createPortal } from "react-dom";
 import type { CSSProperties } from "react";
 
 import type { EventCreatePayload } from "./types";
@@ -87,7 +88,7 @@ export function BuddhistBatchCreateModal({
   const youthCount = validRows(youthRows).length;
   const childCount = validRows(childRows).length;
 
-  return (
+  return createPortal(
     <div style={overlayStyle} onClick={onClose}>
       <div style={sheetStyle} onClick={(e) => e.stopPropagation()}>
         <div style={headStyle}>
@@ -143,11 +144,12 @@ export function BuddhistBatchCreateModal({
           </button>
         </div>
       </div>
-    </div>
+    </div>,
+    document.body,
   );
 }
 
-const overlayStyle: CSSProperties = { position: "fixed", inset: 0, zIndex: 200, background: "rgba(15,23,42,0.45)", display: "flex", alignItems: "flex-start", justifyContent: "center", padding: "24px 12px", overflowY: "auto" };
+const overlayStyle: CSSProperties = { position: "fixed", inset: 0, zIndex: 1000, background: "rgba(15,23,42,0.45)", display: "flex", alignItems: "flex-start", justifyContent: "center", padding: "24px 12px", overflowY: "auto" };
 const sheetStyle: CSSProperties = { width: "min(820px, 100%)", background: "var(--x-color-panel)", border: "1px solid var(--x-color-line)", borderRadius: "14px", boxShadow: "0 24px 60px var(--x-color-shadow)", padding: "16px", display: "grid", gap: "12px" };
 const headStyle: CSSProperties = { display: "flex", alignItems: "center", justifyContent: "space-between", gap: 10 };
 const titleStyle: CSSProperties = { margin: 0, fontSize: 16, fontWeight: 800 };
