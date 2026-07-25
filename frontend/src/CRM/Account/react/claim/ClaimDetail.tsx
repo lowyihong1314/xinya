@@ -487,6 +487,21 @@ export function ClaimDetail({
               {eventError ? <span style={{ ...chipStyle, color: "var(--x-color-danger)" }}>{eventError}</span> : null}
             </Field>
 
+            {claim.event_budget_id ? (
+              <Field label="关联预算行">
+                <div style={{ display: "flex", gap: "6px", flexWrap: "wrap", alignItems: "center" }}>
+                  <span style={{ ...chipStyle, background: "var(--x-color-accent-tint)", color: "var(--x-color-accent-strong)" }}>
+                    预算 · {claim.event_budget_category || `#${claim.event_budget_id}`}
+                  </span>
+                  {claim.event_id ? (
+                    <button type="button" style={buttonSecondaryStyle} onClick={() => navigate(`/crm/event_table?event_id=${claim.event_id}&event_tab=budget`)}>
+                      查看预算
+                    </button>
+                  ) : null}
+                </div>
+              </Field>
+            ) : null}
+
             <Field label="用途说明">
               {editingClaim ? (
                 <textarea rows={3} style={textareaStyle} value={editDraft.purpose} onChange={(e) => setEditDraft((p) => ({ ...p, purpose: e.target.value }))} />

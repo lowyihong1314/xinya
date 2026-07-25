@@ -311,6 +311,8 @@ class EventBudgetData(db.Model):
     event = db.relationship("EventData", backref=db.backref("event_budgets", passive_deletes=True))
 
     no = db.Column(db.Integer, nullable=False, default=0, index=True)
+    # 收支类型：expense（支出，可提交报销）/ income（收入）
+    type = db.Column(db.String(16), nullable=False, default="expense")
     category = db.Column(db.String(255), nullable=False)
     budget_amount = db.Column(db.Numeric(10, 2), nullable=False, default=0)
     actual_amount = db.Column(db.Numeric(10, 2), nullable=True)
@@ -322,6 +324,7 @@ class EventBudgetData(db.Model):
             "id": self.id,
             "event_id": self.event_id,
             "no": self.no,
+            "type": self.type or "expense",
             "category": self.category,
             "budget_amount": float(self.budget_amount or 0),
             "actual_amount": float(self.actual_amount) if self.actual_amount is not None else None,

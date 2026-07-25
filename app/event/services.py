@@ -20,6 +20,7 @@ from models.event_data import (
     EventFlowData,
     EventTaskData,
 )
+from models.finance import ReimbursementRequest
 from models.user_data import User
 
 BROCHURE_EXTENSIONS = {
@@ -876,14 +877,114 @@ def delete_event_task(task_id):
 # =========================
 # 活动财政预算
 # =========================
+def _norm_budget_type(value):
+    return "income" if str(value or "").strip() == "income" else "expense"
+
+
+def _claim_status_from_request(req):
+    """与报销 UI 一致：任一 reject=True → rejected；有 reject=False → approved；否则 pending。"""
+    approvers = list(getattr(req, "approver_data", []) or [])
+    if any(getattr(a, "reject", False) for a in approvers):
+        return "rejected"
+    if any(not getattr(a, "reject", False) for a in approvers):
+        return "approved"
+    return "pending"
+
+
+def _budget_line_claim(line_id):
+    """某条预算行当前关联的报销（取最新一条；被拒后重提=新建，故看最新）。"""
+    req = (
+        ReimbursementRequest.query
+        .filter_by(event_budget_id=line_id)
+        .order_by(ReimbursementRequest.id.desc())
+        .first()
+    )
+    if not req:
+        return None
+    return {"id": req.id, "status": _claim_status_from_request(req), "amount": float(req.amount or 0)}
+
+
+def _registration_income_rows(event):
+    """报名表格收入合成行（只读，不入库）：预期/已收金额 + 总人数/已支付/已批准。"""
+    # 延迟导入，避免 app.event ↔ app.form 循环依赖。
+    from app.form.services import (
+        FORM_FEE_SCOPE,
+        _calc_age_from_nric,
+        _pick_fee_for_age,
+        _sorted_fees_for_form,
+    )
+    from models.form import RegisPayment
+
+    rows = []
+    for form in (event.regis_forms or []):
+        fees = _sorted_fees_for_form(form)
+        if not fees:
+            continue  # 没有收费项 = 没有报名收入
+        members = form.members or []
+
+        expected = 0.0
+        for m in members:
+            try:
+                age = _calc_age_from_nric(m.nric)
+            except Exception:  # noqa: BLE001
+                age = None
+            fee = _pick_fee_for_age(fees, age)
+            if fee is not None and fee.amount is not None:
+                expected += float(fee.amount)
+
+        pays = (
+            RegisPayment.query
+            .filter_by(regis_form_id=form.id, payment_scope=FORM_FEE_SCOPE)
+            .order_by(RegisPayment.id.desc())
+            .all()
+        )
+        latest_by_member = {}
+        for p in pays:
+            mid = p.nric_asset_id
+            if mid is not None and mid not in latest_by_member:
+                latest_by_member[mid] = p
+        paid = sum(1 for p in latest_by_member.values() if p.status in ("process", "checked"))
+        approved = sum(1 for p in latest_by_member.values() if p.status == "checked")
+        collected = sum(
+            float(p.price or 0) for p in latest_by_member.values() if p.status == "checked"
+        )
+
+        rows.append({
+            "id": f"reg-{form.id}",
+            "no": 0,
+            "type": "income",
+            "source": "registration",
+            "editable": False,
+            "locked": True,
+            "form_id": form.id,
+            "category": f"报名收入：{form.title}",
+            "budget_amount": round(expected, 2),
+            "actual_amount": round(collected, 2),
+            "remark": None,
+            "claim": None,
+            "stats": {"total": len(members), "paid": paid, "approved": approved},
+        })
+    return rows
+
+
 def event_budget_list_response(event_id):
-    EventData.query.get_or_404(event_id)
+    event = EventData.query.get_or_404(event_id)
     items = (
         EventBudgetData.query.filter_by(event_id=event_id)
         .order_by(asc(EventBudgetData.no), asc(EventBudgetData.id))
         .all()
     )
-    return jsonify({"status": "success", "data": [i.to_dict() for i in items]})
+    manual = []
+    for i in items:
+        d = i.to_dict()
+        claim = _budget_line_claim(i.id)
+        d["claim"] = claim
+        d["locked"] = bool(claim and claim["status"] != "rejected")
+        d["editable"] = True
+        manual.append(d)
+    # 报名收入只读行放前面（前端按 type 分区）。
+    data = _registration_income_rows(event) + manual
+    return jsonify({"status": "success", "data": data})
 
 
 def create_event_budget(data):
@@ -903,6 +1004,7 @@ def create_event_budget(data):
     item = EventBudgetData(
         event_id=event_id,
         no=(max_no or 0) + 1,
+        type=_norm_budget_type(data.get("type")),
         category=category[:255],
         budget_amount=_parse_amount(data.get("budget_amount")) or 0,
         actual_amount=_parse_amount(data.get("actual_amount")),
@@ -915,6 +1017,8 @@ def create_event_budget(data):
 
 def update_event_budget(item_id, data):
     item = EventBudgetData.query.get_or_404(item_id)
+    if "type" in data:
+        item.type = _norm_budget_type(data.get("type"))
     if "category" in data:
         category = (data.get("category") or "").strip()
         if category:

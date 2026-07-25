@@ -8,6 +8,7 @@ import { showConfirmDialog, showPromptDialog } from "../../../../js/dialogs";
 import { showEventPicker } from "../../../shared/showEventPicker";
 import { render_sign_modal } from "../../../../../../static/js/sign_tools.js";
 import { decideClaim, deleteClaim, downloadClaimReport, fetchClaims, readClaimBill, submitClaim } from "./api";
+import { buildClaimFormData, buildInitialCreateState, validateCreateState } from "./submitCreate";
 import { ClaimBatchAiPage } from "./ClaimBatchAiPage";
 import { ClaimCreateForm, type CreateState } from "./ClaimCreateForm";
 import { ClaimDetail } from "./ClaimDetail";
@@ -35,33 +36,6 @@ type ClaimStatusFilter = "all" | "approved" | "unapproved";
 const PAGE_SIZE_DESKTOP = 8;
 const PAGE_SIZE_MOBILE = 6;
 
-function todayIsoDate() {
-  const now = new Date();
-  const yyyy = now.getFullYear();
-  const mm = String(now.getMonth() + 1).padStart(2, "0");
-  const dd = String(now.getDate()).padStart(2, "0");
-  return `${yyyy}-${mm}-${dd}`;
-}
-
-function buildInitialCreateState(user: AccountUser | null): CreateState {
-  return {
-    applicant_name: String(user?.display_name || user?.name_NRIC || user?.username || ""),
-    request_date: todayIsoDate(),
-    amount: "",
-    department_name: user?.departments?.[0]?.name || "",
-    acctDept: "",
-    purpose: "",
-    ref1: "",
-    ref2: "",
-    vendor_name: "",
-    vendor_address: "",
-    vendor_contact_number: "",
-    purchase_datetime: "",
-    selectedEvent: null,
-    files: [],
-    signJsonData: null,
-  };
-}
 
 function isReadableBillFile(file: File) {
   return (
@@ -585,75 +559,13 @@ export function ClaimWorkspace() {
       return;
     }
 
-    if (!createState.signJsonData?.strokes?.length) {
-      setError("请先签名");
-      return;
-    }
-    if (!createState.applicant_name.trim()) {
-      setError("请填写姓名");
-      return;
-    }
-    if (!createState.request_date) {
-      setError("请选择日期");
-      return;
-    }
-    if (!createState.amount || Number(createState.amount) <= 0) {
-      setError("请输入正确金额");
-      return;
-    }
-    if (!createState.department_name.trim()) {
-      setError("请选择部门");
-      return;
-    }
-    if (!createState.purpose.trim()) {
-      setError("请填写用途说明");
+    const validationError = validateCreateState(createState);
+    if (validationError) {
+      setError(validationError);
       return;
     }
 
-    const formData = new FormData();
-    formData.append(
-      "sign_json_data",
-      JSON.stringify({
-        version: 1,
-        signed_at: new Date().toISOString(),
-        signed_by_user_id: accountUser?.id || null,
-        signed_by_username: accountUser?.username || null,
-        signed_by_name: accountUser?.display_name || accountUser?.name_NRIC || null,
-        strokes: createState.signJsonData.strokes,
-      }),
-    );
-    formData.append("applicant_name", createState.applicant_name.trim());
-    formData.append("request_date", createState.request_date);
-    formData.append("amount", createState.amount);
-    formData.append("department_name", createState.department_name.trim());
-    formData.append(
-      "purpose",
-      createState.acctDept
-        ? `【做账分配：${createState.acctDept}】\n${createState.purpose.trim()}`
-        : createState.purpose.trim(),
-    );
-    if (createState.ref1.trim()) {
-      formData.append("ref1", createState.ref1.trim());
-    }
-    if (createState.ref2.trim()) {
-      formData.append("ref2", createState.ref2.trim());
-    }
-    if (createState.vendor_name.trim()) {
-      formData.append("vendor_name", createState.vendor_name.trim());
-    }
-    if (createState.vendor_address.trim()) {
-      formData.append("vendor_address", createState.vendor_address.trim());
-    }
-    if (createState.vendor_contact_number.trim()) {
-      formData.append("vendor_contact_number", createState.vendor_contact_number.trim());
-    }
-    if (createState.purchase_datetime) {
-      formData.append("purchase_datetime", createState.purchase_datetime);
-    }
-    if (createState.selectedEvent?.id) {
-      formData.append("event_id", String(createState.selectedEvent.id));
-    }
-    createState.files.forEach((file) => formData.append("files", file));
+    const formData = buildClaimFormData(createState, accountUser);
 
     setSubmitting(true);
     try {

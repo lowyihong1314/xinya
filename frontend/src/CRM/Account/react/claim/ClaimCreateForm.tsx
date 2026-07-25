@@ -13,6 +13,8 @@ import {
   inputStyle,
   panelHeaderStyle,
   panelTitleStyle,
+  sectionCardStyle,
+  sectionTitleStyle,
   summaryRowStyle,
   textareaStyle,
   uploadBoxStyle,
@@ -53,6 +55,13 @@ type ClaimCreateFormProps = {
   onSign: () => void;
   onSubmit: () => void;
   onFilesChange: (event: ChangeEvent<HTMLInputElement>) => void;
+  // 从预算行发起时：锁定活动、显示关联预算行。
+  lockedEvent?: boolean;
+  budgetLine?: { id: number; category?: string } | null;
+  title?: string;
+  backLabel?: string;
+  submitLabel?: string;
+  showAiFill?: boolean;
 };
 
 export function ClaimCreateForm({
@@ -68,17 +77,24 @@ export function ClaimCreateForm({
   onSign,
   onSubmit,
   onFilesChange,
+  lockedEvent = false,
+  budgetLine = null,
+  title = "填写申请",
+  backLabel = "返回列表",
+  submitLabel = "提交申请",
+  showAiFill = true,
 }: ClaimCreateFormProps) {
   const hasReadableFile = state.files.some(isReadableBillFile);
   const aiFillDisabled = !hasReadableFile || aiFilling || submitting;
+  const signed = !!state.signJsonData?.strokes?.length;
 
   return (
     <>
       <div className="claim-create-form__header" style={panelHeaderStyle}>
         <button type="button" style={buttonGhostStyle} onClick={onBack}>
-          返回列表
+          {backLabel}
         </button>
-        <div className="claim-create-form__title" style={panelTitleStyle}>填写申请</div>
+        <div className="claim-create-form__title" style={panelTitleStyle}>{title}</div>
       </div>
 
       <div className="claim-create-form__summary" style={summaryRowStyle}>
@@ -87,125 +103,159 @@ export function ClaimCreateForm({
         {user?.phone ? <span style={chipStyle}>电话：{user.phone}</span> : null}
       </div>
 
-      <div className="claim-create-form__grid" style={formGridStyle(isMobile)}>
-        <Field label="姓名">
-          <input
-            value={state.applicant_name}
-            onChange={(event) => onChange((prev) => ({ ...prev, applicant_name: event.target.value }))}
-            style={inputStyle}
-          />
-        </Field>
-        <Field label="日期">
-          <input
-            type="date"
-            value={state.request_date}
-            onChange={(event) => onChange((prev) => ({ ...prev, request_date: event.target.value }))}
-            style={inputStyle}
-          />
-        </Field>
-        <Field label="金额">
-          <input
-            type="number"
-            inputMode="decimal"
-            value={state.amount}
-            onChange={(event) => onChange((prev) => ({ ...prev, amount: event.target.value }))}
-            style={inputStyle}
-          />
-        </Field>
-        <Field label="部门">
-          <select
-            value={state.department_name}
-            onChange={(event) => onChange((prev) => ({ ...prev, department_name: event.target.value }))}
-            style={inputStyle}
-          >
-            <option value="">请选择部门</option>
-            {(user?.departments || []).map((department) => (
-              <option key={department.id} value={department.name}>
-                {department.name}
-              </option>
-            ))}
-          </select>
-        </Field>
-        <Field label="做账分配">
-          <select
-            value={state.acctDept}
-            onChange={(event) => onChange((prev) => ({ ...prev, acctDept: event.target.value }))}
-            style={inputStyle}
-          >
-            <option value="">请选择</option>
-            {ACCT_DEPARTMENTS.map((department) => (
-              <option key={department} value={department}>
-                {department}
-              </option>
-            ))}
-          </select>
-        </Field>
-        <Field label="关联活动">
-          <div className="claim-create-form__event-row" style={{ display: "flex", gap: "8px", flexWrap: "wrap", alignItems: "center" }}>
-            <button type="button" style={buttonSecondaryStyle} onClick={onPickEvent}>
-              选择活动
-            </button>
-            <span style={chipStyle}>
-              {state.selectedEvent
-                ? `${state.selectedEvent.event_name || "未命名活动"} #${state.selectedEvent.id}`
-                : "未关联活动"}
-            </span>
+      <div style={{ display: "grid", gap: "12px" }}>
+        {/* 1) 申请信息 */}
+        <Section title="① 申请信息">
+          <div style={formGridStyle(isMobile)}>
+            <Field label="姓名">
+              <input
+                value={state.applicant_name}
+                onChange={(event) => onChange((prev) => ({ ...prev, applicant_name: event.target.value }))}
+                style={inputStyle}
+              />
+            </Field>
+            <Field label="日期">
+              <input
+                type="date"
+                value={state.request_date}
+                onChange={(event) => onChange((prev) => ({ ...prev, request_date: event.target.value }))}
+                style={inputStyle}
+              />
+            </Field>
+            <Field label="部门">
+              <select
+                value={state.department_name}
+                onChange={(event) => onChange((prev) => ({ ...prev, department_name: event.target.value }))}
+                style={inputStyle}
+              >
+                <option value="">请选择部门</option>
+                {(user?.departments || []).map((department) => (
+                  <option key={department.id} value={department.name}>
+                    {department.name}
+                  </option>
+                ))}
+              </select>
+            </Field>
+            <Field label="做账分配">
+              <select
+                value={state.acctDept}
+                onChange={(event) => onChange((prev) => ({ ...prev, acctDept: event.target.value }))}
+                style={inputStyle}
+              >
+                <option value="">请选择</option>
+                {ACCT_DEPARTMENTS.map((department) => (
+                  <option key={department} value={department}>
+                    {department}
+                  </option>
+                ))}
+              </select>
+            </Field>
           </div>
-        </Field>
-        <Field label="用途说明" wide>
-          <textarea
-            rows={5}
-            value={state.purpose}
-            onChange={(event) => onChange((prev) => ({ ...prev, purpose: event.target.value }))}
-            style={textareaStyle}
-          />
-        </Field>
-        <Field label="AI说明 ref1" wide>
-          <textarea
-            rows={3}
-            value={state.ref1}
-            onChange={(event) => onChange((prev) => ({ ...prev, ref1: event.target.value }))}
-            style={textareaStyle}
-          />
-        </Field>
-        <Field label="AI项目内容 ref2" wide>
-          <textarea
-            rows={4}
-            value={state.ref2}
-            onChange={(event) => onChange((prev) => ({ ...prev, ref2: event.target.value }))}
-            style={textareaStyle}
-          />
-        </Field>
-        <Field label="商家名称">
-          <input
-            value={state.vendor_name}
-            onChange={(event) => onChange((prev) => ({ ...prev, vendor_name: event.target.value }))}
-            style={inputStyle}
-          />
-        </Field>
-        <Field label="商家联络号码">
-          <input
-            value={state.vendor_contact_number}
-            onChange={(event) => onChange((prev) => ({ ...prev, vendor_contact_number: event.target.value }))}
-            style={inputStyle}
-          />
-        </Field>
-        <Field label="商家地址" wide>
-          <input
-            value={state.vendor_address}
-            onChange={(event) => onChange((prev) => ({ ...prev, vendor_address: event.target.value }))}
-            style={inputStyle}
-          />
-        </Field>
-        <Field label="采购日期 purchase_datetime">
-          <input
-            type="datetime-local"
-            value={state.purchase_datetime}
-            onChange={(event) => onChange((prev) => ({ ...prev, purchase_datetime: event.target.value }))}
-            style={inputStyle}
-          />
-        </Field>
-        <Field label="附件" wide>
+        </Section>
+
+        {/* 2) 金额与关联 */}
+        <Section title="② 金额与关联">
+          <div style={formGridStyle(isMobile)}>
+            <Field label="金额 (RM)">
+              <input
+                type="number"
+                inputMode="decimal"
+                value={state.amount}
+                onChange={(event) => onChange((prev) => ({ ...prev, amount: event.target.value }))}
+                style={inputStyle}
+              />
+            </Field>
+            <Field label="关联活动">
+              <div className="claim-create-form__event-row" style={{ display: "flex", gap: "8px", flexWrap: "wrap", alignItems: "center" }}>
+                {lockedEvent ? null : (
+                  <button type="button" style={buttonSecondaryStyle} onClick={onPickEvent}>
+                    选择活动
+                  </button>
+                )}
+                <span style={chipStyle}>
+                  {state.selectedEvent
+                    ? `${state.selectedEvent.event_name || "未命名活动"} #${state.selectedEvent.id}`
+                    : "未关联活动"}
+                </span>
+              </div>
+            </Field>
+            {budgetLine ? (
+              <Field label="关联预算行" wide>
+                <span style={{ ...chipStyle, background: "var(--x-color-accent-tint)", color: "var(--x-color-accent-strong)" }}>
+                  预算 · {budgetLine.category || `#${budgetLine.id}`}
+                </span>
+              </Field>
+            ) : null}
+          </div>
+        </Section>
+
+        {/* 3) 用途 */}
+        <Section title="③ 用途说明">
+          <div style={formGridStyle(isMobile)}>
+            <Field label="用途说明" wide>
+              <textarea
+                rows={5}
+                value={state.purpose}
+                onChange={(event) => onChange((prev) => ({ ...prev, purpose: event.target.value }))}
+                style={textareaStyle}
+              />
+            </Field>
+            <Field label="AI说明 ref1" wide>
+              <textarea
+                rows={3}
+                value={state.ref1}
+                onChange={(event) => onChange((prev) => ({ ...prev, ref1: event.target.value }))}
+                style={textareaStyle}
+              />
+            </Field>
+            <Field label="AI项目内容 ref2" wide>
+              <textarea
+                rows={4}
+                value={state.ref2}
+                onChange={(event) => onChange((prev) => ({ ...prev, ref2: event.target.value }))}
+                style={textareaStyle}
+              />
+            </Field>
+          </div>
+        </Section>
+
+        {/* 4) 商家信息 */}
+        <Section title="④ 商家信息">
+          <div style={formGridStyle(isMobile)}>
+            <Field label="商家名称">
+              <input
+                value={state.vendor_name}
+                onChange={(event) => onChange((prev) => ({ ...prev, vendor_name: event.target.value }))}
+                style={inputStyle}
+              />
+            </Field>
+            <Field label="商家联络号码">
+              <input
+                value={state.vendor_contact_number}
+                onChange={(event) => onChange((prev) => ({ ...prev, vendor_contact_number: event.target.value }))}
+                style={inputStyle}
+              />
+            </Field>
+            <Field label="商家地址" wide>
+              <input
+                value={state.vendor_address}
+                onChange={(event) => onChange((prev) => ({ ...prev, vendor_address: event.target.value }))}
+                style={inputStyle}
+              />
+            </Field>
+            <Field label="采购日期">
+              <input
+                type="datetime-local"
+                value={state.purchase_datetime}
+                onChange={(event) => onChange((prev) => ({ ...prev, purchase_datetime: event.target.value }))}
+                style={inputStyle}
+              />
+            </Field>
+          </div>
+        </Section>
+
+        {/* 5) 附件与签名 */}
+        <Section title="⑤ 附件与签名">
           <div className="claim-create-form__upload" style={uploadBoxStyle}>
             <input type="file" accept="image/*,application/pdf" multiple onChange={onFilesChange} />
             <div className="claim-create-form__file-list" style={fileListStyle}>
@@ -213,40 +263,52 @@ export function ClaimCreateForm({
                 ? state.files.map((file) => `${file.name} (${Math.round(file.size / 1024)} KB)`).join(" / ")
                 : "未选择文件"}
             </div>
-            <div style={{ display: "flex", gap: "8px", flexWrap: "wrap", alignItems: "center" }}>
-              <button
-                type="button"
-                style={{
-                  ...buttonSecondaryStyle,
-                  opacity: aiFillDisabled ? 0.6 : 1,
-                  cursor: aiFillDisabled ? "not-allowed" : "pointer",
-                }}
-                onClick={onAiFill}
-                disabled={aiFillDisabled}
-              >
-                {aiFilling ? "AI reading..." : "AI fillin"}
-              </button>
-            </div>
+            {showAiFill ? (
+              <div style={{ display: "flex", gap: "8px", flexWrap: "wrap", alignItems: "center" }}>
+                <button
+                  type="button"
+                  style={{
+                    ...buttonSecondaryStyle,
+                    opacity: aiFillDisabled ? 0.6 : 1,
+                    cursor: aiFillDisabled ? "not-allowed" : "pointer",
+                  }}
+                  onClick={onAiFill}
+                  disabled={aiFillDisabled}
+                >
+                  {aiFilling ? "AI reading..." : "AI fillin"}
+                </button>
+              </div>
+            ) : null}
           </div>
-        </Field>
-      </div>
-
-      <div className="claim-create-form__sign-row" style={summaryRowStyle}>
-        <span style={chipStyle}>{state.signJsonData?.strokes?.length ? "已签名" : "尚未签名"}</span>
-        <button type="button" style={buttonSecondaryStyle} onClick={onSign}>
-          {state.signJsonData?.strokes?.length ? "重新签名" : "签名"}
-        </button>
+          <div className="claim-create-form__sign-row" style={summaryRowStyle}>
+            <span style={{ ...chipStyle, ...(signed ? { background: "var(--x-color-success-soft)", color: "var(--x-color-success)" } : {}) }}>
+              {signed ? "已签名" : "尚未签名"}
+            </span>
+            <button type="button" style={buttonSecondaryStyle} onClick={onSign}>
+              {signed ? "重新签名" : "签名"}
+            </button>
+          </div>
+        </Section>
       </div>
 
       <div className="claim-create-form__footer" style={footerActionsStyle}>
         <button type="button" style={buttonGhostStyle} onClick={onBack}>
-          返回列表
+          {backLabel}
         </button>
         <button type="button" style={buttonPrimaryStyle} onClick={onSubmit} disabled={submitting}>
-          {submitting ? "提交中…" : "提交申请"}
+          {submitting ? "提交中…" : submitLabel}
         </button>
       </div>
     </>
+  );
+}
+
+function Section({ title, children }: { title: string; children: ReactNode }) {
+  return (
+    <section style={sectionCardStyle}>
+      <div style={sectionTitleStyle}>{title}</div>
+      {children}
+    </section>
   );
 }
 

@@ -269,6 +269,15 @@ export function formGridStyle(isMobile: boolean): CSSProperties {
   };
 }
 
+export const sectionCardStyle: CSSProperties = {
+  display: "grid",
+  gap: "10px",
+  padding: "14px",
+  borderRadius: "12px",
+  border: "1px solid var(--x-color-line-soft)",
+  background: "var(--x-color-panel)",
+};
+
 export const fieldStyle: CSSProperties = {
   display: "grid",
   gap: "4px",
