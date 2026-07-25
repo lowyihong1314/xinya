@@ -266,6 +266,14 @@ export function EventTableView(props: {
                       ? [formatEventDateTime(event.datetime), event.location].filter(Boolean).join(" · ") || "暂无时间/地点"
                       : ""}
                   </div>
+                  <div style={linkedHeadRowStyle}>
+                    <span style={linkedHeadLabelStyle}>关联报名表</span>
+                    {props.selectedEventForm ? (
+                      <LinkedFormHeadChip event={event} form={props.selectedEventForm} onOpen={() => props.onOpenFormContent(props.selectedEventForm!.id)} />
+                    ) : (
+                      <span style={mutedStyle}>未关联</span>
+                    )}
+                  </div>
                 </div>
               </div>
               <div style={headerRightStyle(isMobile)}>
@@ -278,15 +286,6 @@ export function EventTableView(props: {
                   </button>
                 ) : null}
               </div>
-            </div>
-
-            <div style={linkedHeadRowStyle}>
-              <span style={linkedHeadLabelStyle}>关联报名表</span>
-              {props.selectedEventForm ? (
-                <LinkedFormHeadChip event={event} form={props.selectedEventForm} onOpen={() => props.onOpenFormContent(props.selectedEventForm!.id)} />
-              ) : (
-                <span style={mutedStyle}>未关联</span>
-              )}
             </div>
 
             <div style={tabBarWrapStyle}>
@@ -870,7 +869,7 @@ const searchInputStyle: CSSProperties = { flex: "1 1 220px", minHeight: "34px", 
 const selectStyle: CSSProperties = { minHeight: "34px", padding: "7px 10px", borderRadius: "8px", border: "1px solid var(--x-color-line)", background: "var(--x-color-panel)", color: "var(--x-color-ink)", fontSize: "13px", boxSizing: "border-box" };
 
 const tabBarWrapStyle: CSSProperties = { padding: "10px 14px", borderBottom: "1px solid var(--x-color-line-soft)", overflowX: "auto" };
-const linkedHeadRowStyle: CSSProperties = { display: "flex", alignItems: "center", gap: "8px", flexWrap: "wrap", padding: "8px 14px", borderBottom: "1px solid var(--x-color-line-soft)" };
+const linkedHeadRowStyle: CSSProperties = { display: "flex", alignItems: "center", gap: "8px", flexWrap: "wrap", marginTop: "8px" };
 const linkedHeadLabelStyle: CSSProperties = { fontSize: "11.5px", fontWeight: 800, letterSpacing: "0.04em", color: "var(--x-color-ink-muted)", textTransform: "uppercase" };
 const headChipStyle: CSSProperties = { display: "inline-flex", alignItems: "center", gap: "2px", padding: "3px 3px 3px 4px", borderRadius: "999px", border: "1px solid var(--x-color-line)", background: "var(--x-color-panel-alt)" };
 const headChipMainStyle: CSSProperties = { display: "inline-flex", alignItems: "center", gap: "7px", padding: "1px 4px 1px 1px", border: "none", background: "transparent", color: "var(--x-color-ink)", cursor: "pointer", maxWidth: "240px" };

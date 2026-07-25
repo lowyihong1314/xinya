@@ -278,6 +278,24 @@ export function FormWorkspaceView(props: {
                 <div style={eyebrowStyle}>特别活动表 #{selectedFormId}</div>
                 <h2 style={panelTitleStyle}>{selectedForm?.title || (props.detailLoading ? "加载中…" : `表格 #${selectedFormId}`)}</h2>
                 {selectedForm ? <div style={mutedStyle}>截止 {selectedForm.expired || "-"} · 成员 {selectedForm.member_count ?? (selectedForm.members || []).length}</div> : null}
+                {selectedForm ? (
+                  <div style={linkedHeadRowStyle}>
+                    <span style={linkedHeadLabelStyle}>关联活动</span>
+                    {(selectedForm.events || []).map((event) => (
+                      <LinkedEventHeadChip
+                        key={event.id}
+                        event={event}
+                        canEditForms={props.canEditForms}
+                        onOpen={() => props.onOpenEventDetail(event.id)}
+                        onRemove={() => props.onRemoveEvent(event.id)}
+                      />
+                    ))}
+                    {!(selectedForm.events || []).length ? <span style={mutedStyle}>未关联</span> : null}
+                    {props.canEditForms ? (
+                      <button type="button" style={linkedAddBtnStyle} onClick={props.onPickEvent}>+ 选择活动</button>
+                    ) : null}
+                  </div>
+                ) : null}
               </div>
             </div>
             <div style={headerRightStyle(isMobile)}>
@@ -289,25 +307,6 @@ export function FormWorkspaceView(props: {
           </div>
 
           {props.toast ? <div style={props.toast.type === "success" ? successStyle : errorStyle}>{props.toast.text}</div> : null}
-
-          {selectedForm ? (
-            <div style={linkedHeadRowStyle}>
-              <span style={linkedHeadLabelStyle}>关联活动</span>
-              {(selectedForm.events || []).map((event) => (
-                <LinkedEventHeadChip
-                  key={event.id}
-                  event={event}
-                  canEditForms={props.canEditForms}
-                  onOpen={() => props.onOpenEventDetail(event.id)}
-                  onRemove={() => props.onRemoveEvent(event.id)}
-                />
-              ))}
-              {!(selectedForm.events || []).length ? <span style={mutedStyle}>未关联</span> : null}
-              {props.canEditForms ? (
-                <button type="button" style={linkedAddBtnStyle} onClick={props.onPickEvent}>+ 选择活动</button>
-              ) : null}
-            </div>
-          ) : null}
 
           <div style={tabBarWrapStyle}>
             <div style={tabBarStyle}>
@@ -1565,7 +1564,7 @@ const fieldStyle: CSSProperties = { display: "grid", gap: "4px" };
 const toggleGridStyle: CSSProperties = { display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(160px, 1fr))", gap: "6px" };
 const configToggleStyle = (checked: boolean): CSSProperties => ({ display: "flex", gap: "6px", alignItems: "center", padding: "8px 10px", borderRadius: "8px", border: checked ? "1px solid var(--x-color-accent-border)" : "1px solid var(--x-color-line-soft)", background: checked ? "var(--x-color-accent-tint)" : "var(--x-color-panel-alt)", color: "var(--x-color-ink)", fontSize: "13px", fontWeight: 600 });
 
-const linkedHeadRowStyle: CSSProperties = { display: "flex", alignItems: "center", gap: "8px", flexWrap: "wrap", padding: "8px 14px", borderBottom: "1px solid var(--x-color-line-soft)" };
+const linkedHeadRowStyle: CSSProperties = { display: "flex", alignItems: "center", gap: "8px", flexWrap: "wrap", marginTop: "8px" };
 const linkedHeadLabelStyle: CSSProperties = { fontSize: "11.5px", fontWeight: 800, letterSpacing: "0.04em", color: "var(--x-color-ink-muted)", textTransform: "uppercase" };
 const linkedAddBtnStyle: CSSProperties = { padding: "5px 11px", borderRadius: "999px", border: "1px dashed var(--x-color-accent-border)", background: "var(--x-color-panel)", color: "var(--x-color-accent-strong)", fontSize: "12px", fontWeight: 700, cursor: "pointer", whiteSpace: "nowrap" };
 const headChipStyle: CSSProperties = { display: "inline-flex", alignItems: "center", gap: "2px", padding: "3px 3px 3px 4px", borderRadius: "999px", border: "1px solid var(--x-color-line)", background: "var(--x-color-panel-alt)" };
