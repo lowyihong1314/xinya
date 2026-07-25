@@ -261,12 +261,12 @@ export function EventTableView(props: {
                 <div>
                   <div style={eyebrowStyle}>活动 #{props.selectedEventId}</div>
                   <h3 style={panelTitleStyle}>{event ? event.event_name || `活动 #${event.id}` : "加载中…"}</h3>
-                  <div style={mutedStyle}>
-                    {event
-                      ? [formatEventDateTime(event.datetime), event.location].filter(Boolean).join(" · ") || "暂无时间/地点"
-                      : ""}
-                  </div>
                   <div style={linkedHeadRowStyle}>
+                    <span style={mutedStyle}>
+                      {event
+                        ? [formatEventDateTime(event.datetime), event.location].filter(Boolean).join(" · ") || "暂无时间/地点"
+                        : ""}
+                    </span>
                     <span style={linkedHeadLabelStyle}>关联报名表</span>
                     {props.selectedEventForm ? (
                       <LinkedFormHeadChip event={event} form={props.selectedEventForm} onOpen={() => props.onOpenFormContent(props.selectedEventForm!.id)} />

@@ -277,9 +277,9 @@ export function FormWorkspaceView(props: {
               <div>
                 <div style={eyebrowStyle}>特别活动表 #{selectedFormId}</div>
                 <h2 style={panelTitleStyle}>{selectedForm?.title || (props.detailLoading ? "加载中…" : `表格 #${selectedFormId}`)}</h2>
-                {selectedForm ? <div style={mutedStyle}>截止 {selectedForm.expired || "-"} · 成员 {selectedForm.member_count ?? (selectedForm.members || []).length}</div> : null}
                 {selectedForm ? (
                   <div style={linkedHeadRowStyle}>
+                    <span style={mutedStyle}>截止 {selectedForm.expired || "-"} · 成员 {selectedForm.member_count ?? (selectedForm.members || []).length}</span>
                     <span style={linkedHeadLabelStyle}>关联活动</span>
                     {(selectedForm.events || []).map((event) => (
                       <LinkedEventHeadChip
