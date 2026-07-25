@@ -579,6 +579,12 @@ const USER_CONTROL_CHILD_ITEMS = [
     icon: "fa-solid fa-sitemap",
     description: "部门、权限与成员维护。",
   },
+  {
+    key: "permissions",
+    title: "权限管理",
+    icon: "fa-solid fa-user-shield",
+    description: "从权限视角查看部门与成员。",
+  },
 ] as const;
 
 const PERMANENT_REGISTRATION_CHILD_ITEMS = [

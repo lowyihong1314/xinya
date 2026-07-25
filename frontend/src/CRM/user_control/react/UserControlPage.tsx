@@ -6,6 +6,7 @@ import { useUserState } from "../../../app/UserState";
 import { useUserControlController } from "./useUserControlController";
 import { DepartmentsView } from "./DepartmentsView";
 import { MembersView } from "./MembersView";
+import { PermissionsView } from "./PermissionsView";
 import { NewUserModal } from "./view/NewUserModal";
 import { PermissionModal } from "./view/PermissionModal";
 import * as styles from "./view/styles";
@@ -17,12 +18,16 @@ export function UserControlPage() {
   const [searchParams, setSearchParams] = useSearchParams();
   const { state, actions } = useUserControlController();
 
+  const rawView = searchParams.get("user_control_view");
   const view =
-    searchParams.get("user_control_view") === "departments"
-      ? "departments"
-      : "members";
+    rawView === "departments" ? "departments" : rawView === "permissions" ? "permissions" : "members";
   const userIdParam = searchParams.get("user_id");
   const deptIdParam = searchParams.get("dept_id");
+  const permIdParam = searchParams.get("permission_id");
+  const selectedPermissionId =
+    view === "permissions" && permIdParam && Number.isFinite(Number(permIdParam))
+      ? Number(permIdParam)
+      : null;
   const editorUserId =
     view === "members" && userIdParam && Number.isFinite(Number(userIdParam))
       ? Number(userIdParam)
@@ -75,7 +80,7 @@ export function UserControlPage() {
         <div>
           <div style={styles.eyebrowStyle}>User Control</div>
           <h3 style={styles.titleStyle}>
-            {view === "departments" ? "部门管理" : "用户管理"}
+            {view === "departments" ? "部门管理" : view === "permissions" ? "权限管理" : "用户管理"}
           </h3>
         </div>
       </header>
@@ -115,6 +120,18 @@ export function UserControlPage() {
           onOpenPermissionEditor={actions.openPermissionEditor}
           onAttachUser={actions.attachUser}
           onDetachUser={actions.detachUser}
+        />
+      ) : view === "permissions" ? (
+        <PermissionsView
+          isMobile={isMobile}
+          permissions={state.allPermissions}
+          departments={state.departments}
+          users={state.allUsers}
+          loading={state.loading}
+          selectedPermissionId={selectedPermissionId}
+          onSelectPermission={(id) => setParam("permission_id", String(id))}
+          onRefresh={() => void actions.refresh()}
+          onSavePermissions={(deptId, nextIds) => void actions.savePermissions(deptId, nextIds)}
         />
       ) : (
         <MembersView
