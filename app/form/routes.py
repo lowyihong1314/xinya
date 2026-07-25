@@ -1,4 +1,5 @@
 from flask import Blueprint, jsonify, request
+from flask_login import login_required
 
 from models.form import RegisForm
 
@@ -60,6 +61,12 @@ def member_portal_participated():
 @form_bp.route("/member/detail", methods=["GET"])
 def member_portal_detail():
     return services.member_portal_detail(request.args.get("nric"), request.args.get("form_id", type=int))
+
+
+@form_bp.route("/member/score_panel/<int:form_id>", methods=["POST"])
+@login_required
+def member_score_panel(form_id):
+    return services.create_member_score_panel(form_id)
 
 
 @form_bp.route("/pay_register/<form_id>", methods=["GET"])

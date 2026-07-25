@@ -2951,6 +2951,14 @@ def member_portal_detail(nric, form_id):
     img = getattr(event, "event_image", None)
     poster_url = f"/api/form/event_poster/{form.id}/cache" if (img and getattr(img, "id", None)) else None
 
+    # 这个 NRIC 是否已绑定登录账号（供终端显示「登录」按钮）
+    has_account = bool(User.query.filter_by(nric_asset_id=member.id).first())
+    # 当前访客是否已登录、以及是否是本活动的组织者（决定是否显示积分面板入口）
+    viewer_logged_in = bool(getattr(current_user, "is_authenticated", False))
+    viewer_is_organizer = False
+    if viewer_logged_in and event is not None:
+        viewer_is_organizer = current_user.id in {o.id for o in (event.organizers or [])}
+
     return jsonify({
         "status": "success",
         "member_name": (latest.name_cn or latest.name) if latest else None,
@@ -2962,7 +2970,25 @@ def member_portal_detail(nric, form_id):
         "member_data": member_data,
         "group_members": group_members,
         "payment": payment_info,
+        "has_account": has_account,
+        "viewer_logged_in": viewer_logged_in,
+        "viewer_is_organizer": viewer_is_organizer,
     })
+
+
+def create_member_score_panel(form_id):
+    """成员终端里：仅当前登录用户是该活动组织者时，为其开启积分控制面板（token 免登录访问）。"""
+    form = RegisForm.query.get(form_id)
+    if not form:
+        return jsonify({"status": "error", "message": "表单不存在"}), 404
+    is_organizer = any(
+        current_user.id in {o.id for o in (ev.organizers or [])}
+        for ev in (form.events or [])
+    )
+    if not is_organizer:
+        return jsonify({"status": "error", "message": "仅活动组织者可开启积分面板"}), 403
+    from app.form import score_panel
+    return score_panel.create_score_panel(form_id)
 
 
 def adjust_form_group_score(group_id, data):

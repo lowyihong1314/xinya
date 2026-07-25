@@ -11,17 +11,20 @@ type PageHeroProps = {
   subtitle: string;
   idPrefix?: string;
   tone?: "default" | "sky";
+  // 副标题显示当前背景活动的名称（无活动时回退到 subtitle）
+  subtitleFromMedia?: boolean;
 };
 
 type HeroMediaItem = {
   id: number;
   fileType?: string | null;
+  name?: string | null;
 };
 
 const IMAGE_HERO_DURATION_MS = 5200;
 const VIDEO_HERO_MAX_DURATION_MS = 15000;
 
-export function PageHero({ title, subtitle, idPrefix = "page-hero", tone = "default" }: PageHeroProps) {
+export function PageHero({ title, subtitle, idPrefix = "page-hero", tone = "default", subtitleFromMedia = false }: PageHeroProps) {
   const { isMobile } = useUserState();
   const { events } = useEventData();
   const [activeIndex, setActiveIndex] = useState(0);
@@ -39,9 +42,13 @@ export function PageHero({ title, subtitle, idPrefix = "page-hero", tone = "defa
         .map((event) => ({
           id: Number(event.event_image?.id),
           fileType: event.event_image?.file_type,
+          name: event.event_name,
         })),
     [events],
   );
+
+  const activeName = subtitleFromMedia ? mediaItems[activeIndex]?.name : null;
+  const displaySubtitle = activeName || subtitle;
 
   useEffect(() => {
     setActiveIndex(0);
@@ -91,9 +98,9 @@ export function PageHero({ title, subtitle, idPrefix = "page-hero", tone = "defa
           />
         </div>
       ))}
-      <div id={`${idPrefix}-mask`} style={heroMaskStyle(pressed)} />
+      <div id={`${idPrefix}-mask`} style={heroMaskStyle(pressed, tone)} />
       <div id={`${idPrefix}-content`} style={heroContentStyle(isMobile)}>
-        <div id={`${idPrefix}-logo-wrap`} style={logoCircleStyle(isMobile)}>
+        <div id={`${idPrefix}-logo-wrap`} style={logoCircleStyle(isMobile, tone)}>
           <CachedImage
             id={`${idPrefix}-logo`}
             src={`${API_BASE}/static/images/logo/logo.png`}
@@ -103,7 +110,7 @@ export function PageHero({ title, subtitle, idPrefix = "page-hero", tone = "defa
           />
         </div>
         <h1 id={`${idPrefix}-title`} style={heroTitleStyle(isMobile)}>{title}</h1>
-        <p id={`${idPrefix}-subtitle`} style={heroSubtitleStyle(isMobile)}>{subtitle}</p>
+        <p id={`${idPrefix}-subtitle`} style={heroSubtitleStyle(isMobile)}>{displaySubtitle}</p>
       </div>
     </section>
   );
@@ -132,13 +139,15 @@ function heroStyle(isMobile: boolean, tone: PageHeroProps["tone"]): CSSPropertie
   };
 }
 
-function heroMaskStyle(pressed: boolean): CSSProperties {
+function heroMaskStyle(pressed: boolean, tone: PageHeroProps["tone"]): CSSProperties {
   return {
     position: "absolute",
     inset: 0,
-    // 冷白薄雾，保证墨色标题在照片上可读；克制的青绿晕染
+    // sky（首页）：不要白色薄雾，只保留模糊，和活动详情页 hero 一致
     background:
-      "linear-gradient(180deg, rgba(238,243,249,0.78), rgba(238,243,249,0.42)), linear-gradient(135deg, rgba(15,118,110,0.14), rgba(15,118,110,0.06), rgba(255,255,255,0.05))",
+      tone === "sky"
+        ? "transparent"
+        : "linear-gradient(180deg, rgba(238,243,249,0.78), rgba(238,243,249,0.42)), linear-gradient(135deg, rgba(15,118,110,0.14), rgba(15,118,110,0.06), rgba(255,255,255,0.05))",
     backdropFilter: `blur(${pressed ? 1 : 4}px)`,
     transition: "backdrop-filter 160ms ease",
     zIndex: 1,
@@ -186,20 +195,24 @@ function heroContentStyle(isMobile: boolean): CSSProperties {
     gap: isMobile ? "10px" : "14px",
     padding: isMobile ? "36px 18px" : "56px 28px",
     textAlign: "center",
+    // 无白色遮罩时给文字一点白色光晕，保证在照片上可读
+    textShadow: "0 1px 14px rgba(255,255,255,0.85), 0 0 3px rgba(255,255,255,0.6)",
   };
 }
 
-function logoCircleStyle(isMobile: boolean): CSSProperties {
+function logoCircleStyle(isMobile: boolean, tone: PageHeroProps["tone"]): CSSProperties {
+  const bare = tone === "sky";
   return {
     width: isMobile ? "78px" : "104px",
     height: isMobile ? "78px" : "104px",
     borderRadius: "50%",
-    background: "rgba(255,255,255,0.72)",
-    border: "1px solid var(--x-color-accent-border)",
+    // sky（首页）：不要白色底圈，只留 logo + blur
+    background: bare ? "transparent" : "rgba(255,255,255,0.72)",
+    border: bare ? "none" : "1px solid var(--x-color-accent-border)",
     display: "grid",
     placeItems: "center",
     marginBottom: "4px",
-    boxShadow: "0 16px 36px var(--x-color-shadow)",
+    boxShadow: bare ? "none" : "0 16px 36px var(--x-color-shadow)",
   };
 }
 

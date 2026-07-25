@@ -7,6 +7,7 @@ import { apiFetch } from "../../../js/apiFetch";
 import { LogoQrBadge } from "../../../components/LogoQrBadge";
 import { createMemberPayment, fetchPaymentQuote, resolveStaticUrl } from "../payApi";
 import { GoogleMapEmbed } from "../../../components/GoogleMapEmbed";
+import { TerminalScorePanel } from "./TerminalScorePanel";
 import type { FormFee } from "../../../CRM/form/react/types";
 
 type PortalForm = { form_id: number; title: string };
@@ -52,6 +53,9 @@ type DetailResponse = {
   member_data?: MemberData | null;
   group_members?: PortalGroupMember[] | null;
   payment?: PaymentInfo | null;
+  has_account?: boolean;
+  viewer_logged_in?: boolean;
+  viewer_is_organizer?: boolean;
 };
 
 function fmtVal(v: unknown): string {
@@ -126,8 +130,33 @@ export function MemberPortalPage() {
 
 function NricGate() {
   const [value, setValue] = useState("");
+  const [checking, setChecking] = useState(true);
   const formId = new URLSearchParams(window.location.search).get("form_id") || undefined;
   const submit = () => { if (value.trim()) setQuery({ nric: value.trim(), form_id: formId }); };
+
+  // 进入先尝试用当前登录用户的 NRIC 自动进入；失败/未登录才手动输入。
+  useEffect(() => {
+    let active = true;
+    apiFetch("/api/user_control/get_user_data")
+      .then((r) => (r.ok ? r.json() : null))
+      .then((d) => {
+        if (!active) return;
+        const autoNric = d && (d.NRIC || d.nric);
+        if (autoNric && String(autoNric).trim()) {
+          setQuery({ nric: String(autoNric).trim(), form_id: formId });
+          return;
+        }
+        setChecking(false);
+      })
+      .catch(() => { if (active) setChecking(false); });
+    return () => { active = false; };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  if (checking) {
+    return <section style={cardStyle}><div style={hintStyle}>加载中…</div></section>;
+  }
+
   return (
     <section style={cardStyle}>
       <h1 style={titleStyle}>请输入 NRIC</h1>
@@ -233,9 +262,11 @@ function PortalView({ nric, formId }: { nric: string; formId: number }) {
   const [loading, setLoading] = useState(true);
   const [data, setData] = useState<DetailResponse | null>(null);
   const [error, setError] = useState("");
-  const [tab, setTab] = useState<"event" | "info" | "flow">("event");
+  const [tab, setTab] = useState<"event" | "info" | "flow" | "score">("event");
   const [posterOk, setPosterOk] = useState(true);
   const [showGroupMembers, setShowGroupMembers] = useState(false);
+  const [scoreToken, setScoreToken] = useState<string | null>(null);
+  const [scoreErr, setScoreErr] = useState("");
 
   useEffect(() => {
     let active = true;
@@ -305,11 +336,29 @@ function PortalView({ nric, formId }: { nric: string; formId: number }) {
 
   const memberFacts = data.member_data ? buildMemberFacts(data.member_data) : [];
   const posterUrl = posterOk && data.poster_url ? data.poster_url : null;
-  const tabs: { key: "event" | "info" | "flow"; label: string }[] = [
+  const tabs: { key: "event" | "info" | "flow" | "score"; label: string }[] = [
     { key: "event", label: "活动" },
     { key: "info", label: "信息" },
     { key: "flow", label: "流程" },
+    ...(data.viewer_is_organizer ? [{ key: "score" as const, label: "积分" }] : []),
   ];
+
+  async function openScoreTab() {
+    setTab("score");
+    if (scoreToken) return;
+    setScoreErr("");
+    try {
+      const r = await apiFetch(`/api/form/member/score_panel/${formId}`, { method: "POST" });
+      const d = await r.json();
+      if (r.ok && d.token) {
+        setScoreToken(d.token);
+      } else {
+        setScoreErr(d.message || "无法开启积分面板");
+      }
+    } catch {
+      setScoreErr("网络错误，请稍后再试");
+    }
+  }
 
   return (
     <div style={{ paddingBottom: 74 }}>
@@ -324,7 +373,36 @@ function PortalView({ nric, formId }: { nric: string; formId: number }) {
             </span>
           ) : null}
         </div>
-        <h1 style={titleStyle}>{ev?.event_name || data.form_title || "活动"}</h1>
+        <div style={titleRowStyle}>
+          <h1 style={titleStyle}>{ev?.event_name || data.form_title || "活动"}</h1>
+          {data.viewer_logged_in ? (
+            <button
+              type="button"
+              style={ghostStyle}
+              onClick={async () => {
+                try {
+                  await apiFetch("/api/user_control/logout");
+                } catch {
+                  /* ignore */
+                }
+                window.location.reload();
+              }}
+            >
+              退出登录
+            </button>
+          ) : data.has_account ? (
+            <button
+              type="button"
+              style={ghostStyle}
+              onClick={() => {
+                const back = window.location.pathname + window.location.search;
+                window.location.href = `/#/login?next=${encodeURIComponent(back)}`;
+              }}
+            >
+              🔑 登录
+            </button>
+          ) : null}
+        </div>
         {data.member_data?.is_leader ? (
           <button type="button" style={leaderBtnStyle} onClick={() => setShowGroupMembers(true)}>
             查看我的组员（{data.group_members?.length ?? 0}）
@@ -411,10 +489,23 @@ function PortalView({ nric, formId }: { nric: string; formId: number }) {
         </section>
       ) : null}
 
+      {tab === "score" ? (
+        scoreToken ? (
+          <TerminalScorePanel token={scoreToken} />
+        ) : (
+          <section style={cardStyle}><div style={hintStyle}>{scoreErr || "开启积分面板中…"}</div></section>
+        )
+      ) : null}
+
       <nav style={tabBarStyle}>
-        <div style={tabBarInnerStyle}>
+        <div style={{ ...tabBarInnerStyle, gridTemplateColumns: `repeat(${tabs.length}, 1fr)` }}>
           {tabs.map((t) => (
-            <button key={t.key} type="button" style={tab === t.key ? tabBtnActiveStyle : tabBtnStyle} onClick={() => setTab(t.key)}>
+            <button
+              key={t.key}
+              type="button"
+              style={tab === t.key ? tabBtnActiveStyle : tabBtnStyle}
+              onClick={() => (t.key === "score" ? void openScoreTab() : setTab(t.key))}
+            >
               {t.label}
             </button>
           ))}
@@ -565,11 +656,13 @@ const cardStyle: CSSProperties = { background: "rgba(255,255,255,0.92)", border:
 const headRowStyle: CSSProperties = { display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: 10 };
 const titleStyle: CSSProperties = { margin: 0, fontSize: 22, fontWeight: 800 };
 const portalHeadStyle: CSSProperties = { padding: "2px 4px", display: "grid", gap: 4 };
+const titleRowStyle: CSSProperties = { display: "flex", alignItems: "center", justifyContent: "space-between", gap: 10, flexWrap: "wrap" };
 const memberLineStyle: CSSProperties = { display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" };
 const memberNameStyle: CSSProperties = { fontSize: 15, fontWeight: 800, color: "#4338ca" };
 const groupChipStyle: CSSProperties = { padding: "2px 10px", borderRadius: 999, background: "#eef2ff", color: "#4338ca", fontSize: 12.5, fontWeight: 700, border: "1px solid #c7d2fe" };
 const leaderBadgeStyle: CSSProperties = { padding: "2px 10px", borderRadius: 999, background: "#fef3c7", color: "#b45309", fontSize: 12.5, fontWeight: 800, border: "1px solid #fde68a" };
 const leaderBtnStyle: CSSProperties = { marginTop: 8, padding: "8px 14px", borderRadius: 10, border: "1px solid #c7d2fe", background: "#eef2ff", color: "#4338ca", fontWeight: 700, fontSize: 13, cursor: "pointer" };
+const loginBtnStyle: CSSProperties = { marginTop: 8, justifySelf: "start", padding: "8px 14px", borderRadius: 10, border: "1px solid #c7d2fe", background: "#fff", color: "#4338ca", fontWeight: 700, fontSize: 13, cursor: "pointer" };
 const gmOverlayStyle: CSSProperties = { position: "fixed", inset: 0, zIndex: 100, background: "rgba(15,23,42,0.4)", display: "flex", alignItems: "flex-end", justifyContent: "center" };
 const gmSheetStyle: CSSProperties = { width: "min(560px, 100%)", maxHeight: "80vh", overflowY: "auto", background: "#fff", borderRadius: "18px 18px 0 0", padding: 16, boxShadow: "0 -20px 50px rgba(15,23,42,0.25)" };
 const gmHeadStyle: CSSProperties = { display: "flex", alignItems: "center", justifyContent: "space-between", gap: 10, marginBottom: 10 };

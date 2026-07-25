@@ -156,7 +156,7 @@ export function HomeAlbumPage() {
   return (
     <div id="home-album-page" style={pageStyle}>
       <style id="home-album-calendar-event-button-style">{calendarEventButtonCss + eventCardCss}</style>
-      <PageHero idPrefix="home-hero" tone="sky" title="地南佛学会" subtitle="南 無 阿 彌 陀 佛" />
+      <PageHero idPrefix="home-hero" tone="sky" title="地南佛学会" subtitle="南 無 阿 彌 陀 佛" subtitleFromMedia />
 
       <div id="home-content" style={contentWrapStyle}>
         <div id="home-view-toggle" style={segmentedWrapStyle}>

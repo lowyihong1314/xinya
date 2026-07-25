@@ -11,6 +11,8 @@ export function LoginPage() {
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
   const from = searchParams.get("from") ?? "/";
+  // next：登录后跳转的完整地址（用于成员终端等 SPA 之外的页面）
+  const next = searchParams.get("next");
 
   const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
@@ -18,6 +20,10 @@ export function LoginPage() {
   const [error, setError] = useState<string | null>(null);
 
   if (isAuthenticated) {
+    if (next) {
+      window.location.assign(next);
+      return null;
+    }
     navigate(from, { replace: true });
     return null;
   }
@@ -28,6 +34,10 @@ export function LoginPage() {
     setError(null);
     try {
       await login(username, password);
+      if (next) {
+        window.location.assign(next);
+        return;
+      }
       navigate(from, { replace: true });
     } catch (err) {
       setError(err instanceof Error ? err.message : "登录失败");
