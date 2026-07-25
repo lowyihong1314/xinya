@@ -141,6 +141,7 @@ export async function updateClaim(
       | "vendor_contact_number"
       | "purchase_datetime"
       | "event_id"
+      | "event_budget_id"
     >
   >,
 ) {
