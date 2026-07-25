@@ -267,12 +267,9 @@ export function EventTableView(props: {
                         ? [formatEventDateTime(event.datetime), event.location].filter(Boolean).join(" · ") || "暂无时间/地点"
                         : ""}
                     </span>
-                    <span style={linkedHeadLabelStyle}>关联报名表</span>
                     {props.selectedEventForm ? (
                       <LinkedFormHeadChip event={event} form={props.selectedEventForm} onOpen={() => props.onOpenFormContent(props.selectedEventForm!.id)} />
-                    ) : (
-                      <span style={mutedStyle}>未关联</span>
-                    )}
+                    ) : null}
                   </div>
                 </div>
               </div>
@@ -848,10 +845,10 @@ const pageStyle: CSSProperties = { display: "grid", gap: "16px" };
 const panelStyle: CSSProperties = { borderRadius: "12px", background: "var(--x-color-panel)", border: "1px solid var(--x-color-line)", boxShadow: "0 1px 2px var(--x-color-shadow-soft)", overflow: "hidden" };
 
 function toolbarStyle(isMobile: boolean): CSSProperties {
-  return { display: "flex", justifyContent: "space-between", alignItems: isMobile ? "stretch" : "flex-start", gap: "12px", flexWrap: "wrap", flexDirection: isMobile ? "column" : "row", padding: "16px 18px", borderBottom: "1px solid var(--x-color-line-soft)", background: "var(--x-color-panel-alt)" };
+  return { display: "flex", justifyContent: "space-between", alignItems: isMobile ? "stretch" : "flex-start", gap: "10px", flexWrap: "wrap", flexDirection: isMobile ? "column" : "row", padding: "12px 16px", borderBottom: "1px solid var(--x-color-line-soft)", background: "var(--x-color-panel-alt)" };
 }
 function headerStyle(isMobile: boolean): CSSProperties {
-  return { display: "flex", justifyContent: "space-between", alignItems: isMobile ? "stretch" : "flex-start", gap: "12px", flexWrap: "wrap", flexDirection: isMobile ? "column" : "row", padding: "16px 18px", borderBottom: "1px solid var(--x-color-line-soft)", background: "var(--x-color-panel-alt)" };
+  return { display: "flex", justifyContent: "space-between", alignItems: isMobile ? "stretch" : "flex-start", gap: "10px", flexWrap: "wrap", flexDirection: isMobile ? "column" : "row", padding: "12px 16px", borderBottom: "1px solid var(--x-color-line-soft)", background: "var(--x-color-panel-alt)" };
 }
 const headerLeftStyle: CSSProperties = { display: "flex", gap: "12px", alignItems: "flex-start" };
 function headerRightStyle(isMobile: boolean): CSSProperties {
@@ -869,14 +866,13 @@ const searchInputStyle: CSSProperties = { flex: "1 1 220px", minHeight: "34px", 
 const selectStyle: CSSProperties = { minHeight: "34px", padding: "7px 10px", borderRadius: "8px", border: "1px solid var(--x-color-line)", background: "var(--x-color-panel)", color: "var(--x-color-ink)", fontSize: "13px", boxSizing: "border-box" };
 
 const tabBarWrapStyle: CSSProperties = { padding: "10px 14px", borderBottom: "1px solid var(--x-color-line-soft)", overflowX: "auto" };
-const linkedHeadRowStyle: CSSProperties = { display: "flex", alignItems: "center", gap: "8px", flexWrap: "wrap", marginTop: "8px" };
-const linkedHeadLabelStyle: CSSProperties = { fontSize: "11.5px", fontWeight: 800, letterSpacing: "0.04em", color: "var(--x-color-ink-muted)", textTransform: "uppercase" };
-const headChipStyle: CSSProperties = { display: "inline-flex", alignItems: "center", gap: "2px", padding: "3px 3px 3px 4px", borderRadius: "999px", border: "1px solid var(--x-color-line)", background: "var(--x-color-panel-alt)" };
-const headChipMainStyle: CSSProperties = { display: "inline-flex", alignItems: "center", gap: "7px", padding: "1px 4px 1px 1px", border: "none", background: "transparent", color: "var(--x-color-ink)", cursor: "pointer", maxWidth: "240px" };
-const headPosterStyle: CSSProperties = { width: 28, height: 38, objectFit: "cover", borderRadius: "6px", border: "1px solid var(--x-color-line-soft)", display: "block", flexShrink: 0 };
-const headPosterPlaceholderStyle: CSSProperties = { width: 28, height: 38, display: "grid", placeItems: "center", borderRadius: "6px", background: "var(--x-color-panel)", border: "1px solid var(--x-color-line-soft)", color: "var(--x-color-ink-muted)", fontSize: "12px", flexShrink: 0 };
-const headChipNameStyle: CSSProperties = { fontSize: "12.5px", fontWeight: 700, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" };
-const headChipOpenStyle: CSSProperties = { flexShrink: 0, width: 22, height: 22, borderRadius: "999px", border: "none", background: "transparent", color: "var(--x-color-accent-strong)", fontSize: "13px", fontWeight: 800, cursor: "pointer" };
+const linkedHeadRowStyle: CSSProperties = { display: "flex", alignItems: "center", gap: "6px", flexWrap: "wrap", marginTop: "5px" };
+const headChipStyle: CSSProperties = { display: "inline-flex", alignItems: "center", gap: "1px", padding: "2px 2px 2px 3px", borderRadius: "999px", border: "1px solid var(--x-color-line)", background: "var(--x-color-panel-alt)" };
+const headChipMainStyle: CSSProperties = { display: "inline-flex", alignItems: "center", gap: "6px", padding: "0 3px 0 0", border: "none", background: "transparent", color: "var(--x-color-ink)", cursor: "pointer", maxWidth: "160px" };
+const headPosterStyle: CSSProperties = { width: 20, height: 27, objectFit: "cover", borderRadius: "5px", border: "1px solid var(--x-color-line-soft)", display: "block", flexShrink: 0 };
+const headPosterPlaceholderStyle: CSSProperties = { width: 20, height: 27, display: "grid", placeItems: "center", borderRadius: "5px", background: "var(--x-color-panel)", border: "1px solid var(--x-color-line-soft)", color: "var(--x-color-ink-muted)", fontSize: "10px", flexShrink: 0 };
+const headChipNameStyle: CSSProperties = { fontSize: "12px", fontWeight: 700, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" };
+const headChipOpenStyle: CSSProperties = { flexShrink: 0, width: 18, height: 18, borderRadius: "999px", border: "none", background: "transparent", color: "var(--x-color-accent-strong)", fontSize: "12px", fontWeight: 800, cursor: "pointer" };
 const tabBarStyle: CSSProperties = { display: "flex", gap: "6px", flexWrap: "wrap" };
 const tabStyle: CSSProperties = { display: "inline-flex", alignItems: "center", gap: "8px", padding: "8px 14px", borderRadius: "8px", border: "1px solid transparent", background: "transparent", color: "var(--x-color-ink-muted)", fontWeight: 600, fontSize: "13px", cursor: "pointer", whiteSpace: "nowrap" };
 const tabActiveStyle: CSSProperties = { ...tabStyle, border: "1px solid var(--x-color-accent-border)", background: "var(--x-color-panel)", color: "var(--x-color-accent-strong)", boxShadow: "0 1px 2px var(--x-color-shadow-soft)" };

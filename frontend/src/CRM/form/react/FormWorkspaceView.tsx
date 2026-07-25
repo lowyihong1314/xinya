@@ -280,7 +280,6 @@ export function FormWorkspaceView(props: {
                 {selectedForm ? (
                   <div style={linkedHeadRowStyle}>
                     <span style={mutedStyle}>截止 {selectedForm.expired || "-"} · 成员 {selectedForm.member_count ?? (selectedForm.members || []).length}</span>
-                    <span style={linkedHeadLabelStyle}>关联活动</span>
                     {(selectedForm.events || []).map((event) => (
                       <LinkedEventHeadChip
                         key={event.id}
@@ -1442,10 +1441,10 @@ const pageStyle: CSSProperties = { display: "grid", gap: "16px" };
 const panelStyle: CSSProperties = { borderRadius: "12px", background: "var(--x-color-panel)", border: "1px solid var(--x-color-line)", boxShadow: "0 1px 2px var(--x-color-shadow-soft)", overflow: "hidden" };
 
 function toolbarStyle(isMobile: boolean): CSSProperties {
-  return { display: "flex", justifyContent: "space-between", alignItems: isMobile ? "stretch" : "flex-start", gap: "12px", flexWrap: "wrap", flexDirection: isMobile ? "column" : "row", padding: "16px 18px", borderBottom: "1px solid var(--x-color-line-soft)", background: "var(--x-color-panel-alt)" };
+  return { display: "flex", justifyContent: "space-between", alignItems: isMobile ? "stretch" : "flex-start", gap: "10px", flexWrap: "wrap", flexDirection: isMobile ? "column" : "row", padding: "12px 16px", borderBottom: "1px solid var(--x-color-line-soft)", background: "var(--x-color-panel-alt)" };
 }
 function headerStyle(isMobile: boolean): CSSProperties {
-  return { display: "flex", justifyContent: "space-between", alignItems: isMobile ? "stretch" : "flex-start", gap: "12px", flexWrap: "wrap", flexDirection: isMobile ? "column" : "row", padding: "16px 18px", borderBottom: "1px solid var(--x-color-line-soft)", background: "var(--x-color-panel-alt)" };
+  return { display: "flex", justifyContent: "space-between", alignItems: isMobile ? "stretch" : "flex-start", gap: "10px", flexWrap: "wrap", flexDirection: isMobile ? "column" : "row", padding: "12px 16px", borderBottom: "1px solid var(--x-color-line-soft)", background: "var(--x-color-panel-alt)" };
 }
 const headerLeftStyle: CSSProperties = { display: "flex", gap: "12px", alignItems: "flex-start" };
 function headerRightStyle(isMobile: boolean): CSSProperties {
@@ -1564,15 +1563,14 @@ const fieldStyle: CSSProperties = { display: "grid", gap: "4px" };
 const toggleGridStyle: CSSProperties = { display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(160px, 1fr))", gap: "6px" };
 const configToggleStyle = (checked: boolean): CSSProperties => ({ display: "flex", gap: "6px", alignItems: "center", padding: "8px 10px", borderRadius: "8px", border: checked ? "1px solid var(--x-color-accent-border)" : "1px solid var(--x-color-line-soft)", background: checked ? "var(--x-color-accent-tint)" : "var(--x-color-panel-alt)", color: "var(--x-color-ink)", fontSize: "13px", fontWeight: 600 });
 
-const linkedHeadRowStyle: CSSProperties = { display: "flex", alignItems: "center", gap: "8px", flexWrap: "wrap", marginTop: "8px" };
-const linkedHeadLabelStyle: CSSProperties = { fontSize: "11.5px", fontWeight: 800, letterSpacing: "0.04em", color: "var(--x-color-ink-muted)", textTransform: "uppercase" };
-const linkedAddBtnStyle: CSSProperties = { padding: "5px 11px", borderRadius: "999px", border: "1px dashed var(--x-color-accent-border)", background: "var(--x-color-panel)", color: "var(--x-color-accent-strong)", fontSize: "12px", fontWeight: 700, cursor: "pointer", whiteSpace: "nowrap" };
-const headChipStyle: CSSProperties = { display: "inline-flex", alignItems: "center", gap: "2px", padding: "3px 3px 3px 4px", borderRadius: "999px", border: "1px solid var(--x-color-line)", background: "var(--x-color-panel-alt)" };
-const headChipMainStyle: CSSProperties = { display: "inline-flex", alignItems: "center", gap: "7px", padding: "1px 4px 1px 1px", border: "none", background: "transparent", color: "var(--x-color-ink)", cursor: "pointer", maxWidth: "230px" };
-const headPosterStyle: CSSProperties = { width: 28, height: 38, objectFit: "cover", borderRadius: "6px", border: "1px solid var(--x-color-line-soft)", display: "block", flexShrink: 0 };
-const headPosterPlaceholderStyle: CSSProperties = { width: 28, height: 38, display: "grid", placeItems: "center", borderRadius: "6px", background: "var(--x-color-panel)", border: "1px solid var(--x-color-line-soft)", color: "var(--x-color-ink-muted)", fontSize: "12px", flexShrink: 0 };
-const headChipNameStyle: CSSProperties = { fontSize: "12.5px", fontWeight: 700, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" };
-const headChipRemoveStyle: CSSProperties = { flexShrink: 0, width: 20, height: 20, borderRadius: "999px", border: "none", background: "transparent", color: "var(--x-color-ink-muted)", fontSize: "15px", lineHeight: 1, cursor: "pointer" };
+const linkedHeadRowStyle: CSSProperties = { display: "flex", alignItems: "center", gap: "6px", flexWrap: "wrap", marginTop: "5px" };
+const linkedAddBtnStyle: CSSProperties = { padding: "3px 9px", borderRadius: "999px", border: "1px dashed var(--x-color-accent-border)", background: "var(--x-color-panel)", color: "var(--x-color-accent-strong)", fontSize: "11.5px", fontWeight: 700, cursor: "pointer", whiteSpace: "nowrap" };
+const headChipStyle: CSSProperties = { display: "inline-flex", alignItems: "center", gap: "1px", padding: "2px 2px 2px 3px", borderRadius: "999px", border: "1px solid var(--x-color-line)", background: "var(--x-color-panel-alt)" };
+const headChipMainStyle: CSSProperties = { display: "inline-flex", alignItems: "center", gap: "6px", padding: "0 3px 0 0", border: "none", background: "transparent", color: "var(--x-color-ink)", cursor: "pointer", maxWidth: "160px" };
+const headPosterStyle: CSSProperties = { width: 20, height: 27, objectFit: "cover", borderRadius: "5px", border: "1px solid var(--x-color-line-soft)", display: "block", flexShrink: 0 };
+const headPosterPlaceholderStyle: CSSProperties = { width: 20, height: 27, display: "grid", placeItems: "center", borderRadius: "5px", background: "var(--x-color-panel)", border: "1px solid var(--x-color-line-soft)", color: "var(--x-color-ink-muted)", fontSize: "10px", flexShrink: 0 };
+const headChipNameStyle: CSSProperties = { fontSize: "12px", fontWeight: 700, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" };
+const headChipRemoveStyle: CSSProperties = { flexShrink: 0, width: 18, height: 18, borderRadius: "999px", border: "none", background: "transparent", color: "var(--x-color-ink-muted)", fontSize: "14px", lineHeight: 1, cursor: "pointer" };
 
 const urlBoxStyle: CSSProperties = { padding: "10px 12px", borderRadius: "8px", background: "var(--x-color-panel-alt)", border: "1px solid var(--x-color-line-soft)", fontFamily: "var(--x-font-mono)", fontSize: "12.5px", wordBreak: "break-all" };
 function publicGridStyle(isMobile: boolean): CSSProperties {
