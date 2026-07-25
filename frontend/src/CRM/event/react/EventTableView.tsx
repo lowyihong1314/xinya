@@ -188,8 +188,8 @@ export function EventTableView(props: {
           <>
             <div style={toolbarStyle(isMobile)}>
               <div>
-                <div style={eyebrowStyle}>CRM / 活动</div>
-                <h3 style={panelTitleStyle}>创建活动</h3>
+                <div style={eyebrowStyle}>{props.buddhistOnly ? "CRM / 长期活动" : "CRM / 活动"}</div>
+                <h3 style={panelTitleStyle}>{props.buddhistOnly ? "佛学班活动" : "创建活动"}</h3>
                 <div style={mutedStyle}>共 {props.events.length} 个活动</div>
               </div>
               <div style={headerRightStyle(isMobile)}>

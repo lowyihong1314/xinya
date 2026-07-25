@@ -20,7 +20,12 @@ export function CRMPage() {
   const [expandedGroups, setExpandedGroups] = useState<Record<string, boolean>>({});
   const searchParams = new URLSearchParams(location.search);
   const isMobileHome = isMobile && location.pathname === "/crm/home";
-  const activeModule = CRM_MODULES.find((module) => isModulePathActive(location.pathname, module.key)) ?? null;
+  // 佛学班活动入口：event_table + ?event_type=buddhist —— 归「长期活动」，不与「创建活动」混淆。
+  const isBuddhistEvents =
+    isModulePathActive(location.pathname, "event_table") && searchParams.get("event_type") === "buddhist";
+  const activeModule = isBuddhistEvents
+    ? CRM_MODULES.find((module) => module.key === "permanent_registration") ?? null
+    : CRM_MODULES.find((module) => isModulePathActive(location.pathname, module.key)) ?? null;
   const loginRedirectPath = `${location.pathname}${location.search}`;
 
   if (!isAuthenticated) {
@@ -59,11 +64,12 @@ export function CRMPage() {
             const groupTitle = isSpecialEvent ? "特别活动" : module.title;
             const groupIcon = isSpecialEvent ? "fas fa-star" : module.icon;
             const active = isSpecialEvent
-              ? SPECIAL_EVENT_MODULE_KEYS.some((key) => isModulePathActive(location.pathname, key))
+              ? SPECIAL_EVENT_MODULE_KEYS.some((key) => isModulePathActive(location.pathname, key)) && !isBuddhistEvents
               : isModulePathActive(location.pathname, module.key) ||
-                (module.key === "dharma_event" && isModulePathActive(location.pathname, "ylp_board"));
+                (module.key === "dharma_event" && isModulePathActive(location.pathname, "ylp_board")) ||
+                (module.key === "permanent_registration" && isBuddhistEvents);
             const children = isSpecialEvent
-              ? getSpecialEventChildren(location.pathname)
+              ? getSpecialEventChildren(location.pathname, isBuddhistEvents)
               : getSidebarChildren(module.key, searchParams, active, location.pathname);
             const hasChildren = children.length > 0;
             const expanded = hasChildren && (active || Boolean(expandedGroups[groupKey]));
@@ -633,7 +639,7 @@ const SPECIAL_EVENT_CHILD_ICONS: Partial<Record<CRMModuleKey, string>> = {
 };
 
 // 「特别活动」分组：把 创建活动 + 报名表格 两个模块作为子项，各自链接到自己的路由。
-function getSpecialEventChildren(pathname: string): SidebarChild[] {
+function getSpecialEventChildren(pathname: string, buddhistEvents: boolean): SidebarChild[] {
   return SPECIAL_EVENT_MODULE_KEYS.map((key) => {
     const module = CRM_MODULES.find((item) => item.key === key);
     return {
@@ -642,7 +648,8 @@ function getSpecialEventChildren(pathname: string): SidebarChild[] {
       icon: SPECIAL_EVENT_CHILD_ICONS[key] ?? module?.icon ?? "fa-solid fa-circle",
       description: module?.description ?? "",
       to: buildCRMModulePath(key),
-      active: isModulePathActive(pathname, key),
+      // 佛学班活动路由不算「创建活动」（它归到长期活动）。
+      active: isModulePathActive(pathname, key) && !(key === "event_table" && buddhistEvents),
     };
   });
 }
@@ -732,6 +739,8 @@ export function getSidebarChildren(
   }
 
   if (moduleKey === "permanent_registration") {
+    const isBuddhist =
+      isModulePathActive(pathname, "event_table") && searchParams.get("event_type") === "buddhist";
     const requestedRegistrationSection = searchParams.get("registration_section");
     const activeRegistrationSection = PERMANENT_REGISTRATION_CHILD_ITEMS.some(
       (item) => item.key === requestedRegistrationSection,
@@ -743,7 +752,7 @@ export function getSidebarChildren(
       ...PERMANENT_REGISTRATION_CHILD_ITEMS.map((item) => ({
         ...item,
         to: buildPathWithParams(registrationPath, { registration_section: item.key }),
-        active: moduleActive && activeRegistrationSection === item.key,
+        active: moduleActive && !isBuddhist && activeRegistrationSection === item.key,
       })),
       {
         key: "buddhist_events",
@@ -751,7 +760,7 @@ export function getSidebarChildren(
         icon: "fa-solid fa-book-open-reader",
         description: "佛学班活动一览（活动表，仅显示佛学班）。",
         to: buildPathWithParams(buildCRMModulePath("event_table"), { event_type: "buddhist" }),
-        active: false,
+        active: isBuddhist,
       },
     ];
   }
