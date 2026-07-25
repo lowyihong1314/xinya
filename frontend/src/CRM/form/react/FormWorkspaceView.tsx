@@ -37,7 +37,6 @@ const TABS: { key: string; label: string; icon: string }[] = [
   { key: "attendance", label: "点名", icon: "fa-solid fa-clipboard-check" },
   { key: "fees", label: "报名费", icon: "fa-solid fa-receipt" },
   { key: "fields", label: "表格内容", icon: "fa-solid fa-list-check" },
-  { key: "events", label: "关联活动", icon: "fa-solid fa-calendar-check" },
   { key: "settings", label: "基本设置", icon: "fa-solid fa-sliders" },
   { key: "public", label: "公开报名页", icon: "fa-solid fa-arrow-up-right-from-square" },
 ];
@@ -291,6 +290,25 @@ export function FormWorkspaceView(props: {
 
           {props.toast ? <div style={props.toast.type === "success" ? successStyle : errorStyle}>{props.toast.text}</div> : null}
 
+          {selectedForm ? (
+            <div style={linkedHeadRowStyle}>
+              <span style={linkedHeadLabelStyle}>关联活动</span>
+              {(selectedForm.events || []).map((event) => (
+                <LinkedEventHeadChip
+                  key={event.id}
+                  event={event}
+                  canEditForms={props.canEditForms}
+                  onOpen={() => props.onOpenEventDetail(event.id)}
+                  onRemove={() => props.onRemoveEvent(event.id)}
+                />
+              ))}
+              {!(selectedForm.events || []).length ? <span style={mutedStyle}>未关联</span> : null}
+              {props.canEditForms ? (
+                <button type="button" style={linkedAddBtnStyle} onClick={props.onPickEvent}>+ 选择活动</button>
+              ) : null}
+            </div>
+          ) : null}
+
           <div style={tabBarWrapStyle}>
             <div style={tabBarStyle}>
               {TABS.map((tab) => (
@@ -385,24 +403,6 @@ export function FormWorkspaceView(props: {
                     onEdit={props.onEditExtraField}
                     onDelete={props.onDeleteExtraField}
                   />
-                </div>
-              ) : null}
-
-              {activeTab === "events" ? (
-                <div style={sectionBodyStyle}>
-                  {props.canEditForms ? (
-                    <div><button type="button" style={btnStyle} onClick={props.onPickEvent}>选择活动</button></div>
-                  ) : null}
-                  {!(selectedForm.events || []).length ? <div style={emptyInlineStyle}>当前未关联活动。</div> : null}
-                  {(selectedForm.events || []).map((event) => (
-                    <LinkedEventCard
-                      key={event.id}
-                      event={event}
-                      canEditForms={props.canEditForms}
-                      onOpen={() => props.onOpenEventDetail(event.id)}
-                      onRemove={() => props.onRemoveEvent(event.id)}
-                    />
-                  ))}
                 </div>
               ) : null}
 
@@ -1330,7 +1330,7 @@ function ExtraFieldPanel({ fields, readOnly, onAdd, onEdit, onDelete }: {
   );
 }
 
-function LinkedEventCard({ event, canEditForms, onOpen, onRemove }: {
+function LinkedEventHeadChip({ event, canEditForms, onOpen, onRemove }: {
   event: FormEvent;
   canEditForms: boolean;
   onOpen: () => void;
@@ -1348,23 +1348,17 @@ function LinkedEventCard({ event, canEditForms, onOpen, onRemove }: {
   }, [event.event_image?.id]);
 
   return (
-    <article style={eventCardStyle}>
-      <button type="button" style={eventCardMainButtonStyle} onClick={onOpen}>
-        <div style={eventPosterWrapStyle}>
-          {imageUrl ? (
-            <CachedImage src={imageUrl} cacheKey={`form-linked-event:${event.id}:${event.event_image?.id || "poster"}`} alt={event.event_name || `活动 #${event.id}`} style={eventPosterStyle} />
-          ) : (
-            <div style={eventPosterPlaceholderStyle}><i className="fa-solid fa-image" aria-hidden="true" /></div>
-          )}
-        </div>
-        <div style={eventCardBodyStyle}>
-          <div style={eventTitleStyle}>{event.event_name || `活动 #${event.id}`}</div>
-          <div style={eventMetaStyle}>{event.datetime || event.purpose || `Event #${event.id}`}</div>
-          <div style={eventOpenHintStyle}>点击进入活动详情</div>
-        </div>
+    <span style={headChipStyle}>
+      <button type="button" style={headChipMainStyle} onClick={onOpen} title="进入活动详情">
+        {imageUrl ? (
+          <CachedImage src={imageUrl} cacheKey={`form-linked-event:${event.id}:${event.event_image?.id || "poster"}`} alt={event.event_name || `活动 #${event.id}`} style={headPosterStyle} />
+        ) : (
+          <span style={headPosterPlaceholderStyle}><i className="fa-solid fa-image" aria-hidden="true" /></span>
+        )}
+        <span style={headChipNameStyle}>{event.event_name || `活动 #${event.id}`}</span>
       </button>
-      {canEditForms ? <button type="button" style={dangerButtonStyle} onClick={onRemove}>移除</button> : null}
-    </article>
+      {canEditForms ? <button type="button" style={headChipRemoveStyle} onClick={onRemove} title="移除关联">×</button> : null}
+    </span>
   );
 }
 
@@ -1571,15 +1565,15 @@ const fieldStyle: CSSProperties = { display: "grid", gap: "4px" };
 const toggleGridStyle: CSSProperties = { display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(160px, 1fr))", gap: "6px" };
 const configToggleStyle = (checked: boolean): CSSProperties => ({ display: "flex", gap: "6px", alignItems: "center", padding: "8px 10px", borderRadius: "8px", border: checked ? "1px solid var(--x-color-accent-border)" : "1px solid var(--x-color-line-soft)", background: checked ? "var(--x-color-accent-tint)" : "var(--x-color-panel-alt)", color: "var(--x-color-ink)", fontSize: "13px", fontWeight: 600 });
 
-const eventCardStyle: CSSProperties = { display: "grid", gridTemplateColumns: "minmax(0, 1fr) auto", gap: "8px", alignItems: "start", padding: "10px", borderRadius: "10px", background: "var(--x-color-panel-alt)", border: "1px solid var(--x-color-line-soft)" };
-const eventCardMainButtonStyle: CSSProperties = { display: "grid", gridTemplateColumns: "minmax(96px, 140px) minmax(0, 1fr)", gap: "10px", width: "100%", padding: 0, border: "none", background: "transparent", color: "var(--x-color-ink)", textAlign: "left", cursor: "pointer" };
-const eventPosterWrapStyle: CSSProperties = { width: "100%", aspectRatio: "4 / 3", minHeight: "96px", overflow: "hidden", borderRadius: "8px", border: "1px solid var(--x-color-line-soft)", background: "var(--x-color-panel)" };
-const eventPosterStyle: CSSProperties = { width: "100%", height: "100%", display: "block", objectFit: "cover" };
-const eventPosterPlaceholderStyle: CSSProperties = { width: "100%", height: "100%", display: "grid", placeItems: "center", color: "var(--x-color-ink-muted)", fontSize: "28px", background: "var(--x-color-panel)" };
-const eventCardBodyStyle: CSSProperties = { minWidth: 0, display: "grid", gap: "5px", alignContent: "start" };
-const eventTitleStyle: CSSProperties = { fontWeight: 700, color: "var(--x-color-ink)" };
-const eventMetaStyle: CSSProperties = { fontSize: "13px", color: "var(--x-color-ink-muted)" };
-const eventOpenHintStyle: CSSProperties = { fontSize: "12px", fontWeight: 700, color: "var(--x-color-accent)" };
+const linkedHeadRowStyle: CSSProperties = { display: "flex", alignItems: "center", gap: "8px", flexWrap: "wrap", padding: "8px 14px", borderBottom: "1px solid var(--x-color-line-soft)" };
+const linkedHeadLabelStyle: CSSProperties = { fontSize: "11.5px", fontWeight: 800, letterSpacing: "0.04em", color: "var(--x-color-ink-muted)", textTransform: "uppercase" };
+const linkedAddBtnStyle: CSSProperties = { padding: "5px 11px", borderRadius: "999px", border: "1px dashed var(--x-color-accent-border)", background: "var(--x-color-panel)", color: "var(--x-color-accent-strong)", fontSize: "12px", fontWeight: 700, cursor: "pointer", whiteSpace: "nowrap" };
+const headChipStyle: CSSProperties = { display: "inline-flex", alignItems: "center", gap: "2px", padding: "3px 3px 3px 4px", borderRadius: "999px", border: "1px solid var(--x-color-line)", background: "var(--x-color-panel-alt)" };
+const headChipMainStyle: CSSProperties = { display: "inline-flex", alignItems: "center", gap: "7px", padding: "1px 4px 1px 1px", border: "none", background: "transparent", color: "var(--x-color-ink)", cursor: "pointer", maxWidth: "230px" };
+const headPosterStyle: CSSProperties = { width: 28, height: 38, objectFit: "cover", borderRadius: "6px", border: "1px solid var(--x-color-line-soft)", display: "block", flexShrink: 0 };
+const headPosterPlaceholderStyle: CSSProperties = { width: 28, height: 38, display: "grid", placeItems: "center", borderRadius: "6px", background: "var(--x-color-panel)", border: "1px solid var(--x-color-line-soft)", color: "var(--x-color-ink-muted)", fontSize: "12px", flexShrink: 0 };
+const headChipNameStyle: CSSProperties = { fontSize: "12.5px", fontWeight: 700, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" };
+const headChipRemoveStyle: CSSProperties = { flexShrink: 0, width: 20, height: 20, borderRadius: "999px", border: "none", background: "transparent", color: "var(--x-color-ink-muted)", fontSize: "15px", lineHeight: 1, cursor: "pointer" };
 
 const urlBoxStyle: CSSProperties = { padding: "10px 12px", borderRadius: "8px", background: "var(--x-color-panel-alt)", border: "1px solid var(--x-color-line-soft)", fontFamily: "var(--x-font-mono)", fontSize: "12.5px", wordBreak: "break-all" };
 function publicGridStyle(isMobile: boolean): CSSProperties {

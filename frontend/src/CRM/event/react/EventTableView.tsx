@@ -1,8 +1,9 @@
-import { useRef, useState, type CSSProperties, type FormEvent, type RefObject } from "react";
+import { useEffect, useRef, useState, type CSSProperties, type FormEvent, type RefObject } from "react";
 
 import { CachedImage } from "../../../components/CachedMedia";
 import { GoogleMapEmbed } from "../../../components/GoogleMapEmbed";
 import { GooglePlaceInput } from "./GooglePlaceInput";
+import { smartImageURL } from "../../../js/get_img";
 import { openPreviewModal } from "../../../js/attachment_preview";
 import { downloadUrlOrShare } from "../../../js/browserActions";
 import { show_alert } from "../../../js/show_alert";
@@ -35,7 +36,6 @@ const TABS: { key: string; label: string; icon: string }[] = [
   { key: "settings", label: "基本设置", icon: "fa-solid fa-sliders" },
   { key: "media", label: "海报与附件", icon: "fa-solid fa-image" },
   { key: "organizers", label: "组织者", icon: "fa-solid fa-users" },
-  { key: "form", label: "关联报名表", icon: "fa-solid fa-clipboard-list" },
   { key: "checkin", label: "签到", icon: "fa-solid fa-clipboard-check" },
   { key: "flow", label: "流程", icon: "fa-solid fa-list-ol" },
   { key: "tasks", label: "待办", icon: "fa-solid fa-list-check" },
@@ -280,6 +280,15 @@ export function EventTableView(props: {
               </div>
             </div>
 
+            <div style={linkedHeadRowStyle}>
+              <span style={linkedHeadLabelStyle}>关联报名表</span>
+              {props.selectedEventForm ? (
+                <LinkedFormHeadChip event={event} form={props.selectedEventForm} onOpen={() => props.onOpenFormContent(props.selectedEventForm!.id)} />
+              ) : (
+                <span style={mutedStyle}>未关联</span>
+              )}
+            </div>
+
             <div style={tabBarWrapStyle}>
               <div style={tabBarStyle}>
                 {TABS.map((tab) => (
@@ -319,8 +328,6 @@ export function EventTableView(props: {
                 />
               ) : props.activeTab === "organizers" ? (
                 <OrganizersTab event={event} canEditEvent={canEditEvent} onAddOrganizers={props.onAddOrganizers} />
-              ) : props.activeTab === "form" ? (
-                <LinkedFormTab form={props.selectedEventForm} onOpenFormContent={props.onOpenFormContent} />
               ) : props.activeTab === "checkin" ? (
                 <EventCheckinTab eventId={event.id} isMobile={isMobile} />
               ) : props.activeTab === "flow" ? (
@@ -640,27 +647,40 @@ function OrganizersTab({ event, canEditEvent, onAddOrganizers }: { event: EventR
   );
 }
 
-function LinkedFormTab({ form, onOpenFormContent }: { form: FormRecord | null; onOpenFormContent: (formId: number) => void }) {
-  if (!form) {
-    return <div style={emptyStyle}>当前活动还没有绑定对应的报名表格。</div>;
-  }
+function LinkedFormHeadChip({ event, form, onOpen }: { event: EventRecord | null; form: FormRecord; onOpen: () => void }) {
+  const [imageUrl, setImageUrl] = useState("");
+  useEffect(() => {
+    let active = true;
+    const imageId = event?.event_image?.id;
+    if (!imageId) {
+      setImageUrl("");
+      return () => { active = false; };
+    }
+    void smartImageURL(imageId, "cache")
+      .then((url) => { if (active) setImageUrl(url && !url.includes("broken-image.png") ? url : ""); })
+      .catch(() => { if (active) setImageUrl(""); });
+    return () => { active = false; };
+  }, [event?.event_image?.id]);
+
   return (
-    <div style={sectionBodyStyle}>
-      <div style={attachmentCardStyle}>
-        <div style={attachmentMetaWrapStyle}>
-          <div style={attachmentTitleStyle}>{form.title || `报名表 #${form.id}`}</div>
-          <div style={attachmentSubtitleStyle}>报名表格 ID #{form.id}</div>
-        </div>
-        <div style={attachmentActionRowStyle}>
-          <button type="button" style={primaryButtonStyle} onClick={() => onOpenFormContent(form.id)}>
-            查看报名内容
-          </button>
-          <button type="button" style={btnStyle} onClick={() => window.open(`/api/form/index/${form.id}`, "_blank", "noopener,noreferrer")}>
-            打开报名表格
-          </button>
-        </div>
-      </div>
-    </div>
+    <span style={headChipStyle}>
+      <button type="button" style={headChipMainStyle} onClick={onOpen} title="查看报名内容">
+        {imageUrl ? (
+          <CachedImage src={imageUrl} cacheKey={`event-linked-form:${form.id}:${event?.event_image?.id || "poster"}`} alt={form.title || `报名表 #${form.id}`} style={headPosterStyle} />
+        ) : (
+          <span style={headPosterPlaceholderStyle}><i className="fa-solid fa-clipboard-list" aria-hidden="true" /></span>
+        )}
+        <span style={headChipNameStyle}>{form.title || `报名表 #${form.id}`}</span>
+      </button>
+      <button
+        type="button"
+        style={headChipOpenStyle}
+        onClick={() => window.open(`/api/form/index/${form.id}`, "_blank", "noopener,noreferrer")}
+        title="打开报名表格"
+      >
+        ↗
+      </button>
+    </span>
   );
 }
 
@@ -850,6 +870,14 @@ const searchInputStyle: CSSProperties = { flex: "1 1 220px", minHeight: "34px", 
 const selectStyle: CSSProperties = { minHeight: "34px", padding: "7px 10px", borderRadius: "8px", border: "1px solid var(--x-color-line)", background: "var(--x-color-panel)", color: "var(--x-color-ink)", fontSize: "13px", boxSizing: "border-box" };
 
 const tabBarWrapStyle: CSSProperties = { padding: "10px 14px", borderBottom: "1px solid var(--x-color-line-soft)", overflowX: "auto" };
+const linkedHeadRowStyle: CSSProperties = { display: "flex", alignItems: "center", gap: "8px", flexWrap: "wrap", padding: "8px 14px", borderBottom: "1px solid var(--x-color-line-soft)" };
+const linkedHeadLabelStyle: CSSProperties = { fontSize: "11.5px", fontWeight: 800, letterSpacing: "0.04em", color: "var(--x-color-ink-muted)", textTransform: "uppercase" };
+const headChipStyle: CSSProperties = { display: "inline-flex", alignItems: "center", gap: "2px", padding: "3px 3px 3px 4px", borderRadius: "999px", border: "1px solid var(--x-color-line)", background: "var(--x-color-panel-alt)" };
+const headChipMainStyle: CSSProperties = { display: "inline-flex", alignItems: "center", gap: "7px", padding: "1px 4px 1px 1px", border: "none", background: "transparent", color: "var(--x-color-ink)", cursor: "pointer", maxWidth: "240px" };
+const headPosterStyle: CSSProperties = { width: 28, height: 38, objectFit: "cover", borderRadius: "6px", border: "1px solid var(--x-color-line-soft)", display: "block", flexShrink: 0 };
+const headPosterPlaceholderStyle: CSSProperties = { width: 28, height: 38, display: "grid", placeItems: "center", borderRadius: "6px", background: "var(--x-color-panel)", border: "1px solid var(--x-color-line-soft)", color: "var(--x-color-ink-muted)", fontSize: "12px", flexShrink: 0 };
+const headChipNameStyle: CSSProperties = { fontSize: "12.5px", fontWeight: 700, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" };
+const headChipOpenStyle: CSSProperties = { flexShrink: 0, width: 22, height: 22, borderRadius: "999px", border: "none", background: "transparent", color: "var(--x-color-accent-strong)", fontSize: "13px", fontWeight: 800, cursor: "pointer" };
 const tabBarStyle: CSSProperties = { display: "flex", gap: "6px", flexWrap: "wrap" };
 const tabStyle: CSSProperties = { display: "inline-flex", alignItems: "center", gap: "8px", padding: "8px 14px", borderRadius: "8px", border: "1px solid transparent", background: "transparent", color: "var(--x-color-ink-muted)", fontWeight: 600, fontSize: "13px", cursor: "pointer", whiteSpace: "nowrap" };
 const tabActiveStyle: CSSProperties = { ...tabStyle, border: "1px solid var(--x-color-accent-border)", background: "var(--x-color-panel)", color: "var(--x-color-accent-strong)", boxShadow: "0 1px 2px var(--x-color-shadow-soft)" };
