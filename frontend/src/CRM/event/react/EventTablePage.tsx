@@ -79,8 +79,8 @@ export function EventTablePage() {
       onSelectTab={selectTab}
       onRefresh={() => void actions.loadEvents()}
       onAddOrganizers={() => void actions.addOrganizers()}
-      onCreateEvent={async (payload) => {
-        const id = await actions.createNewEvent(payload);
+      onCreateEvent={async (payload, media) => {
+        const id = await actions.createNewEvent(payload, media);
         if (id) selectEvent(id);
         return Boolean(id);
       }}

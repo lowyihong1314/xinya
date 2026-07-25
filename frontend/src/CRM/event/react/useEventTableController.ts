@@ -311,15 +311,32 @@ export function useEventTableController(options?: { preferredEventId?: number | 
     }
   }
 
-  async function createNewEvent(payload: EventCreatePayload) {
+  async function createNewEvent(
+    payload: EventCreatePayload,
+    media?: { poster?: File | null; brochure?: File | null; attachments?: File[] },
+  ) {
     await flushPendingEventChanges();
     setCreating(true);
     try {
       const response = await createEvent(payload);
+      const newId = response.data?.id ?? null;
+      let mediaOk = true;
+      if (newId && media) {
+        try {
+          if (media.poster) await uploadEventPoster(newId, media.poster);
+          if (media.brochure) await uploadEventBrochure(newId, media.brochure);
+          for (const file of media.attachments || []) {
+            if (file) await uploadEventFile(newId, file);
+          }
+        } catch {
+          mediaOk = false;
+          setToast({ type: "error", text: "活动已创建，但部分文件上传失败，可在活动内重试" });
+        }
+      }
       await refreshEvents();
       setQuery("");
-      setToast({ type: "success", text: "活动已创建" });
-      return response.data?.id ?? null;
+      if (mediaOk) setToast({ type: "success", text: "活动已创建" });
+      return newId;
     } catch (err) {
       setToast({ type: "error", text: err instanceof Error ? err.message : "创建失败" });
       return null;

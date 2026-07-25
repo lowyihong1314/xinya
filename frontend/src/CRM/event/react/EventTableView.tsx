@@ -30,6 +30,9 @@ type CreateDraft = {
   type: string;
   target: string;
   purpose: string;
+  poster: File | null;
+  brochure: File | null;
+  attachments: File[];
 };
 
 const TABS: { key: string; label: string; icon: string }[] = [
@@ -85,7 +88,10 @@ export function EventTableView(props: {
   onSelectTab: (tab: string) => void;
   onRefresh: () => void;
   onAddOrganizers: () => void;
-  onCreateEvent: (payload: EventCreatePayload) => Promise<boolean>;
+  onCreateEvent: (
+    payload: EventCreatePayload,
+    media?: { poster?: File | null; brochure?: File | null; attachments?: File[] },
+  ) => Promise<boolean>;
   onUpdateEvent: (patch: EventMutationPayload) => void;
   onUploadPoster: (file: File) => void;
   onUploadBrochure: (file: File) => void;
@@ -128,6 +134,10 @@ export function EventTableView(props: {
       type: draft.type.trim(),
       target: draft.target.trim() || undefined,
       purpose: draft.purpose.trim() || undefined,
+    }, {
+      poster: draft.poster,
+      brochure: draft.brochure,
+      attachments: draft.attachments,
     });
     if (success) {
       setCreateOpen(false);
@@ -406,7 +416,17 @@ export function EventTableView(props: {
               </label>
               <label style={fieldStyle}>
                 <span style={factLabelStyle}>类型 *</span>
-                <input list="event-type-options" style={factInputStyle} value={draft.type} placeholder="必填" onChange={(e) => setDraft((p) => ({ ...p, type: e.target.value }))} />
+                <select
+                  value={eventTypeChoices.includes(draft.type) ? draft.type : ""}
+                  style={factInputStyle}
+                  onChange={(e) => { if (e.target.value) setDraft((p) => ({ ...p, type: e.target.value })); }}
+                >
+                  <option value="">— 从列表选择 —</option>
+                  {eventTypeChoices.map((t) => (
+                    <option key={t} value={t}>{t}</option>
+                  ))}
+                </select>
+                <input style={factInputStyle} value={draft.type} placeholder="或直接输入新类型（必填）" onChange={(e) => setDraft((p) => ({ ...p, type: e.target.value }))} />
               </label>
               <label style={fieldStyle}>
                 <span style={factLabelStyle}>对象</span>
@@ -415,6 +435,21 @@ export function EventTableView(props: {
               <label style={{ ...fieldStyle, gridColumn: "1 / -1" }}>
                 <span style={factLabelStyle}>活动说明</span>
                 <textarea style={{ ...factInputStyle, minHeight: "120px", resize: "vertical" }} value={draft.purpose} onChange={(e) => setDraft((p) => ({ ...p, purpose: e.target.value }))} />
+              </label>
+              <label style={{ ...fieldStyle, gridColumn: "1 / -1" }}>
+                <span style={factLabelStyle}>海报（可选）</span>
+                <input type="file" accept="image/*" style={factInputStyle} onChange={(e) => setDraft((p) => ({ ...p, poster: e.target.files?.[0] || null }))} />
+                {draft.poster ? <span style={createFileHintStyle}>已选：{draft.poster.name}</span> : null}
+              </label>
+              <label style={{ ...fieldStyle, gridColumn: "1 / -1" }}>
+                <span style={factLabelStyle}>简章（可选）</span>
+                <input type="file" accept="image/*,application/pdf" style={factInputStyle} onChange={(e) => setDraft((p) => ({ ...p, brochure: e.target.files?.[0] || null }))} />
+                {draft.brochure ? <span style={createFileHintStyle}>已选：{draft.brochure.name}</span> : null}
+              </label>
+              <label style={{ ...fieldStyle, gridColumn: "1 / -1" }}>
+                <span style={factLabelStyle}>附件（可选，可多选）</span>
+                <input type="file" multiple style={factInputStyle} onChange={(e) => setDraft((p) => ({ ...p, attachments: Array.from(e.target.files || []) }))} />
+                {draft.attachments.length ? <span style={createFileHintStyle}>已选 {draft.attachments.length} 个文件</span> : null}
               </label>
               <div style={modalFooterStyle}>
                 <button type="button" style={btnStyle} disabled={props.creating} onClick={() => setCreateOpen(false)}>
@@ -811,6 +846,9 @@ function createDefaultDraft(): CreateDraft {
     type: "",
     target: "",
     purpose: "",
+    poster: null,
+    brochure: null,
+    attachments: [],
   };
 }
 
@@ -882,6 +920,7 @@ function filterRowStyle(isMobile: boolean): CSSProperties {
 const searchInputStyle: CSSProperties = { flex: "1 1 220px", minHeight: "34px", padding: "7px 10px", borderRadius: "8px", border: "1px solid var(--x-color-line)", background: "var(--x-color-panel)", color: "var(--x-color-ink)", fontSize: "13px", boxSizing: "border-box" };
 const selectStyle: CSSProperties = { minHeight: "34px", padding: "7px 10px", borderRadius: "8px", border: "1px solid var(--x-color-line)", background: "var(--x-color-panel)", color: "var(--x-color-ink)", fontSize: "13px", boxSizing: "border-box" };
 const checkLabelStyle: CSSProperties = { display: "inline-flex", alignItems: "center", gap: "5px", fontSize: "12.5px", color: "var(--x-color-ink)", whiteSpace: "nowrap", cursor: "pointer", userSelect: "none" };
+const createFileHintStyle: CSSProperties = { fontSize: "11.5px", color: "var(--x-color-success)", fontWeight: 600 };
 
 const tabBarWrapStyle: CSSProperties = { padding: "10px 14px", borderBottom: "1px solid var(--x-color-line-soft)", overflowX: "auto" };
 const linkedHeadRowStyle: CSSProperties = { display: "flex", alignItems: "center", gap: "6px", flexWrap: "wrap", marginTop: "5px" };
