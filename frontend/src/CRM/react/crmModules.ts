@@ -87,7 +87,7 @@ export const CRM_MODULES: CRMModuleSpec[] = [
   },
   {
     key: 'permanent_registration',
-    title: '长期活动表格',
+    title: '长期活动',
     icon: 'fas fa-id-card-clip',
     description: '会员与青少年班等长期活动报名表格工作台。',
     Component: LongOpenRegistrationFormPage,
