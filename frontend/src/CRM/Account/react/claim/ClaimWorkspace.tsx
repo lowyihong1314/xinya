@@ -956,6 +956,8 @@ function getClaimSortValue(
       return Number(claim.amount ?? 0);
     case "department":
       return claim.department_name || "";
+    case "event":
+      return claim.event_name || "";
     case "purpose":
       return claim.purpose || "";
     case "id":

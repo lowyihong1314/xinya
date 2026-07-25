@@ -896,9 +896,17 @@ def _claim_status_from_request(req):
     return "pending"
 
 
+def _strip_acct_dept(text):
+    """去掉用途开头的「【做账分配：xxx】」前缀（做账分配不进用途/支出类别）。"""
+    if not text:
+        return ""
+    return re.sub(r"^【做账分配：[^】]*】\s*", "", text).strip()
+
+
 def _event_claim_rows(event_id):
     """把该活动的报销（按 event_id）作为只读支出行拼进预算：
-    锁定不可编辑，按报销状态上色（pending 绿 / approved 蓝 / rejected 红）。"""
+    锁定不可编辑，按报销状态上色（pending 绿 / approved 蓝 / rejected 红）。
+    支出类别 = 报销用途（去掉做账分配前缀）。"""
     reqs = (
         ReimbursementRequest.query
         .filter_by(event_id=event_id)
@@ -907,7 +915,8 @@ def _event_claim_rows(event_id):
     )
     rows = []
     for r in reqs:
-        label = (r.purpose or r.vendor_name or r.applicant_name or "").strip().splitlines()[0] if (r.purpose or r.vendor_name or r.applicant_name) else ""
+        purpose = _strip_acct_dept(r.purpose)
+        first = (purpose.splitlines()[0].strip() if purpose else "") or (r.vendor_name or "").strip() or (r.applicant_name or "").strip()
         rows.append({
             "id": f"claim-{r.id}",
             "no": 0,
@@ -915,7 +924,7 @@ def _event_claim_rows(event_id):
             "source": "claim",
             "editable": False,
             "locked": True,
-            "category": f"报销 · {label[:40] or ('#' + str(r.id))}",
+            "category": first[:60] or f"报销#{r.id}",
             "budget_amount": None,
             "actual_amount": float(r.amount or 0),
             "remark": r.applicant_name,

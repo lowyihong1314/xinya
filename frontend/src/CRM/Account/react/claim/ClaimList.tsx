@@ -4,6 +4,7 @@ import { apiFetch } from "../../../../js/apiFetch";
 import { TablePagination } from "../../../shared/TablePagination";
 import type { GLSourceEntryRef } from "../gl/api";
 import { sortArrow, sortableThStyle, type SortState } from "../shared/tableSort";
+import { displayPurpose } from "./purpose";
 import type { ApproverUserProfile, ClaimRecord } from "./types";
 
 type ClaimStatusFilter = "all" | "approved" | "unapproved";
@@ -239,7 +240,7 @@ export function ClaimList(props: ClaimListProps) {
                   <th style={sortableThStyle} onClick={() => onSort("je")}>JE{sortArrow(sort, "je")}</th>
                   <th style={sortableThStyle} onClick={() => onSort("applicant")}>申请人{sortArrow(sort, "applicant")}</th>
                   <th style={sortableThStyle} onClick={() => onSort("amount")}>金额{sortArrow(sort, "amount")}</th>
-                  <th style={sortableThStyle} onClick={() => onSort("department")}>部门{sortArrow(sort, "department")}</th>
+                  <th style={sortableThStyle} onClick={() => onSort("event")}>活动{sortArrow(sort, "event")}</th>
                   <th style={sortableThStyle} onClick={() => onSort("purpose")}>用途{sortArrow(sort, "purpose")}</th>
                   <th style={sortableThStyle} onClick={() => onSort("id")}>单号{sortArrow(sort, "id")}</th>
                   <th style={sortableThStyle} onClick={() => onSort("request_date")}>日期{sortArrow(sort, "request_date")}</th>
@@ -264,8 +265,8 @@ export function ClaimList(props: ClaimListProps) {
                       <td>{renderJeCell(jeMap[String(claim.id)])}</td>
                       <td style={cellStrongStyle}>{claim.applicant_name || "未填姓名"}</td>
                       <td style={cellStrongStyle}>RM {safeMoney(claim.amount)}</td>
-                      <td>{claim.department_name || "-"}</td>
-                      <td style={purposeCellStyle} title={claim.purpose || ""}>{claim.purpose || "-"}</td>
+                      <td>{claim.event_name || "-"}</td>
+                      <td style={purposeCellStyle} title={displayPurpose(claim.purpose)}>{displayPurpose(claim.purpose) || "-"}</td>
                       <td style={monoCellStyle}>#{claim.id}</td>
                       <td style={monoCellStyle}>{claim.request_date || "-"}</td>
                       <td>

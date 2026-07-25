@@ -9,6 +9,7 @@ import { showConfirmDialog } from "../../../../js/dialogs";
 import { showEventPicker } from "../../../shared/showEventPicker";
 import { downloadBlobOrShare } from "../../../../js/browserActions";
 import { deleteClaimAttachment, downloadPaymentVoucher, updateClaim, updateClaimEvent, uploadClaimAttachments } from "./api";
+import { displayPurpose } from "./purpose";
 import {
   approverAvatarStyle,
   approverCardStyle,
@@ -496,7 +497,7 @@ export function ClaimDetail({
               {editingClaim ? (
                 <textarea rows={3} style={textareaStyle} value={editDraft.purpose} onChange={(e) => setEditDraft((p) => ({ ...p, purpose: e.target.value }))} />
               ) : (
-                <FieldValue value={claim.purpose || "-"} multiline />
+                <FieldValue value={displayPurpose(claim.purpose) || "-"} multiline />
               )}
             </Field>
 
