@@ -1527,12 +1527,18 @@ def add_fee(form_id, data):
         if not data.get("category") or data.get("amount") is None:
             return jsonify({"status": "error", "message": "类别和金额不能为空"}), 400
 
+        try:
+            age_range_from = _normalize_optional_age_bound(data.get("age_range_from"), "起始年龄")
+            age_range_to = _normalize_optional_age_bound(data.get("age_range_to"), "结束年龄")
+        except ValueError as exc:
+            return jsonify({"status": "error", "message": str(exc)}), 400
+
         fee = RegistrationFee(
             regis_form_id=form.id,
             fee_scope=FORM_FEE_SCOPE,
             category=data.get("category"),
-            age_range_from=data.get("age_range_from"),
-            age_range_to=data.get("age_range_to"),
+            age_range_from=age_range_from,
+            age_range_to=age_range_to,
             amount=data.get("amount"),
             description=data.get("description"),
             image_path=data.get("image_path"),
@@ -1551,9 +1557,16 @@ def edit_fee(fee_id, data):
     try:
         fee = RegistrationFee.query.filter_by(id=fee_id, fee_scope=FORM_FEE_SCOPE).first_or_404()
         old_image_path = fee.image_path
-        for key in ["category", "age_range_from", "age_range_to", "amount", "description", "image_path"]:
+        for key in ["category", "amount", "description", "image_path"]:
             if key in data:
                 setattr(fee, key, data[key])
+        try:
+            if "age_range_from" in data:
+                fee.age_range_from = _normalize_optional_age_bound(data["age_range_from"], "起始年龄")
+            if "age_range_to" in data:
+                fee.age_range_to = _normalize_optional_age_bound(data["age_range_to"], "结束年龄")
+        except ValueError as exc:
+            return jsonify({"status": "error", "message": str(exc)}), 400
         if "image_path" in data and old_image_path and old_image_path != fee.image_path:
             _delete_register_fee_image(old_image_path)
         db.session.commit()
