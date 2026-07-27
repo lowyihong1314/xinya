@@ -74,6 +74,24 @@ git commit -m "describe your changes"
 git push origin v2
 ```
 
+## 上传文件放哪里（重要）
+
+所有用户 / 后台上传的文件一律存 `DATA_ROOT`（`app/paths.py`，线上是
+`/srv/flaskapp/xinya/database`，可用环境变量 `XINYA_DATA_ROOT` 覆盖）：
+
+```python
+from app.paths import DATA_ROOT, data_media_url
+
+TARGET_DIR = DATA_ROOT / "my_feature"          # 保存目录
+url = data_media_url("my_feature", filename)   # 存进 DB 的 URL：/media_file/my_feature/xxx.jpg
+```
+
+`/media_file/` 由 nginx 直接 alias 到 `DATA_ROOT`，找不到文件才回落给 Flask。
+
+**不要**把上传文件写进 `static/` 或其它仓库目录 —— deploy 时的 `git pull` /
+`checkout` 会把它们删掉或覆盖掉（2026-04-08 就这样弄丢了 3 月份上传的报名收费项
+图片）。这几个目录已经写进 `.gitignore` 挡着了。
+
 ## 常用检查
 
 看当前分支：
