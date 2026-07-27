@@ -4,6 +4,7 @@ from flask_socketio import emit, join_room
 
 from app.extensions import socketio
 from app.quiz import services as quiz_services
+from app.quiz_game import services as quiz_game_services
 from app.redis_client import redis_client
 
 REDIS_ONLINE_KEY = "online_users"
@@ -24,6 +25,19 @@ def handle_disconnect(reason=None):
             emit("quiz:snapshot", snapshot, to=quiz_services.socket_room(token))
     except Exception as exc:  # noqa: BLE001 - presence cleanup must never break disconnect
         print("⚠️ Quiz presence cleanup error:", exc)
+    try:
+        game_token = quiz_game_services.mark_offline_by_sid(request.sid)
+        if game_token:
+            emit(
+                "game:players",
+                {
+                    "players": quiz_game_services.player_list(game_token),
+                    "player_count": len(quiz_game_services._load_players(game_token)),
+                },
+                to=quiz_game_services.socket_room(game_token),
+            )
+    except Exception as exc:  # noqa: BLE001 - presence cleanup must never break disconnect
+        print("⚠️ Quiz game presence cleanup error:", exc)
 
 
 @socketio.on_error_default
@@ -223,3 +237,7 @@ def handle_quiz_guest_tap(data):
             )
             return
         _handle_quiz_error(exc)
+
+
+# Register the 问答游戏 (Kahoot-style quiz) socket handlers on the same server.
+from app.quiz_game import socket_events as _quiz_game_socket_events  # noqa: E402,F401

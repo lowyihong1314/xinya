@@ -3,6 +3,7 @@ export const MUSIC_PLAYER_PATH = "/music/music_player";
 export const CHANGYOU_PATH = "/music/changyou";
 export const TURNTABLE_PATH = "/music/turntable";
 export const QUIZ_GUEST_PATH = "/music/turntable/quiz";
+export const GAME_PLAYER_PATH = "/music/turntable/game";
 export const CHANGYOU_ROOM_PATH = "/music/changyou/room";
 export const CHANGYOU_ROOM_PLAYER_PATH = "/music/changyou/room/player";
 export const CHANGYOU_PUBLIC_ROOM_PATH = "/changyou-room";

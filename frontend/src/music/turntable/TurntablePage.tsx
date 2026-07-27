@@ -2,10 +2,11 @@ import { useState } from "react";
 import type { CSSProperties } from "react";
 
 import { useBaseNavbarVisibility } from "../../router/AppChromeContext";
+import { GameHostPage } from "./game/GameHostPage";
 import { QuizHostPage } from "./quiz/QuizHostPage";
 import { TurntableSpinnerPage } from "./spinner/TurntableSpinnerPage";
 
-type ActivityMode = "quiz" | "turntable";
+type ActivityMode = "quiz" | "game" | "turntable";
 
 const ACTIVITY_ITEMS: Array<{
   key: ActivityMode;
@@ -16,6 +17,11 @@ const ACTIVITY_ITEMS: Array<{
     key: "quiz",
     title: "抢答活动",
     icon: "fas fa-bolt",
+  },
+  {
+    key: "game",
+    title: "问答游戏",
+    icon: "fas fa-gamepad",
   },
   {
     key: "turntable",
@@ -33,6 +39,10 @@ export function TurntablePage() {
   if (detailActive) {
     if (activeMode === "quiz") {
       return <QuizHostPage onBack={() => setActiveMode(null)} />;
+    }
+
+    if (activeMode === "game") {
+      return <GameHostPage onBack={() => setActiveMode(null)} />;
     }
 
     return <TurntableSpinnerPage onBack={() => setActiveMode(null)} />;

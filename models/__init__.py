@@ -21,6 +21,7 @@ MODEL_MODULES = (
     "models.songbook_user_edit",
     "models.youth_class_registration",
     "models.email_log",
+    "models.quiz_game",
 )
 
 
