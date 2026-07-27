@@ -222,6 +222,33 @@ export function QuestionEditorPage({
     }
   }
 
+  const pagerNode =
+    totalPages > 1 ? (
+      <div style={pagerStyle}>
+        <button type="button" onClick={() => setPage((p) => Math.max(1, p - 1))} disabled={safePage <= 1} style={pagerBtnStyle}>
+          <i className="fas fa-chevron-left" aria-hidden="true" /> 上一页
+        </button>
+        <div style={pagerInfoStyle}>
+          第
+          <input
+            type="number"
+            min={1}
+            max={totalPages}
+            value={safePage}
+            onChange={(e) => {
+              const v = Number.parseInt(e.target.value || "1", 10) || 1;
+              setPage(Math.max(1, Math.min(totalPages, v)));
+            }}
+            style={pagerInputStyle}
+          />
+          / {totalPages} 页
+        </div>
+        <button type="button" onClick={() => setPage((p) => Math.min(totalPages, p + 1))} disabled={safePage >= totalPages} style={pagerBtnStyle}>
+          下一页 <i className="fas fa-chevron-right" aria-hidden="true" />
+        </button>
+      </div>
+    ) : null;
+
   if (loading) {
     return (
       <main style={pageStyle}>
@@ -250,7 +277,8 @@ export function QuestionEditorPage({
 
         {error ? <div style={errorStyle}>{error}</div> : null}
 
-        <section style={metaCardStyle}>
+        <div style={twoColStyle}>
+        <section style={{ ...metaCardStyle, ...leftColStyle }}>
           <label style={fieldStyle}>
             <span style={labelStyle}>题库名称</span>
             <input value={title} onChange={(e) => setTitle(e.target.value)} style={inputStyle} placeholder="例如：十善业测验" maxLength={255} />
@@ -272,12 +300,15 @@ export function QuestionEditorPage({
           </label>
         </section>
 
+        <div style={rightColStyle}>
         <div style={questionCountRowStyle}>
           <span>共 {questions.length} 题{totalPages > 1 ? ` · 第 ${safePage}/${totalPages} 页` : ""}</span>
           <button type="button" onClick={() => setAiOpen(true)} style={aiInlineBtnStyle}>
             <i className="fas fa-wand-magic-sparkles" aria-hidden="true" /> 让 AI 帮我出题
           </button>
         </div>
+
+        {pagerNode}
 
         <div style={listStyle}>
           {pageItems.map((q, i) => {
@@ -369,35 +400,11 @@ export function QuestionEditorPage({
           })}
         </div>
 
-        {totalPages > 1 ? (
-          <div style={pagerStyle}>
-            <button type="button" onClick={() => setPage((p) => Math.max(1, p - 1))} disabled={safePage <= 1} style={pagerBtnStyle}>
-              <i className="fas fa-chevron-left" aria-hidden="true" /> 上一页
-            </button>
-            <div style={pagerInfoStyle}>
-              第
-              <input
-                type="number"
-                min={1}
-                max={totalPages}
-                value={safePage}
-                onChange={(e) => {
-                  const v = Number.parseInt(e.target.value || "1", 10) || 1;
-                  setPage(Math.max(1, Math.min(totalPages, v)));
-                }}
-                style={pagerInputStyle}
-              />
-              / {totalPages} 页
-            </div>
-            <button type="button" onClick={() => setPage((p) => Math.min(totalPages, p + 1))} disabled={safePage >= totalPages} style={pagerBtnStyle}>
-              下一页 <i className="fas fa-chevron-right" aria-hidden="true" />
-            </button>
-          </div>
-        ) : null}
-
         <button type="button" onClick={addQuestion} style={addQuestionBtnStyle}>
           <i className="fas fa-plus" aria-hidden="true" /> 添加题目
         </button>
+        </div>
+        </div>
 
         <div style={footerStyle}>
           {setId !== null ? (
@@ -419,7 +426,7 @@ export function QuestionEditorPage({
 /* styles */
 
 const pageStyle: CSSProperties = { minHeight: "100vh", background: "var(--x-color-canvas)", color: "var(--x-color-ink)" };
-const shellStyle: CSSProperties = { width: "min(820px, calc(100% - 28px))", margin: "0 auto", padding: "16px 0 48px" };
+const shellStyle: CSSProperties = { width: "min(1080px, calc(100% - 28px))", margin: "0 auto", padding: "16px 0 48px" };
 const centerMsg: CSSProperties = { minHeight: "60vh", display: "grid", placeItems: "center", color: "var(--x-color-ink-muted)", fontWeight: 800 };
 const topBarStyle: CSSProperties = {
   position: "sticky",
@@ -538,6 +545,15 @@ const aiInlineBtnStyle: CSSProperties = {
   fontWeight: 900,
   cursor: "pointer",
 };
+const twoColStyle: CSSProperties = {
+  marginTop: "8px",
+  display: "flex",
+  flexWrap: "wrap",
+  alignItems: "flex-start",
+  gap: "16px",
+};
+const leftColStyle: CSSProperties = { marginTop: 0, flex: "1 1 280px", maxWidth: "340px" };
+const rightColStyle: CSSProperties = { flex: "999 1 380px", minWidth: 0 };
 const listStyle: CSSProperties = { display: "grid", gap: "8px" };
 const rowCardStyle: CSSProperties = {
   display: "flex",
@@ -597,7 +613,7 @@ const rowAnswerChipStyle: CSSProperties = {
   fontSize: "13px",
 };
 const pagerStyle: CSSProperties = {
-  marginTop: "14px",
+  margin: "0 0 12px",
   display: "flex",
   alignItems: "center",
   justifyContent: "center",
