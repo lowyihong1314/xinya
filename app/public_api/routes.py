@@ -1,15 +1,9 @@
-import os
-
 from flask import Blueprint, jsonify
 from flask_login import current_user
 
 from app.auth import permission_required
-from app.paths import PROJECT_ROOT
 from models.event_data import AlbumFiles, EventData
 from models.form import NRIC_Asset, RegisForm, RegisPayment
-
-UPLOAD_FOLDER = os.path.join(PROJECT_ROOT, "uploads")
-os.makedirs(UPLOAD_FOLDER, exist_ok=True)
 
 api_bp = Blueprint("api", __name__)
 

@@ -7,7 +7,7 @@ from flask_login import login_required
 from werkzeug.utils import secure_filename
 
 from .services import user_can_view_order
-from app.paths import PROJECT_ROOT, TEMPLATE_ROOT
+from app.paths import TEMPLATE_ROOT
 from models.fahui import FahuiOrder, FahuiOrderItem, FahuiPdfPageData, FahuiPrintPdf
 
 from ..common.ylp_storage import preferred_dir, resolve_existing_path
@@ -17,11 +17,11 @@ from .print_generator import (
     generate_paiwei_using_order_ids,
     generate_paiwei_using_order_item_ids,
 )
-from .print_points import load_point_json, save_point_json
+from .print_points import PAIWEI_PDF_DIR, load_point_json, save_point_json
 
 
 print_paiwei_bp = Blueprint("print_paiwei", __name__)
-PAIWEI_TEMPLATE_UPLOAD_DIR = PROJECT_ROOT / "paiwei_template" / "pdf"
+PAIWEI_TEMPLATE_UPLOAD_DIR = PAIWEI_PDF_DIR
 
 
 def _build_order_paiwei_response(order_id: int, *, as_attachment: bool):

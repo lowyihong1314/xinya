@@ -8,3 +8,10 @@ _token.txt
 *.pyc
 static/vite/
 static/assets/
+
+# 用户上传的文件一律放 DATA_ROOT（app/paths.py，线上 = /srv/flaskapp/xinya/database），
+# 不要再提交进仓库：deploy 时 git pull / checkout 会把它们删掉。
+static/images/register_fee_image/
+static/images/fahui_payment_qr/
+static/images/info/
+paiwei_template/

@@ -4,12 +4,14 @@ from datetime import datetime
 
 from werkzeug.utils import secure_filename
 
-from app.paths import STATIC_ROOT
+from app.paths import DATA_ROOT, data_media_url
 from models import db
 from models.fahui import FahuiPaymentChannel
 
 ALLOWED_QR_EXTENSIONS = {".png", ".jpg", ".jpeg", ".heic", ".heif", ".webp"}
-QR_IMAGE_DIR = STATIC_ROOT / "images" / "fahui_payment_qr"
+# 收款码属于用户上传内容，必须存在 DATA_ROOT，不能写进仓库的 static/。
+QR_IMAGE_SUBDIR = "fahui_payment_qr"
+QR_IMAGE_DIR = DATA_ROOT / QR_IMAGE_SUBDIR
 CHANNEL_TYPES = {"qr", "bank"}
 
 
@@ -25,7 +27,7 @@ def _save_channel_qr(file_storage):
     QR_IMAGE_DIR.mkdir(parents=True, exist_ok=True)
     filename = f"{datetime.utcnow().strftime('%Y%m%d%H%M%S')}_{secrets.token_hex(8)}{extension}"
     file_storage.save(QR_IMAGE_DIR / filename)
-    return f"/static/images/fahui_payment_qr/{filename}"
+    return data_media_url(QR_IMAGE_SUBDIR, filename)
 
 
 def _clean(value):

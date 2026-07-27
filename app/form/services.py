@@ -13,7 +13,7 @@ from sqlalchemy.orm.attributes import flag_modified
 from werkzeug.utils import secure_filename
 
 from app.timezone import malaysia_now, malaysia_now_naive
-from app.paths import DATA_ROOT, PROJECT_ROOT, STATIC_ROOT
+from app.paths import DATA_ROOT, PROJECT_ROOT, STATIC_ROOT, data_media_url
 from app.redis_client import redis_client
 from .pdf import merge_html_files_to_pdf
 from .realtime import emit_form_event, emit_youth_class_event
@@ -59,9 +59,9 @@ FIELD_SWITCH_KEYS = [
 ]
 
 ALLOWED_FEE_IMAGE_EXTENSIONS = {".png", ".jpg", ".jpeg", ".heic", ".heif"}
-REGISTER_FEE_IMAGE_DIR = STATIC_ROOT / "images" / "register_fee_image"
+REGISTER_FEE_IMAGE_SUBDIR = "register_fee_image"
+REGISTER_FEE_IMAGE_DIR = DATA_ROOT / REGISTER_FEE_IMAGE_SUBDIR
 REGISTER_PAYMENT_PROOF_DIR = DATA_ROOT / "register_payment_images"
-LEGACY_REGISTER_PAYMENT_PROOF_DIR = STATIC_ROOT / "images" / "register_payment_proof"
 FORM_FEE_SCOPE = "form"
 MEMBERSHIP_FEE_SCOPE = "membership"
 YOUTH_CLASS_FEE_SCOPE = "youth_class"
@@ -358,22 +358,29 @@ def _save_register_fee_image(file_storage):
     filename = f"{datetime.utcnow().strftime('%Y%m%d%H%M%S')}_{secrets.token_hex(8)}{extension}"
     target_path = REGISTER_FEE_IMAGE_DIR / filename
     file_storage.save(target_path)
-    return f"/static/images/register_fee_image/{filename}"
+    return data_media_url(REGISTER_FEE_IMAGE_SUBDIR, filename)
+
+
+def _resolve_register_fee_image(image_path):
+    normalized = str(image_path or "").strip().replace("\\", "/")
+    if not normalized:
+        return None
+
+    if not normalized.startswith(data_media_url(REGISTER_FEE_IMAGE_SUBDIR) + "/"):
+        return None
+
+    filename = secure_filename(os.path.basename(normalized))
+    return REGISTER_FEE_IMAGE_DIR / filename if filename else None
 
 
 def _delete_register_fee_image(image_path):
-    normalized = str(image_path or "").strip()
-    prefix = "/static/images/register_fee_image/"
-    if not normalized.startswith(prefix):
+    target_path = _resolve_register_fee_image(image_path)
+    if not target_path or not target_path.exists():
         return
-
-    filename = normalized.removeprefix(prefix)
-    target_path = REGISTER_FEE_IMAGE_DIR / filename
-    if target_path.exists():
-        try:
-            target_path.unlink()
-        except OSError:
-            pass
+    try:
+        target_path.unlink()
+    except OSError:
+        pass
 
 
 def _save_register_payment_proof(file_storage):
@@ -399,32 +406,19 @@ def _resolve_register_payment_proof(image_path):
 
     normalized = normalized.replace("\\", "/")
 
-    current_prefixes = (
+    valid_prefixes = (
         "database/register_payment_images/",
         "/database/register_payment_images/",
     )
-    for prefix in current_prefixes:
-        if normalized.startswith(prefix):
-            filename = secure_filename(os.path.basename(normalized))
-            if not filename:
-                return None
-            target_path = REGISTER_PAYMENT_PROOF_DIR / filename
-            if target_path.exists():
-                return target_path
-            return None
-
-    legacy_prefix = "/static/images/register_payment_proof/"
-    if not normalized.startswith(legacy_prefix):
+    if not normalized.startswith(valid_prefixes):
         return None
 
-    filename = secure_filename(os.path.basename(normalized.removeprefix(legacy_prefix)))
+    filename = secure_filename(os.path.basename(normalized))
     if not filename:
         return None
 
-    target_path = LEGACY_REGISTER_PAYMENT_PROOF_DIR / filename
-    if target_path.exists():
-        return target_path
-    return None
+    target_path = REGISTER_PAYMENT_PROOF_DIR / filename
+    return target_path if target_path.exists() else None
 
 
 def _delete_register_payment_proof(image_path):

@@ -2,19 +2,12 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from app.paths import DATA_ROOT, PROJECT_ROOT
-
-
-LEGACY_DATA_ROOT = Path("/srv/flaskapp/fahui/database")
-DATA_ROOT_CANDIDATES = [DATA_ROOT, PROJECT_ROOT / "database", LEGACY_DATA_ROOT]
+from app.paths import DATA_ROOT
 
 
 def resolve_existing_path(*parts: str) -> Path | None:
-    for root in DATA_ROOT_CANDIDATES:
-        candidate = root.joinpath(*parts)
-        if candidate.exists():
-            return candidate
-    return None
+    candidate = DATA_ROOT.joinpath(*parts)
+    return candidate if candidate.exists() else None
 
 
 def preferred_path(*parts: str, ensure_parent: bool = False) -> Path:

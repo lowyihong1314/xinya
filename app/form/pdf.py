@@ -6,7 +6,7 @@ from flask import Response
 from pypdf import PdfReader, PdfWriter
 from weasyprint import HTML
 
-from app.paths import PROJECT_ROOT, STATIC_ROOT
+from app.paths import DATA_ROOT, MEDIA_URL_PREFIX, PROJECT_ROOT, STATIC_ROOT
 
 try:
     from weasyprint.text.fonts import FontConfiguration
@@ -35,38 +35,48 @@ def _content_disposition_for_pdf(filename):
     return f"attachment; filename=\"{ascii_filename}\"; filename*=UTF-8''{quote(pdf_filename)}"
 
 
-def _static_file_uri(path):
-    relative_path = str(path or "").split("?", 1)[0].split("#", 1)[0].lstrip("/")
-    if not relative_path.startswith("static/"):
+def _local_file_uri(url_path):
+    """把 /static/... 或 /media_file/...（DATA_ROOT 上传文件）转成本地 file:// URI。"""
+    cleaned = str(url_path or "").split("?", 1)[0].split("#", 1)[0]
+    normalized = cleaned.lstrip("/")
+
+    media_prefix = MEDIA_URL_PREFIX.strip("/") + "/"
+    if normalized.startswith("static/"):
+        file_path = PROJECT_ROOT / normalized
+    elif normalized.startswith(media_prefix):
+        file_path = DATA_ROOT / normalized.removeprefix(media_prefix)
+    else:
         return None
 
-    file_path = PROJECT_ROOT / relative_path
-    if not file_path.exists():
+    if ".." in file_path.parts or not file_path.exists():
         return None
     return file_path.resolve().as_uri()
 
 
 def _rewrite_local_asset_urls(html):
+    media_prefix = MEDIA_URL_PREFIX.strip("/")
+    url_roots = f"(?:static|{re.escape(media_prefix)})"
+
     def replace_attr(match):
-        uri = _static_file_uri(f"static/{match.group('path')}")
+        uri = _local_file_uri(f"/{match.group('root')}/{match.group('path')}")
         if not uri:
             return match.group(0)
         return f'{match.group("prefix")}{uri}{match.group("suffix")}'
 
     def replace_css_url(match):
-        uri = _static_file_uri(f"static/{match.group('path')}")
+        uri = _local_file_uri(f"/{match.group('root')}/{match.group('path')}")
         if not uri:
             return match.group(0)
         return f'url("{uri}")'
 
     html = re.sub(
-        r'(?P<prefix>\b(?:src|href)=["\'])/static/(?P<path>[^"\']+)(?P<suffix>["\'])',
+        rf'(?P<prefix>\b(?:src|href)=["\'])/(?P<root>{url_roots})/(?P<path>[^"\']+)(?P<suffix>["\'])',
         replace_attr,
         html,
         flags=re.IGNORECASE,
     )
     return re.sub(
-        r'url\(\s*["\']?/static/(?P<path>[^)"\']+)["\']?\s*\)',
+        rf'url\(\s*["\']?/(?P<root>{url_roots})/(?P<path>[^)"\']+)["\']?\s*\)',
         replace_css_url,
         html,
         flags=re.IGNORECASE,

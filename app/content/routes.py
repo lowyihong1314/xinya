@@ -8,18 +8,24 @@ from flask_login import current_user
 from werkzeug.utils import secure_filename
 
 from app.auth import get_current_user_permissions, permission_required
+from app.paths import DATA_ROOT, data_media_url
 
 from models import db
 from models.info import AboutUs, OurHistory, TreeHoleMessage
 
 info_bp = Blueprint("info_bp", __name__)
-INFO_IMAGE_DIR = os.path.join("static", "images", "info")
+# 上传的图存 DATA_ROOT；写进仓库的 static/ 会被 deploy 时的 git pull 删掉。
+INFO_IMAGE_SUBDIR = "info_image"
+INFO_IMAGE_DIR = DATA_ROOT / INFO_IMAGE_SUBDIR
 
 
 def _resolve_image_path(image_url):
-    if not image_url:
+    normalized = str(image_url or "").strip().replace("\\", "/")
+    if not normalized.startswith(data_media_url(INFO_IMAGE_SUBDIR) + "/"):
         return None
-    return image_url.lstrip("/")
+
+    file_name = secure_filename(os.path.basename(normalized))
+    return str(INFO_IMAGE_DIR / file_name) if file_name else None
 
 
 def _delete_history_image(image_url):
@@ -29,13 +35,12 @@ def _delete_history_image(image_url):
 
 
 def _save_history_image(file_storage):
-    os.makedirs(INFO_IMAGE_DIR, exist_ok=True)
+    INFO_IMAGE_DIR.mkdir(parents=True, exist_ok=True)
     original_name = secure_filename(file_storage.filename or "history-image")
     suffix = os.path.splitext(original_name)[1] or ".jpg"
     file_name = f"history-{uuid.uuid4().hex}{suffix}"
-    file_path = os.path.join(INFO_IMAGE_DIR, file_name)
-    file_storage.save(file_path)
-    return f"/{file_path}"
+    file_storage.save(INFO_IMAGE_DIR / file_name)
+    return data_media_url(INFO_IMAGE_SUBDIR, file_name)
 
 
 def _serialize_history_entry(entry):
