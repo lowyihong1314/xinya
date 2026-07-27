@@ -721,6 +721,26 @@ def _clean_username(value):
     return normalized
 
 
+def _derive_username_from_text(value, *, member_id=None):
+    """报名表 username 留空时，用英文名推导一个：小写、只保留字母数字。
+
+    例如 "Hazell Tan" -> "hazelltan"；已被别人占用就往后加 2、3……
+    """
+    base = re.sub(r"[^a-z0-9]", "", str(value or "").lower())
+    if not base:
+        return None
+
+    candidate = base
+    for suffix in range(2, 1000):
+        existing = User.query.filter_by(username=candidate).first()
+        if existing is None:
+            return candidate
+        if member_id is not None and existing.nric_asset_id == member_id:
+            return candidate
+        candidate = f"{base}{suffix}"
+    return None
+
+
 def _ensure_approved_youth_user(entry):
     """青少年报名生效时，据报名填写的 username 创建 / 关联一个无密码账户。
 
@@ -2186,8 +2206,6 @@ def submit_youth_class_registration(payload):
         return jsonify({"status": "error", "message": "请填写中文名"}), 400
     if not english_name:
         return jsonify({"status": "error", "message": "请填写英文名"}), 400
-    if not requested_username:
-        return jsonify({"status": "error", "message": "请填写 username"}), 400
     if not nric:
         return jsonify({"status": "error", "message": "请填写 NRIC"}), 400
     if not address:
@@ -2210,6 +2228,11 @@ def submit_youth_class_registration(payload):
 
     try:
         member = _get_or_create_member_by_nric(nric, name_nric=english_name)
+
+        if not requested_username:
+            requested_username = _derive_username_from_text(english_name, member_id=member.id)
+        if not requested_username:
+            return jsonify({"status": "error", "message": "请填写 username"}), 400
 
         existing_user = User.query.filter_by(username=requested_username).first()
         if existing_user and existing_user.nric_asset_id not in (None, member.id):

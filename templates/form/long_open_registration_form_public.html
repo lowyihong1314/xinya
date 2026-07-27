@@ -62,8 +62,8 @@
       <p>审批通过后，系统会直接把这份会员资料写进 `user_data`，但不会设置密码；也就是说账号先建好，暂时还不能登录。</p>
 
       <div class="grid">
-        <label>Username *
-          <input name="username" required />
+        <label>Username
+          <input name="username" placeholder="留空就自动用英文名，例如 Hazell Tan → hazelltan" />
         </label>
         <label>姓名 *
           <input name="display_name" required placeholder="例如：张三 / Chen San" />
@@ -147,6 +147,9 @@
       <p>13-17 岁会进入这张表单；18 岁以上会自动改走会员报名。</p>
 
       <div class="grid">
+        <label>Username
+          <input name="username" placeholder="留空就自动用英文名，例如 Hazell Tan → hazelltan" />
+        </label>
         <label>中文名 *
           <input name="chinese_name" required />
         </label>
@@ -359,6 +362,12 @@
       }
       if (!youthForm.elements.address.value) {
         youthForm.elements.address.value = defaults.address || "";
+      }
+      if (!youthForm.elements.username.value) {
+        youthForm.elements.username.value = user.username || "";
+      }
+      if (user.username) {
+        youthForm.elements.username.readOnly = true;
       }
       if (!nricInput.value && member.nric) {
         nricInput.value = member.nric;
@@ -600,6 +609,7 @@
       }
 
       const payload = {
+        username: youthForm.elements.username.value,
         chinese_name: youthForm.elements.chinese_name.value,
         english_name: youthForm.elements.english_name.value,
         nric: nricInput.value,

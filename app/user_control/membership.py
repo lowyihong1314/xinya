@@ -1,3 +1,4 @@
+import re
 from datetime import date, datetime
 from decimal import Decimal
 
@@ -47,6 +48,28 @@ def _clean_username(value):
     if any(char.isspace() for char in normalized):
         raise ValueError("username 不能包含空格")
     return normalized
+
+
+def _derive_username_from_text(value, *, member_id=None, actor_user_id=None):
+    """报名表 username 留空时，用英文名推导一个：小写、只保留字母数字。
+
+    例如 "Hazell Tan" -> "hazelltan"；已被别人占用就往后加 2、3……
+    """
+    base = re.sub(r"[^a-z0-9]", "", str(value or "").lower())
+    if not base:
+        return None
+
+    candidate = base
+    for suffix in range(2, 1000):
+        existing = User.query.filter_by(username=candidate).first()
+        if existing is None:
+            return candidate
+        if member_id is not None and existing.nric_asset_id == member_id:
+            return candidate
+        if actor_user_id is not None and existing.id == actor_user_id:
+            return candidate
+        candidate = f"{base}{suffix}"
+    return None
 
 
 def _authenticated_user_or_none():
@@ -351,6 +374,7 @@ def _validate_requested_username(requested_username, *, actor_user=None, member=
 def _resolve_membership_submission_target(payload, *, actor_user=None):
     requested_username = None
     applicant_name = _clean_text(payload.get("display_name")) or _clean_text(payload.get("full_name"))
+    english_name = _clean_text(payload.get("english_name"))
 
     if actor_user is not None:
         if actor_user.is_member:
@@ -359,8 +383,6 @@ def _resolve_membership_submission_target(payload, *, actor_user=None):
         requested_username = actor_user.username
         if not requested_username:
             requested_username = _clean_username(payload.get("username"))
-        if not requested_username:
-            raise ValueError("请填写 username")
 
         member = actor_user.nric_asset
         if member and _clean_text(getattr(member, "nric", None)):
@@ -384,8 +406,6 @@ def _resolve_membership_submission_target(payload, *, actor_user=None):
             actor_user.display_name = applicant_name
     else:
         requested_username = _clean_username(payload.get("username"))
-        if not requested_username:
-            raise ValueError("请填写 username")
 
         nric = _clean_text(payload.get("nric"))
         if not nric:
@@ -397,6 +417,15 @@ def _resolve_membership_submission_target(payload, *, actor_user=None):
         age = _member_age(member)
         if age is None:
             raise ValueError("当前 NRIC 无法解析年龄，请先检查资料")
+
+    if not requested_username:
+        requested_username = _derive_username_from_text(
+            english_name or applicant_name,
+            member_id=getattr(member, "id", None),
+            actor_user_id=getattr(actor_user, "id", None),
+        )
+    if not requested_username:
+        raise ValueError("请填写 username")
 
     if age < 18:
         raise ValueError("18 岁以下请改走青少年佛学班报名入口")
