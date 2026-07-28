@@ -786,6 +786,111 @@ def list_trash(user_id):
     }
 
 
+def batch_delete_items(items, user_id):
+    results = []
+    deleted_count = 0
+    for item in items:
+        item_type = item.get("type")
+        key = item.get("id") if item_type == "file" else item.get("path")
+        try:
+            if item_type == "file":
+                file_obj = File.query.get(item.get("id"))
+                if not file_obj:
+                    raise FileNotFoundError("文件不存在")
+            elif item_type == "dir":
+                normalized = normalize_path(item.get("path"))
+                file_obj = File.query.filter_by(path=normalized).first()
+                if not file_obj or not file_obj.is_folder:
+                    raise FileNotFoundError("目录不存在")
+            else:
+                raise ValueError("未知的项目类型")
+
+            # move_to_trash 会先移动磁盘文件，逐项提交避免失败回滚扩散到已删项
+            deleted_count += move_to_trash(file_obj, user_id)
+            db.session.commit()
+            results.append({"key": key, "success": True})
+        except PermissionError as exc:
+            db.session.rollback()
+            results.append({"key": key, "success": False, "error": str(exc) or "没有权限"})
+        except FileNotFoundError as exc:
+            db.session.rollback()
+            results.append({"key": key, "success": False, "error": str(exc)})
+        except Exception as exc:
+            db.session.rollback()
+            results.append({"key": key, "success": False, "error": f"删除失败：{exc}"})
+    return {"results": results, "deleted": deleted_count}
+
+
+def _filter_readable(files, user_id):
+    # 批量版读权限过滤，语义须与 check_permission(required="read") 保持一致：
+    # owner / 用户级权限 / 部门级权限 / read_public 兜底
+    if not files:
+        return []
+    user = User.query.get(user_id)
+    if not user:
+        return []
+    dept_ids = {dept.id for dept in user.departments} if user.departments else set()
+    file_ids = [f.id for f in files]
+    perms = FilePermission.query.filter(FilePermission.file_id.in_(file_ids)).all()
+    readable_ids = set()
+    for perm in perms:
+        if perm.permission not in ("read", "read_write", "read_public"):
+            continue
+        if perm.permission == "read_public":
+            readable_ids.add(perm.file_id)
+        elif perm.user_id == user_id:
+            readable_ids.add(perm.file_id)
+        elif perm.department_id and perm.department_id in dept_ids:
+            readable_ids.add(perm.file_id)
+    return [f for f in files if f.owner_id == user_id or f.id in readable_ids]
+
+
+def search_files(q, user_id, limit=100):
+    escaped = q.replace("\\", r"\\").replace("%", r"\%").replace("_", r"\_")
+    candidates = (
+        File.query.options(joinedload(File.owner))
+        .filter(File.path.ilike(f"%{escaped}%", escape="\\"))
+        .order_by(File.updated_at.desc())
+        .limit(500)
+        .all()
+    )
+    q_lower = q.lower()
+    candidates = [f for f in candidates if q_lower in f.path.rstrip("/").rsplit("/", 1)[-1].lower()]
+    readable = _filter_readable(candidates, user_id)
+    return {
+        "query": q,
+        "items": [serialize_file_item(f) for f in readable[:limit]],
+        "truncated": len(readable) > limit,
+    }
+
+
+def purge_trash(trash_id, user_id):
+    trash_entry = FileTrash.query.get(trash_id)
+    if not trash_entry:
+        raise FileNotFoundError("回收站条目不存在")
+    if trash_entry.owner_id != user_id:
+        raise PermissionError("没有权限")
+
+    source = trash_path(trash_entry.id)
+    if source.exists():
+        if source.is_dir():
+            shutil.rmtree(source)
+        else:
+            source.unlink()
+    db.session.delete(trash_entry)
+    db.session.commit()
+    return {"success": True}
+
+
+def purge_all_trash(user_id):
+    entries = FileTrash.query.filter_by(owner_id=user_id).all()
+    purged = 0
+    for entry in entries:
+        purge_trash(entry.id, user_id)
+        purged += 1
+    return {"success": True, "purged": purged}
+
+
 def restore_trash(trash_id, user_id):
     trash_entry = FileTrash.query.get(trash_id)
     if not trash_entry:

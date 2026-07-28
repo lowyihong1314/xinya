@@ -3,6 +3,7 @@ from flask_login import current_user, login_required
 
 from app.filesystem.services import (
     archive_files,
+    batch_delete_items,
     build_directory_detail,
     build_tree,
     create_directory,
@@ -16,10 +17,13 @@ from app.filesystem.services import (
     list_permissions,
     list_trash,
     move_file,
+    purge_all_trash,
+    purge_trash,
     remove_permission,
     rename_file,
     rename_directory,
     restore_trash,
+    search_files,
     send_file_content,
     set_directory_permission,
     upload_entries,
@@ -234,6 +238,25 @@ def delete_items_route():
         return _error(str(exc), 500)
 
 
+@files_bp.post("/items/batch_delete")
+@login_required
+def batch_delete_route():
+    items = (request.get_json() or {}).get("items", [])
+    if not items:
+        return _error("没有选择项目", 400)
+    return jsonify(batch_delete_items(items, current_user.id))
+
+
+@files_bp.get("/search")
+@login_required
+def search_route():
+    q = (request.args.get("q") or "").strip()
+    if not q:
+        return _error("缺少搜索词", 400)
+    limit = request.args.get("limit", 100, type=int)
+    return jsonify(search_files(q, current_user.id, limit=max(1, min(limit, 200))))
+
+
 @files_bp.patch("/items/<int:file_id>/rename")
 @login_required
 def rename_item_route(file_id):
@@ -309,6 +332,23 @@ def restore_trash_route(trash_id):
         return _error(str(exc), 404)
     except FileExistsError as exc:
         return _error(str(exc), 409)
+
+
+@files_bp.delete("/trash/<int:trash_id>")
+@login_required
+def purge_trash_route(trash_id):
+    try:
+        return jsonify(purge_trash(trash_id, current_user.id))
+    except PermissionError as exc:
+        return _error(str(exc), 403)
+    except FileNotFoundError as exc:
+        return _error(str(exc), 404)
+
+
+@files_bp.delete("/trash")
+@login_required
+def purge_all_trash_route():
+    return jsonify(purge_all_trash(current_user.id))
 
 
 @files_bp.delete("/permissions/<int:permission_id>")

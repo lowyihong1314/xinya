@@ -9,6 +9,7 @@ import { FinancePage } from '../Account/react/FinancePage';
 import { AssetWorkspace } from '../Account/react/asset/AssetWorkspace';
 import { SongbookAdminPage } from '../changyou/react/SongbookAdminPage';
 import { FileSystemPage } from '../file_system/react/FileSystemPage';
+import { FileSystemV2Page } from '../file_system/v2/FileSystemV2Page';
 import { ManualPage } from '../manual/react/ManualPage';
 import { createElement } from 'react';
 import type { ComponentType } from 'react';
@@ -22,6 +23,7 @@ export type CRMModuleKey =
   | 'register'
   | 'cctv'
   | 'files'
+  | 'files_v2'
   | 'songbook'
   | 'permanent_registration'
   | 'ylp_board'
@@ -112,6 +114,13 @@ export const CRM_MODULES: CRMModuleSpec[] = [
     icon: 'fas fa-folder-tree',
     description: '文件浏览、上传、权限和回收站管理。',
     Component: () => createElement(FileSystemPage, { embedded: true }),
+  },
+  {
+    key: 'files_v2',
+    title: '文件系统（新版）',
+    icon: 'fas fa-hard-drive',
+    description: '网盘式文件管理：拖拽上传、预览、批量操作与全局搜索。',
+    Component: FileSystemV2Page,
   },
   {
     key: 'manual',

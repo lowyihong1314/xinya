@@ -54,8 +54,9 @@ export function CRMPage() {
             <span style={navHeaderTitleStyle}>CRM 工作台</span>
           </div>
           {CRM_MODULES.map((module) => {
-            // 「报名表格」并入「特别活动」分组；「看板」并入「法会」分组，这里不单独渲染。
-            if (module.key === "register" || module.key === "ylp_board") {
+            // 「报名表格」并入「特别活动」分组；「看板」并入「法会」分组；
+            // 「文件系统（新版）」并入「文件系统」分组，这里不单独渲染。
+            if (module.key === "register" || module.key === "ylp_board" || module.key === "files_v2") {
               return null;
             }
 
@@ -67,6 +68,7 @@ export function CRMPage() {
               ? SPECIAL_EVENT_MODULE_KEYS.some((key) => isModulePathActive(location.pathname, key)) && !isBuddhistEvents
               : isModulePathActive(location.pathname, module.key) ||
                 (module.key === "dharma_event" && isModulePathActive(location.pathname, "ylp_board")) ||
+                (module.key === "files" && isModulePathActive(location.pathname, "files_v2")) ||
                 (module.key === "permanent_registration" && isBuddhistEvents);
             const children = isSpecialEvent
               ? getSpecialEventChildren(location.pathname, isBuddhistEvents)
@@ -696,6 +698,27 @@ export function getSidebarChildren(
         description: "维护牌位贴板位置。",
         to: buildCRMModulePath("ylp_board"),
         active: onBoard,
+      },
+    ];
+  }
+
+  if (moduleKey === "files") {
+    return [
+      {
+        key: "files_v2",
+        title: "新版",
+        icon: "fa-solid fa-hard-drive",
+        description: "网盘式文件管理：拖拽上传、预览、批量操作与全局搜索。",
+        to: buildCRMModulePath("files_v2"),
+        active: isModulePathActive(pathname, "files_v2"),
+      },
+      {
+        key: "files_legacy",
+        title: "旧版",
+        icon: "fa-solid fa-folder-tree",
+        description: "原版文件浏览、上传、权限和回收站管理。",
+        to: buildCRMModulePath("files"),
+        active: isModulePathActive(pathname, "files"),
       },
     ];
   }
