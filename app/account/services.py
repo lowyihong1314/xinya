@@ -21,6 +21,7 @@ from models import db
 from models.form import RegisForm, RegisPayment
 from models.event_data import EventData
 from models.finance import (
+    ManualIncome,
     ReimbursementApproverData,
     ReimbursementAttachment,
     ReimbursementRequestChangeLog,
@@ -767,6 +768,16 @@ def build_claim_report_context(claim_ids, user):
     return [serialize_request_data(request_obj, with_children=True) for request_obj in requests]
 
 
+def _claim_has_approval(request_obj):
+    """是否已有人批准（reject=False 的审批记录）。一旦有人批准，申请锁定不能编辑/删除。"""
+    return any(not getattr(item, "reject", False) for item in (request_obj.approver_data or []))
+
+
+def _ensure_claim_not_approved(request_obj, action_label):
+    if _claim_has_approval(request_obj):
+        raise PermissionDenied(f"已有人批准该申请，不能{action_label}；请先让批准人撤回签名。")
+
+
 def record_claim_decision(request_id, payload, user):
     request_obj = _get_claim_or_raise(request_id)
     action = (payload.get("action") or "").strip().lower()
@@ -804,12 +815,35 @@ def record_claim_decision(request_id, payload, user):
     return request_obj
 
 
+def withdraw_claim_decision(request_id, user):
+    """批准人撤回自己的审批签名。撤回后按剩余审批记录重算状态。"""
+    request_obj = _get_claim_or_raise(request_id)
+
+    own_rows = [item for item in (request_obj.approver_data or []) if item.user_id == user.id]
+    if not own_rows:
+        raise NotFound("你没有在这个申请上留下审批记录")
+
+    for row in own_rows:
+        db.session.delete(row)
+
+    remaining = [item for item in (request_obj.approver_data or []) if item.user_id != user.id]
+    if any(item.reject for item in remaining):
+        request_obj.status = "rejected"
+    elif remaining:
+        request_obj.status = "approved"
+    else:
+        request_obj.status = "submitted"
+    db.session.commit()
+    return request_obj
+
+
 def update_claim(request_id, payload, user):
     request_obj = _get_claim_or_raise(request_id)
     if not user_can_manage_claims(user):
         raise PermissionDenied("没有权限编辑该申请")
     if request_obj.is_locked:
         raise PermissionDenied("该申请已锁定，不能修改")
+    _ensure_claim_not_approved(request_obj, "再编辑")
 
     payload = payload or {}
 
@@ -900,6 +934,7 @@ def add_claim_attachments(request_id, files, user):
         raise PermissionDenied("没有权限编辑该申请")
     if request_obj.is_locked:
         raise PermissionDenied("该申请已锁定，不能新增附件")
+    _ensure_claim_not_approved(request_obj, "新增附件")
 
     attachments = []
     for uploaded_file in files.getlist("files"):
@@ -924,6 +959,7 @@ def delete_claim_attachment(attachment_id, user):
         raise PermissionDenied("没有权限删除该附件")
     if request_obj.is_locked:
         raise PermissionDenied("该申请已锁定，不能删除附件")
+    _ensure_claim_not_approved(request_obj, "删除附件")
 
     request_id = request_obj.id
     relative_path = str(attachment.file_path or "").strip()
@@ -953,6 +989,7 @@ def update_claim_event(request_id, payload, user):
 
     if request_obj.is_locked:
         raise PermissionDenied("该申请已锁定，不能修改活动")
+    _ensure_claim_not_approved(request_obj, "修改活动")
 
     raw_event_id = (payload or {}).get("event_id")
     if raw_event_id in (None, "", 0, "0"):
@@ -979,6 +1016,7 @@ def delete_claim(request_id, user):
 
     if not user_can_manage_claims(user):
         raise PermissionDenied("没有权限删除该申请")
+    _ensure_claim_not_approved(request_obj, "删除")
 
     attachment_paths = [
         str(item.file_path or "").strip()
@@ -1071,6 +1109,7 @@ FINANCE_SCOPE_LABELS = {
     "fahui_ylp": "法会 YLP",
     "fahui_lamp": "法会 Lamp",
     "sales": "销售收入",
+    "manual": "手动收款",
 }
 _FINANCE_PAYMENT_SCOPES = ("form", "membership", "youth_class")
 _FINANCE_PAYMENT_STATUSES = ("process", "checked", "fail")
@@ -1158,6 +1197,141 @@ def _update_sales_finance_payment_status(payment_id, data):
             "payment": _serialize_sales_finance_payment(document),
         }
     )
+
+# 手动新建收款（ManualIncome，目前只有捐赠收入）并入收款审核聚合列表。
+# 偏移量 3e9，大于销售 (2e9) 与法会 (1e9)。
+MANUAL_FINANCE_ID_OFFSET = 3_000_000_000
+MANUAL_INCOME_TYPE_LABELS = {"donation": "捐赠收入"}
+
+
+def _serialize_manual_finance_payment(record):
+    amount = float(record.amount or 0)
+    event = record.event
+    return {
+        "id": MANUAL_FINANCE_ID_OFFSET + record.id,
+        "payment_scope": "manual",
+        "regis_form_id": None,
+        "membership_registration_id": None,
+        "youth_class_registration_id": None,
+        "nric_asset_id": None,
+        "nric": None,
+        "nric_snapshot": None,
+        "name": record.name,
+        "phone": record.phone,
+        "payment_mode": record.payment_mode,
+        "price": amount,
+        "amount": amount,
+        "created_at": record.created_at.isoformat() if record.created_at else None,
+        "date": record.date.isoformat() if record.date else None,
+        "time": record.created_at.time().isoformat() if record.created_at else None,
+        "status": record.status,
+        "counter": getattr(record.created_by, "display_name", None) or getattr(record.created_by, "username", None),
+        "proof_image_path": None,
+        "proof_image_url": None,
+        "source_scope": "manual",
+        "source_scope_label": MANUAL_INCOME_TYPE_LABELS.get(record.income_type, record.income_type),
+        "source_label": (event.event_name if event else None) or None,
+        "registration_id": None,
+        "income_type": record.income_type,
+        "event_id": record.event_id,
+        "event_name": event.event_name if event else None,
+        "remark": record.remark,
+    }
+
+
+def _list_manual_finance_payments(status=None):
+    query = ManualIncome.query
+    if status in _FINANCE_PAYMENT_STATUSES:
+        query = query.filter(ManualIncome.status == status)
+    records = query.order_by(ManualIncome.created_at.desc(), ManualIncome.id.desc()).all()
+    return [_serialize_manual_finance_payment(record) for record in records]
+
+
+def create_manual_finance_payment(payload, user=None):
+    payload = payload or {}
+
+    income_type = str(payload.get("income_type") or "donation").strip()
+    if income_type not in MANUAL_INCOME_TYPE_LABELS:
+        raise ValidationError("收入类型无效")
+
+    name = str(payload.get("name") or "").strip()
+    if not name:
+        raise ValidationError("请填写付款人姓名")
+
+    try:
+        amount = float(payload.get("amount"))
+    except (TypeError, ValueError) as exc:
+        raise ValidationError("金额格式错误") from exc
+    if amount <= 0:
+        raise ValidationError("金额必须大于 0")
+
+    date_raw = str(payload.get("date") or "").strip()
+    if date_raw:
+        try:
+            date_value = datetime.strptime(date_raw, "%Y-%m-%d").date()
+        except ValueError as exc:
+            raise ValidationError("日期格式错误，应为 YYYY-MM-DD") from exc
+    else:
+        date_value = datetime.utcnow().date()
+
+    event_id = None
+    raw_event_id = payload.get("event_id")
+    if raw_event_id not in (None, "", 0, "0"):
+        try:
+            event_id = int(raw_event_id)
+        except (TypeError, ValueError) as exc:
+            raise ValidationError("event_id 格式错误") from exc
+        if EventData.query.get(event_id) is None:
+            raise ValidationError("活动不存在")
+
+    record = ManualIncome(
+        income_type=income_type,
+        name=name,
+        phone=str(payload.get("phone") or "").strip() or None,
+        payment_mode=str(payload.get("payment_mode") or "").strip() or None,
+        amount=amount,
+        date=date_value,
+        remark=str(payload.get("remark") or "").strip() or None,
+        event_id=event_id,
+        created_by_user_id=getattr(user, "id", None),
+    )
+    db.session.add(record)
+    db.session.commit()
+    return _serialize_manual_finance_payment(record)
+
+
+def _update_manual_finance_payment_status(payment_id, data):
+    from flask import jsonify
+
+    real_id = payment_id - MANUAL_FINANCE_ID_OFFSET
+    record = ManualIncome.query.get(real_id)
+    if record is None:
+        raise NotFound("收款记录不存在")
+
+    status = str((data or {}).get("status") or "").strip()
+    if status not in _FINANCE_PAYMENT_STATUSES:
+        raise ValidationError("付款状态无效")
+
+    record.status = status
+    db.session.commit()
+    return jsonify(
+        {
+            "status": "success",
+            "message": "付款状态已更新",
+            "payment": _serialize_manual_finance_payment(record),
+        }
+    )
+
+
+def delete_manual_finance_payment(payment_id):
+    real_id = payment_id - MANUAL_FINANCE_ID_OFFSET if payment_id >= MANUAL_FINANCE_ID_OFFSET else payment_id
+    record = ManualIncome.query.get(real_id)
+    if record is None:
+        raise NotFound("收款记录不存在")
+    db.session.delete(record)
+    db.session.commit()
+    return real_id
+
 
 # 法会付款（FahuiPayment）统一并入财政收款审核。法会付款的 id 与 RegisPayment
 # 分属不同表、会冲突，这里给法会付款加一个大偏移量做命名空间。
@@ -1290,6 +1464,7 @@ def list_finance_payments(scope=None, status=None):
     include_regis = scope in _FINANCE_PAYMENT_SCOPES or scope in (None, "", "all")
     include_fahui = scope in _FAHUI_FINANCE_SCOPES or scope in (None, "", "all")
     include_sales = scope == "sales" or scope in (None, "", "all")
+    include_manual = scope == "manual" or scope in (None, "", "all")
 
     if include_regis:
         query = RegisPayment.query
@@ -1313,6 +1488,9 @@ def list_finance_payments(scope=None, status=None):
     if include_sales:
         results.extend(_list_sales_finance_payments(status=status))
 
+    if include_manual:
+        results.extend(_list_manual_finance_payments(status=status))
+
     results.sort(key=lambda item: (item.get("created_at") or "", item.get("id") or 0), reverse=True)
     return results
 
@@ -1330,7 +1508,9 @@ def build_payment_report_context(payment_ids, user=None):
 
 def update_finance_payment_status(payment_id, data):
     """按 scope 分发到对应的付款状态更新流程，保留会员 / 青少年 / 法会 / 销售 的生效副作用。"""
-    # 销售偏移量 (2e9) 大于法会偏移量 (1e9)，必须先判销售。
+    # 偏移量从大到小判断：手动 (3e9) > 销售 (2e9) > 法会 (1e9)。
+    if payment_id >= MANUAL_FINANCE_ID_OFFSET:
+        return _update_manual_finance_payment_status(payment_id, data)
     if payment_id >= SALES_FINANCE_ID_OFFSET:
         return _update_sales_finance_payment_status(payment_id, data)
     if payment_id >= FAHUI_FINANCE_ID_OFFSET:

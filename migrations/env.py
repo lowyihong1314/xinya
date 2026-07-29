@@ -5,6 +5,15 @@ from flask import current_app
 
 from alembic import context
 
+# 支持裸 alembic 命令（如项目根目录跑 `alembic upgrade head`）：
+# 没有 Flask app context 时自己创建一个；`flask db` 走原路不受影响。
+try:
+    current_app._get_current_object()
+except RuntimeError:
+    from app import create_app
+
+    create_app().app_context().push()
+
 # this is the Alembic Config object, which provides
 # access to the values within the .ini file in use.
 config = context.config

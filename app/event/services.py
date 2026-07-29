@@ -22,7 +22,7 @@ from models.event_data import (
     EventFlowData,
     EventTaskData,
 )
-from models.finance import ReimbursementRequest
+from models.finance import ManualIncome, ReimbursementRequest
 from models.user_data import User
 
 BROCHURE_EXTENSIONS = {
@@ -1009,6 +1009,43 @@ def _registration_income_rows(event):
     return rows
 
 
+def _manual_income_rows(event_id):
+    """把该活动的手动收款（收款审核·捐赠收入等，按 event_id）作为只读收入行拼进预算：
+    锁定不可编辑，按收款审核状态上色（process 绿 / checked 蓝 / fail 红）。
+    已确认(checked)金额计入实际收入，处理中/失败不计。"""
+    from app.account.services import MANUAL_FINANCE_ID_OFFSET, MANUAL_INCOME_TYPE_LABELS
+
+    records = (
+        ManualIncome.query
+        .filter_by(event_id=event_id)
+        .order_by(ManualIncome.id.desc())
+        .all()
+    )
+    rows = []
+    for r in records:
+        type_label = MANUAL_INCOME_TYPE_LABELS.get(r.income_type, r.income_type)
+        amount = float(r.amount or 0)
+        rows.append({
+            "id": f"manual-{r.id}",
+            "no": 0,
+            "type": "income",
+            "source": "manual_income",
+            "editable": False,
+            "locked": True,
+            "category": f"{type_label}：{r.name}",
+            "budget_amount": amount,
+            "actual_amount": amount if r.status == "checked" else 0.0,
+            "remark": r.remark,
+            "claim": None,
+            "payment": {
+                "id": MANUAL_FINANCE_ID_OFFSET + r.id,
+                "status": r.status,
+                "amount": amount,
+            },
+        })
+    return rows
+
+
 def event_budget_list_response(event_id):
     event = EventData.query.get_or_404(event_id)
     items = (
@@ -1024,8 +1061,8 @@ def event_budget_list_response(event_id):
         d["locked"] = False
         d["claim"] = None
         manual.append(d)
-    # 统一列表：报名收入(只读) + 手动预算行 + 该活动的报销(只读，按 event_id)。
-    data = _registration_income_rows(event) + manual + _event_claim_rows(event_id)
+    # 统一列表：报名收入(只读) + 手动收款(只读，按 event_id) + 手动预算行 + 该活动的报销(只读，按 event_id)。
+    data = _registration_income_rows(event) + _manual_income_rows(event_id) + manual + _event_claim_rows(event_id)
     return jsonify({"status": "success", "data": data})
 
 

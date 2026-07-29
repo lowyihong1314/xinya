@@ -124,6 +124,19 @@ export async function updateClaimEvent(requestId: number, eventId: number | null
   return payload.data;
 }
 
+// 批准人撤回自己的审批签名（撤回后申请解除「已批准锁定」，可再编辑/删除）。
+export async function withdrawClaimDecision(requestId: number) {
+  const response = await apiFetch(`/api/account/claim/${requestId}/withdraw_decision`, {
+    method: "POST",
+    credentials: "include",
+  });
+  const payload = await parseJson<{ data?: ClaimRecord; message?: string }>(response);
+  if (!payload.data) {
+    throw new Error("申请数据缺失");
+  }
+  return payload.data;
+}
+
 export async function updateClaim(
   requestId: number,
   payload: Partial<

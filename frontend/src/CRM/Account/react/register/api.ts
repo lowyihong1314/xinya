@@ -35,6 +35,34 @@ export async function fetchFinancePayments(params?: { scope?: string; status?: s
   return Array.isArray(payload.payments) ? payload.payments : [];
 }
 
+// 手动新建收款（目前只有捐赠收入），可选关联活动（event_id，与报销一致）。
+export async function createManualFinancePayment(payload: {
+  income_type: string;
+  name: string;
+  amount: number;
+  phone?: string;
+  payment_mode?: string;
+  date?: string;
+  event_id?: number | null;
+  remark?: string;
+}) {
+  const response = await apiFetch("/api/account/payments/manual", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    credentials: "include",
+    body: JSON.stringify(payload),
+  });
+  return parseJson<{ status?: string; message?: string; payment?: FinancePayment }>(response);
+}
+
+export async function deleteManualFinancePayment(paymentId: number) {
+  const response = await apiFetch(`/api/account/payments/manual/${paymentId}`, {
+    method: "DELETE",
+    credentials: "include",
+  });
+  return parseJson<{ status?: string; message?: string }>(response);
+}
+
 export async function updateFinancePaymentStatus(paymentId: number, status: string) {
   const response = await apiFetch(`/api/account/payments/${paymentId}/status`, {
     method: "POST",

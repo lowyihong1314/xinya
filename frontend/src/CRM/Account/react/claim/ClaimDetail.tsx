@@ -8,7 +8,7 @@ import { getAttachmentKind, openPreviewModal, resolveAttachmentPreviewUrl } from
 import { showConfirmDialog } from "../../../../js/dialogs";
 import { showEventPicker } from "../../../shared/showEventPicker";
 import { downloadBlobOrShare } from "../../../../js/browserActions";
-import { deleteClaimAttachment, downloadPaymentVoucher, updateClaim, updateClaimEvent, uploadClaimAttachments } from "./api";
+import { deleteClaimAttachment, downloadPaymentVoucher, updateClaim, updateClaimEvent, uploadClaimAttachments, withdrawClaimDecision } from "./api";
 import { displayPurpose } from "./purpose";
 import {
   approverAvatarStyle,
@@ -82,11 +82,8 @@ export function ClaimDetail({
   const [downloadingVoucher, setDownloadingVoucher] = useState(false);
   const [approverUsers, setApproverUsers] = useState<Record<number, ApproverUserProfile>>({});
   const [approverLoadError, setApproverLoadError] = useState("");
-  const [selectedApprover, setSelectedApprover] = useState<{
-    userId: number;
-    name: string;
-    sign: { strokes?: Array<{ points?: Array<{ x: number; y: number }> }> } | null;
-  } | null>(null);
+  const [selectedApprover, setSelectedApprover] = useState<SelectedSign | null>(null);
+  const [withdrawing, setWithdrawing] = useState(false);
   const [voucherOpen, setVoucherOpen] = useState(false);
   const [savingEvent, setSavingEvent] = useState(false);
   const [eventFeedback, setEventFeedback] = useState("");
@@ -118,9 +115,11 @@ export function ClaimDetail({
     setSelectedAttachmentIndex(0);
   }, [claim.id]);
   const claimStatus = useMemo(() => getClaimStatus(claim), [claim]);
-  const canEditEvent = Boolean(!claim.is_locked && (canEditClaims || claim.applicant_user_id === currentUserId));
-  const canEditClaim = Boolean(!claim.is_locked && canEditClaims);
-  const canEditAttachments = Boolean(!claim.is_locked && (canEditClaims || claim.applicant_user_id === currentUserId));
+  // 一旦有人批准（reject=false 的审批记录），申请锁定：不能编辑/删除，除非批准人先撤回签名。
+  const hasApproval = useMemo(() => (claim.approver_data || []).some((item) => !item.reject), [claim]);
+  const canEditEvent = Boolean(!claim.is_locked && !hasApproval && (canEditClaims || claim.applicant_user_id === currentUserId));
+  const canEditClaim = Boolean(!claim.is_locked && !hasApproval && canEditClaims);
+  const canEditAttachments = Boolean(!claim.is_locked && !hasApproval && (canEditClaims || claim.applicant_user_id === currentUserId));
 
   useEffect(() => {
     const approverIds = Array.from(new Set((claim.approver_data || []).map((item) => item.user_id).filter(Boolean)));
@@ -318,7 +317,32 @@ export function ClaimDetail({
     if (!sign) {
       return;
     }
-    setSelectedApprover({ userId: -1, name, sign });
+    setSelectedApprover({ userId: -1, name, sign, decision: null });
+  }
+
+  async function handleWithdrawDecision() {
+    if (withdrawing) {
+      return;
+    }
+    const confirmed = await showConfirmDialog({
+      message: "确认撤回你的审批签名？撤回后这条申请恢复可编辑/可删除状态。",
+      tone: "danger",
+    });
+    if (!confirmed) {
+      return;
+    }
+    setWithdrawing(true);
+    try {
+      const updated = await withdrawClaimDecision(claim.id);
+      onClaimUpdated(updated);
+      setSelectedApprover(null);
+      setEditFeedback("已撤回你的审批签名");
+      setEditError("");
+    } catch (error) {
+      setEditError(error instanceof Error ? error.message : "撤回签名失败");
+    } finally {
+      setWithdrawing(false);
+    }
   }
 
   async function handleDownloadVoucher() {
@@ -379,7 +403,9 @@ export function ClaimDetail({
         <>
           <button type="button" style={buttonApproveStyle} onClick={onApprove}>批准</button>
           <button type="button" style={buttonRejectStyle} onClick={onReject}>拒绝</button>
-          <button type="button" style={buttonRejectStyle} onClick={onDelete}>删除申请</button>
+          {!hasApproval ? (
+            <button type="button" style={buttonRejectStyle} onClick={onDelete}>删除申请</button>
+          ) : null}
         </>
       ) : null}
       {isApprovedByMe ? (
@@ -414,6 +440,9 @@ export function ClaimDetail({
           <div style={statusBadgeStyle(claimStatus)}>{statusText(claimStatus)}</div>
           <span style={chipStyle}>批准 {claim.approver_data?.filter((item) => !item.reject).length || 0} 人</span>
           <span style={chipStyle}>拒绝 {claim.approver_data?.filter((item) => item.reject).length || 0} 人</span>
+          {hasApproval ? (
+            <span style={{ ...chipStyle, color: "var(--x-color-warning)" }}>已有人批准 · 锁定编辑/删除（批准人可撤回签名解锁）</span>
+          ) : null}
           {approverLoadError ? <span style={{ ...chipStyle, color: "var(--x-color-danger)" }}>{approverLoadError}</span> : null}
           {editFeedback ? <span style={{ ...chipStyle, color: "var(--x-color-success)" }}>{editFeedback}</span> : null}
           {editError ? <span style={{ ...chipStyle, color: "var(--x-color-danger)" }}>{editError}</span> : null}
@@ -595,12 +624,9 @@ export function ClaimDetail({
                   type="button"
                   className="claim-detail__approver-card"
                   key={`${approver.user_id}-${approver.decided_at || ""}`}
-                  style={{ ...approverCardStyle, cursor: parseApproverSign(approver.sign_json_data) ? "pointer" : "default", textAlign: "center" }}
+                  style={{ ...approverCardStyle, cursor: "pointer", textAlign: "center" }}
                   onClick={() => {
                     const sign = parseApproverSign(approver.sign_json_data);
-                    if (!sign?.strokes?.length) {
-                      return;
-                    }
                     setSelectedApprover({
                       userId: approver.user_id,
                       name:
@@ -609,6 +635,11 @@ export function ClaimDetail({
                         approverUsers[approver.user_id]?.username ||
                         `用户 #${approver.user_id}`,
                       sign,
+                      decision: {
+                        reject: Boolean(approver.reject),
+                        decidedAt: approver.decided_at || null,
+                        comment: parseApproverComment(approver.sign_json_data),
+                      },
                     });
                   }}
                 >
@@ -647,7 +678,13 @@ export function ClaimDetail({
       </section>
 
       {selectedApprover ? (
-        <SignViewerModal approver={selectedApprover} onClose={() => setSelectedApprover(null)} />
+        <SignViewerModal
+          approver={selectedApprover}
+          isMine={selectedApprover.userId === currentUserId}
+          withdrawing={withdrawing}
+          onWithdraw={() => void handleWithdrawDecision()}
+          onClose={() => setSelectedApprover(null)}
+        />
       ) : null}
 
       {voucherOpen ? <PaymentVoucherModal claimId={claim.id} onClose={() => setVoucherOpen(false)} /> : null}
@@ -879,70 +916,168 @@ function Section({ title, children }: { title: string; children: ReactNode }) {
   );
 }
 
+type SelectedSign = {
+  userId: number;
+  name: string;
+  sign: { strokes?: Array<{ points?: Array<{ x: number; y: number }> }> } | null;
+  // 审批记录信息；申请人/收款人签名预览时为 null。
+  decision: { reject: boolean; decidedAt?: string | null; comment?: string } | null;
+};
+
+// 审批签名预览弹窗（重新设计）：状态、时间、备注 + 白纸签名区；
+// 自己的审批记录多一个「撤回签名」按钮，撤回后申请解锁。
 function SignViewerModal({
   approver,
+  isMine,
+  withdrawing,
+  onWithdraw,
   onClose,
 }: {
-  approver: { userId: number; name: string; sign: { strokes?: Array<{ points?: Array<{ x: number; y: number }> }> } | null };
+  approver: SelectedSign;
+  isMine: boolean;
+  withdrawing: boolean;
+  onWithdraw: () => void;
   onClose: () => void;
 }) {
+  const decision = approver.decision;
+  const decisionColor = decision ? (decision.reject ? "var(--x-color-danger)" : "var(--x-color-success)") : "var(--x-color-ink-muted)";
+  const decisionBg = decision ? (decision.reject ? "var(--x-color-danger-soft)" : "var(--x-color-success-soft)") : "var(--x-color-panel-alt)";
   return (
-    <div
-      className="claim-detail__sign-modal"
-      style={{
-        position: "fixed",
-        inset: 0,
-        zIndex: 10020,
-        background: "rgba(10, 14, 20, 0.6)",
-        display: "grid",
-        placeItems: "center",
-        padding: "12px",
-      }}
-      onClick={onClose}
-    >
-      <div
-        className="claim-detail__sign-modal-card"
-        style={{
-          width: "min(720px, 100%)",
-          display: "grid",
-          gap: "10px",
-          padding: "12px",
-          borderRadius: "8px",
-          background: "var(--x-color-panel-strong)",
-          border: "1px solid var(--x-color-line-soft)",
-          boxShadow: "0 12px 28px var(--x-color-shadow-soft)",
-        }}
-        onClick={(event) => event.stopPropagation()}
-      >
-        <div
-          className="claim-detail__sign-modal-header"
-          style={{ display: "flex", justifyContent: "space-between", gap: "12px", alignItems: "center", flexWrap: "wrap" }}
-        >
-          <div>
-            <div style={{ fontSize: "18px", fontWeight: 800, color: "var(--x-color-ink)" }}>{approver.name}</div>
-            <div style={{ fontSize: "12px", color: "var(--x-color-ink-muted)" }}>审批签名预览</div>
+    <div className="claim-detail__sign-modal" style={signModalBackdropStyle} onClick={onClose}>
+      <div className="claim-detail__sign-modal-card" style={signModalCardStyle} onClick={(event) => event.stopPropagation()}>
+        <div style={signModalHeaderStyle}>
+          <div style={{ display: "grid", gap: "4px", minWidth: 0 }}>
+            <div style={{ fontSize: "11px", letterSpacing: "0.14em", textTransform: "uppercase", color: "var(--x-color-ink-muted)", fontWeight: 700 }}>
+              {decision ? "审批记录" : "签名预览"}
+            </div>
+            <div style={{ display: "flex", gap: "8px", alignItems: "center", flexWrap: "wrap" }}>
+              <span style={{ fontSize: "18px", fontWeight: 800, color: "var(--x-color-ink)" }}>{approver.name}</span>
+              {decision ? (
+                <span style={{ ...signStatusChipStyle, background: decisionBg, color: decisionColor }}>
+                  {decision.reject ? "已拒绝" : "已批准"}
+                </span>
+              ) : null}
+              {isMine ? <span style={{ ...signStatusChipStyle, background: "var(--x-color-accent-tint)", color: "var(--x-color-accent-strong)" }}>你</span> : null}
+            </div>
+            {decision?.decidedAt ? (
+              <div style={{ fontSize: "12px", color: "var(--x-color-ink-muted)" }}>
+                审批时间：{decision.decidedAt.replace("T", " ").slice(0, 16)}
+              </div>
+            ) : null}
           </div>
-          <button type="button" style={buttonGhostStyle} onClick={onClose}>
-            关闭
-          </button>
+          <button type="button" style={signCloseBtnStyle} onClick={onClose} aria-label="关闭">✕</button>
         </div>
 
-        <div
-          className="claim-detail__sign-modal-preview"
-          style={{
-            minHeight: "220px",
-            borderRadius: "6px",
-            border: "1px solid var(--x-color-line-soft)",
-            background: "linear-gradient(180deg, #fffdf8, #f5efe0)",
-            overflow: "hidden",
-          }}
-        >
+        {decision?.comment ? (
+          <div style={signCommentStyle}>
+            <span style={{ fontWeight: 700, color: "var(--x-color-ink-muted)" }}>审批备注：</span>
+            {decision.comment}
+          </div>
+        ) : null}
+
+        <div style={signPaperStyle}>
           <SignatureSvg sign={approver.sign} />
+        </div>
+
+        <div style={signModalFooterStyle}>
+          {isMine && decision ? (
+            <button
+              type="button"
+              style={{ ...signWithdrawBtnStyle, ...(withdrawing ? { opacity: 0.6, cursor: "not-allowed" } : {}) }}
+              disabled={withdrawing}
+              onClick={onWithdraw}
+            >
+              {withdrawing ? "撤回中…" : decision.reject ? "撤回拒绝" : "撤回签名"}
+            </button>
+          ) : null}
+          <button type="button" style={buttonGhostStyle} onClick={onClose}>关闭</button>
         </div>
       </div>
     </div>
   );
 }
+
+const signModalBackdropStyle: CSSProperties = {
+  position: "fixed",
+  inset: 0,
+  zIndex: 10020,
+  background: "rgba(15, 23, 42, 0.55)",
+  display: "grid",
+  placeItems: "center",
+  padding: "16px",
+};
+const signModalCardStyle: CSSProperties = {
+  width: "min(640px, 100%)",
+  maxHeight: "88vh",
+  overflowY: "auto",
+  display: "grid",
+  gap: "12px",
+  padding: "16px 18px 18px",
+  borderRadius: "14px",
+  background: "var(--x-color-panel)",
+  border: "1px solid var(--x-color-line)",
+  boxShadow: "0 20px 60px rgba(0,0,0,0.35)",
+};
+const signModalHeaderStyle: CSSProperties = {
+  display: "flex",
+  justifyContent: "space-between",
+  gap: "12px",
+  alignItems: "flex-start",
+};
+const signStatusChipStyle: CSSProperties = {
+  display: "inline-flex",
+  alignItems: "center",
+  padding: "3px 10px",
+  borderRadius: "999px",
+  fontSize: "12px",
+  fontWeight: 800,
+  whiteSpace: "nowrap",
+};
+const signCloseBtnStyle: CSSProperties = {
+  border: "1px solid var(--x-color-line)",
+  background: "var(--x-color-panel-alt)",
+  color: "var(--x-color-ink-muted)",
+  borderRadius: "8px",
+  width: "30px",
+  height: "30px",
+  cursor: "pointer",
+  fontSize: "14px",
+  flexShrink: 0,
+};
+const signCommentStyle: CSSProperties = {
+  padding: "9px 12px",
+  borderRadius: "8px",
+  background: "var(--x-color-panel-alt)",
+  border: "1px solid var(--x-color-line-soft)",
+  fontSize: "13px",
+  color: "var(--x-color-ink)",
+  lineHeight: 1.6,
+  whiteSpace: "pre-wrap",
+  wordBreak: "break-word",
+};
+const signPaperStyle: CSSProperties = {
+  minHeight: "220px",
+  borderRadius: "10px",
+  border: "1px solid var(--x-color-line)",
+  background: "#ffffff",
+  overflow: "hidden",
+};
+const signModalFooterStyle: CSSProperties = {
+  display: "flex",
+  justifyContent: "flex-end",
+  gap: "8px",
+  flexWrap: "wrap",
+};
+const signWithdrawBtnStyle: CSSProperties = {
+  padding: "8px 16px",
+  borderRadius: "8px",
+  border: "1px solid var(--x-color-danger-border)",
+  background: "var(--x-color-danger-soft)",
+  color: "var(--x-color-danger)",
+  fontWeight: 700,
+  fontSize: "13px",
+  cursor: "pointer",
+};
 
 function SignatureSvg({
   sign,
@@ -1003,6 +1138,25 @@ function formatDateTime(value?: string | null) {
     return "-";
   }
   return value.replace("T", " ").slice(0, 16);
+}
+
+// 审批记录的备注（sign_json_data 外层的 comment 字段）。
+function parseApproverComment(value: unknown): string {
+  if (!value) {
+    return "";
+  }
+  let parsed: unknown = value;
+  if (typeof value === "string") {
+    try {
+      parsed = JSON.parse(value);
+    } catch {
+      return "";
+    }
+  }
+  if (parsed && typeof parsed === "object" && "comment" in parsed) {
+    return String((parsed as { comment?: unknown }).comment || "").trim();
+  }
+  return "";
 }
 
 function parseApproverSign(value: unknown) {

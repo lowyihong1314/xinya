@@ -16,8 +16,10 @@ from app.account.services import (
     build_payment_voucher_context,
     build_public_payment_voucher_context,
     create_claim_from_form,
+    create_manual_finance_payment,
     delete_claim,
     delete_claim_attachment,
+    delete_manual_finance_payment,
     get_payment_voucher_share_data,
     get_public_payment_voucher_data,
     list_claims_for_user,
@@ -28,6 +30,7 @@ from app.account.services import (
     update_claim,
     update_claim_event,
     update_finance_payment_status,
+    withdraw_claim_decision,
 )
 
 account_bp = Blueprint("account", __name__)
@@ -91,6 +94,36 @@ def get_finance_payments():
             status=request.args.get("status"),
         )
         return jsonify({"status": "success", "count": len(payments), "payments": payments}), 200
+    except AccountError as exc:
+        return _error_response(exc)
+    except Exception as exc:
+        from models import db
+
+        db.session.rollback()
+        return jsonify({"status": "error", "message": str(exc)}), 500
+
+
+@account_bp.post("/payments/manual")
+def create_manual_finance_payment_route():
+    try:
+        user = require_claim_edit_permission()
+        payment = create_manual_finance_payment(request.get_json(silent=True) or {}, user)
+        return jsonify({"status": "success", "message": "收款已新建", "payment": payment}), 201
+    except AccountError as exc:
+        return _error_response(exc)
+    except Exception as exc:
+        from models import db
+
+        db.session.rollback()
+        return jsonify({"status": "error", "message": str(exc)}), 500
+
+
+@account_bp.delete("/payments/manual/<int:payment_id>")
+def delete_manual_finance_payment_route(payment_id):
+    try:
+        require_claim_edit_permission()
+        delete_manual_finance_payment(payment_id)
+        return jsonify({"status": "success", "message": "收款记录已移除"}), 200
     except AccountError as exc:
         return _error_response(exc)
     except Exception as exc:
@@ -175,6 +208,30 @@ def claim_decision(request_id):
                 {
                     "status": "success",
                     "message": "操作成功",
+                    "data": serialize_request_data(request_obj, with_children=True),
+                }
+            ),
+            200,
+        )
+    except AccountError as exc:
+        return _error_response(exc)
+    except Exception as exc:
+        from models import db
+
+        db.session.rollback()
+        return jsonify({"status": "error", "message": str(exc)}), 500
+
+
+@account_bp.post("/claim/<int:request_id>/withdraw_decision")
+def withdraw_claim_decision_route(request_id):
+    try:
+        user = require_authenticated_user()
+        request_obj = withdraw_claim_decision(request_id, user)
+        return (
+            jsonify(
+                {
+                    "status": "success",
+                    "message": "已撤回你的审批签名",
                     "data": serialize_request_data(request_obj, with_children=True),
                 }
             ),

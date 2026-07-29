@@ -1,6 +1,7 @@
-import { useState, type CSSProperties, type ReactNode } from "react";
+import { useEffect, useState, type CSSProperties, type KeyboardEvent, type ReactNode } from "react";
 
 import { openOverlay } from "../app/OverlayProvider";
+import { ensureDesignTokens } from "../theme/designTokens";
 
 type DialogTone = "default" | "danger";
 
@@ -24,20 +25,6 @@ type PromptOptions = {
   readOnly?: boolean;
 };
 
-function dialogAccent(tone: DialogTone) {
-  return tone === "danger"
-    ? {
-        background: "linear-gradient(135deg, rgba(194,65,12,0.76), rgba(220,38,38,0.7))",
-        soft: "rgba(255,241,242,0.8)",
-        border: "rgba(244,63,94,0.24)",
-      }
-    : {
-        background: "linear-gradient(135deg, rgba(14,165,233,0.78), rgba(125,211,252,0.62))",
-        soft: "rgba(56,189,248,0.16)",
-        border: "rgba(56,189,248,0.24)",
-      };
-}
-
 function DialogFrame({
   title,
   message,
@@ -53,18 +40,27 @@ function DialogFrame({
   tone?: DialogTone;
   onClose: () => void;
 }) {
-  const accent = dialogAccent(tone);
+  useEffect(() => {
+    const onKey = (event: globalThis.KeyboardEvent) => {
+      if (event.key === "Escape") onClose();
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [onClose]);
 
   return (
     <div style={overlayStyle} onClick={onClose}>
-      <div style={{ ...panelStyle, borderColor: accent.border }} onClick={(event) => event.stopPropagation()}>
-        <div style={{ ...accentBarStyle, background: accent.background }} />
+      <div style={panelStyle} role="dialog" aria-modal="true" onClick={(event) => event.stopPropagation()}>
         <div style={headerStyle}>
-          <div style={eyebrowStyle}>Dialog</div>
-          <h3 style={titleStyle}>{title}</h3>
-          <p style={messageStyle}>{message}</p>
+          <span style={iconBadgeStyle(tone)}>
+            <i className={tone === "danger" ? "fa-solid fa-triangle-exclamation" : "fa-solid fa-circle-info"} />
+          </span>
+          <div style={{ display: "grid", gap: 4, minWidth: 0 }}>
+            <h3 style={titleStyle}>{title}</h3>
+            <p style={messageStyle}>{message}</p>
+          </div>
         </div>
-        {children ? <div style={{ ...bodyStyle, background: accent.soft }}>{children}</div> : null}
+        {children ? <div>{children}</div> : null}
         <div style={actionsStyle}>{actions}</div>
       </div>
     </div>
@@ -107,6 +103,12 @@ function PromptDialog({
 }) {
   const [value, setValue] = useState(options.initialValue || "");
 
+  const submitOnEnter = (event: KeyboardEvent) => {
+    if (event.key === "Enter" && !options.multiline && !options.readOnly) {
+      onResolve(value);
+    }
+  };
+
   const inputNode = options.multiline ? (
     <textarea
       value={value}
@@ -120,10 +122,12 @@ function PromptDialog({
     <input
       value={value}
       onChange={(event) => setValue(event.target.value)}
+      onKeyDown={submitOnEnter}
       placeholder={options.placeholder}
       readOnly={options.readOnly}
       style={inputStyle}
       autoFocus={!options.readOnly}
+      onFocus={options.readOnly ? (event) => event.target.select() : undefined}
     />
   );
 
@@ -156,6 +160,7 @@ function PromptDialog({
 }
 
 export function showConfirmDialog(options: ConfirmOptions) {
+  ensureDesignTokens();
   return new Promise<boolean>((resolve) => {
     openOverlay((close) => (
       <ConfirmDialog
@@ -170,6 +175,7 @@ export function showConfirmDialog(options: ConfirmOptions) {
 }
 
 export function showPromptDialog(options: PromptOptions) {
+  ensureDesignTokens();
   return new Promise<string | null>((resolve) => {
     openOverlay((close) => (
       <PromptDialog
@@ -190,110 +196,104 @@ const overlayStyle: CSSProperties = {
   display: "grid",
   placeItems: "center",
   padding: "20px",
-  background: "rgba(214,242,255,0.66)",
-  backdropFilter: "blur(10px)",
+  background: "rgba(15, 23, 42, 0.45)",
 };
 
 const panelStyle: CSSProperties = {
-  width: "min(520px, 100%)",
+  width: "min(420px, 100%)",
   display: "grid",
-  gap: "16px",
-  padding: "22px",
-  borderRadius: 0,
-  background: "linear-gradient(180deg, rgba(255,255,255,0.7), rgba(232,247,255,0.62))",
-  border: "1px solid rgba(255,255,255,0.14)",
-  boxShadow: "0 30px 90px rgba(14,116,144,0.18), inset 0 1px 0 rgba(255,255,255,0.1)",
-  color: "rgba(31,78,121,0.92)",
-  backdropFilter: "blur(24px) saturate(140%)",
-};
-
-const accentBarStyle: CSSProperties = {
-  width: "72px",
-  height: "6px",
-  borderRadius: "999px",
+  gap: "18px",
+  padding: "20px",
+  borderRadius: "var(--x-radius-md, 16px)",
+  background: "var(--x-color-panel, #ffffff)",
+  boxShadow: "0 24px 64px rgba(15, 23, 42, 0.24)",
+  color: "var(--x-color-ink, #1d2433)",
+  fontFamily: "var(--x-font-sans, sans-serif)",
 };
 
 const headerStyle: CSSProperties = {
-  display: "grid",
-  gap: "8px",
+  display: "flex",
+  alignItems: "flex-start",
+  gap: "12px",
 };
 
-const eyebrowStyle: CSSProperties = {
-  fontSize: "12px",
-  fontWeight: 800,
-  letterSpacing: "0.14em",
-  textTransform: "uppercase",
-  color: "rgba(14,165,233,0.82)",
-};
+function iconBadgeStyle(tone: DialogTone): CSSProperties {
+  return {
+    display: "inline-flex",
+    alignItems: "center",
+    justifyContent: "center",
+    width: 38,
+    height: 38,
+    borderRadius: 12,
+    flexShrink: 0,
+    fontSize: 16,
+    background: tone === "danger" ? "var(--x-color-danger-soft, #ffedd5)" : "var(--x-color-accent-soft, #d9f3ef)",
+    color: tone === "danger" ? "var(--x-color-danger, #c2410c)" : "var(--x-color-accent-strong, #115e59)",
+  };
+}
 
 const titleStyle: CSSProperties = {
   margin: 0,
-  fontSize: "24px",
-  lineHeight: 1.1,
-  color: "rgba(12,74,110,0.98)",
+  fontSize: "16px",
+  fontWeight: 700,
+  lineHeight: 1.3,
 };
 
 const messageStyle: CSSProperties = {
   margin: 0,
-  fontSize: "14px",
-  lineHeight: 1.7,
-  color: "rgba(57,100,137,0.88)",
+  fontSize: "13.5px",
+  lineHeight: 1.6,
+  color: "var(--x-color-ink-muted, #5d6678)",
   whiteSpace: "pre-wrap",
-};
-
-const bodyStyle: CSSProperties = {
-  padding: "14px",
-  borderRadius: 0,
-  border: "1px solid rgba(255,255,255,0.1)",
-  backdropFilter: "blur(12px)",
+  overflowWrap: "anywhere",
 };
 
 const actionsStyle: CSSProperties = {
   display: "flex",
   justifyContent: "flex-end",
-  gap: "12px",
+  gap: "8px",
   flexWrap: "wrap",
 };
 
 const secondaryButtonStyle: CSSProperties = {
-  border: "1px solid rgba(255,255,255,0.14)",
-  borderRadius: "999px",
-  padding: "10px 16px",
-  background: "rgba(255,255,255,0.6)",
-  color: "rgba(31,78,121,0.9)",
-  fontWeight: 700,
+  border: "1px solid var(--x-color-line, #d8dfeb)",
+  borderRadius: 8,
+  padding: "8px 16px",
+  background: "var(--x-color-panel, #ffffff)",
+  color: "var(--x-color-ink, #1d2433)",
+  fontSize: 13.5,
+  fontWeight: 600,
   cursor: "pointer",
-  boxShadow: "0 12px 28px rgba(14,116,144,0.12)",
-  backdropFilter: "blur(14px)",
 };
 
 function primaryButtonStyle(tone: DialogTone): CSSProperties {
   return {
-    border: `1px solid ${dialogAccent(tone).border}`,
-    borderRadius: "999px",
-    padding: "10px 16px",
-    background: dialogAccent(tone).background,
-    color: "rgba(3,105,161,0.98)",
-    fontWeight: 700,
+    border: "none",
+    borderRadius: 8,
+    padding: "8px 16px",
+    background: tone === "danger" ? "var(--x-color-danger, #c2410c)" : "var(--x-color-accent, #0f766e)",
+    color: "#ffffff",
+    fontSize: 13.5,
+    fontWeight: 600,
     cursor: "pointer",
   };
 }
 
 const inputStyle: CSSProperties = {
   width: "100%",
-  borderRadius: 0,
-  border: "1px solid rgba(255,255,255,0.12)",
-  padding: "12px 14px",
+  borderRadius: 8,
+  border: "1px solid var(--x-color-line, #d8dfeb)",
+  padding: "10px 12px",
   boxSizing: "border-box",
-  fontSize: "14px",
-  background: "rgba(232,247,255,0.44)",
-  color: "rgba(12,74,110,0.94)",
-  outlineColor: "rgba(56,189,248,0.72)",
-  backdropFilter: "blur(12px)",
+  fontSize: "13.5px",
+  background: "var(--x-color-panel, #ffffff)",
+  color: "var(--x-color-ink, #1d2433)",
+  outlineColor: "var(--x-color-accent, #0f766e)",
 };
 
 const textAreaStyle: CSSProperties = {
   ...inputStyle,
   minHeight: "120px",
   resize: "vertical",
+  fontFamily: "var(--x-font-sans, sans-serif)",
 };

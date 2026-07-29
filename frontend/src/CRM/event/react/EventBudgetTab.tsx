@@ -9,6 +9,7 @@ import { hasUserPermission } from "../../../app/permissions";
 import { ClaimCreateModal } from "../../Account/react/claim/ClaimCreateModal";
 
 type BudgetClaim = { id: number; status: "pending" | "approved" | "rejected"; amount?: number };
+type BudgetPayment = { id: number; status: "process" | "checked" | "fail"; amount?: number };
 type BudgetStats = { total: number; paid: number; approved: number };
 type BudgetItem = {
   id: number | string;
@@ -19,6 +20,7 @@ type BudgetItem = {
   actual_amount: number | null;
   remark: string | null;
   claim?: BudgetClaim | null;
+  payment?: BudgetPayment | null;
   locked?: boolean;
   source?: string;
   editable?: boolean;
@@ -35,6 +37,14 @@ function claimTone(status?: string): { bg: string; border: string; label: string
   if (status === "approved") return { bg: "var(--x-color-accent-tint)", border: "var(--x-color-accent-border)", label: "已批准", color: "var(--x-color-accent-strong)" };
   if (status === "pending") return { bg: "var(--x-color-success-soft)", border: "rgba(21,128,61,0.30)", label: "已提交", color: "var(--x-color-success)" };
   if (status === "rejected") return { bg: "var(--x-color-danger-soft)", border: "var(--x-color-danger-border)", label: "被拒", color: "var(--x-color-danger)" };
+  return null;
+}
+
+// 手动收款行（source=manual_income，收款审核状态）：process 绿 / checked 蓝 / fail 红。
+function paymentTone(status?: string): { bg: string; border: string; label: string; color: string } | null {
+  if (status === "checked") return { bg: "var(--x-color-accent-tint)", border: "var(--x-color-accent-border)", label: "已确认", color: "var(--x-color-accent-strong)" };
+  if (status === "process") return { bg: "var(--x-color-success-soft)", border: "rgba(21,128,61,0.30)", label: "处理中", color: "var(--x-color-success)" };
+  if (status === "fail") return { bg: "var(--x-color-danger-soft)", border: "var(--x-color-danger-border)", label: "失败", color: "var(--x-color-danger)" };
   return null;
 }
 
@@ -144,6 +154,14 @@ export function EventBudgetTab({
     );
   }
 
+  // 手动收款行（source=manual_income，只读）：显示「查看」跳到收款审核详情。
+  function paymentView(it: BudgetItem): ReactNode {
+    if (it.source !== "manual_income" || !it.payment) return null;
+    return (
+      <button type="button" style={linkBtnStyle} onClick={() => navigate(`/crm/finance?account_router=register&pay_status=all&payment_id=${it.payment!.id}`)}>查看</button>
+    );
+  }
+
   return (
     <div style={wrapStyle}>
       {error ? <div style={errorStyle}>{error}</div> : null}
@@ -175,8 +193,9 @@ export function EventBudgetTab({
         {income.filter((it) => it.source !== "registration").length ? (
           <div style={{ display: "grid", gap: 6 }}>
             {income.filter((it) => it.source !== "registration").map((it) => (
-              <EditableRow key={it.id} it={it} isMobile={isMobile} canEdit={canEdit} locked={false} tone={null}
-                onPatch={patch} onRemove={remove} action={null} />
+              <EditableRow key={it.id} it={it} isMobile={isMobile} canEdit={canEdit} locked={!!it.locked}
+                tone={paymentTone(it.payment?.status)}
+                onPatch={patch} onRemove={remove} action={paymentView(it)} />
             ))}
           </div>
         ) : null}

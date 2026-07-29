@@ -62,6 +62,45 @@ class ReimbursementRequest(db.Model):
 
 
 
+class ManualIncome(db.Model):
+    """财政手动新建的收款（目前只有捐赠收入），并入「收款审核」统一审核。"""
+
+    __tablename__ = "manual_income"
+
+    id = db.Column(db.Integer, primary_key=True, autoincrement=True)
+
+    # 收入类型：donation=捐赠收入（暂时只有这一种）
+    income_type = db.Column(db.String(32), nullable=False, default="donation", index=True)
+
+    name = db.Column(db.String(128), nullable=False)
+    phone = db.Column(db.String(32), nullable=True)
+    payment_mode = db.Column(db.String(32), nullable=True)
+    amount = db.Column(db.Numeric(10, 2), nullable=False)
+    date = db.Column(db.Date, nullable=False)
+    remark = db.Column(db.Text, nullable=True)
+
+    status = db.Column(db.Enum("fail", "process", "checked"), default="process", nullable=False)
+
+    # 关联活动（可为空，与报销一致）
+    event_id = db.Column(
+        db.Integer,
+        db.ForeignKey("event_data.id", ondelete="SET NULL", onupdate="CASCADE"),
+        nullable=True,
+        index=True
+    )
+    event = db.relationship("EventData", foreign_keys=[event_id])
+
+    created_by_user_id = db.Column(
+        db.Integer,
+        db.ForeignKey("user_data.id", ondelete="SET NULL", onupdate="CASCADE"),
+        nullable=True,
+        index=True
+    )
+    created_by = db.relationship("User", foreign_keys=[created_by_user_id])
+
+    created_at = db.Column(db.DateTime, default=datetime.utcnow, nullable=False)
+
+
 class ReimbursementAttachment(db.Model):
     __tablename__ = "reimbursement_attachment"
 

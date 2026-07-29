@@ -9,12 +9,14 @@ import { useUserState } from "../../../../app/UserState";
 import { getUserPermissionNames } from "../../../../app/permissions";
 import { useEnsureDesignTokens } from "../../../../theme/designTokens";
 import {
+  deleteManualFinancePayment,
   deleteRegisterPayment,
   downloadPaymentReport,
   fetchFinancePayments,
   replaceRegisterPaymentProof,
   updateFinancePaymentStatus,
 } from "./api";
+import { ManualPaymentCreateModal } from "./ManualPaymentCreateModal";
 import { SCOPE_FILTERS, STATUS_FILTERS, type FinancePayment } from "./types";
 import { TablePagination, usePagedRows } from "../../../shared/TablePagination";
 import { DocDetailHeader } from "../shared/DocDetailHeader";
@@ -79,6 +81,7 @@ export function RegisterWorkspace() {
   const [proofVersion, setProofVersion] = useState(0);
   const [jeOpen, setJeOpen] = useState(false);
   const [batchJeOpen, setBatchJeOpen] = useState(false);
+  const [createOpen, setCreateOpen] = useState(false);
   const [selectedIds, setSelectedIds] = useState<Set<number>>(new Set());
   const [jeMap, setJeMap] = useState<Record<string, GLSourceEntryRef>>({});
   const [exportingXlsx, setExportingXlsx] = useState(false);
@@ -306,7 +309,8 @@ export function RegisterWorkspace() {
     setRemoving(true);
     setNotice(null);
     try {
-      await deleteRegisterPayment(selected.id);
+      if (selected.source_scope === "manual") await deleteManualFinancePayment(selected.id);
+      else await deleteRegisterPayment(selected.id);
       closePayment();
       setNotice({ tone: "success", text: "付款记录已移除" });
       await loadData();
@@ -320,6 +324,7 @@ export function RegisterWorkspace() {
   // ------- Detail view -------
   if (selectedId != null) {
     const isForm = selected?.source_scope === "form";
+    const isManual = selected?.source_scope === "manual";
     const proofUrl = selected?.proof_image_url || selected?.proof_image_path || "";
     const proofSrc = proofUrl ? `${proofUrl}${proofUrl.includes("?") ? "&" : "?"}t=${proofVersion}` : "";
     const regPath = selected ? registrationPath(selected) : null;
@@ -374,6 +379,13 @@ export function RegisterWorkspace() {
                     <Fact label="日期" value={selected.date || "-"} />
                     <Fact label="时间" value={selected.time || "-"} />
                     <Fact label="提交时间" value={submittedAt(selected)} />
+                    {isManual ? (
+                      <Fact
+                        label="关联活动"
+                        value={selected.event_id ? `${selected.event_name || "未命名活动"} #${selected.event_id}` : "未关联活动"}
+                      />
+                    ) : null}
+                    {isManual && selected.remark ? <Fact label="备注" value={selected.remark} /> : null}
                   </div>
 
                   {canEdit ? (
@@ -431,7 +443,20 @@ export function RegisterWorkspace() {
                       ) : null}
                     </div>
                   ) : null}
-                  {!isForm ? (
+                  {canEdit && isManual ? (
+                    <div style={rowStyle}>
+                      <button
+                        type="button"
+                        className="fin-btn fin-btn--danger"
+                        style={{ width: "auto", padding: "8px 16px" }}
+                        disabled={busy}
+                        onClick={() => void handleRemove()}
+                      >
+                        {removing ? "移除中…" : "移除记录"}
+                      </button>
+                    </div>
+                  ) : null}
+                  {!isForm && !isManual ? (
                     <div style={mutedStyle}>会员 / 青少年佛学班 / 法会 / 销售 的付款截图请在对应模块管理，这里做收款状态审核（确认 = 批准）。</div>
                   ) : null}
                 </div>
@@ -489,9 +514,16 @@ export function RegisterWorkspace() {
               共 {stats.count} 笔 · 已确认 {stats.checkedCount} 笔 · 已确认金额 {formatAmount(stats.checkedTotal)}
             </div>
           </div>
-          <button type="button" style={btnStyle} onClick={() => void loadData()} disabled={loading}>
-            {loading ? "刷新中…" : "刷新"}
-          </button>
+          <div style={rowStyle}>
+            {canEdit ? (
+              <button type="button" style={primaryBulkBtnStyle} onClick={() => setCreateOpen(true)}>
+                新建收款
+              </button>
+            ) : null}
+            <button type="button" style={btnStyle} onClick={() => void loadData()} disabled={loading}>
+              {loading ? "刷新中…" : "刷新"}
+            </button>
+          </div>
         </div>
 
         <div style={filterBarStyle}>
@@ -642,6 +674,16 @@ export function RegisterWorkspace() {
           </div>
         ) : null}
       </section>
+
+      <ManualPaymentCreateModal
+        open={createOpen}
+        onClose={() => setCreateOpen(false)}
+        onCreated={(message) => {
+          setCreateOpen(false);
+          setNotice({ tone: "success", text: message || "收款已新建" });
+          void loadData();
+        }}
+      />
 
       <BatchWriteJEModal
         open={batchJeOpen}
