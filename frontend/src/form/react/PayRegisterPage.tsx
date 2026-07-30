@@ -712,6 +712,7 @@ const styles: Record<string, React.CSSProperties> = {
     fontSize: 12,
     color: "var(--x-color-ink-muted)",
     lineHeight: 1.5,
+    whiteSpace: "pre-wrap" as const,
   },
   summaryBox: {
     display: "flex",

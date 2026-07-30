@@ -329,9 +329,10 @@ export function EventFlowInline({ detail, canEdit, isMobile }: { detail: EventDe
                 </span>
               )}
               {canEdit ? (
-                <input style={detailInputStyle} defaultValue={f.detail || ""} placeholder="详情 / 负责人"
+                <textarea style={{ ...detailInputStyle, resize: "none", fontFamily: "inherit", lineHeight: 1.5, whiteSpace: "pre-wrap" }}
+                  rows={Math.max(1, (f.detail || "").split("\n").length)} defaultValue={f.detail || ""} placeholder="详情 / 负责人"
                   onBlur={(ev) => { const v = ev.target.value.trim(); if (v !== (f.detail || "")) void patch(f.id, { detail: v }); }} />
-              ) : f.detail ? <span style={mutedStyle}>{f.detail}</span> : null}
+              ) : f.detail ? <span style={{ ...mutedStyle, whiteSpace: "pre-wrap" }}>{f.detail}</span> : null}
             </div>
             {canEdit ? (
               <div style={actionsStyle}>
@@ -406,7 +407,7 @@ const mHandleStyle: CSSProperties = { flexShrink: 0, width: "34px", height: "40p
 const mBodyStyle: CSSProperties = { flex: 1, minWidth: 0, display: "grid", gap: "2px" };
 const mTimeStyle: CSSProperties = { fontSize: "12px", fontWeight: 600, letterSpacing: "0.02em", color: "var(--x-color-accent-strong)" };
 const mTitleStyle: CSSProperties = { fontSize: "15px", fontWeight: 600, color: "var(--x-color-ink)" };
-const mDetailStyle: CSSProperties = { fontSize: "13px", lineHeight: 1.6, color: "var(--x-color-ink-muted)" };
+const mDetailStyle: CSSProperties = { fontSize: "13px", lineHeight: 1.6, color: "var(--x-color-ink-muted)", whiteSpace: "pre-wrap" };
 const mEditBtnStyle: CSSProperties = { flexShrink: 0, width: "36px", height: "36px", borderRadius: "8px", border: "1px solid var(--x-color-line)", background: "var(--x-color-panel)", color: "var(--x-color-accent-strong)", cursor: "pointer", fontSize: "13px" };
 const editOverlayStyle: CSSProperties = { position: "fixed", inset: 0, zIndex: 3000, background: "rgba(15,23,42,0.4)", display: "flex", alignItems: "flex-end", justifyContent: "center" };
 const editSheetStyle: CSSProperties = { width: "min(560px, 100%)", maxHeight: "88vh", overflowY: "auto", background: "var(--x-color-panel)", borderRadius: "18px 18px 0 0", padding: "18px 16px max(18px, env(safe-area-inset-bottom))", display: "grid", gap: "8px", boxShadow: "0 -20px 50px rgba(15,23,42,0.25)" };

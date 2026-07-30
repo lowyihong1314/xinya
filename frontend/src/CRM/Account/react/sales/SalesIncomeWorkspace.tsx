@@ -791,7 +791,7 @@ export function SalesIncomeWorkspace() {
                   客户 {doc.counterparty_name || "—"} · 仓库 {getDocumentWarehouse(doc)} · 经手 {doc.taken_by_name || "—"} ·
                   金额 {total > 0 ? `RM ${formatMoney(total)}` : "—"} · {formatDateTime(doc.created_at)}
                 </div>
-                {doc.note ? <div style={{ ...mutedStyle, marginTop: "4px" }}>备注：{doc.note}</div> : null}
+                {doc.note ? <div style={{ ...mutedStyle, marginTop: "4px", whiteSpace: "pre-wrap" }}>备注：{doc.note}</div> : null}
               </div>
 
               {canEdit ? (

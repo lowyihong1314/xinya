@@ -735,7 +735,7 @@ const styles: Record<string, CSSProperties> = {
   factList: { margin: 0, display: "flex", flexDirection: "column", gap: "6px" },
   factRow: { display: "flex", gap: "10px", margin: 0 },
   factLabel: { margin: 0, width: "56px", flexShrink: 0, fontSize: "13px", color: "var(--x-color-ink-muted)" },
-  factValue: { margin: 0, fontSize: "13px", color: "var(--x-color-ink)" },
+  factValue: { margin: 0, fontSize: "13px", color: "var(--x-color-ink)", whiteSpace: "pre-wrap" },
   detailText: { fontSize: "13px", lineHeight: 1.6, color: "var(--x-color-ink)", whiteSpace: "pre-wrap" },
   feeBox: { display: "flex", flexDirection: "column", gap: "4px", padding: "10px 12px", borderRadius: "var(--x-radius-sm)", background: "var(--x-color-panel-alt)" },
   feeTitle: { fontSize: "12px", fontWeight: 700, color: "var(--x-color-ink-muted)" },

@@ -546,6 +546,7 @@ const contentBodyStyle: CSSProperties = {
   fontSize: "13px",
   color: "var(--x-color-ink-muted)",
   lineHeight: 1.6,
+  whiteSpace: "pre-wrap",
 };
 
 const rowActionsStyle: CSSProperties = {

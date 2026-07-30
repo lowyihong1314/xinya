@@ -674,6 +674,7 @@ function WorkbenchDetailPage({
           value={fieldString(entry, field.key)}
           field={field.putKey || field.key || ""}
           link={field.kind === "link"}
+          multiline={field.kind === "multiline"}
           placeholder={field.placeholder}
           editable={editable}
           saving={savingField === (field.putKey || field.key)}
@@ -876,6 +877,7 @@ function EditableFact({
   onSave,
   placeholder,
   link,
+  multiline,
 }: {
   label: string;
   value?: string | null;
@@ -885,6 +887,7 @@ function EditableFact({
   onSave: (field: string, value: string) => void;
   placeholder?: string;
   link?: boolean;
+  multiline?: boolean;
 }) {
   const [editing, setEditing] = useState(false);
   const [draft, setDraft] = useState(value ?? "");
@@ -922,17 +925,30 @@ function EditableFact({
         ) : null}
       </div>
       {editing ? (
-        <input
-          style={factInputStyle}
-          value={draft}
-          placeholder={placeholder}
-          autoFocus
-          onChange={(e) => setDraft(e.target.value)}
-          onKeyDown={(e) => {
-            if (e.key === "Enter") commit();
-            if (e.key === "Escape") setEditing(false);
-          }}
-        />
+        multiline ? (
+          <textarea
+            style={{ ...factInputStyle, minHeight: "72px", resize: "vertical", fontFamily: "inherit" }}
+            value={draft}
+            placeholder={placeholder}
+            autoFocus
+            onChange={(e) => setDraft(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === "Escape") setEditing(false);
+            }}
+          />
+        ) : (
+          <input
+            style={factInputStyle}
+            value={draft}
+            placeholder={placeholder}
+            autoFocus
+            onChange={(e) => setDraft(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === "Enter") commit();
+              if (e.key === "Escape") setEditing(false);
+            }}
+          />
+        )
       ) : link && value && value.trim() ? (
         <a href={value} target="_blank" rel="noreferrer" style={{ ...factValueStyle, ...proofLinkStyle }}>
           {value}
@@ -1273,7 +1289,7 @@ const factLabelStyle: CSSProperties = {
   textTransform: "uppercase",
   color: "var(--x-color-ink-muted)",
 };
-const factValueStyle: CSSProperties = { fontSize: "13px", lineHeight: 1.5, wordBreak: "break-word", fontWeight: 600 };
+const factValueStyle: CSSProperties = { fontSize: "13px", lineHeight: 1.5, wordBreak: "break-word", fontWeight: 600, whiteSpace: "pre-wrap" };
 
 const proofLinkStyle: CSSProperties = {
   color: "var(--x-color-accent-strong)",

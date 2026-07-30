@@ -101,7 +101,7 @@ export type DetailField = {
   value?: (entry: WorkbenchEntry) => string; // computed readonly display
   editable?: boolean;
   putKey?: string;
-  kind?: "text" | "link";
+  kind?: "text" | "link" | "multiline";
   placeholder?: string;
 };
 

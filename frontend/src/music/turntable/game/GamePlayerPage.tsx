@@ -392,8 +392,8 @@ const timerTrackStyle: CSSProperties = { flex: 1, height: "12px", background: "v
 const timerBarStyle: CSSProperties = { height: "100%", background: "linear-gradient(90deg,#2bd66b,#ffd23f,#ff5a5a)", transition: "width 0.2s linear" };
 const qSecStyle: CSSProperties = { fontWeight: 900, fontSize: "18px", minWidth: "28px", textAlign: "center" };
 const qTextCardStyle: CSSProperties = { padding: "14px 16px", borderRadius: "14px", background: "var(--x-color-panel)", border: "1px solid var(--x-color-line)" };
-const qZhStyle: CSSProperties = { fontSize: "clamp(16px,4.4vw,21px)", fontWeight: 800, lineHeight: 1.45 };
-const qEnStyle: CSSProperties = { fontSize: "clamp(11px,3vw,14px)", opacity: 0.7, marginTop: "4px" };
+const qZhStyle: CSSProperties = { fontSize: "clamp(16px,4.4vw,21px)", fontWeight: 800, lineHeight: 1.45, whiteSpace: "pre-wrap" };
+const qEnStyle: CSSProperties = { fontSize: "clamp(11px,3vw,14px)", opacity: 0.7, marginTop: "4px", whiteSpace: "pre-wrap" };
 const optionsGridStyle: CSSProperties = { display: "grid", gridTemplateColumns: "1fr 1fr", gap: "10px" };
 const optionBtnStyle = (i: number, locked: boolean, mine: boolean): CSSProperties => ({
   border: "none",

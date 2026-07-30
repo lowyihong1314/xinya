@@ -92,7 +92,7 @@ export function YouthClassRegistrationPage() {
         { label: "英文名", key: "english_name", editable: true },
         { label: "手机号码", key: "phone", editable: true },
         { label: "性别", key: "gender", editable: true, placeholder: "男 / 女" },
-        { label: "住家地址", key: "address", editable: true },
+        { label: "住家地址", key: "address", editable: true, kind: "multiline" },
         { label: "紧急联络人姓名", key: "emergency_contact_name", editable: true },
         { label: "紧急联络人电话", key: "emergency_contact_phone", editable: true },
         { label: "紧急联络人关系", key: "emergency_contact_relation", editable: true },

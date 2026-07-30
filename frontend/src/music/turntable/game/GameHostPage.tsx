@@ -446,8 +446,8 @@ const qTimerTrack: CSSProperties = { flex: 1, height: "16px", background: "var(-
 const qTimerBar: CSSProperties = { height: "100%", background: "linear-gradient(90deg,#2bd66b,#ffd23f,#ff5a5a)", transition: "width 0.2s linear" };
 const qBigTime: CSSProperties = { fontSize: "32px", fontWeight: 900, minWidth: "56px", textAlign: "center" };
 const qCardStyle: CSSProperties = { background: "var(--x-color-panel)", border: "1px solid var(--x-color-line)", borderRadius: "18px", padding: "22px 26px" };
-const qCardZh: CSSProperties = { fontSize: "clamp(20px,3vw,32px)", fontWeight: 800, lineHeight: 1.5 };
-const qCardEn: CSSProperties = { fontSize: "clamp(13px,1.6vw,18px)", opacity: 0.7, marginTop: "8px" };
+const qCardZh: CSSProperties = { fontSize: "clamp(20px,3vw,32px)", fontWeight: 800, lineHeight: 1.5, whiteSpace: "pre-wrap" };
+const qCardEn: CSSProperties = { fontSize: "clamp(13px,1.6vw,18px)", opacity: 0.7, marginTop: "8px", whiteSpace: "pre-wrap" };
 const hostOptionsGrid: CSSProperties = { display: "grid", gridTemplateColumns: "1fr 1fr", gap: "14px" };
 const hostOptionStyle = (i: number, dim: boolean, correct: boolean): CSSProperties => ({
   display: "flex",

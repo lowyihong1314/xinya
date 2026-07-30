@@ -181,6 +181,7 @@ const sectionCopyStyle: CSSProperties = {
   margin: "4px 0 0",
   fontSize: "13px",
   color: "var(--x-color-ink-muted)",
+  whiteSpace: "pre-wrap",
 };
 
 const toolbarStyle: CSSProperties = {

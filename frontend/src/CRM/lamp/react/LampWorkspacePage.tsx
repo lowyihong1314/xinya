@@ -275,7 +275,7 @@ export function LampWorkspacePage() {
                       </tr>
                       <tr>
                         <th>地址</th>
-                        <td>{editable ? <input style={inputStyle} value={form.address} disabled={saving} onChange={(e) => setForm((p) => ({ ...p, address: e.target.value }))} /> : form.address || "-"}</td>
+                        <td style={{ whiteSpace: "pre-wrap" }}>{editable ? <textarea style={{ ...inputStyle, minHeight: "56px", resize: "vertical", fontFamily: "inherit" }} value={form.address} disabled={saving} onChange={(e) => setForm((p) => ({ ...p, address: e.target.value }))} /> : form.address || "-"}</td>
                       </tr>
                       <tr><th>合计</th><td style={cellStrongStyle}>{formatAmount(selected.total_amount)}</td></tr>
                       <tr><th>登记时间</th><td style={monoCellStyle}>{formatDateTime(selected.created_at)}</td></tr>

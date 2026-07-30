@@ -496,7 +496,7 @@ function PortalView({ nric, formId }: { nric: string; formId: number }) {
                       {item.title || "（环节）"}
                       {item.login_only ? <span title="仅登陆可见" style={{ marginLeft: 6, fontSize: 12 }}>🔒</span> : null}
                     </div>
-                    {item.detail ? <div style={mutedStyle}>{item.detail}</div> : null}
+                    {item.detail ? <div style={{ ...mutedStyle, whiteSpace: "pre-wrap" }}>{item.detail}</div> : null}
                   </div>
                 </div>
               ))}
@@ -703,7 +703,7 @@ const formPickStyle: CSSProperties = { display: "flex", flexWrap: "wrap", gap: 8
 const factGridStyle: CSSProperties = { display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(150px, 1fr))", gap: 8 };
 const factStyle: CSSProperties = { background: "#f8fafc", border: "1px solid #eef2f7", borderRadius: 10, padding: "9px 11px", display: "grid", gap: 2 };
 const factLabelStyle: CSSProperties = { fontSize: 10.5, letterSpacing: "0.08em", textTransform: "uppercase", color: "#94a3b8" };
-const factValueStyle: CSSProperties = { fontSize: 13.5, fontWeight: 600, wordBreak: "break-word" };
+const factValueStyle: CSSProperties = { fontSize: 13.5, fontWeight: 600, wordBreak: "break-word", whiteSpace: "pre-wrap" };
 const purposeStyle: CSSProperties = { fontSize: 13.5, lineHeight: 1.6, color: "#374151", whiteSpace: "pre-wrap", background: "#f8fafc", borderRadius: 10, padding: "12px" };
 const sectionTitleStyle: CSSProperties = { margin: "6px 0 0", fontSize: 15, fontWeight: 800 };
 const payStatusRowStyle: CSSProperties = { display: "flex", alignItems: "center", justifyContent: "space-between", gap: 10 };

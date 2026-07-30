@@ -327,6 +327,7 @@ const claimPurposeStyle = {
   fontSize: "13px",
   color: "#334155",
   lineHeight: 1.6,
+  whiteSpace: "pre-wrap" as const,
 };
 
 const footerStyle = {

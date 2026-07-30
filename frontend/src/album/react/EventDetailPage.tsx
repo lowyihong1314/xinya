@@ -1054,6 +1054,7 @@ const heroBodyStyle: CSSProperties = {
   fontSize: "14.5px",
   lineHeight: 1.8,
   color: "var(--x-color-ink-muted)",
+  whiteSpace: "pre-line",
   display: "-webkit-box",
   WebkitLineClamp: 3,
   WebkitBoxOrient: "vertical",

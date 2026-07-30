@@ -2976,6 +2976,7 @@ const styles = {
     color: "var(--x-color-ink)",
     fontSize: "12px",
     fontWeight: 600,
+    whiteSpace: "pre-wrap" as const,
   },
   itemFieldEmpty: {
     color: "var(--x-color-ink-muted)",

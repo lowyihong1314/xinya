@@ -132,7 +132,7 @@ function EventCard({
           <span style={eventIdStyle}>{`#${event.id}`}</span>
         </div>
         <div style={eventCardMetaStyle}>{event.date || event.datetime || ""}</div>
-        <div style={eventCardMetaStyle}>{event.purpose || ""}</div>
+        <div style={{ ...eventCardMetaStyle, whiteSpace: "pre-wrap" }}>{event.purpose || ""}</div>
       </div>
     </button>
   );

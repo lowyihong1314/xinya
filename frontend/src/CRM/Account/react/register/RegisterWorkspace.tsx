@@ -1025,7 +1025,7 @@ const factLabelStyle: CSSProperties = {
   textTransform: "uppercase",
   color: "var(--x-color-ink-muted)",
 };
-const factValueStyle: CSSProperties = { fontSize: "13px", lineHeight: 1.5, wordBreak: "break-word", fontWeight: 600 };
+const factValueStyle: CSSProperties = { fontSize: "13px", lineHeight: 1.5, wordBreak: "break-word", fontWeight: 600, whiteSpace: "pre-wrap" };
 
 const linkStyle: CSSProperties = {
   color: "var(--x-color-accent-strong)",

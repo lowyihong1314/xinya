@@ -88,7 +88,7 @@ const membershipConfig: WorkbenchConfig = {
     { label: "紧急联络人姓名", key: "emergency_contact_name", editable: true },
     { label: "紧急联络人电话", key: "emergency_contact_phone", editable: true },
     { label: "Facebook", key: "facebook_profile_url", editable: true, kind: "link" },
-    { label: "住家地址 / NRIC_address", key: "nric_address", editable: true },
+    { label: "住家地址 / NRIC_address", key: "nric_address", editable: true, kind: "multiline" },
   ],
 };
 

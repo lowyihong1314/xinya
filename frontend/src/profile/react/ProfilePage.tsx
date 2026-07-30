@@ -3085,6 +3085,7 @@ const footprintNoteStyle: CSSProperties = {
   fontSize: "14px",
   color: "var(--x-color-ink-muted)",
   lineHeight: 1.7,
+  whiteSpace: "pre-wrap",
 };
 
 function accountGridStyle(isMobile: boolean): CSSProperties {
