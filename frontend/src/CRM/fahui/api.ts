@@ -398,3 +398,41 @@ export async function getYlpPaiweiJobStatus(jobId: string) {
     data?: { status?: string; progress?: string; total?: string; done?: string; message?: string };
   }>(response);
 }
+
+export type FahuiOpenWindow = {
+  id: number;
+  fahui_key: string;
+  start_md: string;
+  end_md: string;
+  note?: string | null;
+};
+
+export type FahuiOpenWindowStatus = {
+  fahui_key: string;
+  today_md: string;
+  is_open: boolean;
+  windows: FahuiOpenWindow[];
+};
+
+export async function fetchFahuiOpenWindows(key: "ylp" | "lamp") {
+  const response = await apiFetch(`/api/fahui_router/open_windows?key=${key}`, { credentials: "include" });
+  return parseJson<{ status?: string; data: FahuiOpenWindowStatus }>(response);
+}
+
+export async function createFahuiOpenWindow(payload: { fahui_key: "ylp" | "lamp"; start_md: string; end_md: string; note?: string }) {
+  const response = await apiFetch("/api/fahui_router/open_windows", {
+    method: "POST",
+    credentials: "include",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(payload),
+  });
+  return parseJson<{ status?: string; data: FahuiOpenWindow }>(response);
+}
+
+export async function deleteFahuiOpenWindow(windowId: number) {
+  const response = await apiFetch(`/api/fahui_router/open_windows/${windowId}`, {
+    method: "DELETE",
+    credentials: "include",
+  });
+  return parseJson<{ status?: string }>(response);
+}

@@ -12,6 +12,7 @@ import { LAMP_META } from "../../lamp/lampMeta";
 import { LampWorkspacePage } from "../lamp/react/LampWorkspacePage";
 import { PaymentChannelModal } from "./PaymentChannelModal";
 import { RelationOptionModal } from "./RelationOptionModal";
+import { OpenWindowModal } from "./OpenWindowModal";
 import {
   approvePayment,
   createYlpOrderItem,
@@ -409,6 +410,7 @@ export function FahuiPage() {
   const [intakeDrawerOpen, setIntakeDrawerOpen] = useState(false);
   const [paymentConfigOpen, setPaymentConfigOpen] = useState(false);
   const [relationConfigOpen, setRelationConfigOpen] = useState(false);
+  const [openWindowConfigOpen, setOpenWindowConfigOpen] = useState(false);
   const [relationOptions, setRelationOptions] = useState<string[]>([]);
 
   const currentWorkspace =
@@ -989,6 +991,9 @@ export function FahuiPage() {
             </button>
             <button type="button" style={styles.secondaryActionCompact} onClick={() => setRelationConfigOpen(true)}>
               超度亡灵关系配置
+            </button>
+            <button type="button" style={styles.secondaryActionCompact} onClick={() => setOpenWindowConfigOpen(true)}>
+              开放时间设置
             </button>
             <button type="button" style={styles.secondaryActionCompact} onClick={openYlpIntakePage}>
               打开牌位填写页
@@ -1990,6 +1995,7 @@ export function FahuiPage() {
       ) : null}
 
       {relationConfigOpen ? <RelationOptionModal onClose={() => setRelationConfigOpen(false)} /> : null}
+      {openWindowConfigOpen ? <OpenWindowModal fahuiKey="ylp" onClose={() => setOpenWindowConfigOpen(false)} /> : null}
 
       {paiweiJob ? (
         <div style={styles.jobOverlay}>

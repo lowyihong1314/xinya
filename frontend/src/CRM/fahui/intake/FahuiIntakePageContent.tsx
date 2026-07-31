@@ -15,11 +15,13 @@ import {
   createYlpOrder,
   createYlpOrderItem,
   deleteYlpOrderItem,
+  fetchFahuiOpenWindows,
   fetchYlpOrderDetail,
   fetchYlpOrdersByPhone,
   listYlpPaymentChannels,
   listYlpRelationOptions,
   updateYlpOrderCustomer,
+  type FahuiOpenWindowStatus,
 } from "../api";
 import type {
   YlpOrderDetail,
@@ -170,9 +172,55 @@ function resolveQrUrl(path?: string | null): string {
   return path.startsWith("/") ? `${API_BASE}${path}` : path;
 }
 
+function formatOpenMd(md: string) {
+  const [month, day] = md.split("-");
+  return `${Number(month)}月${Number(day)}日`;
+}
+
+// 开放时间闸门：截止期间公开访客只看到提示页；已登录用户（CRM）不受限。
 export function FahuiIntakePage() {
   useEnsureDesignTokens();
+  const { isAuthenticated } = useUserState();
+  const [openStatus, setOpenStatus] = useState<FahuiOpenWindowStatus | null | "loading">("loading");
 
+  useEffect(() => {
+    let cancelled = false;
+    fetchFahuiOpenWindows("ylp")
+      .then((res) => {
+        if (!cancelled) setOpenStatus(res.data);
+      })
+      .catch(() => {
+        // 状态查询失败时放行显示（后端提交仍会拦截）。
+        if (!cancelled) setOpenStatus(null);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  if (openStatus === "loading") return null;
+
+  if (openStatus && !openStatus.is_open && !isAuthenticated) {
+    return (
+      <div style={{ minHeight: "calc(100vh - 60px)", display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: "12px", padding: "24px", textAlign: "center" }}>
+        <p style={{ margin: 0, fontSize: "17px", fontWeight: 700 }}>盂兰盆法会 · 牌位登记目前未开放</p>
+        {openStatus.windows.length ? (
+          <p style={{ margin: 0, fontSize: "14px", color: "#667085" }}>
+            开放时间：
+            {openStatus.windows
+              .map((window) => `每年 ${formatOpenMd(window.start_md)} 至 ${formatOpenMd(window.end_md)}`)
+              .join("、")}
+          </p>
+        ) : null}
+        <p style={{ margin: 0, fontSize: "13px", color: "#98a2b3" }}>请在开放期间再回来登记，感恩。</p>
+      </div>
+    );
+  }
+
+  return <FahuiIntakePageInner />;
+}
+
+function FahuiIntakePageInner() {
   const { isAuthenticated, isMobile } = useUserState();
   const [step, setStep] = useState<IntakeStep>("phone");
   const [orderForm, setOrderForm] = useState<OrderFormState>(() => emptyOrderForm());

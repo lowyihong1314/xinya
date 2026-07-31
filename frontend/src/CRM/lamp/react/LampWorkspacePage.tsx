@@ -9,6 +9,7 @@ import { showConfirmDialog } from "../../../js/dialogs";
 import { LAMP_META } from "../../../lamp/lampMeta";
 import { usePagedRows } from "../../shared/TablePagination";
 import { sortArrow, sortRows, sortableThStyle, toggleSort, type SortState } from "../../Account/react/shared/tableSort";
+import { OpenWindowModal } from "../../fahui/OpenWindowModal";
 import { deleteLampRegistration, fetchLampRegistrations, updateLampRegistration } from "./api";
 import type { LampItem, LampRegistrationRecord } from "./types";
 
@@ -66,6 +67,7 @@ export function LampWorkspacePage() {
   const [sort, setSort] = useState<SortState>(null);
   const [saving, setSaving] = useState(false);
   const [form, setForm] = useState({ devotee_name: "", phone: "", address: "" });
+  const [openWindowConfigOpen, setOpenWindowConfigOpen] = useState(false);
 
   const canEdit = useMemo(() => getUserPermissionNames(user).has("account_edit"), [user]);
 
@@ -329,9 +331,16 @@ export function LampWorkspacePage() {
             <h2 style={titleStyle}>点灯登记</h2>
             <div style={mutedStyle}>共 {rows.length} 条登记</div>
           </div>
-          <button type="button" style={btnStyle} onClick={() => void loadData()} disabled={loading}>
-            {loading ? "刷新中…" : "刷新"}
-          </button>
+          <div style={rowStyle}>
+            {canEdit ? (
+              <button type="button" style={btnStyle} onClick={() => setOpenWindowConfigOpen(true)}>
+                开放时间设置
+              </button>
+            ) : null}
+            <button type="button" style={btnStyle} onClick={() => void loadData()} disabled={loading}>
+              {loading ? "刷新中…" : "刷新"}
+            </button>
+          </div>
         </div>
 
         <div style={filterBarStyle}>
@@ -407,6 +416,7 @@ export function LampWorkspacePage() {
           </div>
         ) : null}
       </section>
+      {openWindowConfigOpen ? <OpenWindowModal fahuiKey="lamp" onClose={() => setOpenWindowConfigOpen(false)} /> : null}
     </div>
   );
 }

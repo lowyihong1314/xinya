@@ -9,6 +9,7 @@ import { FahuiIntakePage } from "../CRM/fahui/FahuiIntakePage";
 import { HomeAlbumPage } from "../album/react/HomeAlbumPage";
 import { EventDetailPage } from "../album/react/EventDetailPage";
 import { InfoPage } from "../info/react/InfoPage";
+import { LampPage } from "../lamp/react/LampPage";
 import {
   CHANGYOU_PATH,
   CHANGYOU_ROOM_PATH,
@@ -44,16 +45,39 @@ function ErrorPage({ message }: { message: string }) {
   );
 }
 
-// 点灯法会已截止：旧链接进来先提示，再自动跳转盂兰盆牌位登记。
-function LampClosedRedirect() {
+// 点灯法会开放时间由 CRM「开放时间设置」维护：开放期内正常显示登记页，
+// 截止期间提示后自动跳转盂兰盆牌位登记。
+function LampRegistrationGate() {
   const navigate = useNavigate();
+  const [isOpen, setIsOpen] = useState<boolean | null>(null);
+
   useEffect(() => {
+    let cancelled = false;
+    apiFetch("/api/fahui_router/open_windows?key=lamp")
+      .then((res) => res.json())
+      .then((payload: { data?: { is_open?: boolean } }) => {
+        if (!cancelled) setIsOpen(Boolean(payload?.data?.is_open));
+      })
+      .catch(() => {
+        // 状态查询失败时不拦路，放行到登记页（后端仍会拦截提交）。
+        if (!cancelled) setIsOpen(true);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  useEffect(() => {
+    if (isOpen !== false) return;
     const timer = window.setTimeout(() => navigate("/ylp-registration", { replace: true }), 2500);
     return () => window.clearTimeout(timer);
-  }, [navigate]);
+  }, [isOpen, navigate]);
+
+  if (isOpen == null) return null;
+  if (isOpen) return <LampPage />;
   return (
     <div style={{ minHeight: "calc(100vh - 60px)", display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: "12px", padding: "24px", textAlign: "center" }}>
-      <p style={{ margin: 0, fontSize: "17px", fontWeight: 700 }}>点灯法会登记已截止</p>
+      <p style={{ margin: 0, fontSize: "17px", fontWeight: 700 }}>点灯法会登记目前未开放</p>
       <p style={{ margin: 0, fontSize: "14px", color: "#667085" }}>正在为你跳转到「盂兰盆法会 · 牌位登记」…</p>
       <a href="/#/ylp-registration" style={{ fontSize: "14px" }}>没有跳转？点这里前往</a>
     </div>
@@ -147,7 +171,7 @@ export const appRouter = createHashRouter([
       { path: "profile/:section", element: <ProfilePage /> },
       musicRoute,
       { path: "ylp-registration", element: <FahuiIntakePage /> },
-      { path: "lamp-registration", element: <LampClosedRedirect /> },
+      { path: "lamp-registration", element: <LampRegistrationGate /> },
       { path: "event/:eventId", element: <EventDetailPage /> },
       { path: "image/:imageId", element: <LegacyImageRedirect /> },
       { path: "login", element: <LoginPage /> },

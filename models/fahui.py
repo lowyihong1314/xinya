@@ -353,3 +353,31 @@ class FahuiRelationOption(db.Model):
             "sort_order": self.sort_order,
             "is_active": bool(self.is_active),
         }
+
+
+class FahuiOpenWindow(db.Model):
+    """法会报名开放时间段（每年循环，按月-日匹配，如 07-01 至 09-01）。"""
+
+    __tablename__ = "fahui_open_window"
+
+    id = db.Column(db.Integer, primary_key=True, autoincrement=True)
+    # 法会标识：ylp（盂兰盆牌位）/ lamp（点灯）
+    fahui_key = db.Column(db.String(32), nullable=False, index=True)
+    # 每年开放起止（含当天），格式 MM-DD；start > end 表示跨年（如 12-15 至 01-15）
+    start_md = db.Column(db.String(5), nullable=False)
+    end_md = db.Column(db.String(5), nullable=False)
+    note = db.Column(db.String(255), nullable=True)
+    created_at = db.Column(
+        db.TIMESTAMP,
+        nullable=True,
+        server_default=db.text("current_timestamp()"),
+    )
+
+    def to_dict(self):
+        return {
+            "id": self.id,
+            "fahui_key": self.fahui_key,
+            "start_md": self.start_md,
+            "end_md": self.end_md,
+            "note": self.note,
+        }

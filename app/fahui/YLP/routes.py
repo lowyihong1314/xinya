@@ -1,6 +1,9 @@
 from flask import Blueprint, jsonify, request
-from flask_login import login_required
+from flask_login import current_user, login_required
 
+from app.form.permissions import permission_required_any
+
+from ..common import open_window as open_window_services
 from .services import (
     create_order_shell,
     get_order_detail,
@@ -71,8 +74,40 @@ def list_orders_by_phone_route():
 @fahui_bp.route("/orders", methods=["POST"])
 @fahui_bp.route("/new_customer", methods=["POST"])
 def create_order_route():
+    # 开放时间之外拒绝公开报名；已登录用户（CRM 后台）不受限制。
+    if not current_user.is_authenticated and not open_window_services.is_open("ylp"):
+        return jsonify({"status": "error", "message": "盂兰盆法会牌位登记目前未开放"}), 403
     payload, status_code = create_order_shell(_json_payload())
     return jsonify(payload), status_code
+
+
+@fahui_bp.route("/open_windows", methods=["GET"])
+def list_open_windows_route():
+    try:
+        result = open_window_services.list_windows(request.args.get("key", default="", type=str))
+    except ValueError as exc:
+        return jsonify({"status": "error", "message": str(exc)}), 400
+    return jsonify({"status": "success", "data": result})
+
+
+@fahui_bp.route("/open_windows", methods=["POST"])
+@permission_required_any("account_edit")
+def create_open_window_route():
+    try:
+        result = open_window_services.create_window(_json_payload())
+    except ValueError as exc:
+        return jsonify({"status": "error", "message": str(exc)}), 400
+    return jsonify({"status": "success", "data": result})
+
+
+@fahui_bp.route("/open_windows/<int:window_id>", methods=["DELETE"])
+@permission_required_any("account_edit")
+def delete_open_window_route(window_id: int):
+    try:
+        open_window_services.delete_window(window_id)
+    except ValueError as exc:
+        return jsonify({"status": "error", "message": str(exc)}), 400
+    return jsonify({"status": "success"})
 
 
 @fahui_bp.route("/versions", methods=["GET"])
