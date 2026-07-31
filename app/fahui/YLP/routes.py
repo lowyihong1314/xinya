@@ -83,8 +83,10 @@ def create_order_route():
 
 @fahui_bp.route("/open_windows", methods=["GET"])
 def list_open_windows_route():
+    key = request.args.get("key", default="", type=str)
     try:
-        result = open_window_services.list_windows(request.args.get("key", default="", type=str))
+        # 不带 key 时返回全部法会的开放状态（公开页用来找「当前开放的法会」）。
+        result = open_window_services.list_windows(key) if key else open_window_services.list_all_status()
     except ValueError as exc:
         return jsonify({"status": "error", "message": str(exc)}), 400
     return jsonify({"status": "success", "data": result})

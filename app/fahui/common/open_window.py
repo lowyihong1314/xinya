@@ -55,6 +55,13 @@ def list_windows(fahui_key):
     }
 
 
+def list_all_status():
+    return {
+        "today_md": today_md(),
+        "items": [list_windows(key) for key in sorted(VALID_KEYS)],
+    }
+
+
 def create_window(data):
     fahui_key = str(data.get("fahui_key") or "").strip()
     if fahui_key not in VALID_KEYS:

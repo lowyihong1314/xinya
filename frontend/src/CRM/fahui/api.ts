@@ -436,3 +436,13 @@ export async function deleteFahuiOpenWindow(windowId: number) {
   });
   return parseJson<{ status?: string }>(response);
 }
+
+export type FahuiOpenWindowAllStatus = {
+  today_md: string;
+  items: FahuiOpenWindowStatus[];
+};
+
+export async function fetchAllFahuiOpenWindows() {
+  const response = await apiFetch("/api/fahui_router/open_windows", { credentials: "include" });
+  return parseJson<{ status?: string; data: FahuiOpenWindowAllStatus }>(response);
+}
