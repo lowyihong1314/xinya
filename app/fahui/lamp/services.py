@@ -28,6 +28,9 @@ from .serializers import serialize_registration
 
 LAMP_PAYMENT_DIR = DATA_ROOT / "lamp_payment_images"
 
+# 点灯法会登记已截止；重新开放时改回 False。
+LAMP_REGISTRATION_CLOSED = True
+
 
 def ping():
     return "pong"
@@ -58,6 +61,8 @@ def _parse_payment_amount(raw_amount):
 
 
 def create_registration(data):
+    if LAMP_REGISTRATION_CLOSED:
+        return jsonify({"status": "error", "message": "点灯法会登记已截止"}), 403
     try:
         devotee_name = (data.get("devotee_name") or "").strip()
         if not devotee_name:

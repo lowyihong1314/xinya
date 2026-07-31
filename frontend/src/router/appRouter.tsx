@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { createHashRouter, Navigate, useParams } from "react-router-dom";
+import { createHashRouter, Navigate, useNavigate, useParams } from "react-router-dom";
 
 import { LongOpenRegistrationFormPage } from "../CRM/long_open_registration_form/react/LongOpenRegistrationFormPage";
 import { CRMPage } from "../CRM/react/CRMPage";
@@ -9,7 +9,6 @@ import { FahuiIntakePage } from "../CRM/fahui/FahuiIntakePage";
 import { HomeAlbumPage } from "../album/react/HomeAlbumPage";
 import { EventDetailPage } from "../album/react/EventDetailPage";
 import { InfoPage } from "../info/react/InfoPage";
-import { LampPage } from "../lamp/react/LampPage";
 import {
   CHANGYOU_PATH,
   CHANGYOU_ROOM_PATH,
@@ -41,6 +40,22 @@ function ErrorPage({ message }: { message: string }) {
   return (
     <div id="app" style={{ minHeight: "calc(100vh - 60px)", padding: "24px", color: "#b42318" }}>
       {message}
+    </div>
+  );
+}
+
+// 点灯法会已截止：旧链接进来先提示，再自动跳转盂兰盆牌位登记。
+function LampClosedRedirect() {
+  const navigate = useNavigate();
+  useEffect(() => {
+    const timer = window.setTimeout(() => navigate("/ylp-registration", { replace: true }), 2500);
+    return () => window.clearTimeout(timer);
+  }, [navigate]);
+  return (
+    <div style={{ minHeight: "calc(100vh - 60px)", display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: "12px", padding: "24px", textAlign: "center" }}>
+      <p style={{ margin: 0, fontSize: "17px", fontWeight: 700 }}>点灯法会登记已截止</p>
+      <p style={{ margin: 0, fontSize: "14px", color: "#667085" }}>正在为你跳转到「盂兰盆法会 · 牌位登记」…</p>
+      <a href="/#/ylp-registration" style={{ fontSize: "14px" }}>没有跳转？点这里前往</a>
     </div>
   );
 }
@@ -132,7 +147,7 @@ export const appRouter = createHashRouter([
       { path: "profile/:section", element: <ProfilePage /> },
       musicRoute,
       { path: "ylp-registration", element: <FahuiIntakePage /> },
-      { path: "lamp-registration", element: <LampPage /> },
+      { path: "lamp-registration", element: <LampClosedRedirect /> },
       { path: "event/:eventId", element: <EventDetailPage /> },
       { path: "image/:imageId", element: <LegacyImageRedirect /> },
       { path: "login", element: <LoginPage /> },
