@@ -116,7 +116,7 @@ export function LampPage() {
   async function loadInitial() {
     setLoading(true);
     try {
-      const detectedPhone = await get_phone_on_localhost();
+      const detectedPhone = await get_phone_on_localhost(undefined, { poster: "/static/poster/lamp.png" });
       setPhone((detectedPhone || "").trim());
 
       const localDrafts = loadDrafts();

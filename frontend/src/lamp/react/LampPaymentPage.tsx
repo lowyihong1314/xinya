@@ -96,7 +96,7 @@ export function LampPaymentPage({
 
   async function loadPhone() {
     try {
-      const currentPhone = await get_phone_on_localhost();
+      const currentPhone = await get_phone_on_localhost(undefined, { poster: "/static/poster/lamp.png" });
       setPhone((currentPhone || "").trim());
     } catch {
       setPhone("");
