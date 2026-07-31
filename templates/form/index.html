@@ -2,15 +2,20 @@
 <html lang="zh-Hans">
   <head>
     <meta charset="UTF-8" />
-    <title>{{ form.title or "报名表格" }}</title>
+    {% set ev = form.events[-1] if form.events else None %}
+    <title>{{ (ev.event_name if ev else None) or form.title or "报名表格" }}</title>
     <meta name="viewport" content="width=device-width, initial-scale=1" />
 
-    <!-- favicon / og:image -->
+    <!-- favicon / og:image：有活动海报用海报，否则退回站点默认 icon -->
+    {% if ev and ev.event_image %}
     <link rel="icon" href="/api/form/event_poster/{{ form.id }}/cache" />
     <meta
       property="og:image"
       content="/api/form/event_poster/{{ form.id }}/cache"
     />
+    {% else %}
+    <link rel="icon" href="/favicon.ico" />
+    {% endif %}
     <style>
       body,
       html {
