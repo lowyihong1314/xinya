@@ -57,6 +57,10 @@ export function PaiweiEditorModal({
 
   function changeCode(code: PaiweiCode) {
     const nextTemplate = getTemplate(code);
+    // 冤亲债主只允许一位阳上：切换过来时把多余的行裁掉。
+    if (code === "C") {
+      setOwners((current) => current.slice(0, 1));
+    }
     setDraft((current) => ({
       ...current,
       code,
@@ -131,7 +135,7 @@ export function PaiweiEditorModal({
               addLabel="添加阳上姓名"
               placeholder="阳上"
               values={owners}
-              max={MAX_OWNERS}
+              max={draft.code === "C" ? 1 : MAX_OWNERS}
               onChange={setOwners}
             />
           ) : null}
