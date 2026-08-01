@@ -93,8 +93,9 @@ export const PAIWEI_TEMPLATES: PaiweiTemplate[] = [
     code: "C",
     title: "超度冤亲债主",
     price: 15,
-    hint: "通常填写阳上，也可补充对象姓名与关系。",
-    fields: { owner: true, deceased: true, relation: true },
+    // 与打印模板一致：牌位中央固定印「冤亲债主」，只需要阳上姓名。
+    hint: "填写阳上姓名即可，牌位内容固定为「冤亲债主」。",
+    fields: { owner: true },
   },
   {
     code: "D1",
@@ -234,6 +235,10 @@ export function validateDraft(draft: PaiweiDraft) {
   if (draft.code === "A2" || draft.code === "B2") {
     if (!ownerValues.length || !deceasedValues.length) {
       return `${template.title} 需要同时填写阳上与亡者`;
+    }
+  } else if (draft.code === "C") {
+    if (!ownerValues.length) {
+      return `${template.title} 需要填写阳上姓名`;
     }
   } else if (!ownerValues.length && !deceasedValues.length) {
     return `${template.title} 至少要填写阳上或对象其中一项`;
