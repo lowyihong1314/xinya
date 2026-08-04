@@ -78,7 +78,14 @@ class MemberRenewal(db.Model):
     __tablename__ = 'member_renewal'
 
     id = db.Column(db.Integer, primary_key=True, autoincrement=True)
-    user_id = db.Column(db.Integer, db.ForeignKey('user_data.id', ondelete='CASCADE', onupdate='CASCADE'), nullable=False, index=True)
+    # user_id 可空：手工名册导入的老会员可能没有登录账号，身份锚定在 nric_asset_id 上。
+    user_id = db.Column(db.Integer, db.ForeignKey('user_data.id', ondelete='CASCADE', onupdate='CASCADE'), nullable=True, index=True)
+    nric_asset_id = db.Column(
+        db.Integer,
+        db.ForeignKey('nric_asset.id', ondelete='SET NULL', onupdate='CASCADE'),
+        nullable=True,
+        index=True,
+    )
     renewal_date = db.Column(db.Date, nullable=False, index=True)
     proof_path = db.Column(db.String(255), nullable=True)
     proof_name = db.Column(db.String(255), nullable=True)
@@ -89,11 +96,13 @@ class MemberRenewal(db.Model):
 
     user = db.relationship('User', foreign_keys=[user_id], back_populates='member_renewals')
     creator = db.relationship('User', foreign_keys=[created_by])
+    nric_asset = db.relationship('NRIC_Asset', foreign_keys=[nric_asset_id])
 
     def to_dict(self):
         return {
             'id': self.id,
             'user_id': self.user_id,
+            'nric_asset_id': self.nric_asset_id,
             'renewal_date': self.renewal_date.isoformat() if self.renewal_date else None,
             'proof_path': self.proof_path,
             'proof_name': self.proof_name,
