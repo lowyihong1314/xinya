@@ -6,7 +6,7 @@ import unicodedata
 import requests
 from datetime import date, datetime, timedelta
 
-from flask import current_app, jsonify, request
+from flask import current_app, jsonify, request, send_file
 from flask_login import current_user
 from itsdangerous import BadSignature, SignatureExpired, URLSafeTimedSerializer
 from sqlalchemy import and_, asc, or_
@@ -946,8 +946,9 @@ def _event_claim_rows(event_id):
     return rows
 
 
-def _registration_income_rows(event):
-    """报名表格收入合成行（只读，不入库）：预期/已收金额 + 总人数/已支付/已批准。"""
+def _registration_income_rows(event, include_pending=False):
+    """报名表格收入合成行（只读，不入库）：预期/已收金额 + 总人数/已支付/已批准。
+    include_pending=True（财政报告用）：已收金额把处理中(process)的付款也计入。"""
     # 延迟导入，避免 app.event ↔ app.form 循环依赖。
     from app.form.services import (
         FORM_FEE_SCOPE,
@@ -987,8 +988,9 @@ def _registration_income_rows(event):
                 latest_by_member[mid] = p
         paid = sum(1 for p in latest_by_member.values() if p.status in ("process", "checked"))
         approved = sum(1 for p in latest_by_member.values() if p.status == "checked")
+        collected_statuses = ("process", "checked") if include_pending else ("checked",)
         collected = sum(
-            float(p.price or 0) for p in latest_by_member.values() if p.status == "checked"
+            float(p.price or 0) for p in latest_by_member.values() if p.status in collected_statuses
         )
 
         rows.append({
@@ -1064,6 +1066,37 @@ def event_budget_list_response(event_id):
     # 统一列表：报名收入(只读) + 手动收款(只读，按 event_id) + 手动预算行 + 该活动的报销(只读，按 event_id)。
     data = _registration_income_rows(event) + _manual_income_rows(event_id) + manual + _event_claim_rows(event_id)
     return jsonify({"status": "success", "data": data})
+
+
+def event_budget_report_pdf_response(event_id):
+    """导出活动财政报告 PDF：与预算页同一份数据，金额不区分审批状态全额计入。"""
+    from .budget_pdf import build_event_finance_report_pdf
+
+    event = EventData.query.get_or_404(event_id)
+    items = (
+        EventBudgetData.query.filter_by(event_id=event_id)
+        .order_by(asc(EventBudgetData.no), asc(EventBudgetData.id))
+        .all()
+    )
+    manual = []
+    for i in items:
+        d = i.to_dict()
+        d["source"] = "budget"
+        manual.append(d)
+    rows = (
+        _registration_income_rows(event, include_pending=True)
+        + _manual_income_rows(event_id)
+        + manual
+        + _event_claim_rows(event_id)
+    )
+    buffer = build_event_finance_report_pdf(event, rows)
+    filename = f"{(event.event_name or f'event_{event_id}').strip()}_财政报告.pdf"
+    return send_file(
+        buffer,
+        mimetype="application/pdf",
+        as_attachment=True,
+        download_name=filename,
+    )
 
 
 def create_event_budget(data):

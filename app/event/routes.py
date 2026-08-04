@@ -138,6 +138,12 @@ def event_budget_list(event_id):
     return services.event_budget_list_response(event_id)
 
 
+@event_data_bp.route("/event_budget/report/<int:event_id>", methods=["GET"])
+@login_required
+def event_budget_report(event_id):
+    return services.event_budget_report_pdf_response(event_id)
+
+
 @event_data_bp.route("/event_budget/new", methods=["POST"])
 @login_required
 @permission_required("event_edit")

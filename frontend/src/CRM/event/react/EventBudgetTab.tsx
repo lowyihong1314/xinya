@@ -167,6 +167,13 @@ export function EventBudgetTab({
       {error ? <div style={errorStyle}>{error}</div> : null}
       {loading ? <div style={emptyStyle}>加载中…</div> : null}
 
+      <div style={{ display: "flex", justifyContent: "flex-end" }}>
+        <a href={`/api/event_data/event_budget/report/${eventId}`} target="_blank" rel="noreferrer" style={reportBtnStyle}>
+          <i className="fa-solid fa-print" style={{ marginRight: 6 }} />
+          打印财政报告
+        </a>
+      </div>
+
       {/* ===== 收入 ===== */}
       <section style={sectionStyle}>
         <div style={headRowStyle}>
@@ -351,6 +358,7 @@ const cellInputStyle: CSSProperties = { padding: "5px 8px", borderRadius: "6px",
 const delBtnStyle: CSSProperties = { flexShrink: 0, padding: "5px 9px", borderRadius: "6px", border: "1px solid var(--x-color-danger-border)", background: "var(--x-color-danger-soft)", color: "var(--x-color-danger)", fontWeight: 700, fontSize: "12px", cursor: "pointer" };
 const claimBtnStyle: CSSProperties = { flexShrink: 0, padding: "5px 10px", borderRadius: "6px", border: "1px solid var(--x-color-accent-strong)", background: "var(--x-color-accent)", color: "white", fontWeight: 700, fontSize: "12px", cursor: "pointer", whiteSpace: "nowrap" };
 const linkBtnStyle: CSSProperties = { flexShrink: 0, padding: "5px 10px", borderRadius: "6px", border: "1px solid var(--x-color-line)", background: "var(--x-color-panel)", color: "var(--x-color-ink)", fontWeight: 700, fontSize: "12px", cursor: "pointer", whiteSpace: "nowrap" };
+const reportBtnStyle: CSSProperties = { display: "inline-flex", alignItems: "center", padding: "7px 14px", borderRadius: "7px", border: "1px solid var(--x-color-line)", background: "var(--x-color-panel)", color: "var(--x-color-ink)", fontWeight: 700, fontSize: "13px", cursor: "pointer", textDecoration: "none", whiteSpace: "nowrap" };
 const toneChipStyle: CSSProperties = { marginLeft: 8, fontSize: 11, fontWeight: 800 };
 const statChipStyle: CSSProperties = { padding: "2px 9px", borderRadius: 999, background: "var(--x-color-panel)", border: "1px solid var(--x-color-line-soft)", fontSize: 11.5, fontWeight: 700 };
 const emptyStyle: CSSProperties = { padding: "16px", borderRadius: "10px", border: "1px dashed var(--x-color-line)", textAlign: "center", color: "var(--x-color-ink-muted)" };
