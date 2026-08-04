@@ -1692,6 +1692,19 @@ def remove_regis_form_member(data):
     if member not in form.members:
         return jsonify({"status": "error", "message": "该成员不属于此表单"}), 400
 
+    # 已付款（处理中/已确认）的成员不允许移除，避免名单与收款对不上。
+    paid = (
+        RegisPayment.query
+        .filter_by(regis_form_id=form.id, nric_asset_id=member.id)
+        .filter(RegisPayment.status.in_(("process", "checked")))
+        .first()
+    )
+    if paid:
+        return jsonify({
+            "status": "error",
+            "message": "该成员已有付款记录（处理中/已确认），不允许移除。如需处理请先在收款审核中处理该笔付款。",
+        }), 400
+
     form.members.remove(member)
     db.session.commit()
     emit_form_event(form_id, "fee_delete")
