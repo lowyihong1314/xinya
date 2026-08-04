@@ -2,6 +2,7 @@ import { summarizeFee } from "../../form/react/FeePanel";
 import { RegistrationWorkbench } from "./RegistrationWorkbench";
 import {
   makeEndpoints,
+  makeRosterFetcher,
   registrationStatusLabel,
   type WorkbenchConfig,
   type WorkbenchEntry,
@@ -33,6 +34,7 @@ function displayName(entry: WorkbenchEntry): string {
 const membershipConfig: WorkbenchConfig = {
   scope: "membership",
   endpoints: makeEndpoints("/api/user_control/membership"),
+  roster: { fetch: makeRosterFetcher("/api/user_control/membership/roster") },
   canRead: true,
   canEdit: true,
   detailEyebrowPrefix: "会员申请 #",

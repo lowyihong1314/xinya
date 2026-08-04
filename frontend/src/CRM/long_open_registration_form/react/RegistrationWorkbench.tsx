@@ -18,6 +18,7 @@ import {
   type CouncilState,
   type DetailField,
   type PaymentRecord,
+  type RosterMember,
   type Settings,
   type SignStrokes,
   type WorkbenchConfig,
@@ -25,13 +26,15 @@ import {
 } from "./workbenchConfig";
 
 type Notice = { tone: "success" | "error"; text: string };
-type TabKey = "list" | "fees" | "public";
+type TabKey = "roster" | "list" | "fees" | "public";
 
 const TABS: { key: TabKey; label: string; icon: string }[] = [
   { key: "list", label: "申请列表", icon: "fa-solid fa-table-list" },
   { key: "fees", label: "费率设置", icon: "fa-solid fa-coins" },
   { key: "public", label: "打开公开报名页", icon: "fa-solid fa-arrow-up-right-from-square" },
 ];
+
+const ROSTER_TAB = { key: "roster" as TabKey, label: "会员列表", icon: "fa-solid fa-users" };
 
 async function copyText(text: string) {
   try {
@@ -104,7 +107,31 @@ export function RegistrationWorkbench({ config }: { config: WorkbenchConfig }) {
   const [batchBusy, setBatchBusy] = useState(false);
   const [error, setError] = useState("");
   const [notice, setNotice] = useState<Notice | null>(null);
-  const [activeTab, setActiveTab] = useState<TabKey>("list");
+  const [activeTab, setActiveTab] = useState<TabKey>(config.roster ? "roster" : "list");
+  const [roster, setRoster] = useState<RosterMember[]>([]);
+  const [rosterLoading, setRosterLoading] = useState(false);
+  const [rosterError, setRosterError] = useState("");
+
+  useEffect(() => {
+    if (!config.roster) return;
+    let cancelled = false;
+    setRosterLoading(true);
+    config.roster
+      .fetch()
+      .then((payload) => {
+        if (!cancelled) setRoster(Array.isArray(payload.members) ? payload.members : []);
+      })
+      .catch((err) => {
+        if (!cancelled) setRosterError(err instanceof Error ? err.message : "名册加载失败");
+      })
+      .finally(() => {
+        if (!cancelled) setRosterLoading(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   const applicationUrl = `${PUBLIC_ORIGIN}${config.publicFormPath}`;
 
@@ -416,7 +443,7 @@ export function RegistrationWorkbench({ config }: { config: WorkbenchConfig }) {
       <section style={panelStyle}>
         <div style={tabHeaderStyle(isMobile)}>
           <div style={tabBarStyle}>
-            {TABS.map((tab) => {
+            {(config.roster ? [ROSTER_TAB, ...TABS] : TABS).map((tab) => {
               const active = tab.key === activeTab;
               return (
                 <button key={tab.key} type="button" style={active ? tabActiveStyle : tabStyle} onClick={() => selectTab(tab.key)}>
@@ -440,6 +467,10 @@ export function RegistrationWorkbench({ config }: { config: WorkbenchConfig }) {
 
         {notice ? <div style={notice.tone === "success" ? successStyle : errorStyle}>{notice.text}</div> : null}
         {error ? <div style={errorStyle}>{error}</div> : null}
+
+        {activeTab === "roster" && config.roster ? (
+          <RosterView members={roster} loading={rosterLoading} error={rosterError} />
+        ) : null}
 
         {activeTab === "list" ? (
           <ListView
@@ -510,6 +541,100 @@ export function RegistrationWorkbench({ config }: { config: WorkbenchConfig }) {
           </button>
         </div>
       ) : null}
+    </div>
+  );
+}
+
+function RosterView({ members, loading, error }: { members: RosterMember[]; loading: boolean; error: string }) {
+  const [query, setQuery] = useState("");
+  const [filter, setFilter] = useState<"all" | "active" | "expired" | "permanent">("all");
+
+  const filtered = useMemo(() => {
+    const q = query.trim().toLowerCase();
+    return members.filter((m) => {
+      if (filter === "active" && !m.active) return false;
+      if (filter === "expired" && m.active) return false;
+      if (filter === "permanent" && !m.permanent) return false;
+      if (!q) return true;
+      const hay = [m.name, m.nric, m.user?.username, m.user?.display_name].map((v) => String(v || "").toLowerCase());
+      return hay.some((h) => h.includes(q));
+    });
+  }, [members, query, filter]);
+
+  const { page, totalPages, total, pageRows, setPage } = usePagedRows(filtered);
+  const activeCount = members.filter((m) => m.active).length;
+  const permanentCount = members.filter((m) => m.permanent).length;
+
+  if (loading) return <div style={emptyStyle}>名册加载中…</div>;
+  if (error) return <div style={errorStyle}>{error}</div>;
+
+  const FILTERS: { key: typeof filter; label: string }[] = [
+    { key: "all", label: `全部 ${members.length}` },
+    { key: "active", label: `有效 ${activeCount}` },
+    { key: "expired", label: `已过期 ${members.length - activeCount}` },
+    { key: "permanent", label: `永久 ${permanentCount}` },
+  ];
+
+  return (
+    <div style={{ display: "grid", gap: "8px", padding: "12px 14px 4px" }}>
+      <div style={{ display: "flex", gap: "8px", flexWrap: "wrap", alignItems: "center" }}>
+        <div style={{ display: "flex", gap: "4px", flexWrap: "wrap" }}>
+          {FILTERS.map((f) => (
+            <button
+              key={f.key}
+              type="button"
+              style={f.key === filter ? rosterFilterActiveStyle : rosterFilterStyle}
+              onClick={() => { setFilter(f.key); setPage(1); }}
+            >
+              {f.label}
+            </button>
+          ))}
+        </div>
+        <input
+          style={rosterSearchStyle}
+          placeholder="搜索姓名 / NRIC / 账号"
+          value={query}
+          onChange={(e) => { setQuery(e.target.value); setPage(1); }}
+        />
+      </div>
+      <TablePagination page={page} totalPages={totalPages} total={total} onPage={setPage} />
+      <div style={tableWrapStyle}>
+        <table className="mrp-table">
+          <thead>
+            <tr>
+              <th>姓名</th>
+              <th>NRIC</th>
+              <th>账号</th>
+              <th>会员有效期</th>
+              <th>状态</th>
+              <th>缴费年份</th>
+            </tr>
+          </thead>
+          <tbody>
+            {pageRows.map((m, i) => (
+              <tr key={`${m.nric_asset_id ?? "u"}-${m.user?.id ?? i}`}>
+                <td style={{ fontWeight: 700 }}>{m.name}</td>
+                <td style={{ fontFamily: "var(--x-font-mono)", fontSize: "12px" }}>{m.nric || "—"}</td>
+                <td>{m.user ? (m.user.display_name || m.user.username || `#${m.user.id}`) : <span style={mutedStyle}>无账号</span>}</td>
+                <td style={{ fontFamily: "var(--x-font-mono)", fontSize: "12px" }}>{m.permanent ? "永久" : m.expiry || "—"}</td>
+                <td>
+                  {m.permanent ? (
+                    <span style={rosterChip("var(--x-color-accent-tint)", "var(--x-color-accent-strong)")}>永久会员</span>
+                  ) : m.active ? (
+                    <span style={rosterChip("var(--x-color-success-soft)", "var(--x-color-success)")}>有效</span>
+                  ) : (
+                    <span style={rosterChip("var(--x-color-danger-soft)", "var(--x-color-danger)")}>已过期</span>
+                  )}
+                </td>
+                <td style={{ fontSize: "12px", color: "var(--x-color-ink-muted)" }} title={m.renewal_dates.join(", ")}>
+                  {m.renewal_count ? `${m.renewal_count} 次` : "—"}
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+      {!filtered.length ? <div style={emptyStyle}>没有匹配的会员。</div> : null}
     </div>
   );
 }
@@ -1212,6 +1337,12 @@ const urlBoxStyle: CSSProperties = {
 };
 
 const tableWrapStyle: CSSProperties = { width: "100%", overflowX: "auto" };
+const rosterFilterStyle: CSSProperties = { padding: "6px 12px", borderRadius: "999px", border: "1px solid var(--x-color-line)", background: "var(--x-color-panel)", color: "var(--x-color-ink-muted)", fontSize: "12px", fontWeight: 700, cursor: "pointer" };
+const rosterFilterActiveStyle: CSSProperties = { ...rosterFilterStyle, background: "var(--x-color-accent)", borderColor: "var(--x-color-accent-strong)", color: "#fff" };
+const rosterSearchStyle: CSSProperties = { flex: "1 1 200px", minWidth: "160px", padding: "8px 12px", borderRadius: "8px", border: "1px solid var(--x-color-line)", background: "var(--x-color-panel)", color: "var(--x-color-ink)", fontSize: "13px", boxSizing: "border-box" };
+function rosterChip(bg: string, color: string): CSSProperties {
+  return { display: "inline-block", padding: "2px 10px", borderRadius: "999px", background: bg, color, fontSize: "11.5px", fontWeight: 800 };
+}
 const checkboxStyle: CSSProperties = { width: "16px", height: "16px", accentColor: "var(--x-color-accent)", cursor: "pointer" };
 
 const actionBarStyle: CSSProperties = {

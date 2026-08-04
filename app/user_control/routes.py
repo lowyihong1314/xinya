@@ -612,6 +612,14 @@ def get_membership_entries():
     return membership.get_membership_registrations()
 
 
+@user_control_bp.get("/membership/roster")
+@login_required
+def get_membership_roster():
+    if not _current_user_has_any_permission(MEMBERSHIP_ADMIN_READ_PERMISSION_NAMES):
+        return _permission_denied_response(MEMBERSHIP_ADMIN_READ_PERMISSION_NAMES)
+    return membership.get_membership_roster()
+
+
 @user_control_bp.post("/membership/payment/<int:payment_id>/status")
 @login_required
 def update_membership_payment_status(payment_id):

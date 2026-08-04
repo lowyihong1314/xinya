@@ -149,6 +149,22 @@ export type WorkbenchConfig = {
   socket?: SocketConfig;
   // 可选：已生效时显示的「升级为会员」动作（仅青少年佛学班配置）。
   upgradeToMembership?: (registrationId: number) => Promise<{ message?: string }>;
+  // 可选：会员名册（仅会员模块配置）。配置后名册成为默认 Tab。
+  roster?: {
+    fetch: () => Promise<{ members: RosterMember[]; total?: number }>;
+  };
+};
+
+export type RosterMember = {
+  nric_asset_id: number | null;
+  name: string;
+  nric: string | null;
+  user: { id: number; username?: string | null; display_name?: string | null } | null;
+  expiry: string | null;
+  permanent: boolean;
+  active: boolean;
+  renewal_count: number;
+  renewal_dates: string[];
 };
 
 async function parseJson<T>(response: Response): Promise<T> {
@@ -164,6 +180,12 @@ async function parseJson<T>(response: Response): Promise<T> {
 }
 
 // 会员与青少年佛学班的接口路径结构一致，只是 base 不同，因此用一个工厂函数复用。
+export function makeRosterFetcher(url: string) {
+  return async (): Promise<{ members: RosterMember[]; total?: number }> => {
+    return parseJson(await apiFetch(url, { credentials: "include" }));
+  };
+}
+
 export function makeEndpoints(base: string): WorkbenchEndpoints {
   return {
     async fetchEntries() {

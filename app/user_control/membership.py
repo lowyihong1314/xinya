@@ -1080,6 +1080,106 @@ def update_membership_payment_settings(data):
         return jsonify({"status": "error", "message": str(exc)}), 500
 
 
+PERMANENT_MEMBER_DATE = date(2099, 12, 31)
+
+
+def get_membership_roster():
+    """会员名册：以 MemberRenewal 为准聚合每个人（含无登录账号的老会员），
+    另补上有 is_member 标记但没有续费记录的账号。"""
+    from models.form import NRIC_Asset
+
+    renewals = MemberRenewal.query.order_by(MemberRenewal.renewal_date.desc()).all()
+    today = date.today()
+
+    groups = {}  # key: ("a", nric_asset_id) 或 ("u", user_id)
+
+    def group_for(renewal):
+        if renewal.nric_asset_id:
+            return ("a", renewal.nric_asset_id)
+        if renewal.user_id:
+            return ("u", renewal.user_id)
+        return None
+
+    for r in renewals:
+        key = group_for(r)
+        if key is None:
+            continue
+        groups.setdefault(key, []).append(r)
+
+    covered_user_ids = set()
+    rows = []
+    for key, items in groups.items():
+        asset = None
+        user = None
+        if key[0] == "a":
+            asset = db.session.get(NRIC_Asset, key[1])
+            user = next((r.user for r in items if r.user), None)
+            if user is None and asset is not None:
+                user = next(iter(asset.linked_users or []), None)
+        else:
+            user = db.session.get(User, key[1])
+            if user is not None:
+                asset = user.nric_data
+
+        if user is not None:
+            covered_user_ids.add(user.id)
+
+        candidates = []
+        if asset is not None:
+            latest = asset.latest_data() if hasattr(asset, "latest_data") else None
+            candidates += [asset.name_nric]
+            if latest is not None:
+                candidates += [getattr(latest, "name_cn", None), getattr(latest, "name", None)]
+        if user is not None:
+            candidates += [user.display_name, user.username]
+        candidates = [c for c in candidates if c and str(c).strip()]
+        # 优先取带中文的名字
+        name = next((c for c in candidates if re.search(r"[一-鿿]", str(c))), None) or (candidates[0] if candidates else None)
+
+        expiry = max(r.renewal_date for r in items)
+        permanent = expiry >= PERMANENT_MEMBER_DATE
+        rows.append({
+            "nric_asset_id": asset.id if asset else None,
+            "name": name or "（未命名）",
+            "nric": asset.nric if asset else None,
+            "user": {
+                "id": user.id,
+                "username": user.username,
+                "display_name": user.display_name,
+            } if user else None,
+            "expiry": expiry.isoformat(),
+            "permanent": permanent,
+            "active": permanent or expiry >= today,
+            "renewal_count": len(items),
+            "renewal_dates": [r.renewal_date.isoformat() for r in sorted(items, key=lambda x: x.renewal_date)],
+        })
+
+    # is_member 账号但没有任何续费记录的，也列进名册（标记无记录）
+    stray_users = User.query.filter(User.is_member.is_(True), ~User.id.in_(covered_user_ids or {0})).all()
+    for user in stray_users:
+        asset = user.nric_data
+        rows.append({
+            "nric_asset_id": asset.id if asset else None,
+            "name": user.display_name or user.username or "（未命名）",
+            "nric": asset.nric if asset else None,
+            "user": {"id": user.id, "username": user.username, "display_name": user.display_name},
+            "expiry": None,
+            "permanent": False,
+            "active": True,
+            "renewal_count": 0,
+            "renewal_dates": [],
+        })
+
+    # 永久在前，其余按到期日倒序，无记录的排最后
+    rows.sort(
+        key=lambda r: (
+            0 if r["permanent"] else 1,
+            -(int(r["expiry"].replace("-", "")) if r["expiry"] else 0),
+        )
+    )
+    return jsonify({"status": "success", "members": rows, "total": len(rows)})
+
+
 def get_membership_registrations():
     try:
         entries = (
