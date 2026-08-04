@@ -10,7 +10,7 @@ import { ClaimCreateModal } from "../../Account/react/claim/ClaimCreateModal";
 
 type BudgetClaim = { id: number; status: "pending" | "approved" | "rejected"; amount?: number };
 type BudgetPayment = { id: number; status: "process" | "checked" | "fail"; amount?: number };
-type BudgetStats = { total: number; paid: number; approved: number };
+type BudgetStats = { total: number; paid: number; approved: number; removed_paid?: number };
 type BudgetItem = {
   id: number | string;
   no: number;
@@ -192,6 +192,11 @@ export function EventBudgetTab({
                 <span style={statChipStyle}>总人数 {it.stats.total}</span>
                 <span style={{ ...statChipStyle, background: "var(--x-color-warning-soft)", color: "var(--x-color-warning)" }}>已支付 {it.stats.paid}</span>
                 <span style={{ ...statChipStyle, background: "var(--x-color-success-soft)", color: "var(--x-color-success)" }}>已批准 {it.stats.approved}</span>
+                {it.stats.removed_paid ? (
+                  <span style={{ ...statChipStyle, background: "var(--x-color-warning-soft)", color: "var(--x-color-warning)" }} title="付款后被移出名单的人数，金额仍计入已收">
+                    已付款但移除 {it.stats.removed_paid}
+                  </span>
+                ) : null}
               </div>
             ) : null}
           </div>

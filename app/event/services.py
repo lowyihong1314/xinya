@@ -986,8 +986,16 @@ def _registration_income_rows(event, include_pending=False):
             mid = p.nric_asset_id
             if mid is not None and mid not in latest_by_member:
                 latest_by_member[mid] = p
-        paid = sum(1 for p in latest_by_member.values() if p.status in ("process", "checked"))
-        approved = sum(1 for p in latest_by_member.values() if p.status == "checked")
+        # 人数统计只数当前名单内的成员（与成员页一致）；
+        # 付款后被移出名单的人单独计数（removed_paid），金额仍计入已收。
+        member_ids = {m.id for m in members}
+        current_latest = {mid: p for mid, p in latest_by_member.items() if mid in member_ids}
+        paid = sum(1 for p in current_latest.values() if p.status in ("process", "checked"))
+        approved = sum(1 for p in current_latest.values() if p.status == "checked")
+        removed_paid = sum(
+            1 for mid, p in latest_by_member.items()
+            if mid not in member_ids and p.status in ("process", "checked")
+        )
         collected_statuses = ("process", "checked") if include_pending else ("checked",)
         collected = sum(
             float(p.price or 0) for p in latest_by_member.values() if p.status in collected_statuses
@@ -1006,7 +1014,7 @@ def _registration_income_rows(event, include_pending=False):
             "actual_amount": round(collected, 2),
             "remark": None,
             "claim": None,
-            "stats": {"total": len(members), "paid": paid, "approved": approved},
+            "stats": {"total": len(members), "paid": paid, "approved": approved, "removed_paid": removed_paid},
         })
     return rows
 

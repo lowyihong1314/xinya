@@ -103,7 +103,10 @@ def _row_status(row):
         return PAYMENT_STATUS_LABELS.get((row.get("payment") or {}).get("status"), "")
     if row.get("source") == "registration":
         stats = row.get("stats") or {}
-        return f"{stats.get('total', 0)}人/付{stats.get('paid', 0)}/批{stats.get('approved', 0)}"
+        text = f"{stats.get('total', 0)}人/付{stats.get('paid', 0)}/批{stats.get('approved', 0)}"
+        if stats.get("removed_paid"):
+            text += f"/移{stats['removed_paid']}"
+        return text
     return ""
 
 
