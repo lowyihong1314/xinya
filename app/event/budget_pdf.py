@@ -65,11 +65,14 @@ def _money(value):
 
 
 def _poster_reader(event):
-    """活动海报（与 event_poster_response 同一路径规则），读不到返回 None。"""
+    """活动海报（与 event_poster_response 同一路径规则），读不到返回 None。
+    打印尺寸只有 24mm，先压成小图（JPEG）再嵌入，避免整张原图撑爆 PDF 体积。"""
     image = getattr(event, "event_image", None)
     if not image or not getattr(image, "id", None):
         return None
     try:
+        from PIL import Image
+
         from models.event_data import AlbumFiles
 
         file = AlbumFiles.query.get(image.id)
@@ -81,7 +84,14 @@ def _poster_reader(event):
         )
         if not os.path.exists(full_path):
             return None
-        return ImageReader(full_path)
+
+        with Image.open(full_path) as img:
+            img = img.convert("RGB")
+            img.thumbnail((360, 360))
+            thumb = BytesIO()
+            img.save(thumb, format="JPEG", quality=82)
+        thumb.seek(0)
+        return ImageReader(thumb)
     except Exception:  # noqa: BLE001
         return None
 
