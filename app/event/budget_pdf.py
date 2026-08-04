@@ -226,72 +226,79 @@ def build_event_finance_report_pdf(event, rows):
     x_actual = x_budget + col_amt_w
     x_remark = x_actual + remark_gap
 
+    # y_pos 一律表示「行顶」；文字基线 = 行顶 − ascent，保证分隔线永远画在字的下方留白处。
+    ascent = 4.0 * mm       # 9.5pt 字高 + 顶部留白
+    leading = 4.8 * mm      # 多行行距
+    bottom_pad = 2.2 * mm   # 基线到行底（分隔线）的留白
+
     def draw_table_header(y_pos):
+        band_h = 7.5 * mm
         pdf.setFillColor(PANEL)
-        pdf.rect(margin, y_pos - 5.4 * mm, content_w, 7 * mm, stroke=0, fill=1)
+        pdf.rect(margin, y_pos - band_h, content_w, band_h, stroke=0, fill=1)
         pdf.setFillColor(MUTED)
         pdf.setFont(PDF_FONT, 9)
-        pdf.drawString(x_cat + 2 * mm, y_pos - 3.4 * mm, "类别")
-        pdf.drawString(x_status, y_pos - 3.4 * mm, "状态")
-        pdf.drawRightString(x_budget, y_pos - 3.4 * mm, "预算 RM")
-        pdf.drawRightString(x_actual, y_pos - 3.4 * mm, "实际 RM")
-        pdf.drawString(x_remark, y_pos - 3.4 * mm, "备注")
-        return y_pos - 8.6 * mm
+        base = y_pos - band_h + 2.4 * mm
+        pdf.drawString(x_cat + 2 * mm, base, "类别")
+        pdf.drawString(x_status, base, "状态")
+        pdf.drawRightString(x_budget, base, "预算 RM")
+        pdf.drawRightString(x_actual, base, "实际 RM")
+        pdf.drawString(x_remark, base, "备注")
+        return y_pos - band_h - 1.2 * mm
 
     def draw_section(y_pos, title, section_rows, subtotal_budget, subtotal_actual, accent):
         if y_pos < 50 * mm:
             y_pos = new_page()
         pdf.setFillColor(accent)
         pdf.setFont(PDF_FONT, 12.5)
-        pdf.drawString(margin, y_pos, title)
-        y_pos -= 6.5 * mm
+        pdf.drawString(margin, y_pos - 4.4 * mm, title)
+        y_pos -= 7.5 * mm
         y_pos = draw_table_header(y_pos)
 
-        pdf.setFont(PDF_FONT, 9.5)
         for row in section_rows:
             cat_lines = _wrap(pdf, row.get("category") or "", col_cat_w - 4 * mm, 9.5)[:2]
             remark_lines = _wrap(pdf, row.get("remark") or "", col_remark_w - 2 * mm, 8.5)[:2]
             line_count = max(len(cat_lines), len(remark_lines), 1)
-            row_h = 4.6 * mm * line_count + 2.6 * mm
+            row_h = ascent + leading * (line_count - 1) + bottom_pad
             if y_pos - row_h < 24 * mm:
                 y_pos = new_page()
                 y_pos = draw_table_header(y_pos)
-                pdf.setFont(PDF_FONT, 9.5)
 
-            pdf.setFillColor(INK)
-            for idx, line in enumerate(cat_lines):
-                pdf.setFont(PDF_FONT, 9.5)
-                pdf.drawString(x_cat + 2 * mm, y_pos - 4.6 * mm * idx, line)
-            pdf.setFont(PDF_FONT, 8.5)
-            pdf.setFillColor(MUTED)
-            pdf.drawString(x_status, y_pos, _row_status(row))
+            base = y_pos - ascent
             pdf.setFillColor(INK)
             pdf.setFont(PDF_FONT, 9.5)
-            pdf.drawRightString(x_budget, y_pos, _money(row.get("budget_amount")))
-            pdf.drawRightString(x_actual, y_pos, _money(_full_actual(row)))
+            for idx, line in enumerate(cat_lines):
+                pdf.drawString(x_cat + 2 * mm, base - leading * idx, line)
+            pdf.setFont(PDF_FONT, 8.5)
+            pdf.setFillColor(MUTED)
+            pdf.drawString(x_status, base, _row_status(row))
+            pdf.setFillColor(INK)
+            pdf.setFont(PDF_FONT, 9.5)
+            pdf.drawRightString(x_budget, base, _money(row.get("budget_amount")))
+            pdf.drawRightString(x_actual, base, _money(_full_actual(row)))
             pdf.setFont(PDF_FONT, 8.5)
             pdf.setFillColor(MUTED)
             for idx, line in enumerate(remark_lines):
-                pdf.drawString(x_remark, y_pos - 4.6 * mm * idx, line)
+                pdf.drawString(x_remark, base - leading * idx, line)
 
             y_pos -= row_h
             pdf.setStrokeColor(LINE)
             pdf.setLineWidth(0.4)
-            pdf.line(margin, y_pos + 1.6 * mm, width - margin, y_pos + 1.6 * mm)
+            pdf.line(margin, y_pos, width - margin, y_pos)
 
         if not section_rows:
             pdf.setFont(PDF_FONT, 9.5)
             pdf.setFillColor(MUTED)
-            pdf.drawString(x_cat + 2 * mm, y_pos, "（无记录）")
-            y_pos -= 7 * mm
+            pdf.drawString(x_cat + 2 * mm, y_pos - ascent, "（无记录）")
+            y_pos -= ascent + bottom_pad
 
         # 小计
+        base = y_pos - ascent - 0.6 * mm
         pdf.setFont(PDF_FONT, 10)
         pdf.setFillColor(INK)
-        pdf.drawString(x_cat + 2 * mm, y_pos, "小计")
-        pdf.drawRightString(x_budget, y_pos, _money(subtotal_budget))
-        pdf.drawRightString(x_actual, y_pos, _money(subtotal_actual))
-        return y_pos - 10 * mm
+        pdf.drawString(x_cat + 2 * mm, base, "小计")
+        pdf.drawRightString(x_budget, base, _money(subtotal_budget))
+        pdf.drawRightString(x_actual, base, _money(subtotal_actual))
+        return base - 10 * mm
 
     y = draw_section(y, "收入", income, inc_budget, inc_actual, GREEN)
     y = draw_section(y, "支出", expense, exp_budget, exp_actual, RED)
