@@ -13,9 +13,12 @@ from reportlab.pdfbase.cidfonts import UnicodeCIDFont
 from reportlab.pdfgen import canvas
 from werkzeug.utils import secure_filename
 
-from app.paths import DATA_ROOT
+from app.paths import DATA_ROOT, STATIC_ROOT
 
+# 优先用可内嵌的楷体 TTF（保证任何查看器都渲染一致），失败退回 Adobe CID 字体。
 PDF_FONT = "STSong-Light"
+EMBED_FONT_NAME = "XinHuaKaiTi"
+EMBED_FONT_PATH = STATIC_ROOT / "font" / "XinHuaKaiTi-1.ttf"
 
 INK = colors.HexColor("#1f2d3d")
 MUTED = colors.HexColor("#5d6678")
@@ -29,10 +32,27 @@ PAYMENT_STATUS_LABELS = {"process": "处理中", "checked": "已确认", "fail":
 
 
 def _register_fonts():
+    global PDF_FONT
+    if EMBED_FONT_PATH.exists():
+        try:
+            pdfmetrics.getFont(EMBED_FONT_NAME)
+            PDF_FONT = EMBED_FONT_NAME
+            return
+        except KeyError:
+            pass
+        try:
+            from reportlab.pdfbase.ttfonts import TTFont
+
+            pdfmetrics.registerFont(TTFont(EMBED_FONT_NAME, str(EMBED_FONT_PATH)))
+            PDF_FONT = EMBED_FONT_NAME
+            return
+        except Exception:  # noqa: BLE001
+            pass
     try:
-        pdfmetrics.getFont(PDF_FONT)
+        pdfmetrics.getFont("STSong-Light")
     except KeyError:
-        pdfmetrics.registerFont(UnicodeCIDFont(PDF_FONT))
+        pdfmetrics.registerFont(UnicodeCIDFont("STSong-Light"))
+    PDF_FONT = "STSong-Light"
 
 
 def _money(value):
@@ -195,15 +215,16 @@ def build_event_finance_report_pdf(event, rows):
     y -= 8 * mm
 
     # ---- 表格列 ----
-    col_cat_w = 74 * mm
+    col_cat_w = 72 * mm
     col_status_w = 26 * mm
-    col_amt_w = 24 * mm
-    col_remark_w = content_w - col_cat_w - col_status_w - col_amt_w * 2
+    col_amt_w = 23 * mm
+    remark_gap = 6 * mm
+    col_remark_w = content_w - col_cat_w - col_status_w - col_amt_w * 2 - remark_gap
     x_cat = margin
     x_status = x_cat + col_cat_w
     x_budget = x_status + col_status_w + col_amt_w   # 右对齐基准
     x_actual = x_budget + col_amt_w
-    x_remark = x_actual + 2 * mm
+    x_remark = x_actual + remark_gap
 
     def draw_table_header(y_pos):
         pdf.setFillColor(PANEL)
