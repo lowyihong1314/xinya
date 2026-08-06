@@ -29,14 +29,15 @@ from .shared import (
 
 
 def user_can_view_order(order: FahuiOrder) -> bool:
-    if current_user and current_user.is_authenticated:
-        return True
+    # 管理端需要法会读权限（fahui_read/account_read/account_edit）；
+    # 公开访客只能看「已验证手机号」名下的订单。
+    from ..common.access import can_access_phone_records
 
     session_phone = current_session_phone()
     if session_phone and session_phone == (order.phone or "").strip():
         return True
 
-    return (order.phone or "").strip() in current_verified_phones()
+    return can_access_phone_records(order.phone)
 
 
 def item_price(item: FahuiOrderItem) -> int:

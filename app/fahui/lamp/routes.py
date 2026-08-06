@@ -2,6 +2,7 @@ from flask import Blueprint, request
 
 from app.form.permissions import permission_required_any
 
+from ..common.access import FAHUI_READ_PERMISSION_NAMES, has_fahui_read
 from . import services
 
 
@@ -57,6 +58,7 @@ def list_payment_reviews_route():
 
 @lamp_registration_bp.route("/registrations", methods=["GET"])
 @lamp_registration_bp.route("/get_all_register", methods=["GET"])
+@permission_required_any(*FAHUI_READ_PERMISSION_NAMES)
 def list_registrations_route():
     return services.list_registrations()
 
@@ -65,7 +67,11 @@ def list_registrations_route():
 @lamp_registration_bp.route("/registrations/by-ids", methods=["POST"])
 @lamp_registration_bp.route("/get_by_ids", methods=["POST"])
 def list_registrations_by_ids_route():
-    return services.get_registrations_by_ids(_json_payload())
+    # 管理权限可查全部；公开访客只返回「已验证手机号」名下的记录。
+    return services.get_registrations_by_ids(
+        _json_payload(),
+        restrict_to_verified_phone=not has_fahui_read(),
+    )
 
 
 @lamp_registration_bp.route("/payments", methods=["POST"])

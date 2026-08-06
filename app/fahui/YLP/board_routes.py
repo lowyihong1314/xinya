@@ -1,7 +1,8 @@
 from flask import Blueprint, jsonify, request
-from flask_login import login_required
 
 from app.form.permissions import permission_required_any
+
+from ..common.access import FAHUI_READ_PERMISSION_NAMES
 
 from .payment_channel_services import (
     create_payment_channel,
@@ -48,7 +49,7 @@ board_router_bp = Blueprint("board_router", __name__)
 
 @board_router_bp.route("/print-pdfs/<int:pdf_id>", methods=["GET"])
 @board_router_bp.route("/get_pdf_data/<int:pdf_id>", methods=["GET"])
-@login_required
+@permission_required_any(*FAHUI_READ_PERMISSION_NAMES)
 def get_print_pdf_detail_route(pdf_id):
     payload, status_code = get_print_pdf_data(pdf_id)
     return jsonify(payload), status_code
@@ -64,7 +65,7 @@ def delete_board_entry_route(board_data_id):
 
 @board_router_bp.route("/boards", methods=["GET"])
 @board_router_bp.route("/list_all", methods=["GET"])
-@login_required
+@permission_required_any(*FAHUI_READ_PERMISSION_NAMES)
 def list_boards_route():
     return jsonify(list_all_boards(request.args.get("version", type=str) or None))
 
@@ -123,21 +124,21 @@ def clear_print_pdfs_route():
 
 @board_router_bp.route("/print-pdfs", methods=["GET"])
 @board_router_bp.route("/get_all_print_data", methods=["GET"])
-@login_required
+@permission_required_any(*FAHUI_READ_PERMISSION_NAMES)
 def list_print_pdfs_route():
     return jsonify(list_print_pdf_records()), 200
 
 
 @board_router_bp.route("/versions", methods=["GET"])
 @board_router_bp.route("/get_version_list", methods=["GET"])
-@login_required
+@permission_required_any(*FAHUI_READ_PERMISSION_NAMES)
 def list_versions_route():
     return jsonify(list_versions())
 
 
 @board_router_bp.route("/orders", methods=["GET"])
 @board_router_bp.route("/get_orders_data", methods=["GET"])
-@login_required
+@permission_required_any(*FAHUI_READ_PERMISSION_NAMES)
 def list_orders_route():
     return jsonify(list_orders_by_version(request.args.get("version", "2024_YLP")))
 
@@ -145,6 +146,16 @@ def list_orders_route():
 @board_router_bp.route("/orders/<int:order_id>/customer", methods=["POST"])
 @board_router_bp.route("/update_customer/<int:order_id>", methods=["POST"])
 def update_order_customer_route(order_id):
+    # 公开访客只能改「已验证手机号」名下的订单；管理端需法会读权限。
+    from ..common.access import can_access_phone_records, has_fahui_read, owner_or_reader_denied
+    from models.fahui import FahuiOrder
+
+    if not has_fahui_read():
+        order = FahuiOrder.query.get(order_id)
+        if order is None:
+            return jsonify({"status": "error", "message": "order not found"}), 404
+        if not can_access_phone_records(order.phone):
+            return owner_or_reader_denied()
     payload, status_code = update_order_customer(order_id, request.get_json(silent=True) or {})
     return jsonify(payload), status_code
 
@@ -221,7 +232,7 @@ def get_order_detail_route():
 
 @board_router_bp.route("/orders/check-duplicate-owner-fields", methods=["GET"])
 @board_router_bp.route("/check_duplicate_owner_fields", methods=["GET"])
-@login_required
+@permission_required_any(*FAHUI_READ_PERMISSION_NAMES)
 def check_duplicate_order_owner_fields_route():
     return jsonify(check_duplicate_owner_fields())
 

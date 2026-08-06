@@ -25,6 +25,7 @@ permission_names = [
     "member_detail",
     "youth_class_read",
     "youth_class_edit",
+    "fahui_read",
     "event_edit",
     "permission",
     "permission_edit",

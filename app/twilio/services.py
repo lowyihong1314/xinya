@@ -148,6 +148,8 @@ def clear_phone_session():
 
 
 def _mark_phone_verified(phone):
+    # 验证结果保存 7 天（PERMANENT_SESSION_LIFETIME），供公开页读取本人记录用。
+    session.permanent = True
     verified_phones = session.get("verified_phones", [])
     if phone not in verified_phones:
         verified_phones.append(phone)

@@ -6,10 +6,12 @@ from flask import Blueprint, jsonify, render_template, request, send_file
 from flask_login import login_required
 from werkzeug.utils import secure_filename
 
+from app.form.permissions import permission_required_any
 from .services import user_can_view_order
 from app.paths import TEMPLATE_ROOT
 from models.fahui import FahuiOrder, FahuiOrderItem, FahuiPdfPageData, FahuiPrintPdf
 
+from ..common.access import FAHUI_READ_PERMISSION_NAMES
 from ..common.ylp_storage import preferred_dir, resolve_existing_path
 from .paiwei_job import get_job_state, resolve_template, start_paiwei_job
 from .print_generator import (
@@ -95,6 +97,7 @@ def download_app_route():
 
 @print_paiwei_bp.route("/pdf-files", methods=["GET"])
 @print_paiwei_bp.route("/get_all_pdf_name", methods=["GET"])
+@permission_required_any(*FAHUI_READ_PERMISSION_NAMES)
 def list_pdf_files_route():
     all_pdf_path = resolve_existing_path("pdf_view")
     if not all_pdf_path or not all_pdf_path.exists():
@@ -110,6 +113,7 @@ def list_pdf_files_route():
 
 @print_paiwei_bp.route("/pdf-file", methods=["GET"])
 @print_paiwei_bp.route("/get_pdf_file", methods=["GET"])
+@permission_required_any(*FAHUI_READ_PERMISSION_NAMES)
 def get_pdf_file_route():
     filename = request.args.get("filename")
     if not filename:
@@ -143,6 +147,7 @@ def upload_template_route():
 
 @print_paiwei_bp.route("/print-pdfs/<int:print_pdf_id>/preview-image", methods=["GET"])
 @print_paiwei_bp.route("/print_paiwei_order_item/<int:print_pdf_id>", methods=["GET"])
+@permission_required_any(*FAHUI_READ_PERMISSION_NAMES)
 def preview_print_pdf_image_route(print_pdf_id):
     cache_dir = preferred_dir("paiwei_result", "paiweicache")
     cache_file = cache_dir / f"{print_pdf_id}.png"
@@ -218,7 +223,7 @@ def preview_order_route(order_id):
 
 @print_paiwei_bp.route("/preview/by-orders", methods=["POST"])
 @print_paiwei_bp.route("/generate_by_orders", methods=["POST"])
-@login_required
+@permission_required_any(*FAHUI_READ_PERMISSION_NAMES)
 def generate_preview_by_orders_route():
     data = request.get_json(silent=True) or {}
     return generate_paiwei_using_order_ids(
@@ -241,7 +246,7 @@ _PAIWEI_TEMPLATE_ALIASES = {
 
 
 @print_paiwei_bp.route("/preview/by-template", methods=["POST"])
-@login_required
+@permission_required_any(*FAHUI_READ_PERMISSION_NAMES)
 def generate_preview_by_template_route():
     data = request.get_json(silent=True) or {}
     order_ids = data.get("order_ids", []) or []
@@ -268,7 +273,7 @@ def generate_preview_by_template_route():
 
 
 @print_paiwei_bp.route("/jobs/by-template", methods=["POST"])
-@login_required
+@permission_required_any(*FAHUI_READ_PERMISSION_NAMES)
 def start_paiwei_job_route():
     data = request.get_json(silent=True) or {}
     order_ids = data.get("order_ids", []) or []

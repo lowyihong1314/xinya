@@ -190,7 +190,7 @@ def list_registrations():
         return jsonify({"status": "error", "message": "服务器错误", "error": str(exc)}), 500
 
 
-def get_registrations_by_ids(data):
+def get_registrations_by_ids(data, restrict_to_verified_phone=False):
     try:
         ids = data.get("ids")
         if not ids or not isinstance(ids, list):
@@ -199,6 +199,10 @@ def get_registrations_by_ids(data):
         registrations = (
             db.session.query(LampRegistration).filter(LampRegistration.id.in_(ids)).all()
         )
+        if restrict_to_verified_phone:
+            from ..common.access import can_access_phone_records
+
+            registrations = [r for r in registrations if can_access_phone_records(r.phone)]
         if not registrations:
             return jsonify({"status": "error", "message": "找不到报名记录"}), 404
 

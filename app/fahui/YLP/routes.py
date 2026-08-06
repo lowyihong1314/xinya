@@ -4,6 +4,12 @@ from flask_login import current_user, login_required
 from app.form.permissions import permission_required_any
 
 from ..common import open_window as open_window_services
+from ..common.access import (
+    FAHUI_READ_PERMISSION_NAMES,
+    can_access_phone_records,
+    has_fahui_read,
+    owner_or_reader_denied,
+)
 from .services import (
     create_order_shell,
     get_order_detail,
@@ -22,6 +28,7 @@ def _json_payload():
 
 @fahui_bp.route("/orders/search", methods=["GET"])
 @fahui_bp.route("/search", methods=["GET"])
+@permission_required_any(*FAHUI_READ_PERMISSION_NAMES)
 def search_orders_route():
     version = request.args.get("version", type=str)
     value = request.args.get("value", default="", type=str)
@@ -40,7 +47,7 @@ def search_orders_route():
 
 
 @fahui_bp.route("/orders/export", methods=["GET"])
-@login_required
+@permission_required_any(*FAHUI_READ_PERMISSION_NAMES)
 def export_orders_route():
     version = request.args.get("version", type=str)
     value = request.args.get("value", default="", type=str)
@@ -60,6 +67,16 @@ def get_order_detail_route(order_id: int | None = None):
     if not order_id:
         return jsonify({"status": "error", "message": "order_id is required"}), 400
 
+    # 管理权限放行；公开访客只能读「已验证手机号」名下的订单。
+    if not has_fahui_read():
+        from models.fahui import FahuiOrder
+
+        order = FahuiOrder.query.get(order_id)
+        if order is None:
+            return jsonify({"status": "error", "message": "order not found"}), 404
+        if not can_access_phone_records(order.phone):
+            return owner_or_reader_denied()
+
     payload, status_code = get_order_detail(order_id)
     return jsonify(payload), status_code
 
@@ -67,7 +84,10 @@ def get_order_detail_route(order_id: int | None = None):
 @fahui_bp.route("/orders/by-phone", methods=["GET"])
 @fahui_bp.route("/get_orders_by_phone", methods=["GET"])
 def list_orders_by_phone_route():
-    payload, status_code = get_orders_by_phone(request.args.get("phone", default="", type=str))
+    phone = request.args.get("phone", default="", type=str)
+    if not can_access_phone_records(phone):
+        return owner_or_reader_denied()
+    payload, status_code = get_orders_by_phone(phone)
     return jsonify(payload), status_code
 
 
