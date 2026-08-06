@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState, type CSSProperties, type MouseEvent } from "react";
-import { useSearchParams } from "react-router-dom";
+import { useNavigate, useSearchParams } from "react-router-dom";
 
 import { apiFetch } from "../../../js/apiFetch";
 import { useEnsureDesignTokens } from "../../../theme/designTokens";
@@ -10,6 +10,7 @@ type ManualDoc = { name: string; title: string };
 export function ManualPage() {
   useEnsureDesignTokens();
   const [searchParams, setSearchParams] = useSearchParams();
+  const navigate = useNavigate();
   const [docs, setDocs] = useState<ManualDoc[]>([]);
   const [content, setContent] = useState("");
   const [loading, setLoading] = useState(false);
@@ -91,7 +92,7 @@ export function ManualPage() {
     });
   }
 
-  // 拦截文档内链接：.md 之间在应用内跳转；外链新标签打开；#锚点滚动
+  // 拦截文档内链接：#/ 开头的应用路由直接跳转；.md 之间在应用内切换；外链新标签打开；#锚点滚动
   function handleContentClick(event: MouseEvent<HTMLDivElement>) {
     const anchorEl = (event.target as HTMLElement).closest("a");
     if (!anchorEl) return;
@@ -100,6 +101,12 @@ export function ManualPage() {
     if (anchorEl.getAttribute("data-ext") === "1" || /^https?:/i.test(href)) {
       event.preventDefault();
       window.open(href, "_blank", "noopener,noreferrer");
+      return;
+    }
+    // 手册里写「#/crm/finance?...」这类站内路由，点击直接跳到对应页面
+    if (href.startsWith("#/") || href.startsWith("/#/")) {
+      event.preventDefault();
+      navigate(href.slice(href.indexOf("#") + 1));
       return;
     }
     const [file, rawAnchor] = href.split("#");
