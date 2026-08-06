@@ -3,6 +3,7 @@ export type PermissionRecord = {
   id: string;
   name: string;
   ref?: string | null;
+  description?: string | null;
 };
 
 export type DepartmentRecord = {

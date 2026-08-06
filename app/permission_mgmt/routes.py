@@ -1,6 +1,7 @@
 from flask import Blueprint, jsonify, request
 from flask_login import login_required
 
+from app.auth import permission_descriptions as PERMISSION_DESCRIPTIONS
 from app.auth import permission_names as PERMISSION_CATALOG
 from models.user_data import Department, DepartmentPermission, db
 
@@ -8,7 +9,12 @@ permission_bp = Blueprint("permission", __name__)
 
 
 def _catalog_entry(name):
-    return {"id": name, "name": name, "ref": name}
+    return {
+        "id": name,
+        "name": name,
+        "ref": name,
+        "description": PERMISSION_DESCRIPTIONS.get(name, ""),
+    }
 
 
 def _resolve_permission_name(data):

@@ -88,10 +88,12 @@ export function PermissionsView({
             const on = p.id === selectedPermissionId;
             const deptCount = deptsWithPermission(p.id).length;
             return (
-              <button key={p.id} type="button" style={{ ...permItemStyle, ...(on ? permItemOnStyle : {}) }} onClick={() => onSelectPermission(p.id)}>
+              <button key={p.id} type="button" title={p.description || undefined} style={{ ...permItemStyle, ...(on ? permItemOnStyle : {}) }} onClick={() => onSelectPermission(p.id)}>
                 <span style={{ display: "grid", gap: 2, minWidth: 0 }}>
                   <span style={{ fontWeight: 700, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{p.name}</span>
-                  {p.ref ? <span style={refStyle}>{p.ref}</span> : null}
+                  {p.description ? (
+                    <span style={{ ...refStyle, fontFamily: "inherit", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{p.description}</span>
+                  ) : null}
                 </span>
                 <span style={countPillStyle}>{deptCount} 部门</span>
               </button>
@@ -108,7 +110,7 @@ export function PermissionsView({
           <>
             <div style={selHeadStyle}>
               <div style={{ fontWeight: 800, fontSize: 16 }}>{selected.name}</div>
-              {selected.ref ? <div style={refStyle}>{selected.ref}</div> : null}
+              {selected.description ? <div style={descStyle}>{selected.description}</div> : null}
               <div style={mutedStyle}>{deptsWithPermission(selected.id).length} 个部门授予 · {grantingUsers.length} 位成员拥有</div>
             </div>
 
@@ -168,6 +170,7 @@ const permListStyle: CSSProperties = { display: "grid", gap: 4, maxHeight: "60vh
 const permItemStyle: CSSProperties = { display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8, textAlign: "left", padding: "8px 10px", borderRadius: 8, border: "1px solid var(--x-color-line-soft)", background: "var(--x-color-panel)", color: "var(--x-color-ink)", cursor: "pointer", fontSize: 13 };
 const permItemOnStyle: CSSProperties = { border: "1px solid var(--x-color-accent-border)", background: "var(--x-color-accent-tint)" };
 const refStyle: CSSProperties = { fontSize: 11.5, color: "var(--x-color-ink-muted)", fontFamily: "var(--x-font-mono)" };
+const descStyle: CSSProperties = { fontSize: 13, lineHeight: 1.6, color: "var(--x-color-ink-muted)" };
 const countPillStyle: CSSProperties = { flexShrink: 0, padding: "2px 9px", borderRadius: 999, background: "var(--x-color-panel-alt)", color: "var(--x-color-ink-muted)", fontSize: 11.5, fontWeight: 700 };
 const selHeadStyle: CSSProperties = { display: "grid", gap: 3, paddingBottom: 8, borderBottom: "1px solid var(--x-color-line-soft)" };
 function detailColumnsStyle(isMobile: boolean): CSSProperties {
