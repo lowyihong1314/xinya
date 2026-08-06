@@ -24,10 +24,7 @@ export function UserControlPage() {
   const userIdParam = searchParams.get("user_id");
   const deptIdParam = searchParams.get("dept_id");
   const permIdParam = searchParams.get("permission_id");
-  const selectedPermissionId =
-    view === "permissions" && permIdParam && Number.isFinite(Number(permIdParam))
-      ? Number(permIdParam)
-      : null;
+  const selectedPermissionId = view === "permissions" && permIdParam ? permIdParam : null;
   const editorUserId =
     view === "members" && userIdParam && Number.isFinite(Number(userIdParam))
       ? Number(userIdParam)

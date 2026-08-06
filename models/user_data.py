@@ -14,32 +14,27 @@ from sqlalchemy.orm import synonym
 
 bcrypt = Bcrypt()
 
-class Permission(db.Model):
-    __tablename__ = "permission"
+# 权限清单是代码的一部分（见 app/auth.py 的 permission_names），DB 只存
+# 「部门 ↔ 权限名」的分配关系；行对象带 .name / .to_dict()，兼容旧的遍历写法。
+class DepartmentPermission(db.Model):
+    __tablename__ = "department_permission"
 
-    id = db.Column(db.Integer, primary_key=True, autoincrement=True)
-    name = db.Column(db.String(100), unique=True, nullable=False)
-    ref = db.Column(db.String(100), nullable=True)
-
-    # ✅ 多对多关联 Department
-    departments = db.relationship(
-        "Department",
-        secondary="department_permission",
-        back_populates="permissions"
+    department_id = db.Column(
+        db.Integer,
+        db.ForeignKey("department.id", ondelete="CASCADE"),
+        primary_key=True,
     )
+    name = db.Column("permission_name", db.String(100), primary_key=True)
+
+    department = db.relationship("Department", back_populates="permissions")
 
     def to_dict(self):
         return {
-            "id": self.id,
+            "id": self.name,
             "name": self.name,
-            "ref": self.ref
+            "ref": self.name,
         }
 
-department_permission = db.Table(
-    "department_permission",
-    db.Column("department_id", db.Integer, db.ForeignKey("department.id", ondelete="CASCADE"), primary_key=True),
-    db.Column("permission_id", db.Integer, db.ForeignKey("permission.id", ondelete="CASCADE"), primary_key=True)
-)
 
 class Department(db.Model):
     __tablename__ = "department"
@@ -54,9 +49,10 @@ class Department(db.Model):
     )
 
     permissions = db.relationship(
-        "Permission",
-        secondary="department_permission",
-        back_populates="departments"
+        "DepartmentPermission",
+        back_populates="department",
+        cascade="all, delete-orphan",
+        lazy=True,
     )
 
     def to_dict(self):

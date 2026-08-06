@@ -1,5 +1,6 @@
+// 权限清单已代码化：id 就是权限名字符串。
 export type PermissionRecord = {
-  id: number;
+  id: string;
   name: string;
   ref?: string | null;
 };

@@ -251,7 +251,7 @@ export function useUserControlController() {
     }
   }
 
-  async function savePermissions(departmentId: number, nextIds: number[]) {
+  async function savePermissions(departmentId: number, nextIds: string[]) {
     const department = departments.find((item) => item.id === departmentId);
     if (!department) return;
 

@@ -21,10 +21,10 @@ export function PermissionsView({
   departments: DepartmentRecord[];
   users: UserRecord[];
   loading: boolean;
-  selectedPermissionId: number | null;
-  onSelectPermission: (id: number) => void;
+  selectedPermissionId: string | null;
+  onSelectPermission: (id: string) => void;
   onRefresh: () => void;
-  onSavePermissions: (departmentId: number, nextIds: number[]) => void;
+  onSavePermissions: (departmentId: number, nextIds: string[]) => void;
 }) {
   const [query, setQuery] = useState("");
 
@@ -41,10 +41,10 @@ export function PermissionsView({
     return map;
   }, [users]);
 
-  function deptsWithPermission(pid: number): DepartmentRecord[] {
+  function deptsWithPermission(pid: string): DepartmentRecord[] {
     return departments.filter((d) => (d.permissions || []).some((p) => p.id === pid));
   }
-  function usersWithPermission(pid: number): { user: UserRecord; via: string[] }[] {
+  function usersWithPermission(pid: string): { user: UserRecord; via: string[] }[] {
     const out: { user: UserRecord; via: string[] }[] = [];
     for (const u of users) {
       const via = (u.departments || [])
@@ -65,7 +65,7 @@ export function PermissionsView({
 
   const selected = permissions.find((p) => p.id === selectedPermissionId) || null;
 
-  function toggleDept(dept: DepartmentRecord, pid: number, has: boolean) {
+  function toggleDept(dept: DepartmentRecord, pid: string, has: boolean) {
     const currentIds = (dept.permissions || []).map((p) => p.id);
     const nextIds = has ? currentIds.filter((id) => id !== pid) : [...currentIds, pid];
     onSavePermissions(dept.id, nextIds);

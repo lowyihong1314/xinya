@@ -5,7 +5,7 @@ from flask_login import current_user
 
 from app.extensions import login_manager
 from models import db
-from models.user_data import Permission, User
+from models.user_data import User
 
 CHANGYOU_ROOM_CONTROL_PERMISSION = "changyou_contorl"
 
@@ -75,19 +75,8 @@ def get_current_user_permissions(user):
 
 
 def ensure_known_permissions():
-    try:
-        existing_names = {permission.name for permission in Permission.query.all()}
-        missing_names = [name for name in permission_names if name not in existing_names]
-        if not missing_names:
-            return []
-
-        db.session.add_all([Permission(name=name, ref=name) for name in missing_names])
-        db.session.commit()
-        return missing_names
-    except Exception as exc:
-        db.session.rollback()
-        print(f"[权限初始化] 同步权限失败: {exc}")
-        return []
+    # 权限清单已完全代码化（permission_names），不再需要写入数据库。
+    return []
 
 
 def permission_required(permission_name):

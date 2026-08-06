@@ -105,7 +105,7 @@ export async function fetchAllPermissions() {
   return parseJson<{ permissions?: PermissionRecord[] }>(response);
 }
 
-export async function addPermissionToDepartment(departmentId: number, permissionId: number) {
+export async function addPermissionToDepartment(departmentId: number, permissionId: string) {
   const response = await apiFetch("/api/permission/add_permission_to_department", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
@@ -115,7 +115,7 @@ export async function addPermissionToDepartment(departmentId: number, permission
   return parseJson<{ message?: string }>(response);
 }
 
-export async function removePermissionFromDepartment(departmentId: number, permissionId: number) {
+export async function removePermissionFromDepartment(departmentId: number, permissionId: string) {
   const response = await apiFetch("/api/permission/remove_permission_from_department", {
     method: "POST",
     headers: { "Content-Type": "application/json" },

@@ -13,9 +13,9 @@ export function PermissionModal({
   department: DepartmentRecord;
   permissions: PermissionRecord[];
   onClose: () => void;
-  onSave: (ids: number[]) => void;
+  onSave: (ids: string[]) => void;
 }) {
-  const [selectedIds, setSelectedIds] = useState<number[]>(
+  const [selectedIds, setSelectedIds] = useState<string[]>(
     (department.permissions || []).map((permission) => permission.id),
   );
   const selectedSet = useMemo(() => new Set(selectedIds), [selectedIds]);
