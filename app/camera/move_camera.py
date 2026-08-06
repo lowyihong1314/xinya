@@ -101,7 +101,19 @@ def api_recordings():
             names = []
         # 最新一段正在写入，moov 未落盘、无法播放，排除
         playable = names[:-1] if len(names) >= 1 else []
-        for name in playable:
+        from datetime import timezone
+
+        def parse_start(fname):
+            try:
+                # 文件名是服务器时间（UTC），标记时区让前端正确换算本地时间
+                return datetime.strptime(
+                    fname[: len("2026-07-22_15-20-36")], "%Y-%m-%d_%H-%M-%S"
+                ).replace(tzinfo=timezone.utc)
+            except ValueError:
+                return None
+
+        starts = {name: parse_start(name) for name in names}
+        for idx, name in enumerate(playable):
             path = os.path.join(REC_DIR, name)
             try:
                 size = os.path.getsize(path)
@@ -109,15 +121,25 @@ def api_recordings():
                 continue
             if size <= 0:
                 continue
-            start = None
-            try:
-                start = datetime.strptime(name[: len("2026-07-22_15-20-36")],
-                                          "%Y-%m-%d_%H-%M-%S").isoformat()
-            except ValueError:
-                pass
+            start_dt = starts.get(name)
+            # 片段时长 ≈ 下一段开始 − 本段开始（最后一段用文件修改时间兜底）
+            duration = None
+            if start_dt is not None:
+                next_start = starts.get(names[idx + 1]) if idx + 1 < len(names) else None
+                end_dt = next_start
+                if end_dt is None:
+                    try:
+                        end_dt = datetime.fromtimestamp(os.path.getmtime(path), tz=timezone.utc)
+                    except OSError:
+                        end_dt = None
+                if end_dt is not None:
+                    seconds = (end_dt - start_dt).total_seconds()
+                    if 0 < seconds <= 3600 * 6:
+                        duration = int(seconds)
             items.append({
                 "name": name,
-                "start": start,
+                "start": start_dt.isoformat() if start_dt else None,
+                "duration": duration,
                 "size": size,
                 "url": f"{REC_PUBLIC_BASE}/{name}",
             })
