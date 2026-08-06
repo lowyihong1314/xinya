@@ -7,6 +7,7 @@ import { useEnsureDesignTokens } from "../../theme/designTokens";
 import {
   CRM_MODULES,
   type CRMModuleKey,
+  LONG_OPEN_REGISTRATION_FORM_PATH,
   buildCRMModulePath,
   buildCRMModuleHref,
 } from "./crmModules";
@@ -23,9 +24,13 @@ export function CRMPage() {
   // 佛学班活动入口：event_table + ?event_type=buddhist —— 归「长期活动」，不与「创建活动」混淆。
   const isBuddhistEvents =
     isModulePathActive(location.pathname, "event_table") && searchParams.get("event_type") === "buddhist";
+  // 会员管理归「用户与部门」分组（页面复用长期活动的会员工作台路由）。
+  const isMembershipAdmin = isMembershipSectionActive(location.pathname, searchParams);
   const activeModule = isBuddhistEvents
     ? CRM_MODULES.find((module) => module.key === "permanent_registration") ?? null
-    : CRM_MODULES.find((module) => isModulePathActive(location.pathname, module.key)) ?? null;
+    : isMembershipAdmin
+      ? CRM_MODULES.find((module) => module.key === "user_control") ?? null
+      : CRM_MODULES.find((module) => isModulePathActive(location.pathname, module.key)) ?? null;
   const loginRedirectPath = `${location.pathname}${location.search}`;
 
   if (!isAuthenticated) {
@@ -66,10 +71,13 @@ export function CRMPage() {
             const groupIcon = isSpecialEvent ? "fas fa-star" : module.icon;
             const active = isSpecialEvent
               ? SPECIAL_EVENT_MODULE_KEYS.some((key) => isModulePathActive(location.pathname, key)) && !isBuddhistEvents
-              : isModulePathActive(location.pathname, module.key) ||
-                (module.key === "dharma_event" && isModulePathActive(location.pathname, "ylp_board")) ||
-                (module.key === "files" && isModulePathActive(location.pathname, "files_v2")) ||
-                (module.key === "permanent_registration" && isBuddhistEvents);
+              : module.key === "user_control"
+                ? isModulePathActive(location.pathname, "user_control") || isMembershipAdmin
+                : module.key === "permanent_registration"
+                  ? (isModulePathActive(location.pathname, module.key) && !isMembershipAdmin) || isBuddhistEvents
+                  : isModulePathActive(location.pathname, module.key) ||
+                    (module.key === "dharma_event" && isModulePathActive(location.pathname, "ylp_board")) ||
+                    (module.key === "files" && isModulePathActive(location.pathname, "files_v2"));
             const children = isSpecialEvent
               ? getSpecialEventChildren(location.pathname, isBuddhistEvents)
               : getSidebarChildren(module.key, searchParams, active, location.pathname);
@@ -597,18 +605,21 @@ const USER_CONTROL_CHILD_ITEMS = [
 
 const PERMANENT_REGISTRATION_CHILD_ITEMS = [
   {
-    key: "membership",
-    title: "会员",
-    icon: "fa-solid fa-id-card",
-    description: "会员报名、续费与费率审核。",
-  },
-  {
     key: "youth_class",
     title: "青少年佛学班",
     icon: "fa-solid fa-graduation-cap",
     description: "青少年佛学班报名与付款审核。",
   },
 ] as const;
+
+// 会员管理已移到「用户与部门」分组，但页面仍复用长期活动的会员工作台路由。
+export function isMembershipSectionActive(pathname: string, searchParams: URLSearchParams) {
+  if (pathname === "/crm/membership_registration") return true;
+  return (
+    isModulePathActive(pathname, "permanent_registration") &&
+    searchParams.get("registration_section") === "membership"
+  );
+}
 
 function isModulePathActive(pathname: string, moduleKey: CRMModuleKey) {
   if (pathname === buildCRMModulePath(moduleKey)) {
@@ -754,11 +765,22 @@ export function getSidebarChildren(
       ? requestedUserControlView
       : "members";
     const userControlPath = buildCRMModulePath("user_control");
-    return USER_CONTROL_CHILD_ITEMS.map((item) => ({
-      ...item,
-      to: buildPathWithParams(userControlPath, { user_control_view: item.key }),
-      active: moduleActive && activeUserControlView === item.key,
-    }));
+    const membershipActive = isMembershipSectionActive(pathname, searchParams);
+    return [
+      ...USER_CONTROL_CHILD_ITEMS.map((item) => ({
+        ...item,
+        to: buildPathWithParams(userControlPath, { user_control_view: item.key }),
+        active: moduleActive && !membershipActive && activeUserControlView === item.key,
+      })),
+      {
+        key: "membership_admin",
+        title: "会员管理",
+        icon: "fa-solid fa-id-card",
+        description: "会员名册、申请审核、续费与费率。",
+        to: buildPathWithParams(LONG_OPEN_REGISTRATION_FORM_PATH, { registration_section: "membership" }),
+        active: membershipActive,
+      },
+    ];
   }
 
   if (moduleKey === "permanent_registration") {
@@ -769,7 +791,7 @@ export function getSidebarChildren(
       (item) => item.key === requestedRegistrationSection,
     )
       ? requestedRegistrationSection
-      : "membership";
+      : "youth_class";
     const registrationPath = buildCRMModulePath("permanent_registration");
     return [
       ...PERMANENT_REGISTRATION_CHILD_ITEMS.map((item) => ({

@@ -7,7 +7,8 @@ import { YouthClassRegistrationPage } from "./YouthClassRegistrationPage";
 type RegistrationSectionKey = "membership" | "youth_class";
 
 function resolveSectionKey(value: string | null): RegistrationSectionKey {
-  return value === "youth_class" ? "youth_class" : "membership";
+  // 默认青少年班——会员管理已移到「用户与部门」分组，带 registration_section=membership 才进会员工作台。
+  return value === "membership" ? "membership" : "youth_class";
 }
 
 export function LongOpenRegistrationFormPage() {
