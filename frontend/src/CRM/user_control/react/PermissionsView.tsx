@@ -112,39 +112,42 @@ export function PermissionsView({
               <div style={mutedStyle}>{deptsWithPermission(selected.id).length} 个部门授予 · {grantingUsers.length} 位成员拥有</div>
             </div>
 
-            <div style={sectionStyle}>
-              <div style={sectionTitleStyle}>部门（勾选=授予此权限）</div>
-              <div style={{ display: "grid", gap: 6 }}>
-                {departments.map((d) => {
-                  const has = (d.permissions || []).some((p) => p.id === selected.id);
-                  const memberCount = (membersByDept.get(d.id) || []).length;
-                  return (
-                    <label key={d.id} style={{ ...deptRowStyle, ...(has ? deptRowOnStyle : {}) }}>
-                      <input type="checkbox" checked={has} onChange={() => toggleDept(d, selected.id, has)} />
-                      <span style={{ fontWeight: 700, flex: 1, minWidth: 0 }}>{d.name}</span>
-                      <span style={countPillStyle}>{memberCount} 人</span>
-                    </label>
-                  );
-                })}
-              </div>
-            </div>
-
-            <div style={sectionStyle}>
-              <div style={sectionTitleStyle}>拥有此权限的成员（{grantingUsers.length}）</div>
-              {!grantingUsers.length ? (
-                <div style={mutedStyle}>还没有成员拥有此权限（把权限授予某个有成员的部门即可）。</div>
-              ) : (
-                <div style={{ display: "grid", gap: 6 }}>
-                  {grantingUsers.map(({ user, via }) => (
-                    <div key={user.id} style={memberRowStyle}>
-                      <span style={{ fontWeight: 700, minWidth: 0 }}>{user.display_name || user.username || user.name_NRIC || `#${user.id}`}</span>
-                      <span style={viaWrapStyle}>
-                        {via.map((name) => <span key={name} style={viaChipStyle}>{name}</span>)}
-                      </span>
-                    </div>
-                  ))}
+            {/* 部门在左、成员在右，两栏各自滚动，避免页面被拉长 */}
+            <div style={detailColumnsStyle(isMobile)}>
+              <div style={sectionStyle}>
+                <div style={sectionTitleStyle}>部门（勾选=授予此权限）</div>
+                <div style={scrollListStyle}>
+                  {departments.map((d) => {
+                    const has = (d.permissions || []).some((p) => p.id === selected.id);
+                    const memberCount = (membersByDept.get(d.id) || []).length;
+                    return (
+                      <label key={d.id} style={{ ...deptRowStyle, ...(has ? deptRowOnStyle : {}) }}>
+                        <input type="checkbox" checked={has} onChange={() => toggleDept(d, selected.id, has)} />
+                        <span style={{ fontWeight: 700, flex: 1, minWidth: 0 }}>{d.name}</span>
+                        <span style={countPillStyle}>{memberCount} 人</span>
+                      </label>
+                    );
+                  })}
                 </div>
-              )}
+              </div>
+
+              <div style={sectionStyle}>
+                <div style={sectionTitleStyle}>拥有此权限的成员（{grantingUsers.length}）</div>
+                {!grantingUsers.length ? (
+                  <div style={mutedStyle}>还没有成员拥有此权限（把权限授予某个有成员的部门即可）。</div>
+                ) : (
+                  <div style={scrollListStyle}>
+                    {grantingUsers.map(({ user, via }) => (
+                      <div key={user.id} style={memberRowStyle}>
+                        <span style={{ fontWeight: 700, minWidth: 0 }}>{user.display_name || user.username || user.name_NRIC || `#${user.id}`}</span>
+                        <span style={viaWrapStyle}>
+                          {via.map((name) => <span key={name} style={viaChipStyle}>{name}</span>)}
+                        </span>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
             </div>
           </>
         )}
@@ -167,6 +170,10 @@ const permItemOnStyle: CSSProperties = { border: "1px solid var(--x-color-accent
 const refStyle: CSSProperties = { fontSize: 11.5, color: "var(--x-color-ink-muted)", fontFamily: "var(--x-font-mono)" };
 const countPillStyle: CSSProperties = { flexShrink: 0, padding: "2px 9px", borderRadius: 999, background: "var(--x-color-panel-alt)", color: "var(--x-color-ink-muted)", fontSize: 11.5, fontWeight: 700 };
 const selHeadStyle: CSSProperties = { display: "grid", gap: 3, paddingBottom: 8, borderBottom: "1px solid var(--x-color-line-soft)" };
+function detailColumnsStyle(isMobile: boolean): CSSProperties {
+  return { display: "grid", gridTemplateColumns: isMobile ? "1fr" : "minmax(240px, 340px) 1fr", gap: 14, alignItems: "start" };
+}
+const scrollListStyle: CSSProperties = { display: "grid", gap: 6, maxHeight: "62vh", overflowY: "auto", paddingRight: 2 };
 const sectionStyle: CSSProperties = { display: "grid", gap: 8 };
 const sectionTitleStyle: CSSProperties = { fontWeight: 800, fontSize: 13 };
 const deptRowStyle: CSSProperties = { display: "flex", alignItems: "center", gap: 10, padding: "8px 11px", borderRadius: 8, border: "1px solid var(--x-color-line-soft)", background: "var(--x-color-panel)", cursor: "pointer", fontSize: 13 };
