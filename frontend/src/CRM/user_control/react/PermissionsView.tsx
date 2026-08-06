@@ -2,6 +2,8 @@ import { useMemo, useState } from "react";
 import type { CSSProperties } from "react";
 
 import type { DepartmentRecord, PermissionRecord, UserRecord } from "./types";
+import { UserCard } from "./view/UserCard";
+import { cardGridStyle } from "./view/styles";
 
 // 权限视角：同一份部门/权限/成员数据（与部门管理同一套 API），换个 UI——
 // 以「权限」为主轴：选一个权限，看哪些部门授予它、哪些成员因此拥有它，并可增删。
@@ -138,15 +140,17 @@ export function PermissionsView({
                 {!grantingUsers.length ? (
                   <div style={mutedStyle}>还没有成员拥有此权限（把权限授予某个有成员的部门即可）。</div>
                 ) : (
-                  <div style={scrollListStyle}>
-                    {grantingUsers.map(({ user, via }) => (
-                      <div key={user.id} style={memberRowStyle}>
-                        <span style={{ fontWeight: 700, minWidth: 0 }}>{user.display_name || user.username || user.name_NRIC || `#${user.id}`}</span>
-                        <span style={viaWrapStyle}>
-                          {via.map((name) => <span key={name} style={viaChipStyle}>{name}</span>)}
-                        </span>
-                      </div>
-                    ))}
+                  <div style={{ ...scrollListStyle, display: "block" }}>
+                    <div style={cardGridStyle}>
+                      {grantingUsers.map(({ user, via }) => (
+                        <UserCard
+                          key={user.id}
+                          // 卡片上的部门 chip 只显示「授予此权限」的来源部门
+                          user={{ ...user, departments: (user.departments || []).filter((d) => via.includes(d.name)) }}
+                          showDepartments
+                        />
+                      ))}
+                    </div>
                   </div>
                 )}
               </div>
@@ -181,9 +185,6 @@ const sectionStyle: CSSProperties = { display: "grid", gap: 8 };
 const sectionTitleStyle: CSSProperties = { fontWeight: 800, fontSize: 13 };
 const deptRowStyle: CSSProperties = { display: "flex", alignItems: "center", gap: 10, padding: "8px 11px", borderRadius: 8, border: "1px solid var(--x-color-line-soft)", background: "var(--x-color-panel)", cursor: "pointer", fontSize: 13 };
 const deptRowOnStyle: CSSProperties = { border: "1px solid var(--x-color-accent-border)", background: "var(--x-color-accent-tint)" };
-const memberRowStyle: CSSProperties = { display: "flex", alignItems: "center", justifyContent: "space-between", gap: 10, padding: "8px 11px", borderRadius: 8, border: "1px solid var(--x-color-line-soft)", background: "var(--x-color-panel-alt)", fontSize: 13, flexWrap: "wrap" };
-const viaWrapStyle: CSSProperties = { display: "flex", gap: 4, flexWrap: "wrap", justifyContent: "flex-end" };
-const viaChipStyle: CSSProperties = { padding: "2px 8px", borderRadius: 999, background: "var(--x-color-accent-tint)", color: "var(--x-color-accent-strong)", fontSize: 11, fontWeight: 700 };
 const ghostBtnStyle: CSSProperties = { padding: "6px 10px", borderRadius: 7, border: "1px solid var(--x-color-line)", background: "var(--x-color-panel)", color: "var(--x-color-ink)", fontSize: 12, fontWeight: 700, cursor: "pointer" };
 const mutedStyle: CSSProperties = { fontSize: 12.5, color: "var(--x-color-ink-muted)", padding: "6px 2px" };
 const emptyStyle: CSSProperties = { padding: 28, borderRadius: 10, border: "1px dashed var(--x-color-line)", textAlign: "center", color: "var(--x-color-ink-muted)" };
