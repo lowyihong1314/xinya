@@ -539,15 +539,20 @@ def check_duplicate_owner_fields() -> list[int]:
     return [order_id for (order_id,) in order_ids]
 
 
-def quick_search_orders(keyword: str | None) -> dict:
+def quick_search_orders(keyword: str | None, version: str | None = None) -> dict:
     keyword = (keyword or "").strip().lower()
     if not keyword:
         return {"success": True, "results": []}
+
+    # 查板只查当前选中的版本（年份），不跨版本。
+    normalized_version = normalize_version(version)
 
     base_query = FahuiOrder.query.options(
         selectinload(FahuiOrder.items).selectinload(FahuiOrderItem.form_data),
         selectinload(FahuiOrder.payments),
     )
+    if normalized_version:
+        base_query = base_query.filter(FahuiOrder.version == normalized_version)
 
     orders = []
     if keyword.isdigit():
@@ -567,7 +572,8 @@ def quick_search_orders(keyword: str | None) -> dict:
                 .first()
             )
             if order_item and order_item.order:
-                orders = [order_item.order]
+                if not normalized_version or str(order_item.order.version or "") == normalized_version:
+                    orders = [order_item.order]
 
         if not orders:
             orders = (
@@ -615,7 +621,8 @@ def quick_search_orders(keyword: str | None) -> dict:
     for order in orders:
         if order.version == "DELETE" and not _is_logged_in():
             continue
-        results.append(serialize_order(order))
+        # full_items=True 才会带 item_location（牌位单号 + 上板位置），查板/点亮都靠它。
+        results.append(serialize_order(order, include_items=True, full_items=True))
     return {"success": True, "results": results}
 
 

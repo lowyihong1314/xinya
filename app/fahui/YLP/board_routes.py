@@ -1,8 +1,15 @@
 from flask import Blueprint, jsonify, request
+from flask_login import current_user
 
 from app.form.permissions import permission_required_any
 
 from ..common.access import FAHUI_READ_PERMISSION_NAMES
+from .board_terminal import (
+    get_or_create_terminal_token,
+    grant_terminal_session,
+    resolve_terminal_token,
+    terminal_room,
+)
 
 from .payment_channel_services import (
     create_payment_channel,
@@ -69,6 +76,44 @@ def delete_board_entry_route(board_data_id):
 @permission_required_any(*FAHUI_READ_PERMISSION_NAMES)
 def list_boards_route():
     return jsonify(list_all_boards(request.args.get("version", type=str) or None))
+
+
+@board_router_bp.route("/terminal-link", methods=["POST"])
+@permission_required_any(*FAHUI_READ_PERMISSION_NAMES)
+def create_board_terminal_link_route():
+    token, expires_in = get_or_create_terminal_token(current_user.id)
+    return jsonify({"status": "success", "token": token, "expires_in": expires_in})
+
+
+@board_router_bp.route("/terminal/boards", methods=["GET"])
+def board_terminal_boards_route():
+    # 终端页公开入口：token 有效即返回大板数据，并给 session 打标以放行牌位预览图。
+    token = request.args.get("token", default="", type=str)
+    user_id = resolve_terminal_token(token)
+    if not user_id:
+        return jsonify({"status": "error", "message": "链接不存在或已过期，请在看板页重新复制终端链接"}), 404
+
+    grant_terminal_session()
+    from .shared import active_order_version
+
+    version = request.args.get("version", type=str) or active_order_version()
+    payload = list_all_boards(version)
+    payload.update({"status": "success", "room": terminal_room(user_id), "version": version})
+    return jsonify(payload)
+
+
+@board_router_bp.route("/terminal/highlight", methods=["POST"])
+@permission_required_any(*FAHUI_READ_PERMISSION_NAMES)
+def board_terminal_highlight_route():
+    # CRM 查板点击订单后，把点亮指令广播到自己的终端房间。
+    payload = request.get_json(silent=True) or {}
+    try:
+        from app.extensions import socket_broker
+
+        socket_broker.emit("fahui:board_highlight", payload, room=terminal_room(current_user.id))
+    except Exception:
+        return jsonify({"success": False, "message": "广播失败"}), 500
+    return jsonify({"success": True})
 
 
 @board_router_bp.route("/boards", methods=["POST"])
@@ -241,7 +286,8 @@ def check_duplicate_order_owner_fields_route():
 @board_router_bp.route("/orders/quick-search", methods=["POST"])
 @board_router_bp.route("/fahui_search_emgine", methods=["POST"])
 def quick_search_orders_route():
-    return jsonify(quick_search_orders((request.get_json(silent=True) or {}).get("keyword")))
+    payload = request.get_json(silent=True) or {}
+    return jsonify(quick_search_orders(payload.get("keyword"), payload.get("version")))
 
 
 @board_router_bp.route("/orders/<int:order_id>/items", methods=["POST"])

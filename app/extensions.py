@@ -15,6 +15,25 @@ SOCKET_ALLOWED_ORIGINS = [
     "http://127.0.0.1:5173",
 ]
 
+
+def socket_origin_allowed(origin: str | None, _environ=None) -> bool:
+    """socketio CORS 校验：白名单之外，放行任意 *.utbabuddha.com 子域
+    （开发隧道如 yukang.utbabuddha.com，终端/公开页也从这些域名连 socket）。"""
+    if not origin:
+        return False
+    if origin in SOCKET_ALLOWED_ORIGINS:
+        return True
+    try:
+        from urllib.parse import urlsplit
+
+        parts = urlsplit(origin)
+        host = (parts.hostname or "").lower()
+        return parts.scheme in ("http", "https") and (
+            host == "utbabuddha.com" or host.endswith(".utbabuddha.com")
+        )
+    except Exception:
+        return False
+
 # Delay Socket.IO server initialization until the Flask app exists, so the
 # Redis manager is created once with the correct read/write settings.
 socketio = SocketIO()

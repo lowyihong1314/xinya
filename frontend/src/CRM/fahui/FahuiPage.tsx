@@ -622,15 +622,12 @@ export function FahuiPage() {
   async function loadYlpVersions() {
     try {
       const response = await fetchYlpVersions();
-      const versions = (response.data || []).filter(Boolean);
-      const preferredVersion =
-        versions.find((item) => item === "2025_YLP") ||
-        versions.find((item) => item !== "DELETE") ||
-        versions[0] ||
-        "2025_YLP";
+      const fetched = (response.data || []).filter(Boolean);
+      // 今年版本始终在下拉里（哪怕还没有订单），并作为默认选中。
+      const versions = fetched.includes(CURRENT_YLP_VERSION) ? fetched : [CURRENT_YLP_VERSION, ...fetched];
 
       setYlpVersions(versions);
-      setYlpVersion((current) => current || preferredVersion);
+      setYlpVersion((current) => current || CURRENT_YLP_VERSION);
     } catch (loadError) {
       setYlpError(loadError instanceof Error ? loadError.message : "版本加载失败");
     }
@@ -1502,7 +1499,7 @@ export function FahuiPage() {
             }}
             style={styles.selectInput}
           >
-            {(ylpVersions.length ? ylpVersions : [ylpVersion || "2025_YLP"]).map((version) => (
+            {(ylpVersions.length ? ylpVersions : [ylpVersion || CURRENT_YLP_VERSION]).map((version) => (
               <option key={version} value={version}>
                 {version}
               </option>

@@ -8,6 +8,7 @@ import { LONG_OPEN_REGISTRATION_FORM_PATH } from "../CRM/react/crmModules";
 import { FahuiIntakePage } from "../CRM/fahui/FahuiIntakePage";
 import { FahuiOpenGate } from "../CRM/fahui/FahuiOpenGate";
 import { SharedOrderPage } from "../CRM/fahui/SharedOrderPage";
+import { BoardTerminalPage } from "../CRM/fahui/board/BoardTerminalPage";
 import { HomeAlbumPage } from "../album/react/HomeAlbumPage";
 import { EventDetailPage } from "../album/react/EventDetailPage";
 import { InfoPage } from "../info/react/InfoPage";
@@ -117,6 +118,8 @@ function LegacyImageRedirect() {
 }
 
 export const appRouter = createHashRouter([
+  // 看板终端（第二显示器全屏展示，无 topbar，不挂在 AppLayout 下）
+  { path: "/ylp-board-terminal", element: <BoardTerminalPage /> },
   {
     path: "/",
     element: <AppLayout />,

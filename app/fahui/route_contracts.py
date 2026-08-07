@@ -99,6 +99,9 @@ FAHUI_ROUTE_GROUPS: tuple[RouteGroup, ...] = (
             route("/api/board_router/orders/clone", "POST"),
             route("/api/board_router/orders/copy-to-current", "POST"),
             route("/api/board_router/item-form-values", "POST"),
+            route("/api/board_router/terminal-link", "POST"),
+            route("/api/board_router/terminal/boards", "GET"),
+            route("/api/board_router/terminal/highlight", "POST"),
         ),
         legacy=(
             route("/api/board_router/get_pdf_data/<int:pdf_id>", "GET"),

@@ -147,8 +147,13 @@ def upload_template_route():
 
 @print_paiwei_bp.route("/print-pdfs/<int:print_pdf_id>/preview-image", methods=["GET"])
 @print_paiwei_bp.route("/print_paiwei_order_item/<int:print_pdf_id>", methods=["GET"])
-@permission_required_any(*FAHUI_READ_PERMISSION_NAMES)
 def preview_print_pdf_image_route(print_pdf_id):
+    # 管理端法会读权限，或看板终端 session（token 验证后打标）都可读预览图。
+    from ..common.access import has_fahui_read
+    from .board_terminal import terminal_session_granted
+
+    if not (has_fahui_read() or terminal_session_granted()):
+        return jsonify({"status": "error", "message": "未登录或没有权限"}), 403
     cache_dir = preferred_dir("paiwei_result", "paiweicache")
     cache_file = cache_dir / f"{print_pdf_id}.png"
 

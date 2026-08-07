@@ -8,7 +8,7 @@ from app.blueprints import register_blueprints
 from app.cli import register_cli
 from app.extensions import (
     REDIS_URL,
-    SOCKET_ALLOWED_ORIGINS,
+    socket_origin_allowed,
     SOCKET_CHANNEL,
     login_manager,
     migrate,
@@ -39,7 +39,7 @@ def create_app(socket=False):
     if socket:
         socketio.init_app(
             app,
-            cors_allowed_origins=SOCKET_ALLOWED_ORIGINS,
+            cors_allowed_origins=socket_origin_allowed,
             message_queue=REDIS_URL,
             channel=SOCKET_CHANNEL,
             async_mode="eventlet",

@@ -110,12 +110,12 @@ export async function getPrintPdf(pdfId: number) {
   return readJson<{ status?: string; data?: { id: number; boards: BoardLocation[]; page_data?: unknown[] } }>(res);
 }
 
-export async function quickSearchBoards(keyword: string) {
+export async function quickSearchBoards(keyword: string, version?: string) {
   const res = await apiFetch("/api/board_router/orders/quick-search", {
     method: "POST",
     credentials: "include",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ keyword }),
+    body: JSON.stringify({ keyword, version }),
   });
   return readJson<{ success?: boolean; results: BoardSearchOrder[] }>(res);
 }
@@ -125,8 +125,50 @@ export type BoardSearchItem = {
   code?: string | null;
   item_name?: string | null;
   item_form_data?: Record<string, { val?: string | null }[]> | null;
-  item_location?: { boards?: BoardLocation[] | null }[] | null;
+  item_location?: { print_pdf?: { id?: number | null } | null; boards?: BoardLocation[] | null }[] | null;
 };
+
+// ---- 终端联动（第二显示器） ----
+
+export type BoardHighlightHit = {
+  board_id: number;
+  board_name?: string | null;
+  location: number;
+  print_pdf_id?: number | null;
+};
+
+export type BoardHighlightPayload = {
+  order_id?: number | null;
+  order_label?: string | null;
+  hits: BoardHighlightHit[];
+  active_index: number;
+  version?: string | null;
+};
+
+export async function createBoardTerminalLink() {
+  const res = await apiFetch("/api/board_router/terminal-link", { method: "POST", credentials: "include" });
+  return readJson<{ status?: string; message?: string; token?: string; expires_in?: number }>(res);
+}
+
+export async function fetchTerminalBoards(token: string, version?: string) {
+  const search = new URLSearchParams();
+  search.set("token", token);
+  if (version) {
+    search.set("version", version);
+  }
+  const res = await apiFetch(`/api/board_router/terminal/boards?${search.toString()}`, { credentials: "include" });
+  return readJson<{ status?: string; message?: string; all_board?: Board[]; room?: string; version?: string }>(res);
+}
+
+export async function sendBoardHighlight(payload: BoardHighlightPayload) {
+  const res = await apiFetch("/api/board_router/terminal/highlight", {
+    method: "POST",
+    credentials: "include",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(payload),
+  });
+  return readJson<{ success?: boolean; message?: string }>(res);
+}
 
 export type BoardSearchOrder = YlpOrderSummary & {
   order_items?: BoardSearchItem[];
