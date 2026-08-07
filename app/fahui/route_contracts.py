@@ -26,6 +26,8 @@ FAHUI_ROUTE_GROUPS: tuple[RouteGroup, ...] = (
         canonical=(
             route("/api/fahui_router/orders/search", "GET"),
             route("/api/fahui_router/orders/<int:order_id>", "GET"),
+            route("/api/fahui_router/orders/<int:order_id>/share-link", "POST"),
+            route("/api/fahui_router/orders/shared", "GET"),
             route("/api/fahui_router/orders/by-phone", "GET"),
             route("/api/fahui_router/orders", "POST"),
             route("/api/fahui_router/versions", "GET"),
@@ -64,6 +66,7 @@ FAHUI_ROUTE_GROUPS: tuple[RouteGroup, ...] = (
             route("/api/payment/orders/<int:order_id>/amount", "GET"),
             route("/api/payment/orders/<int:order_id>/quotation", "GET"),
             route("/api/payment/orders/<int:order_id>/receipt", "POST"),
+            route("/api/payment/orders/<int:order_id>/receipt-image", "GET"),
         ),
         legacy=(
             route("/api/payment/get_payment_data/<int:order_id>", "GET"),
@@ -94,6 +97,7 @@ FAHUI_ROUTE_GROUPS: tuple[RouteGroup, ...] = (
             route("/api/board_router/orders/<int:order_id>/items/<int:item_id>", "DELETE"),
             route("/api/board_router/orders/delete", "POST"),
             route("/api/board_router/orders/clone", "POST"),
+            route("/api/board_router/orders/copy-to-current", "POST"),
             route("/api/board_router/item-form-values", "POST"),
         ),
         legacy=(

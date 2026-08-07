@@ -6,7 +6,7 @@ from decimal import Decimal
 from io import BytesIO
 from pathlib import Path
 
-from flask import jsonify, make_response, request
+from flask import jsonify, make_response, request, send_file
 from flask_login import current_user
 from reportlab.lib.pagesizes import letter
 from reportlab.pdfbase import pdfmetrics
@@ -26,12 +26,13 @@ from app.paths import DATA_ROOT
 from models import db
 from models.fahui import FahuiOrder, FahuiPayment
 
-from .receipt import build_receipt_bytes, send_raw_to_printer
+from .receipt import build_receipt_bytes, build_receipt_image, send_raw_to_printer
 from .services import user_can_view_order
 from .shared import (
     active_order_version,
     item_price_decimal,
     latest_payment,
+    order_all_payments,
     order_payment_state,
     order_total_amount,
 )
@@ -369,6 +370,28 @@ def download_order_quotation(order_id: int):
     response.headers["Content-Type"] = "application/pdf"
     response.headers["Content-Disposition"] = f"attachment; filename=order_{order_id}_quotation.pdf"
     return response
+
+
+def download_receipt_image(order_id: int):
+    order = FahuiOrder.query.get(order_id)
+    if not order:
+        return jsonify({"success": False, "message": "订单不存在"}), 404
+
+    approved_payments = [
+        payment
+        for payment in order_all_payments(order)
+        if normalize_fahui_payment_status(payment.status) == "approved"
+    ]
+    if not approved_payments:
+        return jsonify({"success": False, "message": "收款尚未审核通过，暂不能下载收据"}), 403
+
+    buffer = build_receipt_image(order, approved_payments)
+    return send_file(
+        buffer,
+        mimetype="image/png",
+        as_attachment=True,
+        download_name=f"receipt_order_{order_id}.png",
+    )
 
 
 def print_receipt(order_id: int):

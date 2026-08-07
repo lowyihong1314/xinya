@@ -21,6 +21,7 @@ from .board_services import (
     check_duplicate_owner_fields,
     clear_print_pdf_records,
     clone_order_to_version,
+    copy_orders_to_current,
     create_board,
     create_order_item,
     delete_board_entry,
@@ -277,6 +278,13 @@ def delete_order_batch_route():
 @permission_required_any("account_edit")
 def clone_orders_route():
     payload, status_code = clone_order_to_version(request.get_json(silent=True) or {})
+    return jsonify(payload), status_code
+
+
+@board_router_bp.route("/orders/copy-to-current", methods=["POST"])
+@permission_required_any("account_edit")
+def copy_orders_to_current_route():
+    payload, status_code = copy_orders_to_current(request.get_json(silent=True) or {})
     return jsonify(payload), status_code
 
 

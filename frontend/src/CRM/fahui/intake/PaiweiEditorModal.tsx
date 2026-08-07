@@ -1,13 +1,13 @@
 import { useState, type CSSProperties } from "react";
 
 import {
-  PAIWEI_TEMPLATES,
   arrayToLines,
   getDraftQuantity,
   getDraftTotalPrice,
   getDraftUnitPrice,
   getTemplate,
   linesToArray,
+  selectableTemplates,
   validateDraft,
   type PaiweiCode,
   type PaiweiDraft,
@@ -31,14 +31,21 @@ type PaiweiEditorModalProps = {
   initialDraft: PaiweiDraft;
   isEdit: boolean;
   relationOptions?: string[];
+  /** 覆盖保存按钮文案；默认「保存修改 / 加入清单」。 */
+  saveLabel?: string;
+  /** 关闭后不渲染「添加阳上 / 添加对象」等加行按钮（公众端停止新增时用）。 */
+  allowAddRows?: boolean;
   onCancel: () => void;
-  onSave: (draft: PaiweiDraft) => void;
+  /** 返回 Promise 时弹窗会显示保存中状态，reject 的错误信息会展示在弹窗内。 */
+  onSave: (draft: PaiweiDraft) => void | Promise<void>;
 };
 
 export function PaiweiEditorModal({
   initialDraft,
   isEdit,
   relationOptions = [],
+  saveLabel,
+  allowAddRows = true,
   onCancel,
   onSave,
 }: PaiweiEditorModalProps) {
@@ -46,6 +53,7 @@ export function PaiweiEditorModal({
   const [owners, setOwners] = useState<string[]>(() => initRows(initialDraft.owner));
   const [deceaseds, setDeceaseds] = useState<string[]>(() => initRows(initialDraft.deceased));
   const [relations, setRelations] = useState<string[]>(() => initRows(initialDraft.relation));
+  const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
 
   const template = getTemplate(draft.code);
@@ -88,14 +96,24 @@ export function PaiweiEditorModal({
     };
   }
 
-  function handleSave() {
+  async function handleSave() {
     const finalDraft = buildFinalDraft();
     const validationError = validateDraft(finalDraft);
     if (validationError) {
       setError(validationError);
       return;
     }
-    onSave(finalDraft);
+    const result = onSave(finalDraft);
+    if (result instanceof Promise) {
+      setSaving(true);
+      try {
+        await result;
+      } catch (saveError) {
+        setError(saveError instanceof Error ? saveError.message : "保存失败");
+      } finally {
+        setSaving(false);
+      }
+    }
   }
 
   const unitPrice = getDraftUnitPrice(draft);
@@ -103,11 +121,11 @@ export function PaiweiEditorModal({
   const total = getDraftTotalPrice(draft);
 
   return (
-    <div style={styles.overlay} onClick={onCancel}>
+    <div style={styles.overlay} onClick={saving ? undefined : onCancel}>
       <div style={styles.panel} onClick={(event) => event.stopPropagation()}>
         <header style={styles.header}>
           <h3 style={styles.title}>{isEdit ? "编辑牌位" : "添加牌位"}</h3>
-          <button type="button" style={styles.closeButton} onClick={onCancel} aria-label="关闭">
+          <button type="button" style={styles.closeButton} onClick={onCancel} aria-label="关闭" disabled={saving}>
             ✕
           </button>
         </header>
@@ -120,7 +138,7 @@ export function PaiweiEditorModal({
               value={draft.code}
               onChange={(event) => changeCode(event.target.value as PaiweiCode)}
             >
-              {PAIWEI_TEMPLATES.map((tpl) => (
+              {selectableTemplates(draft.code).map((tpl) => (
                 <option key={tpl.code} value={tpl.code}>
                   {`${tpl.title} · RM ${tpl.price}`}
                 </option>
@@ -135,7 +153,7 @@ export function PaiweiEditorModal({
               addLabel="添加阳上姓名"
               placeholder="阳上"
               values={owners}
-              max={draft.code === "C" ? 1 : MAX_OWNERS}
+              max={allowAddRows ? (draft.code === "C" ? 1 : MAX_OWNERS) : 1}
               onChange={setOwners}
             />
           ) : null}
@@ -146,7 +164,7 @@ export function PaiweiEditorModal({
               deceaseds={deceaseds}
               relations={relations}
               relationOptions={relationOptions}
-              max={MAX_DECEASED}
+              max={allowAddRows ? MAX_DECEASED : 1}
               onChange={updatePairs}
             />
           ) : template.fields.deceased ? (
@@ -155,7 +173,7 @@ export function PaiweiEditorModal({
               addLabel={`添加${deceasedLabel(draft.code)}`}
               placeholder={deceasedLabel(draft.code)}
               values={deceaseds}
-              max={MAX_DECEASED}
+              max={allowAddRows ? MAX_DECEASED : 1}
               onChange={setDeceaseds}
             />
           ) : null}
@@ -164,7 +182,8 @@ export function PaiweiEditorModal({
             <TextField label="姓氏" value={draft.surname} placeholder="例如：陈" onChange={(v) => patch({ surname: v })} />
           ) : null}
           {template.fields.suffix ? (
-            <TextField label="堂号 / 内容" value={draft.suffix} placeholder="门堂上历代祖先" onChange={(v) => patch({ suffix: v })} />
+            // 堂号固定为打印模板的「门堂上历代祖先」，不允许修改。
+            <TextField label="堂号 / 内容" value={draft.suffix} placeholder="门堂上历代祖先" readOnly onChange={() => {}} />
           ) : null}
           {template.fields.father ? (
             <TextField label="显考" value={draft.father} placeholder="先父名讳" onChange={(v) => patch({ father: v })} />
@@ -206,11 +225,16 @@ export function PaiweiEditorModal({
             ) : null}
           </div>
           <div style={styles.footerButtons}>
-            <button type="button" style={styles.ghostButton} onClick={onCancel}>
+            <button type="button" style={styles.ghostButton} onClick={onCancel} disabled={saving}>
               取消
             </button>
-            <button type="button" style={styles.primaryButton} onClick={handleSave}>
-              {isEdit ? "保存修改" : "加入清单"}
+            <button
+              type="button"
+              style={{ ...styles.primaryButton, ...(saving ? { opacity: 0.6, cursor: "default" } : null) }}
+              onClick={() => void handleSave()}
+              disabled={saving}
+            >
+              {saving ? "保存中…" : saveLabel ?? (isEdit ? "保存修改" : "加入清单")}
             </button>
           </div>
         </footer>
@@ -354,23 +378,29 @@ function TextField({
   value,
   placeholder,
   type = "text",
+  readOnly = false,
   onChange,
 }: {
   label: string;
   value: string;
   placeholder?: string;
   type?: string;
+  readOnly?: boolean;
   onChange: (value: string) => void;
 }) {
   return (
     <div style={styles.field}>
       <label style={styles.label}>{label}</label>
       <input
-        style={styles.input}
+        style={{
+          ...styles.input,
+          ...(readOnly ? { background: "var(--x-color-panel-alt)", color: "var(--x-color-ink-muted)" } : null),
+        }}
         type={type}
         inputMode={type === "number" ? "numeric" : undefined}
         value={value}
         placeholder={placeholder}
+        readOnly={readOnly}
         onChange={(event) => onChange(event.target.value)}
       />
     </div>

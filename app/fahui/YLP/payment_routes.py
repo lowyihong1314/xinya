@@ -8,6 +8,7 @@ from .payment_services import (
     create_group_payment,
     create_payment_record,
     download_order_quotation,
+    download_receipt_image,
     list_order_payment_data,
     print_receipt,
 )
@@ -70,3 +71,12 @@ def download_order_quotation_route(order_id):
 @permission_required_any("account_read", "account_edit")
 def print_order_receipt_route(order_id):
     return print_receipt(order_id)
+
+
+@payment_bp.route("/orders/<int:order_id>/receipt-image", methods=["GET"])
+def download_receipt_image_route(order_id):
+    # 管理端或订单手机号已验证（公开链接 token 授权）都可下载；服务层再校验付款已审核。
+    denied = _order_read_denied(order_id)
+    if denied is not None:
+        return denied
+    return download_receipt_image(order_id)

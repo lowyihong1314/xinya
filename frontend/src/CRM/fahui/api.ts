@@ -93,6 +93,8 @@ export async function searchYlpOrders(params: {
   value?: string;
   page?: number;
   perPage?: number;
+  sort?: string;
+  dir?: "asc" | "desc";
 }) {
   const search = new URLSearchParams();
   search.set("version", params.version);
@@ -101,6 +103,10 @@ export async function searchYlpOrders(params: {
   }
   search.set("page", String(params.page || 1));
   search.set("per_page", String(params.perPage || 8));
+  if (params.sort) {
+    search.set("sort", params.sort);
+    search.set("dir", params.dir || "asc");
+  }
 
   const response = await apiFetch(`/api/fahui_router/orders/search?${search.toString()}`, {
     credentials: "include",
@@ -199,6 +205,87 @@ export async function updateYlpOrderCustomer(
   });
 
   return parseJson<{ success?: boolean; message?: string }>(response);
+}
+
+export async function createYlpOrderPayment(orderId: number, paymentMode: string, file?: File | null) {
+  const formData = new FormData();
+  formData.append("payment_mode", paymentMode);
+  if (file) {
+    formData.append("file", file);
+  }
+
+  const response = await apiFetch(`/api/payment/orders/${orderId}/payments`, {
+    method: "POST",
+    credentials: "include",
+    body: formData,
+  });
+
+  return parseJson<{ success?: boolean; message?: string; payment_id?: number }>(response);
+}
+
+export async function downloadYlpReceiptImage(orderId: number) {
+  const response = await apiFetch(`/api/payment/orders/${orderId}/receipt-image`, {
+    credentials: "include",
+  });
+
+  if (!response.ok) {
+    const payload = (await response.json().catch(() => ({}))) as { message?: string };
+    throw new Error(payload.message || "下载收据失败");
+  }
+
+  return response.blob();
+}
+
+export async function createYlpShareLink(orderId: number) {
+  const response = await apiFetch(`/api/fahui_router/orders/${orderId}/share-link`, {
+    method: "POST",
+    credentials: "include",
+  });
+
+  return parseJson<{ status?: string; message?: string; token?: string; expires_in?: number }>(response);
+}
+
+export async function fetchYlpSharedOrder(token: string) {
+  const search = new URLSearchParams();
+  search.set("token", token);
+
+  const response = await apiFetch(`/api/fahui_router/orders/shared?${search.toString()}`, {
+    credentials: "include",
+  });
+
+  return parseJson<YlpOrderDetailResponse>(response);
+}
+
+export async function deleteYlpOrdersBatch(orderIds: number[]) {
+  const response = await apiFetch("/api/board_router/orders/delete", {
+    method: "POST",
+    credentials: "include",
+    headers: {
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({ order_ids: orderIds }),
+  });
+
+  return parseJson<{ status?: string; message?: string; marked?: number; deleted?: number }>(response);
+}
+
+export async function copyYlpOrdersToCurrent(orderIds: number[]) {
+  const response = await apiFetch("/api/board_router/orders/copy-to-current", {
+    method: "POST",
+    credentials: "include",
+    headers: {
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({ order_ids: orderIds }),
+  });
+
+  return parseJson<{
+    success?: boolean;
+    message?: string;
+    version?: string;
+    copied?: { old_id: number; new_id: number }[];
+    skipped?: { id: number; reason: string }[];
+  }>(response);
 }
 
 export async function updateYlpOrderStatus(orderId: number, status: string) {

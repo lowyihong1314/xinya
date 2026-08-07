@@ -941,6 +941,8 @@ function FahuiIntakePageInner() {
           initialDraft={editorDraft}
           isEdit={editorIndex !== "new"}
           relationOptions={relationOptions}
+          // 公开访客每项只能填一个（不渲染加行按钮）；登录的工作人员不受限。
+          allowAddRows={isAuthenticated}
           onCancel={() => setEditorIndex(null)}
           onSave={commitDraft}
         />

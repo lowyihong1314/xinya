@@ -150,6 +150,39 @@ def _require_order_access(order: FahuiOrder | None):
     return None
 
 
+def _require_current_version(order: FahuiOrder | None):
+    # 历史版本（非今年 YLP）的订单一律只读：只能查看，或「复制到今年」后再修改。
+    active = active_order_version()
+    if order is not None and str(order.version or "") != active:
+        return {
+            "success": False,
+            "message": f"订单属于 {order.version}，历史版本不可修改；如需沿用请「复制到今年」",
+        }, 403
+    return None
+
+
+def _touch_maintainer(order: FahuiOrder | None) -> None:
+    # 记录最后维护人；公众端未登录的操作不覆盖已有记录。
+    if order is not None and _is_logged_in():
+        order.user_id = current_user.id
+
+
+def _notify_order_updated(order_id: int | None) -> None:
+    # 广播给正在看公开链接页的访客（房间 fahui:order:<id>），触发前端刷新。
+    if not order_id:
+        return
+    try:
+        from app.extensions import socket_broker
+
+        socket_broker.emit(
+            "fahui:order_updated",
+            {"order_id": order_id},
+            room=f"fahui:order:{order_id}",
+        )
+    except Exception:
+        pass
+
+
 def default_item_price(code: str | None) -> int:
     return PRICE_MAP.get(code or "", 0)
 
@@ -436,7 +469,7 @@ def list_orders_by_version(version: str) -> list[dict]:
 
 def update_order_customer(order_id: int, data: dict) -> tuple[dict, int]:
     order = FahuiOrder.query.get(order_id)
-    denied = _require_order_access(order)
+    denied = _require_order_access(order) or _require_current_version(order)
     if denied:
         return denied
 
@@ -450,7 +483,9 @@ def update_order_customer(order_id: int, data: dict) -> tuple[dict, int]:
         else:
             return {"success": False, "message": "未登录用户无法修改手机号"}, 403
 
+    _touch_maintainer(order)
     db.session.commit()
+    _notify_order_updated(order.id)
     return {"success": True, "message": "Customer info updated"}, 200
 
 
@@ -459,12 +494,18 @@ def update_order_status(order_id: int, data: dict) -> tuple[dict, int]:
     if not order:
         return {"success": False, "message": f"Order {order_id} not found"}, 404
 
+    denied = _require_current_version(order)
+    if denied:
+        return denied
+
     status = str(data.get("status") or "").strip()
     if not status:
         return {"success": False, "message": "缺少 status"}, 400
 
     order.status = status
+    _touch_maintainer(order)
     db.session.commit()
+    _notify_order_updated(order.id)
     return {"success": True, "message": "订单状态已更新", "status": order.status}, 200
 
 
@@ -628,7 +669,7 @@ def _write_item_form_data(item_id: int, data: dict) -> None:
 
 def create_order_item(order_id: int, data: dict) -> tuple[dict, int]:
     order = FahuiOrder.query.get(order_id)
-    denied = _require_order_access(order)
+    denied = _require_order_access(order) or _require_current_version(order)
     if denied:
         return denied
 
@@ -648,7 +689,9 @@ def create_order_item(order_id: int, data: dict) -> tuple[dict, int]:
 
     _write_item_form_data(order_item.id, data)
 
+    _touch_maintainer(order)
     db.session.commit()
+    _notify_order_updated(order_id)
     return {"success": True, "message": "已保存", "item_id": order_item.id}, 200
 
 
@@ -657,7 +700,7 @@ def update_order_item_fields(item_id: int, data: dict) -> tuple[dict, int]:
     if not item:
         return {"success": False, "message": "未找到该订单项"}, 404
 
-    denied = _require_order_access(item.order)
+    denied = _require_order_access(item.order) or _require_current_version(item.order)
     if denied:
         return denied
 
@@ -676,7 +719,9 @@ def update_order_item_fields(item_id: int, data: dict) -> tuple[dict, int]:
     FahuiItemFormData.query.filter_by(item_id=item.id).delete()
     _write_item_form_data(item.id, data)
 
+    _touch_maintainer(item.order)
     db.session.commit()
+    _notify_order_updated(item.order_id)
     return {"success": True, "message": "已更新", "item_id": item.id}, 200
 
 
@@ -687,14 +732,16 @@ def delete_order_item(item_id: int, order_id: int) -> tuple[dict, int]:
     if item.order_id != order_id:
         return {"success": False, "message": "订单项与订单不匹配"}, 400
 
-    denied = _require_order_access(item.order)
+    denied = _require_order_access(item.order) or _require_current_version(item.order)
     if denied:
         return denied
 
     FahuiItemFormData.query.filter_by(item_id=item_id).delete(synchronize_session=False)
     FahuiPdfPageData.query.filter_by(order_item_id=item_id).delete(synchronize_session=False)
+    _touch_maintainer(item.order)
     db.session.delete(item)
     db.session.commit()
+    _notify_order_updated(order_id)
     return {"success": True, "message": "删除成功"}, 200
 
 
@@ -722,6 +769,7 @@ def delete_order_batch(data: dict) -> tuple[dict, int]:
             deleted_count += 1
         else:
             order.version = "DELETE"
+            _touch_maintainer(order)
             marked_count += 1
 
     db.session.commit()
@@ -733,28 +781,17 @@ def delete_order_batch(data: dict) -> tuple[dict, int]:
     }, 200
 
 
-def clone_order_to_version(data: dict) -> tuple[dict, int]:
-    order_id = _coerce_int(data.get("order_id"))
-    new_version = normalize_version(data.get("new_version") or data.get("version")) or active_order_version()
-    if not order_id:
-        return {"error": "order_id and new_version are required"}, 400
-
-    old_order = FahuiOrder.query.get(order_id)
-    if not old_order:
-        return {"error": f"Order with id {order_id} not found"}, 404
-    if old_order.version == new_version:
-        return {
-            "error": f"Order {order_id} already has version {new_version}, cannot copy again.",
-        }, 400
-
+def _clone_order_record(old_order: FahuiOrder, new_version: str) -> FahuiOrder:
+    # 复制订单与全部项目到指定版本；新订单回到 Draft（未付款、可编辑），并记录操作人。
     new_order = FahuiOrder(
-        status=old_order.status,
+        status="Draft",
         date=old_order.date,
         time=old_order.time,
         name=old_order.name,
         email=old_order.email,
         customer_name=old_order.customer_name,
         member_name=old_order.member_name,
+        user_id=current_user.id if _is_logged_in() else old_order.user_id,
         phone=old_order.phone,
         code=old_order.code,
         full_code=old_order.full_code,
@@ -785,9 +822,60 @@ def clone_order_to_version(data: dict) -> tuple[dict, int]:
                     field_value=old_data.field_value,
                 )
             )
+    return new_order
 
+
+def clone_order_to_version(data: dict) -> tuple[dict, int]:
+    order_id = _coerce_int(data.get("order_id"))
+    new_version = normalize_version(data.get("new_version") or data.get("version")) or active_order_version()
+    if not order_id:
+        return {"error": "order_id and new_version are required"}, 400
+
+    old_order = FahuiOrder.query.get(order_id)
+    if not old_order:
+        return {"error": f"Order with id {order_id} not found"}, 404
+    if old_order.version == new_version:
+        return {
+            "error": f"Order {order_id} already has version {new_version}, cannot copy again.",
+        }, 400
+
+    new_order = _clone_order_record(old_order, new_version)
     db.session.commit()
     return {"message": "Order copied successfully", "new_order_id": new_order.id}, 201
+
+
+def copy_orders_to_current(data: dict) -> tuple[dict, int]:
+    # 「复制到今年」：把历史版本订单（含全部牌位项目）复制成今年版本的新 Draft 订单。
+    raw_ids = data.get("order_ids")
+    if raw_ids is None and data.get("order_id") is not None:
+        raw_ids = [data.get("order_id")]
+    order_ids = [oid for oid in (_coerce_int(raw) for raw in raw_ids or []) if oid]
+    if not order_ids:
+        return {"success": False, "message": "缺少 order_ids"}, 400
+
+    active = active_order_version()
+    copied: list[dict] = []
+    skipped: list[dict] = []
+    for order_id in order_ids:
+        old_order = FahuiOrder.query.get(order_id)
+        if not old_order:
+            skipped.append({"id": order_id, "reason": "订单不存在"})
+            continue
+        if str(old_order.version or "") == active:
+            skipped.append({"id": order_id, "reason": f"已是今年版本（{active}）"})
+            continue
+        new_order = _clone_order_record(old_order, active)
+        copied.append({"old_id": order_id, "new_id": new_order.id})
+
+    if copied:
+        db.session.commit()
+    else:
+        db.session.rollback()
+
+    message = f"已复制 {len(copied)} 张订单到 {active}"
+    if skipped:
+        message += f"，跳过 {len(skipped)} 张"
+    return {"success": True, "message": message, "copied": copied, "skipped": skipped, "version": active}, 200
 
 
 def update_order_item_form_value(data: dict) -> tuple[dict, int]:
@@ -807,12 +895,14 @@ def update_order_item_form_value(data: dict) -> tuple[dict, int]:
         return {"success": False, "message": "未找到数据"}, 404
 
     order = item_form.item.order if item_form.item else None
-    denied = _require_order_access(order)
+    denied = _require_order_access(order) or _require_current_version(order)
     if denied:
         return denied
 
     item_form.field_value = str(new_value)
+    _touch_maintainer(order)
     db.session.commit()
+    _notify_order_updated(order.id if order else None)
     return {"success": True}, 200
 
 

@@ -6,7 +6,7 @@ import { useEnsureDesignTokens } from "../../theme/designTokens";
 import { useUserState } from "../../app/UserState";
 import { CachedImage } from "../../components/CachedMedia";
 import { showConfirmDialog } from "../../js/dialogs";
-import { downloadBlobOrShare, downloadUrlOrShare } from "../../js/browserActions";
+import { copyTextToClipboard, downloadBlobOrShare, downloadUrlOrShare } from "../../js/browserActions";
 import { show_alert } from "../../js/show_alert";
 import { LAMP_META } from "../../lamp/lampMeta";
 import { LampWorkspacePage } from "../lamp/react/LampWorkspacePage";
@@ -15,8 +15,13 @@ import { RelationOptionModal } from "./RelationOptionModal";
 import { OpenWindowModal } from "./OpenWindowModal";
 import {
   approvePayment,
+  copyYlpOrdersToCurrent,
   createYlpOrderItem,
+  createYlpOrderPayment,
+  createYlpShareLink,
   deleteYlpOrderItem,
+  deleteYlpOrdersBatch,
+  downloadYlpReceiptImage,
   downloadYlpPaiwei,
   fetchPayments,
   fetchYlpOrderDetail,
@@ -35,16 +40,9 @@ import {
   updateYlpOrderItem,
   updateYlpOrderStatus,
 } from "./api";
-import {
-  PAIWEI_TEMPLATES,
-  buildItemPayload,
-  createDraft,
-  getTemplate,
-  getDraftTotalPrice,
-  validateDraft,
-  type PaiweiCode,
-  type PaiweiDraft,
-} from "./intake/paiwei";
+import { PaiweiEditorModal } from "./intake/PaiweiEditorModal";
+import { buildItemPayload, createDraft, draftFromItem } from "./intake/paiwei";
+import { connectFahuiSocket } from "./socket";
 import type {
   PaymentRecord,
   RegistrationRecord,
@@ -57,6 +55,13 @@ import type {
 
 const PAGE_SIZE = 8;
 const YLP_ORDER_PAGE_SIZE = 15;
+
+// 版本即年份（2025_YLP ↔ 2025 年）；只有今年版本的订单可以修改，历史版本只读、只能复制到今年。
+const CURRENT_YLP_VERSION = `${new Date().getFullYear()}_YLP`;
+
+function isCurrentYlpVersion(version?: string | null): boolean {
+  return String(version || "") === CURRENT_YLP_VERSION;
+}
 
 type WorkspaceTab = "lamp" | "ylp";
 type WorkspaceSection = "payments" | "orders";
@@ -336,35 +341,17 @@ function buildFahuiSearchParams(
   return params;
 }
 
-type YlpSortKey = "status" | "id" | "customer" | "phone" | "version" | "created_at";
+type YlpSortKey = "status" | "id" | "customer" | "phone" | "total" | "maintainer" | "created_at";
 
 const YLP_ORDER_COLUMNS: { key: YlpSortKey; label: string }[] = [
   { key: "status", label: "状态" },
   { key: "id", label: "单号" },
   { key: "customer", label: "功德主" },
   { key: "phone", label: "电话" },
-  { key: "version", label: "版本" },
+  { key: "total", label: "总额 (RM)" },
+  { key: "maintainer", label: "维护人" },
   { key: "created_at", label: "创建时间" },
 ];
-
-function ylpSortValue(order: YlpOrderSummary, key: YlpSortKey): string | number {
-  switch (key) {
-    case "id":
-      return order.id ?? 0;
-    case "customer":
-      return (order.customer_name || order.name || "").toLowerCase();
-    case "status":
-      return (order.status || "").toLowerCase();
-    case "phone":
-      return order.phone || "";
-    case "version":
-      return order.version || "";
-    case "created_at":
-      return order.created_at || "";
-    default:
-      return "";
-  }
-}
 
 export function FahuiPage() {
   useEnsureDesignTokens();
@@ -405,6 +392,7 @@ export function FahuiPage() {
   const [orderSaving, setOrderSaving] = useState(false);
   const [statusSaving, setStatusSaving] = useState(false);
   const [itemModal, setItemModal] = useState<{ item: YlpOrderItem | null } | null>(null);
+  const [paymentModalOpen, setPaymentModalOpen] = useState(false);
   const [paiweiPreviewUrl, setPaiweiPreviewUrl] = useState<string | null>(null);
   const [paiweiPreviewLoading, setPaiweiPreviewLoading] = useState(false);
   const [intakeDrawerOpen, setIntakeDrawerOpen] = useState(false);
@@ -514,7 +502,39 @@ export function FahuiPage() {
       return;
     }
     void loadYlpOrders();
-  }, [screen, ylpPage, ylpQuery, ylpVersion]);
+  }, [screen, ylpPage, ylpQuery, ylpVersion, ylpSort]);
+
+  // 手机预览抽屉（或任何入口）提交新订单时，列表即时刷新插入，无需手动刷新。
+  useEffect(() => {
+    if (screen.kind !== "workspace" || screen.workspace !== "ylp" || screen.section !== "orders") {
+      return;
+    }
+    const socket = connectFahuiSocket();
+    socket.on("fahui:order_created", (payload: { order?: { version?: string } }) => {
+      const version = payload?.order?.version;
+      if (!version || version === ylpVersion) {
+        void loadYlpOrders();
+      }
+    });
+    return () => {
+      socket.disconnect();
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [screen, ylpPage, ylpQuery, ylpVersion, ylpSort]);
+
+  // 搜索框输入即搜（防抖 350ms），不再需要搜索按钮。
+  useEffect(() => {
+    const timer = window.setTimeout(() => {
+      const next = ylpQueryInput.trim();
+      setYlpQuery((current) => {
+        if (current !== next) {
+          setYlpPage(1);
+        }
+        return next;
+      });
+    }, 350);
+    return () => window.clearTimeout(timer);
+  }, [ylpQueryInput]);
 
   useEffect(() => {
     if (!actionMessage) {
@@ -626,6 +646,8 @@ export function FahuiPage() {
         value: ylpQuery,
         page: ylpPage,
         perPage: YLP_ORDER_PAGE_SIZE,
+        sort: ylpSort?.key,
+        dir: ylpSort?.dir,
       });
       setYlpOrders(response.data?.items || []);
       setYlpPagination(response.data?.pagination || null);
@@ -916,6 +938,126 @@ export function FahuiPage() {
     }
   }
 
+  async function handleCopyYlpOrderToCurrent(orderId: number) {
+    const ok = await showConfirmDialog({
+      message: `把订单 #${orderId} 复制到今年（${CURRENT_YLP_VERSION}）？会生成一张新的 Draft 订单，原订单保持不变。`,
+    });
+    if (!ok) {
+      return;
+    }
+    setStatusSaving(true);
+    try {
+      const res = await copyYlpOrdersToCurrent([orderId]);
+      const newId = res.copied?.[0]?.new_id;
+      if (newId) {
+        show_alert("success", `已复制为今年订单 #${newId}`);
+        openYlpDetail(newId);
+      } else {
+        show_alert("error", res.skipped?.[0]?.reason || res.message || "复制失败");
+      }
+    } catch (copyError) {
+      show_alert("error", copyError instanceof Error ? copyError.message : "复制失败");
+    } finally {
+      setStatusSaving(false);
+    }
+  }
+
+  async function handleBulkCopyToCurrent() {
+    let ids: number[];
+    try {
+      ids = await resolveYlpSelectedIds();
+    } catch {
+      show_alert("error", "获取订单失败");
+      return;
+    }
+    if (!ids.length) {
+      show_alert("error", "请选择订单");
+      return;
+    }
+    const ok = await showConfirmDialog({
+      message: `把选中的 ${ids.length} 张订单复制到今年（${CURRENT_YLP_VERSION}）？每张都会生成新的 Draft 订单，原订单保持不变。`,
+    });
+    if (!ok) {
+      return;
+    }
+    setYlpBulkBusy(true);
+    try {
+      const res = await copyYlpOrdersToCurrent(ids);
+      show_alert("success", res.message || "复制完成");
+      clearYlpSelection();
+    } catch (copyError) {
+      show_alert("error", copyError instanceof Error ? copyError.message : "批量复制失败");
+    } finally {
+      setYlpBulkBusy(false);
+    }
+  }
+
+  async function handleDownloadReceipt(orderId: number) {
+    try {
+      const blob = await downloadYlpReceiptImage(orderId);
+      await downloadBlobOrShare(blob, `收据_订单${orderId}.png`, { isMobile });
+    } catch (receiptError) {
+      show_alert("error", receiptError instanceof Error ? receiptError.message : "下载收据失败");
+    }
+  }
+
+  async function handleCopyShareLink(orderId: number) {
+    try {
+      const res = await createYlpShareLink(orderId);
+      if (!res.token) {
+        show_alert("error", res.message || "生成公开链接失败");
+        return;
+      }
+      const url = `${window.location.origin}/#/ylp-shared?token=${res.token}`;
+      const days = Math.max(1, Math.round((res.expires_in || 0) / 86400));
+      try {
+        await copyTextToClipboard(url);
+        show_alert("success", `公开链接已复制（${days} 天内有效）`);
+      } catch {
+        show_alert("error", `自动复制失败，请手动复制：${url}`);
+      }
+      setActionMessage(url);
+    } catch (shareError) {
+      show_alert("error", shareError instanceof Error ? shareError.message : "生成公开链接失败");
+    }
+  }
+
+  async function handleBulkDeleteYlpOrders() {
+    let ids: number[];
+    try {
+      ids = await resolveYlpSelectedIds();
+    } catch {
+      show_alert("error", "获取订单失败");
+      return;
+    }
+    if (!ids.length) {
+      show_alert("error", "请选择订单");
+      return;
+    }
+    const isPurge = ylpVersion === "DELETE";
+    const ok = await showConfirmDialog({
+      message: isPurge
+        ? `彻底删除选中的 ${ids.length} 张订单？数据会从数据库移除，不可恢复！`
+        : `移除选中的 ${ids.length} 张订单？订单会移入「DELETE」版本（软删除），切到 DELETE 版本再删除一次才会彻底删除。`,
+      tone: "danger",
+    });
+    if (!ok) {
+      return;
+    }
+    setYlpBulkBusy(true);
+    try {
+      const res = await deleteYlpOrdersBatch(ids);
+      show_alert("success", res.message || "已处理");
+      clearYlpSelection();
+      void loadYlpOrders();
+      void loadYlpVersions();
+    } catch (deleteError) {
+      show_alert("error", deleteError instanceof Error ? deleteError.message : "批量移除失败");
+    } finally {
+      setYlpBulkBusy(false);
+    }
+  }
+
   async function handleDeleteYlpItem(orderId: number, itemId: number) {
     const ok = await showConfirmDialog({ message: `确认删除项目 #${itemId}？`, tone: "danger" });
     if (!ok) {
@@ -1166,20 +1308,8 @@ export function FahuiPage() {
     );
   }
 
-  const sortedYlpOrders = useMemo(() => {
-    if (!ylpSort) {
-      return ylpOrders;
-    }
-    const sorted = [...ylpOrders].sort((a, b) => {
-      const av = ylpSortValue(a, ylpSort.key);
-      const bv = ylpSortValue(b, ylpSort.key);
-      if (typeof av === "number" && typeof bv === "number") {
-        return av - bv;
-      }
-      return String(av).localeCompare(String(bv), "zh-Hans-u-kn-true");
-    });
-    return ylpSort.dir === "desc" ? sorted.reverse() : sorted;
-  }, [ylpOrders, ylpSort]);
+  // 排序 / 分页 / 搜索全部走后端；本地不再重排。
+  const sortedYlpOrders = ylpOrders;
 
   function toggleYlpSort(key: YlpSortKey) {
     setYlpSort((current) =>
@@ -1187,6 +1317,7 @@ export function FahuiPage() {
         ? { key, dir: current.dir === "asc" ? "desc" : "asc" }
         : { key, dir: "asc" },
     );
+    setYlpPage(1);
   }
 
   // ---- 多选 / 批量操作 ----
@@ -1250,6 +1381,8 @@ export function FahuiPage() {
         联络人: order.name || "",
         电话: order.phone || "",
         版本: order.version || "",
+        "总额 (RM)": order.total_amount ?? "",
+        维护人: order.maintainer_name || "",
         创建时间: order.created_at || "",
       }));
       const workbook = XLSX.utils.book_new();
@@ -1379,26 +1512,9 @@ export function FahuiPage() {
           <input
             value={ylpQueryInput}
             onChange={(event) => setYlpQueryInput(event.target.value)}
-            onKeyDown={(event) => {
-              if (event.key === "Enter") {
-                setYlpQuery(ylpQueryInput.trim());
-                setYlpPage(1);
-              }
-            }}
-            placeholder="搜索订单号 / 功德主 / 电话 / 牌位内容"
+            placeholder="搜索订单号 / 功德主 / 电话 / 牌位内容 / 维护人"
             style={{ ...styles.searchInput, flex: "1 1 200px", width: "auto", minWidth: 0 }}
           />
-
-          <button
-            type="button"
-            style={styles.secondaryActionCompact}
-            onClick={() => {
-              setYlpQuery(ylpQueryInput.trim());
-              setYlpPage(1);
-            }}
-          >
-            搜索
-          </button>
 
           <nav style={styles.pagination}>
             <button
@@ -1510,7 +1626,8 @@ export function FahuiPage() {
                       <td style={styles.cellMono}>{`#${order.id}`}</td>
                       <td style={styles.cellStrong}>{order.customer_name || order.name || "-"}</td>
                       <td style={styles.cellMono}>{order.phone || "-"}</td>
-                      <td>{order.version || "-"}</td>
+                      <td style={styles.cellMono}>{order.total_amount != null ? `RM ${order.total_amount}` : "-"}</td>
+                      <td>{order.maintainer_name || "-"}</td>
                       <td style={styles.cellMono}>{order.created_at || "-"}</td>
                     </tr>
                   ))}
@@ -1532,6 +1649,26 @@ export function FahuiPage() {
               >
                 导出 xlsx
               </button>
+              {!isCurrentYlpVersion(ylpVersion) ? (
+                <button
+                  type="button"
+                  style={{ ...styles.bulkButton, ...(ylpBulkBusy ? styles.pageButtonDisabled : null) }}
+                  disabled={ylpBulkBusy}
+                  onClick={() => void handleBulkCopyToCurrent()}
+                >
+                  批量复制到今年
+                </button>
+              ) : null}
+              {isCurrentYlpVersion(ylpVersion) || ylpVersion === "DELETE" ? (
+                <button
+                  type="button"
+                  style={{ ...styles.bulkDanger, ...(ylpBulkBusy ? styles.pageButtonDisabled : null) }}
+                  disabled={ylpBulkBusy}
+                  onClick={() => void handleBulkDeleteYlpOrders()}
+                >
+                  {ylpVersion === "DELETE" ? "彻底删除" : "批量移除"}
+                </button>
+              ) : null}
               <div style={styles.printMenuWrap}>
                 <button
                   type="button"
@@ -1567,8 +1704,10 @@ export function FahuiPage() {
 
   function renderYlpOrderDetailView() {
     const orderStatus = ylpDetail?.order?.order_status || "Draft";
-    const editable = orderStatus === "Draft";
-    const canDelete = orderStatus === "cancel";
+    // 历史版本（非今年）只读：不能改状态、资料、项目，只能查看或复制到今年。
+    const versionEditable = isCurrentYlpVersion(ylpDetail?.order?.version);
+    const editable = versionEditable && orderStatus === "Draft";
+    const canDelete = versionEditable && orderStatus === "cancel";
     return (
       <section style={styles.detailCard}>
         {ylpDetail?.loading ? <section style={styles.stateCard}>加载中…</section> : null}
@@ -1584,6 +1723,17 @@ export function FahuiPage() {
               </section>
 
               <nav style={styles.detailActions(isMobile)}>
+                {!versionEditable ? (
+                  <button
+                    type="button"
+                    style={{ ...styles.primaryAction, ...(statusSaving ? styles.pageButtonDisabled : null) }}
+                    disabled={statusSaving}
+                    onClick={() => void handleCopyYlpOrderToCurrent(ylpDetail.orderId)}
+                  >
+                    {statusSaving ? "复制中…" : "复制到今年"}
+                  </button>
+                ) : null}
+
                 <button
                   type="button"
                   style={{ ...styles.primaryAction, ...(paiweiPreviewLoading ? styles.pageButtonDisabled : null) }}
@@ -1609,6 +1759,24 @@ export function FahuiPage() {
                   下载报价单
                 </button>
 
+                <button
+                  type="button"
+                  style={styles.secondaryAction}
+                  onClick={() => void handleCopyShareLink(ylpDetail.orderId)}
+                >
+                  复制公开链接
+                </button>
+
+                {ylpDetail.order.status === "paid" ? (
+                  <button
+                    type="button"
+                    style={styles.secondaryAction}
+                    onClick={() => void handleDownloadReceipt(ylpDetail.orderId)}
+                  >
+                    下载收据
+                  </button>
+                ) : null}
+
                 {canDelete ? (
                   <button
                     type="button"
@@ -1627,7 +1795,10 @@ export function FahuiPage() {
             <section style={styles.statusEditRow}>
               <span style={styles.statusEditLabel}>订单状态</span>
               <span style={ylpStatusChipStyle(orderStatus)}>{orderStatus}</span>
-              {orderStatus === "Draft" ? (
+              {!versionEditable ? (
+                <span style={ylpStatusChipStyle("none")}>{`历史版本（${ylpDetail.order.version}）只读`}</span>
+              ) : null}
+              {versionEditable && orderStatus === "Draft" ? (
                 <>
                   <button
                     type="button"
@@ -1647,7 +1818,7 @@ export function FahuiPage() {
                   </button>
                 </>
               ) : null}
-              {orderStatus === "confirm" ? (
+              {versionEditable && orderStatus === "confirm" ? (
                 <>
                   <button
                     type="button"
@@ -1667,7 +1838,7 @@ export function FahuiPage() {
                   </button>
                 </>
               ) : null}
-              {orderStatus !== "Draft" && orderStatus !== "confirm" ? (
+              {versionEditable && orderStatus !== "Draft" && orderStatus !== "confirm" ? (
                 <button
                   type="button"
                   style={{ ...styles.secondaryAction, ...(statusSaving ? styles.pageButtonDisabled : null) }}
@@ -1682,7 +1853,7 @@ export function FahuiPage() {
             <section style={styles.detailSection}>
               <header style={styles.detailSectionHeader}>
                 <h4 style={styles.detailSectionTitle}>
-                  订单资料{editable ? "" : "（已确认，只读）"}
+                  订单资料{editable ? "" : versionEditable ? "（已确认，只读）" : "（历史版本，只读）"}
                 </h4>
                 {editable ? (
                   <button
@@ -1752,6 +1923,10 @@ export function FahuiPage() {
                       <td>{ylpDetail.order.version || "-"}</td>
                     </tr>
                     <tr>
+                      <th>维护人</th>
+                      <td>{ylpDetail.order.maintainer_name || "-"}</td>
+                    </tr>
+                    <tr>
                       <th>创建时间</th>
                       <td>{ylpDetail.order.created_at || "-"}</td>
                     </tr>
@@ -1765,7 +1940,14 @@ export function FahuiPage() {
                 <h4 style={styles.detailSectionTitle}>
                   付款记录（共 {(ylpDetail.payments || []).length} 条）
                 </h4>
-                <span style={ylpStatusChipStyle(ylpDetail.order.status)}>{`汇总：${ylpDetail.order.status || "none"}`}</span>
+                <div style={styles.itemActionCell}>
+                  <span style={ylpStatusChipStyle(ylpDetail.order.status)}>{`汇总：${ylpDetail.order.status || "none"}`}</span>
+                  {versionEditable ? (
+                    <button type="button" style={styles.addItemToggle} onClick={() => setPaymentModalOpen(true)}>
+                      + 新增付款记录
+                    </button>
+                  ) : null}
+                </div>
               </header>
 
               {ylpDetail.paymentsError ? <p style={styles.emptyText}>{ylpDetail.paymentsError}</p> : null}
@@ -1811,7 +1993,7 @@ export function FahuiPage() {
                 </h4>
                 {editable ? (
                   <button type="button" style={styles.addItemToggle} onClick={() => setItemModal({ item: null })}>
-                    + 添加项目
+                    + 添加牌位
                   </button>
                 ) : null}
               </header>
@@ -1867,6 +2049,17 @@ export function FahuiPage() {
               )}
             </section>
           </>
+        ) : null}
+
+        {paymentModalOpen && ylpDetail ? (
+          <YlpPaymentModal
+            orderId={ylpDetail.orderId}
+            onClose={() => setPaymentModalOpen(false)}
+            onSaved={() => {
+              setPaymentModalOpen(false);
+              void loadYlpDetail(ylpDetail.orderId);
+            }}
+          />
         ) : null}
 
         {itemModal ? (
@@ -2129,174 +2322,106 @@ function YlpItemFields({ item }: { item: YlpOrderItem }) {
   );
 }
 
-function ListInput({
-  label,
-  values,
-  disabled,
-  onChange,
-}: {
-  label: string;
-  values: string[];
-  disabled: boolean;
-  onChange: (next: string[]) => void;
-}) {
-  return (
-    <div style={styles.addItemField}>
-      <span style={styles.addItemLabel}>{label}</span>
-      <div style={styles.listInputWrap}>
-        {values.map((value, index) => (
-          <div key={index} style={styles.listInputRow}>
-            <input
-              style={styles.detailInput}
-              value={value}
-              disabled={disabled}
-              placeholder={`${label} ${index + 1}`}
-              onChange={(event) => onChange(values.map((entry, i) => (i === index ? event.target.value : entry)))}
-            />
-            <button
-              type="button"
-              style={styles.listRemoveButton}
-              disabled={disabled || values.length <= 1}
-              onClick={() => onChange(values.length <= 1 ? [""] : values.filter((_, i) => i !== index))}
-              aria-label="删除这一行"
-            >
-              ×
-            </button>
-          </div>
-        ))}
-        <button
-          type="button"
-          style={styles.listAddButton}
-          disabled={disabled}
-          onClick={() => onChange([...values, ""])}
-        >
-          + 添加一行
-        </button>
-      </div>
-    </div>
-  );
-}
-
-const PAIWEI_ROWS_CSS = `
-.paiwei-rows { width: 100%; border-collapse: collapse; font-size: 13px; min-width: 320px; }
-.paiwei-rows th { text-align: left; padding: 4px 6px; font-size: 11px; font-weight: 800; color: var(--x-color-ink-muted); white-space: nowrap; }
-.paiwei-rows td { padding: 4px 6px; vertical-align: middle; }
-.paiwei-rows td.paiwei-rows-action { width: 34px; }
-`;
-
 // 无缘子女用「子女」，其余（超度亡灵 / 冤亲债主）用「对象」。
 function paiweiDeceasedLabel(code?: string | null): string {
   return code === "A3" || code === "B3" ? "子女" : "对象";
 }
 
-// 对象/子女 与 关系 是一组一起的（阳上分开填），用一行来对应，整行一起增删。
-function PaiweiRowsTable({
-  deceaseds,
-  relations,
-  relationOptions,
-  deceasedLabel,
-  disabled,
-  onChange,
+const YLP_PAYMENT_MODES: { value: string; label: string }[] = [
+  { value: "bank", label: "银行转账" },
+  { value: "qr", label: "扫码" },
+  { value: "cash", label: "现金" },
+];
+
+function YlpPaymentModal({
+  orderId,
+  onClose,
+  onSaved,
 }: {
-  deceaseds: string[];
-  relations: string[];
-  relationOptions: string[];
-  deceasedLabel: string;
-  disabled: boolean;
-  onChange: (next: { deceaseds: string[]; relations: string[] }) => void;
+  orderId: number;
+  onClose: () => void;
+  onSaved: () => void;
 }) {
-  const rowCount = Math.max(deceaseds.length, relations.length, 1);
-  const pad = (values: string[]) => Array.from({ length: rowCount }, (_, index) => values[index] ?? "");
+  const [mode, setMode] = useState("bank");
+  const [file, setFile] = useState<File | null>(null);
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState("");
 
-  function updateCell(field: "deceaseds" | "relations", index: number, value: string) {
-    const next = { deceaseds: pad(deceaseds), relations: pad(relations) };
-    next[field][index] = value;
-    onChange(next);
-  }
-
-  function addRow() {
-    onChange({ deceaseds: [...pad(deceaseds), ""], relations: [...pad(relations), ""] });
-  }
-
-  function removeRow(index: number) {
-    if (rowCount <= 1) {
-      onChange({ deceaseds: [""], relations: [""] });
-      return;
+  async function submit() {
+    setSaving(true);
+    setError("");
+    try {
+      const res = await createYlpOrderPayment(orderId, mode, file);
+      if (res.success === false) {
+        setError(res.message || "保存失败");
+        return;
+      }
+      onSaved();
+    } catch (saveError) {
+      setError(saveError instanceof Error ? saveError.message : "保存失败");
+    } finally {
+      setSaving(false);
     }
-    const drop = (values: string[]) => pad(values).filter((_, i) => i !== index);
-    onChange({ deceaseds: drop(deceaseds), relations: drop(relations) });
   }
 
   return (
-    <div style={{ ...styles.addItemField, gridColumn: "1 / -1" }}>
-      <span style={styles.addItemLabel}>{`${deceasedLabel} / 关系`}</span>
-      <div style={styles.tableWrap}>
-        <style>{PAIWEI_ROWS_CSS}</style>
-        <table className="paiwei-rows">
-          <thead>
-            <tr>
-              <th style={{ width: "40px" }}>#</th>
-              <th>{deceasedLabel}</th>
-              <th>{PAIWEI_FIELD_LABELS.relation}</th>
-              <th className="paiwei-rows-action" />
-            </tr>
-          </thead>
-          <tbody>
-            {Array.from({ length: rowCount }, (_, index) => (
-              <tr key={index}>
-                <td>{index + 1}</td>
-                <td>
-                  <input
-                    style={styles.detailInput}
-                    value={deceaseds[index] ?? ""}
-                    disabled={disabled}
-                    onChange={(event) => updateCell("deceaseds", index, event.target.value)}
-                  />
-                </td>
-                <td>
-                  <select
-                    style={styles.detailInput}
-                    value={relations[index] ?? ""}
-                    disabled={disabled}
-                    onChange={(event) => updateCell("relations", index, event.target.value)}
-                  >
-                    <option value="">选择关系…</option>
-                    {relations[index] && !relationOptions.includes(relations[index]) ? (
-                      <option value={relations[index]}>{relations[index]}</option>
-                    ) : null}
-                    {relationOptions.map((label) => (
-                      <option key={label} value={label}>
-                        {label}
-                      </option>
-                    ))}
-                  </select>
-                </td>
-                <td className="paiwei-rows-action">
-                  <button
-                    type="button"
-                    style={styles.listRemoveButton}
-                    disabled={disabled || rowCount <= 1}
-                    onClick={() => removeRow(index)}
-                    aria-label="删除这一行"
-                  >
-                    ×
-                  </button>
-                </td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
+    <div style={styles.itemModalOverlay} onClick={saving ? undefined : onClose}>
+      <div style={styles.itemModalContent} onClick={(event) => event.stopPropagation()}>
+        <div style={styles.addItemHeader}>
+          <span style={styles.detailSectionTitle}>新增付款记录</span>
+          <button type="button" style={styles.addItemCancel} onClick={onClose} disabled={saving}>
+            关闭
+          </button>
+        </div>
+
+        {error ? <div style={styles.paymentModalError}>{error}</div> : null}
+
+        <div style={styles.paymentModalBody}>
+          <div>
+            <span style={styles.paymentModalLabel}>付款方式</span>
+            <div style={styles.paymentModeRow}>
+              {YLP_PAYMENT_MODES.map((option) => (
+                <button
+                  key={option.value}
+                  type="button"
+                  disabled={saving}
+                  style={{
+                    ...styles.paymentModeButton,
+                    ...(mode === option.value ? styles.paymentModeButtonActive : null),
+                  }}
+                  onClick={() => setMode(option.value)}
+                >
+                  {option.label}
+                </button>
+              ))}
+            </div>
+          </div>
+
+          <div>
+            <span style={styles.paymentModalLabel}>付款凭证（选填，图片）</span>
+            <input
+              type="file"
+              accept="image/*,application/pdf"
+              disabled={saving}
+              onChange={(event) => setFile(event.target.files?.[0] || null)}
+            />
+            {file ? <p style={styles.paymentModalHint}>已选择:{file.name}</p> : null}
+          </div>
+        </div>
+
+        <div style={styles.paymentModalFooter}>
+          <button
+            type="button"
+            style={{ ...styles.primaryAction, ...(saving ? styles.pageButtonDisabled : null) }}
+            disabled={saving}
+            onClick={() => void submit()}
+          >
+            {saving ? "保存中…" : "保存"}
+          </button>
+        </div>
       </div>
-      <button type="button" style={styles.listAddButton} disabled={disabled} onClick={addRow}>
-        + 添加一行
-      </button>
     </div>
   );
-}
-
-
-function itemFieldValues(item: YlpOrderItem, key: string): string[] {
-  return (item.item_form_data?.[key] || []).map((entry) => String(entry.val ?? "").trim()).filter(Boolean);
 }
 
 function YlpItemModal({
@@ -2313,167 +2438,23 @@ function YlpItemModal({
   onSaved: () => void;
 }) {
   const isEdit = item != null;
-  const [draft, setDraft] = useState<PaiweiDraft>(() => {
-    if (!item) {
-      return createDraft("A1");
-    }
-    const code = PAIWEI_TEMPLATES.some((tpl) => tpl.code === item.code) ? (item.code as PaiweiCode) : "A1";
-    const base = createDraft(code);
-    const first = (key: string) => itemFieldValues(item, key)[0] || "";
-    return {
-      ...base,
-      surname: first("surname"),
-      suffix: first("suffix") || base.suffix,
-      father: first("father"),
-      mother: first("mother"),
-      quantity: first("quantity") || base.quantity,
-      note: first("note"),
-    };
-  });
-  const seedList = (key: string) => {
-    const values = item ? itemFieldValues(item, key) : [];
-    return values.length ? values : [""];
-  };
-  const [owners, setOwners] = useState<string[]>(() => seedList("owner"));
-  const [deceaseds, setDeceaseds] = useState<string[]>(() => seedList("deceased"));
-  const [relations, setRelations] = useState<string[]>(() => seedList("relation"));
-  const [saving, setSaving] = useState(false);
-  const [error, setError] = useState("");
-  const template = getTemplate(draft.code);
-
-  function setField(field: keyof PaiweiDraft, value: string) {
-    setError("");
-    setDraft((prev) => ({ ...prev, [field]: value }));
-  }
-
-  function changeCode(code: PaiweiCode) {
-    const next = getTemplate(code);
-    setError("");
-    setDraft((prev) => ({
-      ...prev,
-      code,
-      suffix: next.defaultSuffix || prev.suffix,
-      quantity: next.fields.quantity ? prev.quantity || "1" : "",
-    }));
-  }
-
-  function buildDraft(): PaiweiDraft {
-    return {
-      ...draft,
-      owner: owners.join("\n"),
-      deceased: deceaseds.join("\n"),
-      relation: relations.join("\n"),
-    };
-  }
-
-  async function submit() {
-    const effective = buildDraft();
-    const message = validateDraft(effective);
-    if (message) {
-      setError(message);
-      return;
-    }
-    setSaving(true);
-    setError("");
-    try {
-      const payload = buildItemPayload(effective);
-      if (isEdit && item) {
-        await updateYlpOrderItem(orderId, item.id, payload);
-      } else {
-        await createYlpOrderItem(orderId, payload);
-      }
-      onSaved();
-    } catch (saveError) {
-      setError(saveError instanceof Error ? saveError.message : isEdit ? "保存失败" : "添加失败");
-    } finally {
-      setSaving(false);
-    }
-  }
-
-  const textField = (field: keyof PaiweiDraft) => (
-    <label style={styles.addItemField}>
-      <span style={styles.addItemLabel}>{PAIWEI_FIELD_LABELS[field as string] || String(field)}</span>
-      <input
-        style={styles.detailInput}
-        value={String(draft[field] || "")}
-        disabled={saving}
-        onChange={(event) => setField(field, event.target.value)}
-      />
-    </label>
-  );
-
   return (
-    <div style={styles.itemModalOverlay} onClick={onClose}>
-      <div style={styles.itemModalContent} onClick={(event) => event.stopPropagation()}>
-        <div style={styles.addItemHeader}>
-          <span style={styles.detailSectionTitle}>{isEdit ? "编辑项目" : "添加项目"}</span>
-          <button type="button" style={styles.addItemCancel} onClick={onClose}>
-            关闭
-          </button>
-        </div>
-
-        {error ? <div style={styles.addItemError}>{error}</div> : null}
-
-        <div style={styles.addItemGrid}>
-          <label style={styles.addItemField}>
-            <span style={styles.addItemLabel}>牌位类型</span>
-            <select
-              style={styles.selectInput}
-              value={draft.code}
-              disabled={saving}
-              onChange={(event) => changeCode(event.target.value as PaiweiCode)}
-            >
-              {PAIWEI_TEMPLATES.map((tpl) => (
-                <option key={tpl.code} value={tpl.code}>
-                  {`${tpl.code} · ${tpl.title} · RM ${tpl.price}`}
-                </option>
-              ))}
-            </select>
-          </label>
-
-          {template.fields.owner ? (
-            <ListInput label={PAIWEI_FIELD_LABELS.owner} values={owners} disabled={saving} onChange={setOwners} />
-          ) : null}
-          {template.fields.deceased && template.fields.relation ? (
-            <PaiweiRowsTable
-              deceaseds={deceaseds}
-              relations={relations}
-              relationOptions={relationOptions}
-              deceasedLabel={paiweiDeceasedLabel(draft.code)}
-              disabled={saving}
-              onChange={(next) => {
-                setDeceaseds(next.deceaseds);
-                setRelations(next.relations);
-              }}
-            />
-          ) : template.fields.deceased ? (
-            <ListInput
-              label={paiweiDeceasedLabel(draft.code)}
-              values={deceaseds}
-              disabled={saving}
-              onChange={setDeceaseds}
-            />
-          ) : null}
-          {template.fields.surname ? textField("surname") : null}
-          {template.fields.suffix ? textField("suffix") : null}
-          {template.fields.father ? textField("father") : null}
-          {template.fields.mother ? textField("mother") : null}
-          {template.fields.quantity ? textField("quantity") : null}
-        </div>
-
-        <div style={styles.addItemFooter}>
-          <span style={styles.addItemHint}>{`合计 RM ${getDraftTotalPrice(buildDraft())}`}</span>
-          <button
-            type="button"
-            style={{ ...styles.primaryAction, ...(saving ? styles.pageButtonDisabled : null) }}
-            disabled={saving}
-            onClick={() => void submit()}
-          >
-            {saving ? "保存中…" : isEdit ? "保存修改" : "添加项目"}
-          </button>
-        </div>
-      </div>
-    </div>
+    <PaiweiEditorModal
+      initialDraft={item ? draftFromItem(item) : createDraft("A1")}
+      isEdit={isEdit}
+      relationOptions={relationOptions}
+      saveLabel={isEdit ? "保存修改" : "添加牌位"}
+      onCancel={onClose}
+      onSave={async (draft) => {
+        const payload = buildItemPayload(draft);
+        if (item) {
+          await updateYlpOrderItem(orderId, item.id, payload);
+        } else {
+          await createYlpOrderItem(orderId, payload);
+        }
+        onSaved();
+      }}
+    />
   );
 }
 
@@ -3015,43 +2996,6 @@ const styles = {
     cursor: "pointer",
     whiteSpace: "nowrap" as const,
   },
-  itemEditor: {
-    display: "grid",
-    gap: "10px",
-    padding: "10px",
-  },
-  listInputWrap: {
-    display: "grid",
-    gap: "6px",
-  },
-  listInputRow: {
-    display: "flex",
-    gap: "6px",
-    alignItems: "center",
-  },
-  listRemoveButton: {
-    width: "30px",
-    height: "30px",
-    flexShrink: 0,
-    borderRadius: "6px",
-    border: "1px solid var(--x-color-line)",
-    background: "var(--x-color-panel)",
-    color: "var(--x-color-ink-muted)",
-    fontSize: "16px",
-    lineHeight: 1,
-    cursor: "pointer",
-  },
-  listAddButton: {
-    width: "fit-content",
-    padding: "4px 10px",
-    borderRadius: "6px",
-    border: "1px dashed var(--x-color-line)",
-    background: "var(--x-color-panel)",
-    color: "var(--x-color-ink-muted)",
-    fontWeight: 700,
-    fontSize: "12px",
-    cursor: "pointer",
-  },
   addItemToggle: {
     width: "fit-content",
     padding: "6px 12px",
@@ -3062,14 +3006,6 @@ const styles = {
     fontWeight: 800,
     fontSize: "13px",
     cursor: "pointer",
-  },
-  addItemForm: {
-    display: "grid",
-    gap: "10px",
-    padding: "12px",
-    borderRadius: "8px",
-    border: "1px solid var(--x-color-accent-border)",
-    background: "var(--x-color-panel-alt)",
   },
   itemModalOverlay: {
     position: "fixed" as const,
@@ -3217,53 +3153,6 @@ const styles = {
     fontSize: "12px",
     cursor: "pointer",
   },
-  addItemError: {
-    padding: "6px 10px",
-    borderRadius: "6px",
-    border: "1px solid var(--x-color-danger-border)",
-    background: "var(--x-color-danger-soft)",
-    color: "var(--x-color-danger)",
-    fontSize: "12px",
-    fontWeight: 700,
-  },
-  addItemGrid: {
-    display: "grid",
-    gridTemplateColumns: "repeat(auto-fit, minmax(200px, 1fr))",
-    gap: "8px",
-  },
-  addItemField: {
-    display: "grid",
-    gap: "4px",
-  },
-  addItemLabel: {
-    fontSize: "11px",
-    fontWeight: 800,
-    color: "var(--x-color-ink-muted)",
-  },
-  addItemTextarea: {
-    width: "100%",
-    minHeight: "60px",
-    padding: "6px 8px",
-    borderRadius: "6px",
-    border: "1px solid var(--x-color-line)",
-    background: "var(--x-color-panel)",
-    color: "var(--x-color-ink)",
-    boxSizing: "border-box" as const,
-    fontSize: "13px",
-    resize: "vertical" as const,
-  },
-  addItemFooter: {
-    display: "flex",
-    justifyContent: "space-between",
-    alignItems: "center",
-    gap: "10px",
-    flexWrap: "wrap" as const,
-  },
-  addItemHint: {
-    fontSize: "13px",
-    fontWeight: 800,
-    color: "var(--x-color-ink)",
-  },
   primaryAction: {
     padding: "7px 10px",
     borderRadius: "6px",
@@ -3399,6 +3288,68 @@ const styles = {
     borderRadius: "999px",
     border: "none",
     background: "rgba(255,255,255,0.16)",
+    color: "#fff",
+    fontWeight: 700,
+    fontSize: "13px",
+    cursor: "pointer",
+    whiteSpace: "nowrap" as const,
+  },
+  paymentModalBody: {
+    display: "grid",
+    gap: "14px",
+    padding: "6px 0",
+  },
+  paymentModalLabel: {
+    display: "block",
+    marginBottom: "6px",
+    fontSize: "12px",
+    fontWeight: 800,
+    color: "var(--x-color-ink-muted)",
+  },
+  paymentModeRow: {
+    display: "flex",
+    gap: "8px",
+    flexWrap: "wrap" as const,
+  },
+  paymentModeButton: {
+    padding: "8px 16px",
+    borderRadius: "999px",
+    border: "1px solid var(--x-color-line)",
+    background: "var(--x-color-panel)",
+    color: "var(--x-color-ink)",
+    fontWeight: 700,
+    fontSize: "13px",
+    cursor: "pointer",
+  },
+  paymentModeButtonActive: {
+    border: "1px solid var(--x-color-accent-border)",
+    background: "var(--x-color-accent-soft)",
+    color: "var(--x-color-accent-strong)",
+  },
+  paymentModalHint: {
+    margin: "6px 0 0",
+    fontSize: "12px",
+    color: "var(--x-color-ink-muted)",
+  },
+  paymentModalError: {
+    padding: "8px 10px",
+    borderRadius: "6px",
+    border: "1px solid var(--x-color-danger-border)",
+    background: "var(--x-color-danger-soft)",
+    color: "var(--x-color-danger)",
+    fontSize: "12px",
+    fontWeight: 700,
+  },
+  paymentModalFooter: {
+    display: "flex",
+    justifyContent: "flex-end",
+    paddingTop: "10px",
+  },
+  bulkDanger: {
+    padding: "8px 14px",
+    borderRadius: "999px",
+    border: "none",
+    background: "var(--x-color-danger)",
     color: "#fff",
     fontWeight: 700,
     fontSize: "13px",

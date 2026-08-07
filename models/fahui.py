@@ -37,6 +37,13 @@ class FahuiOrder(db.Model):
     email = db.Column(db.String(100), nullable=True)
     customer_name = db.Column(db.String(100), nullable=True)
     member_name = db.Column(db.String(100), nullable=True)
+    # 最后创建/维护这张订单的登录用户（CRM 或已登录的公众端）；匿名操作保持不变。
+    user_id = db.Column(
+        db.Integer,
+        db.ForeignKey("user_data.id", ondelete="SET NULL"),
+        nullable=True,
+        index=True,
+    )
     phone = db.Column(db.String(20), nullable=True)
     code = db.Column(db.String(50), nullable=True)
     full_code = db.Column(db.String(100), nullable=True)
@@ -51,6 +58,7 @@ class FahuiOrder(db.Model):
         server_default=db.text("'2024_YLP'"),
     )
 
+    maintainer = db.relationship("User", lazy="selectin")
     items = db.relationship(
         "FahuiOrderItem",
         back_populates="order",

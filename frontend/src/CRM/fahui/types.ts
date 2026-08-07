@@ -83,9 +83,12 @@ export type YlpOrderSummary = {
   email?: string | null;
   customer_name?: string | null;
   member_name?: string | null;
+  user_id?: number | null;
+  maintainer_name?: string | null;
   phone?: string | null;
   created_at?: string | null;
   version?: string | null;
+  total_amount?: number | null;
   login?: boolean;
   owner?: boolean;
 };

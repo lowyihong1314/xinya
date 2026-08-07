@@ -1,11 +1,11 @@
 from __future__ import annotations
 
 from flask_login import current_user
-from sqlalchemy import or_
+from sqlalchemy import case, func, or_
 from sqlalchemy.orm import selectinload
 
 from app.fahui.common.session_state import current_session_phone, current_verified_phones
-from app.extensions import socketio
+from app.extensions import socket_broker
 from models import db
 from models.fahui import (
     FahuiItemFormData,
@@ -14,7 +14,9 @@ from models.fahui import (
     FahuiPayment,
     FahuiPdfPageData,
     FahuiPrintPdf,
+    fahui_payment_order,
 )
+from models.user_data import User
 from .shared import (
     active_order_version,
     format_created_at,
@@ -25,6 +27,7 @@ from .shared import (
     normalize_version,
     order_payment_state,
     order_payment_status,
+    order_total_amount,
 )
 
 
@@ -148,6 +151,14 @@ def payment_status(order: FahuiOrder) -> str:
     return order_payment_status(order)
 
 
+def maintainer_display_name(order: FahuiOrder) -> str | None:
+    # 优先显示 user_id 对应用户；旧数据退回 member_name 文本。
+    user = getattr(order, "maintainer", None)
+    if user is not None:
+        return user.display_name or user.username or user.email
+    return order.member_name
+
+
 def serialize_order(order: FahuiOrder, include_items: bool = False, full_items: bool = False) -> dict:
     can_view = user_can_view_order(order)
     is_logged_in = bool(current_user and current_user.is_authenticated)
@@ -162,9 +173,12 @@ def serialize_order(order: FahuiOrder, include_items: bool = False, full_items: 
         "email": order.email,
         "customer_name": order.customer_name,
         "member_name": order.member_name,
+        "user_id": order.user_id,
+        "maintainer_name": maintainer_display_name(order),
         "phone": phone,
         "created_at": format_created_at(order.created_at),
         "version": order.version,
+        "total_amount": float(order_total_amount(order)),
         "login": is_logged_in,
         "is_logged_in": is_logged_in,
         "owner": can_view and not is_logged_in,
@@ -198,7 +212,122 @@ def serialize_order_detail(order: FahuiOrder) -> dict:
     return data
 
 
-def search_orders(version: object, value: str, page_num: int = 1, per_page: int = 20) -> dict:
+def _order_search_filter(value: str):
+    # 搜索范围：订单号 / 功德主 / 联络人 / 电话 / 牌位内容（所有表单值 + 项目名）/ 维护人。
+    # 用 EXISTS 子查询代替 join+distinct，这样任意字段排序在 MySQL 下都合法。
+    like_value = f"%{value}%"
+
+    item_match = (
+        db.session.query(FahuiOrderItem.id)
+        .outerjoin(FahuiItemFormData, FahuiItemFormData.item_id == FahuiOrderItem.id)
+        .filter(
+            FahuiOrderItem.order_id == FahuiOrder.id,
+            or_(
+                FahuiItemFormData.field_value.ilike(like_value),
+                FahuiOrderItem.item_name.ilike(like_value),
+            ),
+        )
+        .exists()
+    )
+    maintainer_match = (
+        db.session.query(User.id)
+        .filter(
+            User.id == FahuiOrder.user_id,
+            or_(User.display_name.ilike(like_value), User.username.ilike(like_value)),
+        )
+        .exists()
+    )
+
+    conditions = [
+        FahuiOrder.name.ilike(like_value),
+        FahuiOrder.customer_name.ilike(like_value),
+        FahuiOrder.phone.ilike(like_value),
+        FahuiOrder.member_name.ilike(like_value),
+        item_match,
+        maintainer_match,
+    ]
+    if value.isdigit():
+        conditions.append(FahuiOrder.id == int(value))
+    return or_(*conditions)
+
+
+_APPROVED_PAYMENT_STATUSES = ("approve", "approved")
+
+
+def _order_sort_columns(sort: str | None, direction: str | None):
+    descending = str(direction or "").lower() == "desc"
+
+    def directed(column):
+        return column.desc() if descending else column.asc()
+
+    if sort == "id":
+        primary = FahuiOrder.id
+    elif sort == "customer":
+        primary = func.coalesce(FahuiOrder.customer_name, FahuiOrder.name)
+    elif sort == "phone":
+        primary = FahuiOrder.phone
+    elif sort == "total":
+        primary = (
+            db.session.query(func.coalesce(func.sum(FahuiOrderItem.price), 0))
+            .filter(FahuiOrderItem.order_id == FahuiOrder.id)
+            .scalar_subquery()
+        )
+    elif sort == "maintainer":
+        maintainer_name = (
+            db.session.query(func.coalesce(User.display_name, User.username, User.email))
+            .filter(User.id == FahuiOrder.user_id)
+            .scalar_subquery()
+        )
+        primary = func.coalesce(maintainer_name, FahuiOrder.member_name)
+    elif sort == "created_at":
+        primary = FahuiOrder.created_at
+    elif sort == "status":
+        # 与 serialize 的汇总付款状态一致：paid(2) > pending(1) > none(0)。
+        direct_approved = (
+            db.session.query(FahuiPayment.id)
+            .filter(
+                FahuiPayment.order_id == FahuiOrder.id,
+                func.lower(FahuiPayment.status).in_(_APPROVED_PAYMENT_STATUSES),
+            )
+            .exists()
+        )
+        grouped_approved = (
+            db.session.query(FahuiPayment.id)
+            .join(fahui_payment_order, fahui_payment_order.c.payment_id == FahuiPayment.id)
+            .filter(
+                fahui_payment_order.c.order_id == FahuiOrder.id,
+                func.lower(FahuiPayment.status).in_(_APPROVED_PAYMENT_STATUSES),
+            )
+            .exists()
+        )
+        direct_any = (
+            db.session.query(FahuiPayment.id).filter(FahuiPayment.order_id == FahuiOrder.id).exists()
+        )
+        grouped_any = (
+            db.session.query(FahuiPayment.id)
+            .join(fahui_payment_order, fahui_payment_order.c.payment_id == FahuiPayment.id)
+            .filter(fahui_payment_order.c.order_id == FahuiOrder.id)
+            .exists()
+        )
+        primary = case(
+            (or_(direct_approved, grouped_approved), 2),
+            (or_(direct_any, grouped_any), 1),
+            else_=0,
+        )
+    else:
+        return [FahuiOrder.created_at.desc(), FahuiOrder.id.desc()]
+
+    return [directed(primary), FahuiOrder.id.desc()]
+
+
+def search_orders(
+    version: object,
+    value: str,
+    page_num: int = 1,
+    per_page: int = 20,
+    sort: str | None = None,
+    direction: str | None = None,
+) -> dict:
     normalized_version = normalize_version(version)
     if not normalized_version:
         raise ValueError("version is required")
@@ -213,27 +342,16 @@ def search_orders(version: object, value: str, page_num: int = 1, per_page: int 
             selectinload(FahuiOrder.items).selectinload(FahuiOrderItem.form_data),
             selectinload(FahuiOrder.payments),
         )
-        .outerjoin(FahuiOrderItem, FahuiOrderItem.order_id == FahuiOrder.id)
-        .outerjoin(FahuiItemFormData, FahuiItemFormData.item_id == FahuiOrderItem.id)
         .filter(FahuiOrder.version == normalized_version)
         .filter(or_(FahuiOrder.status.is_(None), FahuiOrder.status != "delete"))
-        .distinct()
     )
 
     if value:
-        like_value = f"%{value}%"
-        query = query.filter(
-            or_(
-                FahuiOrder.name.ilike(like_value),
-                FahuiOrder.customer_name.ilike(like_value),
-                FahuiOrder.phone.ilike(like_value),
-                FahuiItemFormData.field_value.ilike(like_value),
-            )
-        )
+        query = query.filter(_order_search_filter(value))
 
     total = query.count()
     items = (
-        query.order_by(FahuiOrder.created_at.desc(), FahuiOrder.id.desc())
+        query.order_by(*_order_sort_columns(sort, direction))
         .offset((page_num - 1) * per_page)
         .limit(per_page)
         .all()
@@ -262,23 +380,12 @@ def list_orders_for_export(version: object, value: str = "") -> dict:
     query = (
         db.session.query(FahuiOrder)
         .options(selectinload(FahuiOrder.payments))
-        .outerjoin(FahuiOrderItem, FahuiOrderItem.order_id == FahuiOrder.id)
-        .outerjoin(FahuiItemFormData, FahuiItemFormData.item_id == FahuiOrderItem.id)
         .filter(FahuiOrder.version == normalized_version)
         .filter(or_(FahuiOrder.status.is_(None), FahuiOrder.status != "delete"))
-        .distinct()
     )
 
     if value:
-        like_value = f"%{value}%"
-        query = query.filter(
-            or_(
-                FahuiOrder.name.ilike(like_value),
-                FahuiOrder.customer_name.ilike(like_value),
-                FahuiOrder.phone.ilike(like_value),
-                FahuiItemFormData.field_value.ilike(like_value),
-            )
-        )
+        query = query.filter(_order_search_filter(value))
 
     orders = query.order_by(FahuiOrder.created_at.desc(), FahuiOrder.id.desc()).all()
     return {"items": [serialize_order(order) for order in orders], "total": len(orders)}
@@ -329,13 +436,11 @@ def create_order_shell(data: dict) -> tuple[dict, int]:
         return {"status": "error", "message": "name and phone are required"}, 400
 
     version = normalize_version(data.get("version")) or active_order_version()
+    # 记录创建人：登录用户直接挂 user_id；匿名提交沿用 payload 里的 member_name 文本（可选）。
+    creator_user_id = None
     member_name = None
     if current_user and current_user.is_authenticated:
-        member_name = (
-            getattr(current_user, "display_name", None)
-            or getattr(current_user, "username", None)
-            or getattr(current_user, "email", None)
-        )
+        creator_user_id = current_user.id
     else:
         member_name = (data.get("member_name") or None)
 
@@ -361,6 +466,7 @@ def create_order_shell(data: dict) -> tuple[dict, int]:
         name=name,
         customer_name=data.get("customer_name"),
         member_name=member_name,
+        user_id=creator_user_id,
         phone=phone,
         version=version,
         status=data.get("status"),
@@ -369,22 +475,23 @@ def create_order_shell(data: dict) -> tuple[dict, int]:
     db.session.commit()
 
     try:
-        if getattr(socketio, "server", None) is not None:
-            socketio.emit(
-                "fahui:order_created",
-                {
-                    "order": {
-                        "id": order.id,
-                        "status": order_payment_status(order),
-                        "name": order.name,
-                        "customer_name": order.customer_name,
-                        "phone": order.phone,
-                        "created_at": format_created_at(order.created_at),
-                        "version": order.version,
-                    },
-                    "source": "new_customer",
+        # 经 redis 消息队列广播，任意 HTTP worker 都能送达 socket 服务；
+        # CRM 订单列表监听此事件即时插入新订单。
+        socket_broker.emit(
+            "fahui:order_created",
+            {
+                "order": {
+                    "id": order.id,
+                    "status": order_payment_status(order),
+                    "name": order.name,
+                    "customer_name": order.customer_name,
+                    "phone": order.phone,
+                    "created_at": format_created_at(order.created_at),
+                    "version": order.version,
                 },
-            )
+                "source": "new_customer",
+            },
+        )
     except Exception:
         pass
 

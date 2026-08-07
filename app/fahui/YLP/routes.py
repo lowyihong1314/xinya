@@ -18,6 +18,7 @@ from .services import (
     list_orders_for_export,
     search_orders,
 )
+from .share_link import get_or_create_share_token, grant_session_phone, resolve_share_token
 
 fahui_bp = Blueprint("fahui_router", __name__)
 
@@ -34,12 +35,21 @@ def search_orders_route():
     value = request.args.get("value", default="", type=str)
     page = request.args.get("page", default=1, type=int)
     per_page = request.args.get("per_page", default=20, type=int)
+    sort = request.args.get("sort", default=None, type=str)
+    direction = request.args.get("dir", default=None, type=str)
 
     if version is None:
         return jsonify({"status": "error", "message": "version is required"}), 400
 
     try:
-        result = search_orders(version=version, value=value, page_num=page, per_page=per_page)
+        result = search_orders(
+            version=version,
+            value=value,
+            page_num=page,
+            per_page=per_page,
+            sort=sort,
+            direction=direction,
+        )
     except ValueError as exc:
         return jsonify({"status": "error", "message": str(exc)}), 400
 
@@ -58,6 +68,38 @@ def export_orders_route():
     except ValueError as exc:
         return jsonify({"status": "error", "message": str(exc)}), 400
     return jsonify({"status": "success", "data": result})
+
+
+@fahui_bp.route("/orders/<int:order_id>/share-link", methods=["POST"])
+@permission_required_any(*FAHUI_READ_PERMISSION_NAMES)
+def create_share_link_route(order_id: int):
+    from models.fahui import FahuiOrder
+
+    if FahuiOrder.query.get(order_id) is None:
+        return jsonify({"status": "error", "message": "order not found"}), 404
+
+    token, expires_in = get_or_create_share_token(order_id)
+    return jsonify({"status": "success", "token": token, "expires_in": expires_in})
+
+
+@fahui_bp.route("/orders/shared", methods=["GET"])
+def shared_order_route():
+    # 公开只读入口：token 有效即放行（同时给 session 授已验证手机号，
+    # 让后续的牌位预览等接口也能按订单主人访问）。
+    token = request.args.get("token", default="", type=str)
+    order_id = resolve_share_token(token)
+    if not order_id:
+        return jsonify({"status": "error", "message": "链接不存在或已过期，请联系工作人员重新获取"}), 404
+
+    from models.fahui import FahuiOrder
+
+    order = FahuiOrder.query.get(order_id)
+    if order is None:
+        return jsonify({"status": "error", "message": "订单不存在"}), 404
+
+    grant_session_phone(order.phone)
+    payload, status_code = get_order_detail(order_id)
+    return jsonify(payload), status_code
 
 
 @fahui_bp.route("/orders/<int:order_id>", methods=["GET"])

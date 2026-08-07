@@ -10,6 +10,8 @@ export type PaiweiTemplate = {
   title: string;
   price: number;
   hint: string;
+  /** 今年停售：不出现在「牌位类型」下拉里，但历史订单仍能正常显示与编辑。 */
+  retired?: boolean;
   defaultSuffix?: string;
   fields: {
     owner?: boolean;
@@ -102,9 +104,15 @@ export const PAIWEI_TEMPLATES: PaiweiTemplate[] = [
     title: "普度贡品",
     price: 50,
     hint: "按数量登记，金额会自动计算。",
+    retired: true, // 2026 年没有这一项；明年恢复时删掉这行即可。
     fields: { quantity: true },
   },
 ];
+
+/** 「牌位类型」下拉可选的模板；正在编辑的旧项目若属停售类型，仍保留其选项以正确显示。 */
+export function selectableTemplates(currentCode?: PaiweiCode): PaiweiTemplate[] {
+  return PAIWEI_TEMPLATES.filter((template) => !template.retired || template.code === currentCode);
+}
 
 function splitLines(value: string) {
   // 只按换行拆分（不再按逗号）——名字里带逗号不会被误拆成两个人。
@@ -176,6 +184,27 @@ export function createDraft(code: PaiweiCode = "A1"): PaiweiDraft {
     mother: "",
     quantity: template.fields.quantity ? "1" : "",
     note: "",
+  };
+}
+
+// 从已保存的订单项目反推出编辑草稿（CRM 端编辑既有牌位时用）。
+export function draftFromItem(item: YlpOrderItem): PaiweiDraft {
+  const code = PAIWEI_TEMPLATES.some((tpl) => tpl.code === item.code) ? (item.code as PaiweiCode) : "A1";
+  const base = createDraft(code);
+  const values = (key: string) =>
+    (item.item_form_data?.[key] || []).map((entry) => String(entry.val ?? "").trim()).filter(Boolean);
+  const first = (key: string) => values(key)[0] || "";
+  return {
+    ...base,
+    owner: values("owner").join("\n"),
+    deceased: values("deceased").join("\n"),
+    relation: values("relation").join("\n"),
+    surname: first("surname"),
+    suffix: first("suffix") || base.suffix,
+    father: first("father"),
+    mother: first("mother"),
+    quantity: first("quantity") || base.quantity,
+    note: first("note"),
   };
 }
 
