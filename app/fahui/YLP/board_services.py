@@ -444,6 +444,101 @@ def clear_print_pdf_records() -> tuple[dict, int]:
     return {"success": True, "message": "Tables cleared and IDs reset"}, 200
 
 
+def list_unattached_print_pdfs(version: str | None, page: int = 1, per_page: int = 12) -> dict:
+    """某版本（年份）已生成但还没贴上任何大板的牌位单，分页返回，供看板拖拽上板。"""
+    normalized_version = normalize_version(version) or active_order_version()
+    page = max(1, int(page or 1))
+    per_page = max(1, min(int(per_page or 12), 60))
+
+    attached = db.session.query(FahuiBoardData.print_pdf_id).filter(FahuiBoardData.print_pdf_id.isnot(None))
+    base = (
+        db.session.query(FahuiPrintPdf.id)
+        .join(FahuiPdfPageData, FahuiPdfPageData.print_pdf_id == FahuiPrintPdf.id)
+        .join(FahuiOrderItem, FahuiOrderItem.id == FahuiPdfPageData.order_item_id)
+        .join(FahuiOrder, FahuiOrder.id == FahuiOrderItem.order_id)
+        .filter(FahuiOrder.version == normalized_version)
+        .filter(~FahuiPrintPdf.id.in_(attached))
+        .distinct()
+    )
+    total = base.count()
+    ids = [pdf_id for (pdf_id,) in base.order_by(FahuiPrintPdf.id.asc()).offset((page - 1) * per_page).limit(per_page)]
+
+    items: list[dict] = []
+    if ids:
+        pdfs = (
+            FahuiPrintPdf.query.options(
+                selectinload(FahuiPrintPdf.pages)
+                .selectinload(FahuiPdfPageData.order_item)
+                .selectinload(FahuiOrderItem.order)
+            )
+            .filter(FahuiPrintPdf.id.in_(ids))
+            .all()
+        )
+        pdfs.sort(key=lambda pdf: ids.index(pdf.id))
+        for pdf in pdfs:
+            orders_info = []
+            seen_items: set[int] = set()
+            for pdf_page in pdf.pages or []:
+                item = pdf_page.order_item
+                if not item or not item.order or item.id in seen_items:
+                    continue
+                seen_items.add(item.id)
+                orders_info.append(
+                    {
+                        "order_id": item.order.id,
+                        "customer_name": item.order.customer_name,
+                        "owner_or_deceased": _board_owner_or_deceased(item),
+                    }
+                )
+            items.append({"id": pdf.id, "orders": orders_info})
+
+    return {
+        "success": True,
+        "items": items,
+        "pagination": {
+            "page": page,
+            "per_page": per_page,
+            "total": total,
+            "pages": (total + per_page - 1) // per_page if total else 0,
+        },
+    }
+
+
+def clear_unattached_print_pdfs(version: str | None) -> tuple[dict, int]:
+    """一键清空某版本所有「未上板」的牌位单。号码随即空出，
+    下次生成牌位时按最小空缺号复用（见 print_generator），单号不会越长越大。"""
+    normalized_version = normalize_version(version) or active_order_version()
+
+    attached = db.session.query(FahuiBoardData.print_pdf_id).filter(FahuiBoardData.print_pdf_id.isnot(None))
+    ids = [
+        pdf_id
+        for (pdf_id,) in (
+            db.session.query(FahuiPrintPdf.id)
+            .join(FahuiPdfPageData, FahuiPdfPageData.print_pdf_id == FahuiPrintPdf.id)
+            .join(FahuiOrderItem, FahuiOrderItem.id == FahuiPdfPageData.order_item_id)
+            .join(FahuiOrder, FahuiOrder.id == FahuiOrderItem.order_id)
+            .filter(FahuiOrder.version == normalized_version)
+            .filter(~FahuiPrintPdf.id.in_(attached))
+            .distinct()
+            .all()
+        )
+    ]
+
+    removed = 0
+    if ids:
+        # pdf_page_data 对 print_pdf 是 DB 级联删除；这些单子不在板上，board_data 无需处理。
+        removed = FahuiPrintPdf.query.filter(FahuiPrintPdf.id.in_(ids)).delete(synchronize_session=False)
+        db.session.commit()
+        # 顺手把自增指针拉回（MySQL 会自动落到 max(id)+1），保持号池紧凑。
+        try:
+            db.session.execute(text("ALTER TABLE print_pdf AUTO_INCREMENT = 1"))
+            db.session.commit()
+        except Exception:
+            db.session.rollback()
+
+    return {"success": True, "message": f"已清空 {removed} 张未上板牌位单，号码可复用", "removed": removed}, 200
+
+
 def list_print_pdf_records() -> list[dict]:
     records = FahuiPrintPdf.query.order_by(FahuiPrintPdf.created_at.desc()).all()
     return [serialize_print_pdf(record) for record in records]

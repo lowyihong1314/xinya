@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState, type CSSProperties, type DragEvent } from "react";
+import { useEffect, useLayoutEffect, useMemo, useRef, useState, type CSSProperties, type DragEvent } from "react";
 
 import { API_BASE } from "../../../js/apiBase";
 import { useUserState } from "../../../app/UserState";
@@ -10,12 +10,14 @@ import { useEnsureDesignTokens } from "../../../theme/designTokens";
 import { fetchYlpVersions } from "../api";
 import {
   attachPdfToBoard,
+  clearUnattachedPdfs,
   createBoard,
   createBoardTerminalLink,
   deleteBoard,
   deleteBoardEntry,
   getPrintPdf,
   listBoards,
+  listUnattachedPdfs,
   quickSearchBoards,
   reorderBoardEntry,
   resetYearBarcodes,
@@ -25,6 +27,7 @@ import {
   type BoardHighlightHit,
   type BoardSearchItem,
   type BoardSearchOrder,
+  type UnattachedPdf,
 } from "./api";
 
 // 一个订单的全部上板位置（可能多张牌位、多块板）；
@@ -107,7 +110,95 @@ export function BoardPage() {
   const [newRow, setNewRow] = useState("10"); // 每行张数
   const [newForm, setNewForm] = useState(false);
 
-  const [dragging, setDragging] = useState<{ boardId: number; pdfId: number } | null>(null);
+  // 拖动来源：板上重排（slot）或从「未上板」面板拖入（pool）。
+  type DragState = { kind: "slot"; boardId: number; pdfId: number } | { kind: "pool"; pdfId: number };
+  const [dragging, setDragging] = useState<DragState | null>(null);
+  // 拖动悬停的目标「位置」（按格子的固定位号），用于实时预览插入后的排布。
+  const [dragOver, setDragOver] = useState<{ boardId: number; location: number } | null>(null);
+  // 被拖的 slot 元素不参与 FLIP（拖影由浏览器渲染，动它会取消拖拽）。
+  const draggingSideIdRef = useRef<number | null>(null);
+
+  // FLIP：slot 卡片因预览重排/落位换位置时，从旧布局位置平滑滑到新布局位置。
+  // 先清掉动画残留的 transform 再量「干净」坐标，避免动画中途重测把中间位置当基准（会闪烁）。
+  const slotRefs = useRef(new Map<number, HTMLDivElement>());
+  const prevSlotRects = useRef(new Map<number, DOMRect>());
+  useLayoutEffect(() => {
+    const els = slotRefs.current;
+    els.forEach((el) => {
+      el.style.transition = "none";
+      el.style.transform = "";
+    });
+    const cleanRects = new Map<number, DOMRect>();
+    els.forEach((el, key) => {
+      cleanRects.set(key, el.getBoundingClientRect());
+    });
+    cleanRects.forEach((rect, key) => {
+      const old = prevSlotRects.current.get(key);
+      const el = els.get(key);
+      if (!old || !el || key === draggingSideIdRef.current) {
+        return;
+      }
+      const dx = old.left - rect.left;
+      const dy = old.top - rect.top;
+      if (Math.abs(dx) > 1 || Math.abs(dy) > 1) {
+        el.style.transform = `translate(${dx}px, ${dy}px)`;
+        requestAnimationFrame(() => {
+          el.style.transition = "transform 0.25s cubic-bezier(0.2, 0.8, 0.2, 1)";
+          el.style.transform = "";
+        });
+      }
+    });
+    prevSlotRects.current = cleanRects;
+  });
+
+  // ---- 未上板牌位（拖入看板即可上板） ----
+  const POOL_PER_PAGE = 12;
+  const [poolOpen, setPoolOpen] = useState(true);
+  const [poolItems, setPoolItems] = useState<UnattachedPdf[]>([]);
+  const [poolPage, setPoolPage] = useState(1);
+  const [poolTotal, setPoolTotal] = useState(0);
+  const [poolLoading, setPoolLoading] = useState(false);
+  const poolPages = Math.max(1, Math.ceil(poolTotal / POOL_PER_PAGE));
+
+  async function loadPool(page = poolPage) {
+    setPoolLoading(true);
+    try {
+      const res = await listUnattachedPdfs(version, page, POOL_PER_PAGE);
+      setPoolItems(res.items || []);
+      setPoolTotal(res.pagination?.total || 0);
+      setPoolPage(res.pagination?.page || page);
+    } catch {
+      setPoolItems([]);
+      setPoolTotal(0);
+    } finally {
+      setPoolLoading(false);
+    }
+  }
+
+  useEffect(() => {
+    setPoolPage(1);
+    void loadPool(1);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [version]);
+
+  async function handleClearPool() {
+    if (!poolTotal) return;
+    const ok = await showConfirmDialog({
+      message: `清空 ${version.replace("_YLP", "")} 年全部 ${poolTotal} 张未上板牌位单？空出的号码会在下次生成牌位时复用；需要时可重新打印生成。`,
+      tone: "danger",
+      confirmText: "清空",
+    });
+    if (!ok) return;
+    setPoolLoading(true);
+    try {
+      const res = await clearUnattachedPdfs(version);
+      show_alert("success", res.message || "已清空");
+      await loadPool(1);
+    } catch (e) {
+      show_alert("error", e instanceof Error ? e.message : "清空失败");
+      setPoolLoading(false);
+    }
+  }
 
   const [keyword, setKeyword] = useState("");
   const [searchResults, setSearchResults] = useState<BoardSearchOrder[] | null>(null);
@@ -219,6 +310,7 @@ export function BoardPage() {
     try {
       await action();
       await reload(); // 返回的 all_board 未按版本过滤，统一按当前版本重载
+      void loadPool(); // 上板/摘板都会改变未上板池
       if (okMsg) show_alert("success", okMsg);
     } catch (e) {
       show_alert("error", e instanceof Error ? e.message : "操作失败");
@@ -269,18 +361,70 @@ export function BoardPage() {
     return API_BASE ? `${API_BASE}${path}` : path;
   }
 
-  function onSlotDragStart(board: Board, pdfId: number | null | undefined) {
-    if (!canEdit || !pdfId) return;
-    setDragging({ boardId: board.board_id, pdfId });
+  function clearDrag() {
+    draggingSideIdRef.current = null;
+    setDragging(null);
+    setDragOver(null);
+  }
+
+  function onSlotDragStart(board: Board, slot: { print_pdf_id?: number | null; side_id: number }) {
+    if (!canEdit || !slot.print_pdf_id) return;
+    const pdfId = slot.print_pdf_id;
+    draggingSideIdRef.current = slot.side_id;
+    // 延迟一拍再 setState：dragstart 当帧改被拖元素的样式会被 Chrome 取消拖拽。
+    window.setTimeout(() => {
+      setDragging({ kind: "slot", boardId: board.board_id, pdfId });
+    }, 0);
+  }
+
+  function onPoolDragStart(pdfId: number) {
+    if (!canEdit) return;
+    window.setTimeout(() => {
+      setDragging({ kind: "pool", pdfId });
+    }, 0);
   }
 
   async function onSlotDrop(board: Board, targetLocation: number | null) {
     const src = dragging;
-    setDragging(null);
-    if (!src || src.boardId !== board.board_id || !targetLocation) return;
+    clearDrag();
+    if (!src) return;
+    if (src.kind === "pool") {
+      // 从未上板面板拖入：先贴板（落末位/空位），指定了格子就再挪到该位置。
+      await run(async () => {
+        await attachPdfToBoard({ board_id: board.board_id, pdf_id: src.pdfId });
+        if (targetLocation != null) {
+          await reorderBoardEntry({ board_id: board.board_id, pdf_id: src.pdfId, location: targetLocation });
+        }
+      }, `已贴到「${board.board_name}」`);
+      void loadPool();
+      return;
+    }
+    if (src.boardId !== board.board_id || !targetLocation) return;
     const from = board.board_data.find((s) => s.print_pdf_id === src.pdfId);
     if (!from || from.location === targetLocation) return;
     await run(() => reorderBoardEntry({ board_id: board.board_id, pdf_id: src.pdfId, location: targetLocation }));
+  }
+
+  // 预览排布：拖到某个位置时，按后端「插入挪位」的语义本地重排（卡片动、位号不动）。
+  function previewSlots(board: Board, sorted: typeof board.board_data): typeof board.board_data {
+    if (
+      !dragging ||
+      dragging.kind !== "slot" ||
+      dragging.boardId !== board.board_id ||
+      !dragOver ||
+      dragOver.boardId !== board.board_id
+    ) {
+      return sorted;
+    }
+    const fromIdx = sorted.findIndex((s) => s.print_pdf_id === dragging.pdfId);
+    const toIdx = sorted.findIndex((s) => s.location === dragOver.location);
+    if (fromIdx < 0 || toIdx < 0 || fromIdx === toIdx) {
+      return sorted;
+    }
+    const copy = [...sorted];
+    const [moved] = copy.splice(fromIdx, 1);
+    copy.splice(toIdx, 0, moved);
+    return copy;
   }
 
   async function handleRemoveSlot(sideId: number) {
@@ -442,8 +586,82 @@ export function BoardPage() {
 
       {loading ? <p style={styles.muted}>加载中…</p> : null}
 
-      {/* 看板列表 */}
-      <div style={styles.boardGrid}>
+      {/* 看板列表（首卡：未上板牌位池，拖入任意看板即上板）。
+          scroll-padding-left 扣掉 sticky 池子的宽度，吸附/定位不会滑到它底下被挡住。 */}
+      <div
+        style={{
+          ...styles.boardGrid,
+          scrollPaddingLeft: poolOpen ? "calc(min(88vw, 380px) + 14px)" : "58px",
+        }}
+      >
+        {poolOpen ? (
+          <div style={styles.poolCard}>
+            <div style={styles.boardHead}>
+              <div>
+                <span style={styles.boardName}>未上板</span>
+                <span style={styles.boardMeta}>{poolTotal} 张待贴 · 拖到右侧看板即可上板</span>
+              </div>
+              <div style={styles.boardActions}>
+                {canEdit && poolTotal > 0 ? (
+                  <button type="button" style={styles.tinyDanger} onClick={() => void handleClearPool()} disabled={poolLoading}>
+                    清空
+                  </button>
+                ) : null}
+                <button type="button" style={styles.tinyBtn} onClick={() => setPoolOpen(false)}>收起</button>
+              </div>
+            </div>
+            <div style={styles.poolGrid}>
+              {poolItems.map((pdf) => {
+                const caption = pdf.orders.length
+                  ? pdf.orders
+                      .map((o) => (o.customer_name || `#${o.order_id}`) + (o.owner_or_deceased ? ` · ${o.owner_or_deceased}` : ""))
+                      .join("；")
+                  : `单号 #${pdf.id}`;
+                const isDragged = dragging?.kind === "pool" && dragging.pdfId === pdf.id;
+                return (
+                  <div
+                    key={pdf.id}
+                    style={{ ...styles.slot, ...(isDragged ? styles.slotDragging : {}) }}
+                    draggable={canEdit}
+                    onDragStart={() => onPoolDragStart(pdf.id)}
+                    onDragEnd={clearDrag}
+                    title={caption}
+                  >
+                    <span style={styles.slotNo}>#{pdf.id}</span>
+                    <img src={previewUrl(pdf.id)} alt={`单号 ${pdf.id}`} style={styles.slotImg} loading="lazy" draggable={false} />
+                    <span style={styles.slotCap}>{caption}</span>
+                  </div>
+                );
+              })}
+              {!poolLoading && !poolItems.length ? (
+                <p style={{ ...styles.muted, gridColumn: "1 / -1" }}>本年牌位都已上板 🎉</p>
+              ) : null}
+            </div>
+            <div style={styles.poolPager}>
+              <button
+                type="button"
+                style={styles.tinyBtn}
+                disabled={poolLoading || poolPage <= 1}
+                onClick={() => void loadPool(poolPage - 1)}
+              >
+                ‹ 上一页
+              </button>
+              <span style={styles.muted}>{poolLoading ? "加载中…" : `${poolPage} / ${poolPages}`}</span>
+              <button
+                type="button"
+                style={styles.tinyBtn}
+                disabled={poolLoading || poolPage >= poolPages}
+                onClick={() => void loadPool(poolPage + 1)}
+              >
+                下一页 ›
+              </button>
+            </div>
+          </div>
+        ) : (
+          <button type="button" style={styles.poolCollapsed} onClick={() => setPoolOpen(true)} title="展开未上板牌位">
+            <span style={styles.poolCollapsedText}>未上板 {poolTotal}</span>
+          </button>
+        )}
         {boards.map((board) => (
           <div key={board.board_id} style={styles.boardCard}>
             <div style={styles.boardHead}>
@@ -468,15 +686,32 @@ export function BoardPage() {
                   ? { ...styles.slotList, display: "grid", gridTemplateColumns: `repeat(${board.board_width}, minmax(0, 1fr))` }
                   : styles.slotList
               }
+              onDragOver={(e: DragEvent) => {
+                if (dragging?.kind === "pool") e.preventDefault();
+              }}
+              onDrop={() => {
+                if (dragging?.kind === "pool") void onSlotDrop(board, null);
+              }}
             >
               {board.board_data.length ? (
-                board.board_data.map((slot) => {
+                (() => {
+                  const sorted = [...board.board_data].sort((a, b) => (a.location ?? 0) - (b.location ?? 0));
+                  const preview = previewSlots(board, sorted);
+                  return preview.map((slot, idx) => {
+                  // 格子的固定位号（卡片在预览中移动，位号钉在格子上）
+                  const posLocation = sorted[idx]?.location ?? slot.location;
                   const caption = slot.orders.length
                     ? slot.orders
                         .map((o) => (o.customer_name || `#${o.order_id}`) + (o.owner_or_deceased ? ` · ${o.owner_or_deceased}` : ""))
                         .join("；")
                     : "空位";
-                  const isDragged = dragging?.pdfId === slot.print_pdf_id && dragging?.boardId === board.board_id;
+                  const isDragged =
+                    dragging?.kind === "slot" &&
+                    dragging.pdfId === slot.print_pdf_id &&
+                    dragging.boardId === board.board_id;
+                  const isDropTarget = Boolean(
+                    dragging && dragOver && dragOver.boardId === board.board_id && dragOver.location === posLocation,
+                  );
                   const isHit = Boolean(
                     highlight?.hits.some((h) => h.board_id === board.board_id && h.location === slot.location),
                   );
@@ -487,24 +722,46 @@ export function BoardPage() {
                   return (
                     <div
                       key={slot.side_id}
+                      ref={(el) => {
+                        if (el) slotRefs.current.set(slot.side_id, el);
+                        else slotRefs.current.delete(slot.side_id);
+                      }}
                       id={boardSlotDomId(board.board_id, slot.location)}
                       className={isActive ? "board-slot-active" : undefined}
                       style={{
                         ...styles.slot,
                         ...(isDragged ? styles.slotDragging : {}),
+                        ...(isDropTarget ? styles.slotDropTarget : {}),
                         ...(isHit ? styles.slotHit : {}),
                         ...(isActive ? styles.slotActive : {}),
                       }}
                       draggable={canEdit && !!slot.print_pdf_id}
-                      onDragStart={() => onSlotDragStart(board, slot.print_pdf_id)}
-                      onDragEnd={() => setDragging(null)}
+                      onDragStart={() => onSlotDragStart(board, slot)}
+                      onDragEnd={clearDrag}
                       onDragOver={(e: DragEvent) => {
-                        if (dragging && dragging.boardId === board.board_id) e.preventDefault();
+                        const accepts =
+                          dragging &&
+                          (dragging.kind === "pool" ||
+                            (dragging.kind === "slot" && dragging.boardId === board.board_id));
+                        if (accepts) {
+                          e.preventDefault();
+                          e.stopPropagation();
+                          setDragOver((current) =>
+                            current && current.boardId === board.board_id && current.location === posLocation
+                              ? current
+                              : posLocation != null
+                                ? { boardId: board.board_id, location: posLocation }
+                                : current,
+                          );
+                        }
                       }}
-                      onDrop={() => void onSlotDrop(board, slot.location)}
+                      onDrop={(e: DragEvent) => {
+                        e.stopPropagation();
+                        void onSlotDrop(board, posLocation);
+                      }}
                       title={caption}
                     >
-                      <span style={styles.slotNo}>{slot.location ?? "-"}</span>
+                      <span style={styles.slotNo}>{posLocation ?? "-"}</span>
                       {canEdit ? (
                         <button
                           type="button"
@@ -523,7 +780,8 @@ export function BoardPage() {
                       <span style={styles.slotCap}>{caption}</span>
                     </div>
                   );
-                })
+                  });
+                })()
               ) : (
                 <p style={styles.muted}>这块板还没有贴牌位。</p>
               )}
@@ -653,8 +911,66 @@ const styles: Record<string, CSSProperties> = {
   tinyBtn: { padding: "4px 9px", fontSize: "12px", fontWeight: 600, borderRadius: "6px", border: "1px solid var(--x-color-line)", background: "var(--x-color-panel)", color: "var(--x-color-ink)", cursor: "pointer" },
   tinyDanger: { padding: "4px 9px", fontSize: "12px", fontWeight: 600, borderRadius: "6px", border: "1px solid var(--x-color-danger-border)", background: "var(--x-color-danger-soft)", color: "var(--x-color-danger)", cursor: "pointer" },
   slotList: { display: "flex", flexDirection: "column", gap: "6px", flex: 1, minHeight: 0, overflowY: "auto", alignContent: "start" },
+  // 未上板牌位池：固定在容器左侧首位（sticky），拖到右侧看板即上板
+  poolCard: {
+    flex: "0 0 auto",
+    width: "min(88vw, 380px)",
+    height: "100%",
+    boxSizing: "border-box",
+    position: "sticky",
+    left: 0,
+    zIndex: 3,
+    scrollSnapAlign: "start",
+    background: "var(--x-color-panel)",
+    borderRadius: "var(--x-radius-md)",
+    border: "1px dashed var(--x-color-accent-border)",
+    boxShadow: "0 12px 30px var(--x-color-shadow)",
+    padding: "14px",
+    display: "flex",
+    flexDirection: "column",
+    gap: "10px",
+  },
+  poolGrid: {
+    display: "grid",
+    gridTemplateColumns: "repeat(2, minmax(0, 1fr))",
+    gap: "8px",
+    flex: 1,
+    minHeight: 0,
+    overflowY: "auto",
+    alignContent: "start",
+  },
+  poolPager: {
+    display: "flex",
+    alignItems: "center",
+    justifyContent: "space-between",
+    gap: "8px",
+  },
+  poolCollapsed: {
+    flex: "0 0 auto",
+    width: "44px",
+    height: "100%",
+    boxSizing: "border-box",
+    position: "sticky",
+    left: 0,
+    zIndex: 3,
+    borderRadius: "var(--x-radius-md)",
+    border: "1px dashed var(--x-color-accent-border)",
+    background: "var(--x-color-accent-soft)",
+    color: "var(--x-color-accent-strong)",
+    cursor: "pointer",
+    display: "flex",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  poolCollapsedText: {
+    writingMode: "vertical-rl",
+    fontSize: "13px",
+    fontWeight: 800,
+    letterSpacing: "2px",
+  },
   slot: { position: "relative", display: "flex", flexDirection: "column", gap: "4px", padding: "6px", borderRadius: "8px", background: "var(--x-color-panel-alt)", border: "1px solid var(--x-color-line-soft)", minWidth: 0, cursor: "grab" },
-  slotDragging: { opacity: 0.4 },
+  slotDragging: { opacity: 0.35, scale: "0.96" },
+  slotDropTarget: { border: "2px dashed var(--x-color-accent)", background: "var(--x-color-accent-soft)" },
   slotHit: { border: "2px solid rgba(245, 158, 11, 0.7)", background: "rgba(245, 158, 11, 0.1)" },
   slotActive: { border: "2px solid rgb(245, 158, 11)", background: "rgba(245, 158, 11, 0.18)", zIndex: 1 },
   searchOrderClickable: { cursor: "pointer", border: "1px solid transparent" },

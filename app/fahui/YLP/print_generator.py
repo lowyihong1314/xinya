@@ -97,7 +97,15 @@ def _get_or_create_print_pdf(order_item_ids, width, height):
         if existing_ids == order_item_id_set:
             return pdf.id
 
-    new_pdf = FahuiPrintPdf(width=int(width), height=int(height))
+    # 牌位单号取「最小空缺号」而不是自增：清空未上板后号码可以回收复用，不会越长越大。
+    used_ids = [pdf_id for (pdf_id,) in db.session.query(FahuiPrintPdf.id).order_by(FahuiPrintPdf.id).all()]
+    next_id = 1
+    for used in used_ids:
+        if used > next_id:
+            break
+        next_id = used + 1
+
+    new_pdf = FahuiPrintPdf(id=next_id, width=int(width), height=int(height))
     db.session.add(new_pdf)
     db.session.flush()
     for order_item_id in order_item_ids:

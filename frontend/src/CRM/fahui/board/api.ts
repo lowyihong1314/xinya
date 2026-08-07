@@ -110,6 +110,34 @@ export async function getPrintPdf(pdfId: number) {
   return readJson<{ status?: string; data?: { id: number; boards: BoardLocation[]; page_data?: unknown[] } }>(res);
 }
 
+export type UnattachedPdf = {
+  id: number;
+  orders: BoardSlotOrder[];
+};
+
+export async function listUnattachedPdfs(version: string, page = 1, perPage = 12) {
+  const search = new URLSearchParams();
+  search.set("version", version);
+  search.set("page", String(page));
+  search.set("per_page", String(perPage));
+  const res = await apiFetch(`/api/board_router/print-pdfs/unattached?${search.toString()}`, { credentials: "include" });
+  return readJson<{
+    success?: boolean;
+    items: UnattachedPdf[];
+    pagination?: { page?: number; per_page?: number; total?: number; pages?: number };
+  }>(res);
+}
+
+export async function clearUnattachedPdfs(version: string) {
+  const res = await apiFetch("/api/board_router/print-pdfs/unattached/clear", {
+    method: "POST",
+    credentials: "include",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ version }),
+  });
+  return readJson<{ success?: boolean; message?: string; removed?: number }>(res);
+}
+
 export async function quickSearchBoards(keyword: string, version?: string) {
   const res = await apiFetch("/api/board_router/orders/quick-search", {
     method: "POST",

@@ -27,6 +27,7 @@ from .board_services import (
     attach_pdf_to_board,
     check_duplicate_owner_fields,
     clear_print_pdf_records,
+    clear_unattached_print_pdfs,
     clone_order_to_version,
     copy_orders_to_current,
     create_board,
@@ -42,6 +43,7 @@ from .board_services import (
     list_all_boards,
     list_orders_by_version,
     list_print_pdf_records,
+    list_unattached_print_pdfs,
     list_versions,
     quick_search_orders,
     reorder_board_entry,
@@ -76,6 +78,26 @@ def delete_board_entry_route(board_data_id):
 @permission_required_any(*FAHUI_READ_PERMISSION_NAMES)
 def list_boards_route():
     return jsonify(list_all_boards(request.args.get("version", type=str) or None))
+
+
+@board_router_bp.route("/print-pdfs/unattached", methods=["GET"])
+@permission_required_any(*FAHUI_READ_PERMISSION_NAMES)
+def list_unattached_print_pdfs_route():
+    return jsonify(
+        list_unattached_print_pdfs(
+            request.args.get("version", type=str),
+            request.args.get("page", default=1, type=int),
+            request.args.get("per_page", default=12, type=int),
+        )
+    )
+
+
+@board_router_bp.route("/print-pdfs/unattached/clear", methods=["POST"])
+@permission_required_any("account_edit")
+def clear_unattached_print_pdfs_route():
+    payload = request.get_json(silent=True) or {}
+    result, status_code = clear_unattached_print_pdfs(payload.get("version"))
+    return jsonify(result), status_code
 
 
 @board_router_bp.route("/terminal-link", methods=["POST"])
