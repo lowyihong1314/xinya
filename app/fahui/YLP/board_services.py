@@ -736,8 +736,12 @@ def delete_order_item(item_id: int, order_id: int) -> tuple[dict, int]:
     if denied:
         return denied
 
-    FahuiItemFormData.query.filter_by(item_id=item_id).delete(synchronize_session=False)
-    FahuiPdfPageData.query.filter_by(order_item_id=item_id).delete(synchronize_session=False)
+    # 子行走 ORM 删除（不用批量 SQL）：item 加载时 form_data/pdf_pages 已被 selectin
+    # 拉进 session，批量删除会让 ORM 在 commit 时对已消失的行发 UPDATE 而抛 StaleDataError。
+    for form_row in list(item.form_data or []):
+        db.session.delete(form_row)
+    for pdf_page in list(item.pdf_pages or []):
+        db.session.delete(pdf_page)
     _touch_maintainer(item.order)
     db.session.delete(item)
     db.session.commit()
