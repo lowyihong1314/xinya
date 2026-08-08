@@ -18,6 +18,7 @@ flask_bcrypt
 gunicorn
 pypdf
 pypdfium2
+qrcode
 psutil
 pillow-heif
 PyMuPDF

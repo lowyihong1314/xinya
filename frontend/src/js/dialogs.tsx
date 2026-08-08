@@ -13,6 +13,21 @@ type ConfirmOptions = {
   tone?: DialogTone;
 };
 
+type ChoiceOption<T extends string> = {
+  value: T;
+  label: string;
+  primary?: boolean;
+  tone?: DialogTone;
+};
+
+type ChoiceOptions<T extends string> = {
+  title?: string;
+  message: string;
+  choices: ChoiceOption<T>[];
+  cancelText?: string;
+  tone?: DialogTone;
+};
+
 type PromptOptions = {
   title?: string;
   message: string;
@@ -94,6 +109,44 @@ function ConfirmDialog({
   );
 }
 
+function ChoiceDialog<T extends string>({
+  options,
+  onResolve,
+}: {
+  options: ChoiceOptions<T>;
+  onResolve: (value: T | null) => void;
+}) {
+  return (
+    <DialogFrame
+      title={options.title || "请选择"}
+      message={options.message}
+      tone={options.tone}
+      onClose={() => onResolve(null)}
+      actions={
+        <>
+          <button type="button" style={secondaryButtonStyle} onClick={() => onResolve(null)}>
+            {options.cancelText || "取消"}
+          </button>
+          {options.choices.map((choice) => (
+            <button
+              key={choice.value}
+              type="button"
+              style={
+                choice.primary
+                  ? primaryButtonStyle(choice.tone || options.tone || "default")
+                  : secondaryButtonStyle
+              }
+              onClick={() => onResolve(choice.value)}
+            >
+              {choice.label}
+            </button>
+          ))}
+        </>
+      }
+    />
+  );
+}
+
 function PromptDialog({
   options,
   onResolve,
@@ -168,6 +221,22 @@ export function showConfirmDialog(options: ConfirmOptions) {
         onResolve={(confirmed) => {
           close();
           resolve(confirmed);
+        }}
+      />
+    ));
+  });
+}
+
+/** 多选一对话框。点遮罩 / Esc / 取消都返回 null，调用方据此中止操作。 */
+export function showChoiceDialog<T extends string>(options: ChoiceOptions<T>) {
+  ensureDesignTokens();
+  return new Promise<T | null>((resolve) => {
+    openOverlay((close) => (
+      <ChoiceDialog
+        options={options}
+        onResolve={(value) => {
+          close();
+          resolve(value);
         }}
       />
     ));

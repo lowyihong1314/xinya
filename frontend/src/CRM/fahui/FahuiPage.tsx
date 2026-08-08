@@ -5,14 +5,16 @@ import { useLocation, useNavigate } from "react-router-dom";
 import { useEnsureDesignTokens } from "../../theme/designTokens";
 import { useUserState } from "../../app/UserState";
 import { CachedImage } from "../../components/CachedMedia";
-import { showConfirmDialog } from "../../js/dialogs";
+import { showChoiceDialog, showConfirmDialog } from "../../js/dialogs";
 import { copyTextToClipboard, downloadBlobOrShare, downloadUrlOrShare } from "../../js/browserActions";
 import { show_alert } from "../../js/show_alert";
 import { LAMP_META } from "../../lamp/lampMeta";
+import { useOptionalAppChrome } from "../../router/AppChromeContext";
 import { LampWorkspacePage } from "../lamp/react/LampWorkspacePage";
 import { PaymentChannelModal } from "./PaymentChannelModal";
 import { RelationOptionModal } from "./RelationOptionModal";
 import { OpenWindowModal } from "./OpenWindowModal";
+import { PrintRecordsModal } from "./PrintRecordsModal";
 import {
   approvePayment,
   copyYlpOrdersToCurrent,
@@ -359,6 +361,8 @@ export function FahuiPage() {
   const location = useLocation();
   const navigate = useNavigate();
   const { isMobile } = useUserState();
+  // 顶部导航条是 sticky 的，右侧面板贴顶/算高度都要把它让出来（导航条藏起来时测得 0）。
+  const navbarHeight = useOptionalAppChrome()?.navbarHeight ?? 60;
   const initialRouteState = parseFahuiRouteState(location.search);
   const [screen, setScreen] = useState<ScreenState>(initialRouteState.screen);
   const [payments, setPayments] = useState<PaymentRecord[]>([]);
@@ -384,6 +388,14 @@ export function FahuiPage() {
   const [ylpSelectAllPages, setYlpSelectAllPages] = useState(false);
   const [ylpBulkBusy, setYlpBulkBusy] = useState(false);
   const [printPlusMenuOpen, setPrintPlusMenuOpen] = useState(false);
+  const [ylpRowMenu, setYlpRowMenu] = useState<{ orderId: number; x: number; y: number } | null>(null);
+  const [ylpRowBusy, setYlpRowBusy] = useState(false);
+  const [ylpRowPreview, setYlpRowPreview] = useState<{ orderId: number; url: string | null; error: string } | null>(null);
+  const [ylpRowDetail, setYlpRowDetail] = useState<{
+    orderId: number;
+    order: YlpOrderDetail | null;
+    error: string;
+  } | null>(null);
   const [paiweiJob, setPaiweiJob] = useState<{ percent: number; status: "running" | "done" | "error"; message?: string } | null>(null);
   const paiweiPollRef = useRef<number | null>(null);
   const [ylpPagination, setYlpPagination] = useState<YlpPagination | null>(null);
@@ -399,6 +411,7 @@ export function FahuiPage() {
   const [paymentConfigOpen, setPaymentConfigOpen] = useState(false);
   const [relationConfigOpen, setRelationConfigOpen] = useState(false);
   const [openWindowConfigOpen, setOpenWindowConfigOpen] = useState(false);
+  const [printRecordsOpen, setPrintRecordsOpen] = useState(false);
   const [relationOptions, setRelationOptions] = useState<string[]>([]);
 
   const currentWorkspace =
@@ -447,6 +460,32 @@ export function FahuiPage() {
       return nextRouteState.ylpVersion;
     });
   }, [location.search]);
+
+  // 行操作菜单是 fixed 定位的，页面一动（滚动/缩放）或点到别处就关掉。
+  useEffect(() => {
+    if (!ylpRowMenu) {
+      return;
+    }
+    const close = () => setYlpRowMenu(null);
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Escape") {
+        close();
+      }
+    };
+    window.addEventListener("click", close);
+    // 右键点到别处（包括别的行，那边会先 stopPropagation 换成自己的菜单）也要收起来。
+    window.addEventListener("contextmenu", close);
+    window.addEventListener("resize", close);
+    window.addEventListener("scroll", close, true);
+    window.addEventListener("keydown", onKeyDown);
+    return () => {
+      window.removeEventListener("click", close);
+      window.removeEventListener("contextmenu", close);
+      window.removeEventListener("resize", close);
+      window.removeEventListener("scroll", close, true);
+      window.removeEventListener("keydown", onKeyDown);
+    };
+  }, [ylpRowMenu]);
 
   useEffect(() => {
     const nextSearchParams = buildFahuiSearchParams(location.search, {
@@ -1019,6 +1058,157 @@ export function FahuiPage() {
     }
   }
 
+  // 右侧那一栏同一时间只放一块内容：填写页 / 牌位预览 / 订单摘要。
+  function closeYlpRowPanels() {
+    setIntakeDrawerOpen(false);
+    setYlpRowDetail(null);
+    closeYlpRowPreview();
+  }
+
+  // 菜单是 fixed 定位的：夹在视窗内，贴不下就往锚点上方翻。
+  function placeYlpRowMenu(orderId: number, x: number, anchorTop: number, anchorBottom: number) {
+    const menuHeight = rowMenuHeight(!isCurrentYlpVersion(ylpVersion));
+    const flipUp = anchorBottom + 4 + menuHeight > window.innerHeight;
+
+    return {
+      orderId,
+      x: Math.max(8, Math.min(x, window.innerWidth - ROW_MENU_WIDTH - 8)),
+      y: flipUp ? Math.max(8, anchorTop - 4 - menuHeight) : anchorBottom + 4,
+    };
+  }
+
+  // 点行只在右侧看摘要，要改动再按「进入订单详情」。
+  async function openYlpRowDetail(orderId: number) {
+    closeYlpRowPanels();
+    setYlpRowDetail({ orderId, order: null, error: "" });
+
+    try {
+      const response = await fetchYlpOrderDetail(orderId);
+      setYlpRowDetail((prev) => {
+        if (!prev || prev.orderId !== orderId) {
+          return prev;
+        }
+        return response.data
+          ? { orderId, order: response.data, error: "" }
+          : { orderId, order: null, error: response.message || "订单加载失败" };
+      });
+    } catch (loadError) {
+      const message = loadError instanceof Error ? loadError.message : "订单加载失败";
+      setYlpRowDetail((prev) => (prev && prev.orderId === orderId ? { orderId, order: null, error: message } : prev));
+    }
+  }
+
+  // 列表行的「预览」＝订单详情那颗「预览牌位」，只是渲染进右侧抽屉而不是弹窗。
+  async function handleRowPreviewPaiwei(orderId: number) {
+    closeYlpRowPanels();
+    setYlpRowPreview((prev) => {
+      if (prev?.url) {
+        URL.revokeObjectURL(prev.url);
+      }
+      return { orderId, url: null, error: "" };
+    });
+
+    try {
+      const blob = await previewYlpPaiwei(orderId);
+      const url = URL.createObjectURL(blob);
+      setYlpRowPreview((prev) => {
+        // 生成期间抽屉被关掉或换了订单，这份结果就直接丢弃。
+        if (!prev || prev.orderId !== orderId) {
+          URL.revokeObjectURL(url);
+          return prev;
+        }
+        return { orderId, url, error: "" };
+      });
+    } catch (previewError) {
+      const message = previewError instanceof Error ? previewError.message : "预览牌位失败";
+      show_alert("error", message);
+      setYlpRowPreview((prev) => (prev && prev.orderId === orderId ? { ...prev, error: message } : prev));
+    }
+  }
+
+  function closeYlpRowPreview() {
+    setYlpRowPreview((prev) => {
+      if (prev?.url) {
+        URL.revokeObjectURL(prev.url);
+      }
+      return null;
+    });
+  }
+
+  async function handleRowConfirmOrder(orderId: number) {
+    setYlpRowBusy(true);
+    try {
+      await updateYlpOrderStatus(orderId, "confirm");
+      show_alert("success", `订单 #${orderId} 已确认`);
+      void loadYlpOrders();
+      if (ylpRowDetail?.orderId === orderId) {
+        void openYlpRowDetail(orderId);
+      }
+    } catch (confirmError) {
+      show_alert("error", confirmError instanceof Error ? confirmError.message : "确认订单失败");
+    } finally {
+      setYlpRowBusy(false);
+    }
+  }
+
+  async function handleRowCopyToCurrent(orderId: number) {
+    const ok = await showConfirmDialog({
+      message: `把订单 #${orderId} 复制到今年（${CURRENT_YLP_VERSION}）？会生成一张新的 Draft 订单，原订单保持不变。`,
+    });
+    if (!ok) {
+      return;
+    }
+    setYlpRowBusy(true);
+    try {
+      const res = await copyYlpOrdersToCurrent([orderId]);
+      const newId = res.copied?.[0]?.new_id;
+      if (!newId) {
+        show_alert("error", res.skipped?.[0]?.reason || res.message || "复制失败");
+        return;
+      }
+      // 新单在今年版本里，当前这份历史版本列表不会有它，所以直接跳进新单详情。
+      show_alert("success", `已复制为今年订单 #${newId}`);
+      closeYlpRowPanels();
+      openYlpDetail(newId);
+    } catch (copyError) {
+      show_alert("error", copyError instanceof Error ? copyError.message : "复制失败");
+    } finally {
+      setYlpRowBusy(false);
+    }
+  }
+
+  async function handleRowRemoveOrder(orderId: number) {
+    // 与批量移除同一套语义：今年版本是软删除（移入 DELETE），DELETE 版本再删才是彻底删除。
+    const isPurge = ylpVersion === "DELETE";
+    const ok = await showConfirmDialog({
+      message: isPurge
+        ? `彻底删除订单 #${orderId}？数据会从数据库移除，不可恢复！`
+        : `移除订单 #${orderId}？订单会移入「DELETE」版本（软删除），切到 DELETE 版本再删除一次才会彻底删除。`,
+      tone: "danger",
+    });
+    if (!ok) {
+      return;
+    }
+    setYlpRowBusy(true);
+    try {
+      const res = await deleteYlpOrdersBatch([orderId]);
+      show_alert("success", res.message || "已移除");
+      if (ylpRowPreview?.orderId === orderId) {
+        closeYlpRowPreview();
+      }
+      if (ylpRowDetail?.orderId === orderId) {
+        setYlpRowDetail(null);
+      }
+      setYlpSelected((current) => current.filter((id) => id !== orderId));
+      void loadYlpOrders();
+      void loadYlpVersions();
+    } catch (removeError) {
+      show_alert("error", removeError instanceof Error ? removeError.message : "移除订单失败");
+    } finally {
+      setYlpRowBusy(false);
+    }
+  }
+
   async function handleBulkDeleteYlpOrders() {
     let ids: number[];
     try {
@@ -1070,6 +1260,7 @@ export function FahuiPage() {
   }
 
   function openYlpIntakePage() {
+    closeYlpRowPanels();
     setIntakeDrawerOpen(true);
   }
 
@@ -1133,6 +1324,9 @@ export function FahuiPage() {
             </button>
             <button type="button" style={styles.secondaryActionCompact} onClick={() => setOpenWindowConfigOpen(true)}>
               开放时间设置
+            </button>
+            <button type="button" style={styles.secondaryActionCompact} onClick={() => setPrintRecordsOpen(true)}>
+              查看打印记录
             </button>
             <button type="button" style={styles.secondaryActionCompact} onClick={openYlpIntakePage}>
               打开牌位填写页
@@ -1444,12 +1638,19 @@ export function FahuiPage() {
       show_alert("error", "请选择订单");
       return;
     }
-    // 询问是否注册条码/二维码（贴板需要）
-    const needBarcode = await showConfirmDialog({
+    // 询问是否注册条码/二维码（贴板需要）。点遮罩 / Esc / 取消都当作放弃打印。
+    const choice = await showChoiceDialog({
+      title: "打印牌位",
       message: "打印时是否注册条码 / 二维码？注册后每张牌位会盖上单号，可在「看板」贴板追踪；不注册则只出图。",
-      confirmText: "注册条码",
-      cancelText: "不注册",
+      choices: [
+        { value: "register", label: "注册条码", primary: true },
+        { value: "plain", label: "不注册" },
+      ],
     });
+    if (!choice) {
+      return;
+    }
+    const needBarcode = choice === "register";
     stopPaiweiPoll();
     setPaiweiJob({ percent: 0, status: "running" });
     try {
@@ -1588,6 +1789,7 @@ export function FahuiPage() {
                         aria-label="当页全选"
                       />
                     </th>
+                    <th className="ylp-action-col">操作</th>
                     {YLP_ORDER_COLUMNS.map((col) => (
                       <th
                         key={col.key}
@@ -1606,8 +1808,17 @@ export function FahuiPage() {
                   {sortedYlpOrders.map((order) => (
                     <tr
                       key={order.id}
-                      className="ylp-order-row"
-                      onClick={() => void openYlpDetail(order.id)}
+                      className={
+                        ylpRowDetail?.orderId === order.id ? "ylp-order-row ylp-order-row-active" : "ylp-order-row"
+                      }
+                      onClick={() => void openYlpRowDetail(order.id)}
+                      onContextMenu={(event) => {
+                        // 右键＝三点菜单，在光标处弹出，顺手压掉浏览器自带菜单。
+                        event.preventDefault();
+                        // 关菜单的 window 监听器已经挂上了，别让这次事件冒上去把刚开的菜单关掉。
+                        event.stopPropagation();
+                        setYlpRowMenu(placeYlpRowMenu(order.id, event.clientX, event.clientY, event.clientY));
+                      }}
                     >
                       <td className="ylp-check-col" onClick={(event) => event.stopPropagation()}>
                         <input
@@ -1616,6 +1827,26 @@ export function FahuiPage() {
                           onChange={() => toggleYlpRow(order.id)}
                           aria-label={`选择订单 ${order.id}`}
                         />
+                      </td>
+                      <td className="ylp-action-col" onClick={(event) => event.stopPropagation()}>
+                        <button
+                          type="button"
+                          className="ylp-row-menu-btn"
+                          aria-label={`订单 ${order.id} 操作`}
+                          aria-haspopup="menu"
+                          aria-expanded={ylpRowMenu?.orderId === order.id}
+                          onClick={(event) => {
+                            event.stopPropagation();
+                            const rect = event.currentTarget.getBoundingClientRect();
+                            setYlpRowMenu((current) =>
+                              current && current.orderId === order.id
+                                ? null
+                                : placeYlpRowMenu(order.id, rect.left, rect.top, rect.bottom),
+                            );
+                          }}
+                        >
+                          ⋯
+                        </button>
                       </td>
                       <td>
                         <span style={ylpStatusChipStyle(order.status)}>{order.status || "-"}</span>
@@ -2140,7 +2371,7 @@ export function FahuiPage() {
         </div>
 
         {intakeDrawerOpen ? (
-          <aside style={styles.intakeDockPanel(isMobile)} className="ylp-intake-drawer">
+          <aside style={styles.intakeDockPanel(isMobile, navbarHeight)} className="ylp-intake-drawer">
             <style>{INTAKE_DRAWER_CSS}</style>
             <header style={styles.intakeDrawerHeader}>
               <div>
@@ -2178,6 +2409,40 @@ export function FahuiPage() {
             </div>
           </aside>
         ) : null}
+
+        {ylpRowDetail ? renderYlpRowDetailPanel(ylpRowDetail) : null}
+
+        {ylpRowPreview ? (
+          <aside style={styles.intakeDockPanel(isMobile, navbarHeight)} className="ylp-intake-drawer">
+            <style>{INTAKE_DRAWER_CSS}</style>
+            <header style={styles.intakeDrawerHeader}>
+              <div>
+                <p style={styles.intakeDrawerEyebrow}>{`订单 #${ylpRowPreview.orderId} · 牌位打印预览`}</p>
+                <p style={styles.intakeDrawerHint}>与订单详情的「预览牌位」是同一份打印结果</p>
+              </div>
+              <div style={styles.itemActionCell}>
+                {ylpRowPreview.url ? (
+                  <a href={ylpRowPreview.url} target="_blank" rel="noreferrer" style={styles.itemEditButton}>
+                    新标签打开
+                  </a>
+                ) : null}
+                <button type="button" style={styles.addItemCancel} onClick={closeYlpRowPreview}>
+                  关闭
+                </button>
+              </div>
+            </header>
+            {ylpRowPreview.url ? (
+              <iframe
+                key={ylpRowPreview.url}
+                title={`订单 ${ylpRowPreview.orderId} 牌位预览`}
+                src={ylpRowPreview.url}
+                style={styles.previewFrame(navbarHeight)}
+              />
+            ) : (
+              <section style={styles.stateCard}>{ylpRowPreview.error || "正在生成牌位预览…"}</section>
+            )}
+          </aside>
+        ) : null}
       </div>
 
       {paymentConfigOpen ? (
@@ -2186,6 +2451,17 @@ export function FahuiPage() {
 
       {relationConfigOpen ? <RelationOptionModal onClose={() => setRelationConfigOpen(false)} /> : null}
       {openWindowConfigOpen ? <OpenWindowModal fahuiKey="ylp" onClose={() => setOpenWindowConfigOpen(false)} /> : null}
+
+      {printRecordsOpen ? (
+        <PrintRecordsModal
+          version={ylpVersion}
+          onClose={() => setPrintRecordsOpen(false)}
+          onOpenOrder={(orderId) => {
+            setPrintRecordsOpen(false);
+            openYlpDetail(orderId);
+          }}
+        />
+      ) : null}
 
       {paiweiJob ? (
         <div style={styles.jobOverlay}>
@@ -2216,8 +2492,209 @@ export function FahuiPage() {
           </div>
         </div>
       ) : null}
+
+      {renderYlpRowMenu()}
     </section>
   );
+
+  // 点行弹出的订单摘要：订单详情的只读节选，改动仍然走「进入订单详情」。
+  function renderYlpRowDetailPanel(panel: { orderId: number; order: YlpOrderDetail | null; error: string }) {
+    const order = panel.order;
+    const items = order?.order_items || [];
+
+    return (
+      <aside style={styles.intakeDockPanel(isMobile, navbarHeight)} className="ylp-intake-drawer">
+        <style>{INTAKE_DRAWER_CSS}</style>
+        <style>{YLP_DETAIL_TABLE_CSS}</style>
+        <style>{YLP_ROW_DETAIL_CSS}</style>
+
+        <header style={styles.intakeDrawerHeader}>
+          <div>
+            <p style={styles.intakeDrawerEyebrow}>{`订单 #${panel.orderId} · 摘要`}</p>
+            <p style={styles.intakeDrawerHint}>只读节选，要改动请进入订单详情</p>
+          </div>
+          <div style={styles.itemActionCell}>
+            <button type="button" style={styles.primaryAction} onClick={() => openYlpDetail(panel.orderId)}>
+              进入订单详情
+            </button>
+            <button type="button" style={styles.addItemCancel} onClick={() => setYlpRowDetail(null)}>
+              关闭
+            </button>
+          </div>
+        </header>
+
+        {panel.error ? <section style={styles.stateCard}>{panel.error}</section> : null}
+        {!panel.error && !order ? <section style={styles.stateCard}>加载中…</section> : null}
+
+        {order ? (
+          <>
+            <section style={styles.statusEditRow}>
+              <span style={ylpStatusChipStyle(order.order_status)}>{order.order_status || "Draft"}</span>
+              <span style={ylpStatusChipStyle(order.status)}>{`付款：${order.status || "none"}`}</span>
+              {!isCurrentYlpVersion(order.version) ? (
+                <span style={ylpStatusChipStyle("none")}>{`历史版本（${order.version}）只读`}</span>
+              ) : null}
+            </section>
+
+            <div style={styles.tableWrap}>
+              <table className="ylp-detail-table ylp-row-detail-table">
+                <tbody>
+                  <tr>
+                    <th style={{ width: 84 }}>功德主</th>
+                    <td>{order.customer_name || order.name || "-"}</td>
+                  </tr>
+                  <tr>
+                    <th>联系电话</th>
+                    <td>{order.phone || "-"}</td>
+                  </tr>
+                  <tr>
+                    <th>Email</th>
+                    <td>{order.email || "-"}</td>
+                  </tr>
+                  <tr>
+                    <th>总额</th>
+                    <td>{order.total_amount != null ? `RM ${order.total_amount}` : "-"}</td>
+                  </tr>
+                  <tr>
+                    <th>版本</th>
+                    <td>{order.version || "-"}</td>
+                  </tr>
+                  <tr>
+                    <th>维护人</th>
+                    <td>{order.maintainer_name || "-"}</td>
+                  </tr>
+                  <tr>
+                    <th>创建时间</th>
+                    <td>{order.created_at || "-"}</td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+
+            <section style={styles.detailSection}>
+              <header style={styles.detailSectionHeader}>
+                <h4 style={styles.detailSectionTitle}>{`牌位项目（${items.length}）`}</h4>
+              </header>
+              {items.length ? (
+                <div style={styles.rowDetailItemList}>
+                  {items.map((item) => (
+                    <article key={item.id} style={styles.rowDetailItemCard}>
+                      <div style={styles.rowDetailItemHead}>
+                        <span style={styles.cellStrong}>{item.item_name || item.code || "项目"}</span>
+                        <span style={styles.cellMono}>{`RM ${item.price ?? 0}`}</span>
+                      </div>
+                      <YlpItemFields item={item} />
+                      <p style={styles.rowDetailItemLocation}>{`位置：${ylpItemLocationText(item) || "-"}`}</p>
+                    </article>
+                  ))}
+                </div>
+              ) : (
+                <p style={styles.emptyText}>暂无项目内容</p>
+              )}
+            </section>
+          </>
+        ) : null}
+      </aside>
+    );
+  }
+
+  function renderYlpRowMenu() {
+    if (!ylpRowMenu) {
+      return null;
+    }
+    const order = sortedYlpOrders.find((item) => item.id === ylpRowMenu.orderId);
+    if (!order) {
+      return null;
+    }
+    // 确认只对今年版本、还是 Draft 的订单开放，跟订单详情页的按钮规则保持一致。
+    const versionEditable = isCurrentYlpVersion(order.version || ylpVersion);
+    const canConfirm = versionEditable && (order.order_status || "Draft") === "Draft";
+    const canRemove = isCurrentYlpVersion(ylpVersion) || ylpVersion === "DELETE";
+    // 跟批量栏那颗「批量复制到今年」同一个出现条件：只在看历史版本时才有意义。
+    const canCopyToCurrent = !isCurrentYlpVersion(ylpVersion);
+    const closeMenu = () => setYlpRowMenu(null);
+
+    return (
+      <div
+        role="menu"
+        style={styles.rowMenu(ylpRowMenu.x, ylpRowMenu.y)}
+        onClick={(event) => event.stopPropagation()}
+      >
+        <button
+          type="button"
+          role="menuitem"
+          disabled={!canConfirm || ylpRowBusy}
+          title={
+            versionEditable
+              ? canConfirm
+                ? ""
+                : `订单已是 ${order.order_status} 状态，无需确认`
+              : "历史版本只读，不能改状态"
+          }
+          style={{ ...styles.rowMenuItem, ...(!canConfirm || ylpRowBusy ? styles.rowMenuItemDisabled : null) }}
+          onClick={() => {
+            closeMenu();
+            void handleRowConfirmOrder(order.id);
+          }}
+        >
+          确认
+        </button>
+        {canCopyToCurrent ? (
+          <button
+            type="button"
+            role="menuitem"
+            disabled={ylpRowBusy}
+            style={{ ...styles.rowMenuItem, ...(ylpRowBusy ? styles.rowMenuItemDisabled : null) }}
+            onClick={() => {
+              closeMenu();
+              void handleRowCopyToCurrent(order.id);
+            }}
+          >
+            复制到今年
+          </button>
+        ) : null}
+        <button
+          type="button"
+          role="menuitem"
+          disabled={!canRemove || ylpRowBusy}
+          title={canRemove ? "" : "历史版本只读，不能移除"}
+          style={{
+            ...styles.rowMenuItem,
+            ...styles.rowMenuItemDanger,
+            ...(!canRemove || ylpRowBusy ? styles.rowMenuItemDisabled : null),
+          }}
+          onClick={() => {
+            closeMenu();
+            void handleRowRemoveOrder(order.id);
+          }}
+        >
+          {ylpVersion === "DELETE" ? "彻底删除" : "移除"}
+        </button>
+        <button
+          type="button"
+          role="menuitem"
+          style={styles.rowMenuItem}
+          onClick={() => {
+            closeMenu();
+            openYlpDetail(order.id);
+          }}
+        >
+          编辑
+        </button>
+        <button
+          type="button"
+          role="menuitem"
+          style={styles.rowMenuItem}
+          onClick={() => {
+            closeMenu();
+            void handleRowPreviewPaiwei(order.id);
+          }}
+        >
+          预览
+        </button>
+      </div>
+    );
+  }
 }
 
 function DetailField({
@@ -2240,8 +2717,18 @@ const INTAKE_DRAWER_CSS = `
 .ylp-intake-drawer { animation: ylpIntakeSlideIn 0.28s cubic-bezier(0.22, 1, 0.36, 1); }
 `;
 
+// 行操作菜单是 fixed 定位的，翻转/夹边需要提前知道尺寸。
+const ROW_MENU_WIDTH = 148;
+const ROW_MENU_ITEM_HEIGHT = 38;
+const ROW_MENU_PADDING = 12;
+
+function rowMenuHeight(withCopyToCurrent: boolean): number {
+  // 确认 / 移除 / 编辑 / 预览，历史版本再加一颗「复制到今年」。
+  return (withCopyToCurrent ? 5 : 4) * ROW_MENU_ITEM_HEIGHT + ROW_MENU_PADDING;
+}
+
 const YLP_ORDER_TABLE_CSS = `
-.ylp-order-table { width: 100%; border-collapse: collapse; font-size: 13px; min-width: 720px; }
+.ylp-order-table { width: 100%; border-collapse: collapse; font-size: 13px; min-width: 772px; }
 .ylp-order-table thead th {
   position: sticky; top: 0; z-index: 1;
   text-align: left; padding: 9px 12px;
@@ -2252,11 +2739,25 @@ const YLP_ORDER_TABLE_CSS = `
 .ylp-order-table tbody td { padding: 10px 12px; border-bottom: 1px solid var(--x-color-line-soft); vertical-align: middle; color: var(--x-color-ink); }
 .ylp-order-table tbody tr.ylp-order-row { cursor: pointer; }
 .ylp-order-table tbody tr.ylp-order-row:hover td { background: var(--x-color-accent-tint); }
+.ylp-order-table tbody tr.ylp-order-row-active td { background: var(--x-color-accent-tint); }
 .ylp-order-table thead th.ylp-sortable { cursor: pointer; user-select: none; }
 .ylp-order-table thead th.ylp-sortable:hover { color: var(--x-color-accent-strong); background: var(--x-color-accent-tint); }
 .ylp-order-table thead th .ylp-sort-arrow { color: var(--x-color-accent-strong); }
 .ylp-order-table .ylp-check-col { width: 40px; text-align: center; cursor: default; }
 .ylp-order-table .ylp-check-col input { cursor: pointer; width: 16px; height: 16px; }
+.ylp-order-table .ylp-action-col { width: 52px; text-align: center; cursor: default; }
+.ylp-order-table .ylp-row-menu-btn {
+  width: 28px; height: 28px; padding: 0; line-height: 1;
+  display: inline-flex; align-items: center; justify-content: center;
+  border-radius: 8px; border: 1px solid var(--x-color-line-soft);
+  background: var(--x-color-panel); color: var(--x-color-ink-muted);
+  font-size: 16px; font-weight: 900; cursor: pointer;
+}
+.ylp-order-table .ylp-row-menu-btn:hover {
+  background: var(--x-color-accent-tint);
+  color: var(--x-color-accent-strong);
+  border-color: var(--x-color-accent-strong);
+}
 `;
 
 const YLP_DETAIL_TABLE_CSS = `
@@ -2268,6 +2769,12 @@ const YLP_DETAIL_TABLE_CSS = `
 }
 .ylp-detail-table thead th { font-size: 11px; letter-spacing: 0.06em; text-transform: uppercase; }
 .ylp-detail-table tbody td { padding: 8px 10px; border-bottom: 1px solid var(--x-color-line-soft); vertical-align: middle; color: var(--x-color-ink); }
+`;
+
+// 抽屉只有 400px 宽，资料表不需要撑到共用样式那个 480px 下限。
+const YLP_ROW_DETAIL_CSS = `
+.ylp-detail-table.ylp-row-detail-table { min-width: 0; }
+.ylp-detail-table.ylp-row-detail-table td { word-break: break-word; }
 `;
 
 const PAIWEI_FIELD_LABELS: Record<string, string> = {
@@ -3057,13 +3564,13 @@ const styles = {
     minWidth: 0,
     width: "100%",
   },
-  intakeDockPanel: (isMobile: boolean) => ({
+  intakeDockPanel: (isMobile: boolean, navbarHeight: number) => ({
     width: isMobile ? "100%" : "min(400px, 42vw)",
     flexShrink: 0,
     position: (isMobile ? "static" : "sticky") as "static" | "sticky",
-    top: "12px",
+    top: `${navbarHeight + 12}px`,
     alignSelf: "flex-start" as const,
-    maxHeight: isMobile ? "none" : "calc(100vh - 24px)",
+    maxHeight: isMobile ? "none" : `calc(100vh - ${navbarHeight + 24}px)`,
     overflowY: "auto" as const,
     display: "grid",
     gridTemplateRows: "auto auto",
@@ -3363,6 +3870,69 @@ const styles = {
     fontSize: "13px",
     cursor: "pointer",
   },
+  rowMenu: (x: number, y: number) => ({
+    position: "fixed" as const,
+    left: `${x}px`,
+    top: `${y}px`,
+    zIndex: 60,
+    display: "flex",
+    flexDirection: "column" as const,
+    width: `${ROW_MENU_WIDTH}px`,
+    padding: "6px",
+    borderRadius: "12px",
+    background: "var(--x-color-panel)",
+    border: "1px solid var(--x-color-line)",
+    boxShadow: "0 18px 44px rgba(15,23,42,0.25)",
+  }),
+  rowMenuItem: {
+    padding: "9px 12px",
+    borderRadius: "8px",
+    border: "none",
+    background: "transparent",
+    color: "var(--x-color-ink)",
+    fontWeight: 600,
+    fontSize: "13px",
+    textAlign: "left" as const,
+    cursor: "pointer",
+  },
+  rowMenuItemDanger: {
+    color: "var(--x-color-danger)",
+  },
+  rowMenuItemDisabled: {
+    opacity: 0.4,
+    cursor: "not-allowed",
+  },
+  rowDetailItemList: {
+    display: "grid",
+    gap: "8px",
+  },
+  rowDetailItemCard: {
+    display: "grid",
+    gap: "6px",
+    padding: "10px",
+    borderRadius: "10px",
+    border: "1px solid var(--x-color-line-soft)",
+    background: "var(--x-color-canvas-alt)",
+  },
+  rowDetailItemHead: {
+    display: "flex",
+    justifyContent: "space-between",
+    alignItems: "baseline",
+    gap: "8px",
+  },
+  rowDetailItemLocation: {
+    margin: 0,
+    fontSize: "12px",
+    color: "var(--x-color-ink-muted)",
+  },
+  // 抽屉容器的行高是 auto，height:100% 会塌成 0，所以按视窗高度减掉导航条和抽屉自身的边距给个实数。
+  previewFrame: (navbarHeight: number) => ({
+    width: "100%",
+    height: `calc(100vh - ${navbarHeight + 130}px)`,
+    border: "1px solid var(--x-color-line-soft)",
+    borderRadius: "10px",
+    background: "var(--x-color-panel-alt)",
+  }),
   printMenuWrap: { position: "relative" as const },
   printMenu: {
     position: "absolute" as const,

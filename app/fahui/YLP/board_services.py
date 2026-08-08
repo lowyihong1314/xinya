@@ -13,7 +13,7 @@ from .services import (
     serialize_print_pdf,
     user_can_view_order,
 )
-from .shared import active_order_version, normalize_version
+from .shared import active_order_version, format_datetime, normalize_version
 from models import db
 from models.fahui import (
     FahuiBoardData,
@@ -542,6 +542,92 @@ def clear_unattached_print_pdfs(version: str | None) -> tuple[dict, int]:
 def list_print_pdf_records() -> list[dict]:
     records = FahuiPrintPdf.query.order_by(FahuiPrintPdf.created_at.desc()).all()
     return [serialize_print_pdf(record) for record in records]
+
+
+def list_print_pdf_history(version: str | None, page: int = 1, per_page: int = 20) -> dict:
+    """某版本已注册二维码的牌位单：几时打印的、含哪几张订单、现在贴在哪块板。
+
+    数据源就是看板用的 print_pdf 表本身，不是另一份日志——所以看板那边
+    「一键清空未上板」或「重置年度单号」删掉的记录，这里同步就没了。
+    """
+    normalized_version = normalize_version(version) or active_order_version()
+    page = max(1, int(page or 1))
+    per_page = max(1, min(int(per_page or 20), 100))
+
+    base = (
+        db.session.query(FahuiPrintPdf.id)
+        .join(FahuiPdfPageData, FahuiPdfPageData.print_pdf_id == FahuiPrintPdf.id)
+        .join(FahuiOrderItem, FahuiOrderItem.id == FahuiPdfPageData.order_item_id)
+        .join(FahuiOrder, FahuiOrder.id == FahuiOrderItem.order_id)
+        .filter(FahuiOrder.version == normalized_version)
+        .distinct()
+    )
+    total = base.count()
+    ids = [
+        pdf_id
+        for (pdf_id,) in (
+            base.order_by(FahuiPrintPdf.created_at.desc(), FahuiPrintPdf.id.desc())
+            .offset((page - 1) * per_page)
+            .limit(per_page)
+        )
+    ]
+
+    items: list[dict] = []
+    if ids:
+        pdfs = (
+            FahuiPrintPdf.query.options(
+                selectinload(FahuiPrintPdf.pages)
+                .selectinload(FahuiPdfPageData.order_item)
+                .selectinload(FahuiOrderItem.order),
+                selectinload(FahuiPrintPdf.board_entries).selectinload(FahuiBoardData.board),
+            )
+            .filter(FahuiPrintPdf.id.in_(ids))
+            .all()
+        )
+        pdfs.sort(key=lambda pdf: ids.index(pdf.id))
+        for pdf in pdfs:
+            orders_info = []
+            seen_items: set[int] = set()
+            for pdf_page in pdf.pages or []:
+                item = pdf_page.order_item
+                if not item or not item.order or item.id in seen_items:
+                    continue
+                seen_items.add(item.id)
+                orders_info.append(
+                    {
+                        "order_id": item.order.id,
+                        "customer_name": item.order.customer_name,
+                        "owner_or_deceased": _board_owner_or_deceased(item),
+                    }
+                )
+            boards_info = [
+                {
+                    "board_id": entry.board.id,
+                    "board_name": entry.board.board_name,
+                    "location": entry.location,
+                }
+                for entry in (pdf.board_entries or [])
+                if entry.board
+            ]
+            items.append(
+                {
+                    "id": pdf.id,
+                    "created_at": format_datetime(pdf.created_at),
+                    "orders": orders_info,
+                    "boards": boards_info,
+                }
+            )
+
+    return {
+        "success": True,
+        "items": items,
+        "pagination": {
+            "page": page,
+            "per_page": per_page,
+            "total": total,
+            "pages": (total + per_page - 1) // per_page if total else 0,
+        },
+    }
 
 
 def list_versions() -> list[str]:

@@ -23,6 +23,16 @@ from .print_points import (
 from .shared import item_price_int
 
 
+# 单号标识：左上角二维码，右上角条码（条码自带下方号码）。
+# 左右边距和上边距分开：顶上留白多，可以再往上贴一些。
+CODE_MARGIN = 12
+CODE_TOP_MARGIN = 5
+QR_SIZE = 28
+BARCODE_HEIGHT = 12
+BARCODE_BAR_WIDTH = 0.9
+BARCODE_FONT_SIZE = 8
+
+
 def _serialize_print_item(item: FahuiOrderItem) -> dict:
     data = {
         "id": item.id,
@@ -63,11 +73,11 @@ def _ensure_font():
     except KeyError:
         pdfmetrics.registerFont(UnicodeCIDFont(font_name))
 
-    preferred_font_path = STATIC_ROOT / "font" / "仓耳曾国藩体.ttf"
+    preferred_font_path = STATIC_ROOT / "font" / "XinHuaKaiTi-1.ttf"
     if preferred_font_path.exists():
         try:
-            pdfmetrics.registerFont(TTFont("CangEr-ZengGuoFan", str(preferred_font_path)))
-            font_name = "CangEr-ZengGuoFan"
+            pdfmetrics.registerFont(TTFont("XinHuaKaiTi", str(preferred_font_path)))
+            font_name = "XinHuaKaiTi"
         except Exception:
             pass
     else:
@@ -113,22 +123,44 @@ def _get_or_create_print_pdf(order_item_ids, width, height):
     return new_pdf.id
 
 
-def _draw_qr(c, barcode_id, font_name):
-    try:
-        import qrcode
-        from reportlab.lib.utils import ImageReader
+def _draw_page_codes(c, barcode_id, page_width, page_height):
+    """单号标识：左上角二维码，右上角条码 + 条码下方的号码。
 
-        buf = io.BytesIO()
-        img = qrcode.make(str(barcode_id))
-        img.save(buf, format="PNG")
-        buf.seek(0)
-        qr_img = ImageReader(buf)
-        c.drawImage(qr_img, 5, 5, width=50, height=50)
-    except Exception:
-        pass
+    这里不吞异常：以前 except 掉之后牌位上会静悄悄地什么都没有，
+    缺 qrcode 依赖这种问题要一直到看实体打印件才会发现。
+    """
+    import qrcode
+    from reportlab.graphics.barcode import code128
+    from reportlab.lib.utils import ImageReader
 
-    c.setFont(font_name, 10)
-    c.drawString(22, 50, str(barcode_id))
+    value = str(barcode_id)
+
+    buf = io.BytesIO()
+    qrcode.make(value).save(buf, format="PNG")
+    buf.seek(0)
+    # drawImage 的 y 是图片底边，贴顶要减掉边长。
+    c.drawImage(
+        ImageReader(buf),
+        CODE_MARGIN,
+        page_height - CODE_TOP_MARGIN - QR_SIZE,
+        width=QR_SIZE,
+        height=QR_SIZE,
+    )
+
+    # humanReadable 让 reportlab 自己在条码下方排号码，省得手动对齐。
+    barcode = code128.Code128(
+        value,
+        barHeight=BARCODE_HEIGHT,
+        barWidth=BARCODE_BAR_WIDTH,
+        humanReadable=True,
+        fontSize=BARCODE_FONT_SIZE,
+    )
+    # drawOn 的 y 是条杠底边，号码画在它下面；对齐顶边要再减掉条杠高度。
+    barcode.drawOn(
+        c,
+        page_width - CODE_MARGIN - barcode.width,
+        page_height - CODE_TOP_MARGIN - BARCODE_HEIGHT,
+    )
 
 
 def _merge_overlay_with_background(overlay_buffer: BytesIO, background_path) -> BytesIO:
@@ -176,7 +208,7 @@ def _generate_simple_paiwei_pdf(code, fahui_data, need_barcode=False):
             if need_barcode and page_order_item_ids:
                 barcode_id = _get_or_create_print_pdf(page_order_item_ids, width, height)
                 if barcode_id:
-                    _draw_qr(c, barcode_id, font_name)
+                    _draw_page_codes(c, barcode_id, width, height)
             c.showPage()
             c.setFont(font_name, 11)
             y = height - 50
@@ -200,7 +232,7 @@ def _generate_simple_paiwei_pdf(code, fahui_data, need_barcode=False):
     if need_barcode and page_order_item_ids:
         barcode_id = _get_or_create_print_pdf(page_order_item_ids, width, height)
         if barcode_id:
-            _draw_qr(c, barcode_id, font_name)
+            _draw_page_codes(c, barcode_id, width, height)
 
     db.session.commit()
     c.save()
@@ -534,7 +566,7 @@ def generate_paiwei(paiwei_type, fahui_data, point_data, source_name, need_barco
         if drew_on_page and need_barcode:
             barcode_id = _get_or_create_print_pdf(page_order_item_ids, width, height)
             if barcode_id:
-                _draw_qr(c, barcode_id, font_name)
+                _draw_page_codes(c, barcode_id, width, height)
 
         if drew_on_page:
             c.showPage()

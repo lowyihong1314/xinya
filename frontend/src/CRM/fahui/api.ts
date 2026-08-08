@@ -7,6 +7,7 @@ import type {
   YlpOrderListResponse,
   YlpOrderSummary,
   YlpOrdersByPhoneResponse,
+  YlpPagination,
   YlpPaymentChannelListResponse,
   YlpPaymentChannelMutationResponse,
   YlpPaymentRecord,
@@ -234,6 +235,37 @@ export async function downloadYlpReceiptImage(orderId: number) {
   }
 
   return response.blob();
+}
+
+export type YlpPrintRecordOrder = {
+  order_id: number;
+  customer_name?: string | null;
+  owner_or_deceased?: string | null;
+};
+
+export type YlpPrintRecord = {
+  id: number;
+  created_at?: string | null;
+  orders?: YlpPrintRecordOrder[] | null;
+  boards?: { board_id: number; board_name?: string | null; location?: number | null }[] | null;
+};
+
+export async function listYlpPrintRecords(version: string, page = 1, perPage = 20) {
+  const search = new URLSearchParams();
+  search.set("version", version);
+  search.set("page", String(page));
+  search.set("per_page", String(perPage));
+
+  const response = await apiFetch(`/api/board_router/print-pdfs/history?${search.toString()}`, {
+    credentials: "include",
+  });
+
+  return parseJson<{
+    success?: boolean;
+    message?: string;
+    items?: YlpPrintRecord[];
+    pagination?: YlpPagination;
+  }>(response);
 }
 
 export async function createYlpShareLink(orderId: number) {

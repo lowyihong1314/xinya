@@ -42,6 +42,7 @@ from .board_services import (
     get_print_pdf_data,
     list_all_boards,
     list_orders_by_version,
+    list_print_pdf_history,
     list_print_pdf_records,
     list_unattached_print_pdfs,
     list_versions,
@@ -88,6 +89,18 @@ def list_unattached_print_pdfs_route():
             request.args.get("version", type=str),
             request.args.get("page", default=1, type=int),
             request.args.get("per_page", default=12, type=int),
+        )
+    )
+
+
+@board_router_bp.route("/print-pdfs/history", methods=["GET"])
+@permission_required_any(*FAHUI_READ_PERMISSION_NAMES)
+def list_print_pdf_history_route():
+    return jsonify(
+        list_print_pdf_history(
+            request.args.get("version", type=str),
+            request.args.get("page", default=1, type=int),
+            request.args.get("per_page", default=20, type=int),
         )
     )
 
