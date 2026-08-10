@@ -435,7 +435,9 @@ def create_order_shell(data: dict) -> tuple[dict, int]:
     if not name or not phone:
         return {"status": "error", "message": "name and phone are required"}, 400
 
-    version = normalize_version(data.get("version")) or active_order_version()
+    # 公开登记页（#/ylp-registration）唯一的建单入口：版本一律锁死今年，
+    # 不接受 payload 传进来的 version —— 不可能从这里新建往年的牌位订单。
+    version = active_order_version()
     # 记录创建人：登录用户直接挂 user_id；匿名提交沿用 payload 里的 member_name 文本（可选）。
     creator_user_id = None
     member_name = None

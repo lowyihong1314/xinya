@@ -32,6 +32,7 @@ import type {
 import { PaiweiEditorModal } from "./PaiweiEditorModal";
 import {
   DEFAULT_VERSION,
+  currentYlpVersion,
   buildItemPayload,
   createDraft,
   emptyOrderForm,
@@ -411,6 +412,15 @@ function FahuiIntakePageInner() {
       const contactName = getContactName(orderForm);
       const email = orderForm.email.trim() || undefined;
 
+      // 这个页面只写今年：往年订单一律走「复制到今年」，不允许直接更新旧版本的订单。
+      const version = currentYlpVersion();
+      const activeEntry = activeOrderId
+        ? historyEntries.find((entry) => entry.summary.id === activeOrderId)
+        : null;
+      if (activeEntry && String(activeEntry.summary.version || "") !== version) {
+        throw new Error(`只能登记 ${version.replace("_YLP", "")} 年的牌位，请从往年记录「复制到今年」再提交。`);
+      }
+
       let orderId = activeOrderId;
       let replaceExistingItems = Boolean(activeOrderId);
 
@@ -420,6 +430,7 @@ function FahuiIntakePageInner() {
           customer_name: customerName,
           phone: verifiedPhone,
           email,
+          version,
         });
         orderId = createPayload.order?.id || null;
         if (!orderId) {

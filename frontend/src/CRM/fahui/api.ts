@@ -140,6 +140,8 @@ export async function createYlpOrder(payload: {
   customer_name?: string;
   phone: string;
   email?: string;
+  /** 登记页固定传今年的 `YYYY_YLP`；后端同样锁死今年，这里只是显式表明意图。 */
+  version?: string;
 }) {
   const response = await apiFetch("/api/fahui_router/orders", {
     method: "POST",

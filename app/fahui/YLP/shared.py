@@ -3,12 +3,14 @@ from __future__ import annotations
 from datetime import datetime
 from decimal import Decimal, InvalidOperation
 
+from app.timezone import malaysia_now_naive
 from ..common.payment import normalize_fahui_payment_status
 from models.fahui import FahuiOrder, FahuiOrderItem, FahuiPayment
 
 
 def active_order_version(reference: datetime | None = None) -> str:
-    target = reference or datetime.utcnow()
+    # 用马来西亚时间取年份：utcnow 在元旦 00:00-08:00（MYT）还停留在去年，会把新单写去去年的版本。
+    target = reference or malaysia_now_naive()
     return f"{target.year}_YLP"
 
 

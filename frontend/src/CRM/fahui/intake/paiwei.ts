@@ -1,7 +1,12 @@
 import type { YlpOrderItem } from "../types";
 import { normalizePhoneMY } from "../../../js/phone";
 
-export const DEFAULT_VERSION = `${new Date().getFullYear()}_YLP`;
+/** 登记页只写今年的版本号；提交时用函数现算，避免页面开着跨年后仍沿用旧年份。 */
+export function currentYlpVersion() {
+  return `${new Date().getFullYear()}_YLP`;
+}
+
+export const DEFAULT_VERSION = currentYlpVersion();
 
 export type PaiweiCode = "A1" | "A2" | "A3" | "B1" | "B2" | "B3" | "C" | "D1";
 
