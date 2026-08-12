@@ -15,6 +15,13 @@ export type PublicEventFlow = {
   minutes?: number | string | null;
 };
 
+export type PublicEventUnit = {
+  id?: number;
+  role?: string | null;
+  unit_name?: string | null;
+  logo_url?: string | null;
+};
+
 export type PublicEvent = {
   event_name?: string | null;
   datetime?: string | null;
@@ -27,6 +34,7 @@ export type PublicEvent = {
   purpose?: string | null;
   brochure_path?: string | null;
   brochure_name?: string | null;
+  organizing_units?: PublicEventUnit[] | null;
   event_flows?: PublicEventFlow[] | null;
 };
 

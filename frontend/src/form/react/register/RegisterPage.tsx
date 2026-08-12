@@ -292,6 +292,25 @@ export function RegisterPage({ formId }: { formId: number }) {
   const hasFees = Boolean(form.fees && form.fees.length);
   const currentYearTitle = form.title || "活动报名";
 
+  // 进行单位：只有默认的「主办单位 · 地南佛学会」一条时不特别展示；
+  // 有协办/协调或其他主办时按角色分组显示在页头（带 logo）。
+  const latestEvent = form.events?.length ? form.events[form.events.length - 1] : null;
+  const organizingUnits = (latestEvent?.organizing_units || []).filter((u) => (u.unit_name || "").trim());
+  const showUnitsBanner =
+    organizingUnits.length > 0 &&
+    !(
+      organizingUnits.length === 1 &&
+      organizingUnits[0].role === "主办单位" &&
+      (organizingUnits[0].unit_name || "").trim() === "地南佛学会"
+    );
+  const unitRoleOrder = ["主办单位", "协办单位", "协调单位"];
+  const unitRoles = [
+    ...unitRoleOrder.filter((role) => organizingUnits.some((u) => u.role === role)),
+    ...Array.from(new Set(organizingUnits.map((u) => u.role || ""))).filter(
+      (role) => role && !unitRoleOrder.includes(role),
+    ),
+  ];
+
   return (
     <div style={styles.page}>
       <LogoQrBadge />
@@ -303,6 +322,25 @@ export function RegisterPage({ formId }: { formId: number }) {
         <header style={styles.head}>
           <p style={styles.eyebrow}>活动报名</p>
           <h1 style={styles.title}>{currentYearTitle}</h1>
+          {showUnitsBanner ? (
+            <div style={styles.unitsBanner}>
+              {unitRoles.map((role) => (
+                <div key={role} style={styles.unitsRow}>
+                  <span style={styles.unitsRole}>{role}</span>
+                  <span style={styles.unitsList}>
+                    {organizingUnits
+                      .filter((u) => u.role === role)
+                      .map((u, idx) => (
+                        <span key={u.id ?? `${role}-${idx}`} style={styles.unitChip}>
+                          {u.logo_url ? <img src={u.logo_url} alt="" style={styles.unitLogo} /> : null}
+                          {u.unit_name}
+                        </span>
+                      ))}
+                  </span>
+                </div>
+              ))}
+            </div>
+          ) : null}
         </header>
 
         {error ? <div style={styles.errorBox}>{error}</div> : null}
@@ -516,26 +554,29 @@ function PersonForm({
   return (
     <div style={styles.card}>
       <div style={styles.personHead}>
-        <span style={styles.cardTitle}>报名人 {index + 1}</span>
+        <span style={styles.cardTitle}>
+          报名人 {index + 1}
+          <span style={styles.fieldLabelEn}>Participant {index + 1}</span>
+        </span>
         {showRemove ? (
           <button type="button" style={styles.removePerson} onClick={onRemove}>
-            移除
+            移除 Remove
           </button>
         ) : null}
       </div>
 
-      <Field label="中文名 *">
+      <Field label="中文名 *" en="Chinese Name">
         <input style={styles.input} value={person.name_cn} onChange={(e) => onChange({ name_cn: e.target.value })} />
       </Field>
-      <Field label="IC 英文名 *">
+      <Field label="IC 英文名 *" en="Name as per IC">
         <input
           style={styles.input}
           value={person.name}
-          placeholder="如 IC 上的英文名"
+          placeholder="如 IC 上的英文名 / Name as per IC"
           onChange={(e) => onChange({ name: e.target.value.toUpperCase().replace(/[^A-Z ]/g, "") })}
         />
       </Field>
-      <Field label="IC 号码 *">
+      <Field label="IC 号码 *" en="IC / NRIC No.">
         <input
           style={styles.input}
           inputMode="numeric"
@@ -544,63 +585,65 @@ function PersonForm({
         />
       </Field>
       <div style={styles.ageRow}>
-        <span style={styles.ageLabel}>年龄</span>
+        <span style={styles.ageLabel}>
+          年龄<span style={styles.fieldLabelEn}>Age</span>
+        </span>
         <span style={styles.ageValue}>{age != null ? `${age} 岁` : "—"}</span>
-        {needConsent ? <span style={styles.parentalPill}>需家长同意书</span> : null}
+        {needConsent ? <span style={styles.parentalPill}>需家长同意书 Parental Consent</span> : null}
       </div>
-      <Field label="手机号码 *">
+      <Field label="手机号码 *" en="Phone No.">
         <input style={styles.input} inputMode="tel" value={person.phone} onChange={(e) => onChange({ phone: e.target.value })} />
       </Field>
-      <Field label="性别 *">
+      <Field label="性别 *" en="Gender">
         <select style={styles.input} value={person.gender} onChange={(e) => onChange({ gender: e.target.value })}>
-          <option value="">请选择</option>
-          <option value="男">男</option>
-          <option value="女">女</option>
+          <option value="">请选择 / Select</option>
+          <option value="男">男 Male</option>
+          <option value="女">女 Female</option>
         </select>
       </Field>
 
       {fieldOn(form, "email") ? (
-        <Field label="电子邮箱">
+        <Field label="电子邮箱" en="Email">
           <input style={styles.input} inputMode="email" value={person.email} onChange={(e) => onChange({ email: e.target.value })} />
         </Field>
       ) : null}
       {fieldOn(form, "parent_1") ? (
         <>
-          <Field label="紧急联络人1 称呼 *">
+          <Field label="紧急联络人1 称呼 *" en="Emergency Contact 1 Name">
             <input style={styles.input} value={person.parent_1} onChange={(e) => onChange({ parent_1: e.target.value })} />
           </Field>
-          <Field label="紧急联络人1 电话 *">
+          <Field label="紧急联络人1 电话 *" en="Emergency Contact 1 Phone">
             <input style={styles.input} inputMode="tel" value={person.parent_1_phone} onChange={(e) => onChange({ parent_1_phone: e.target.value })} />
           </Field>
         </>
       ) : null}
       {fieldOn(form, "parent_2") ? (
         <>
-          <Field label="紧急联络人2 称呼">
+          <Field label="紧急联络人2 称呼" en="Emergency Contact 2 Name">
             <input style={styles.input} value={person.parent_2} onChange={(e) => onChange({ parent_2: e.target.value })} />
           </Field>
-          <Field label="紧急联络人2 电话">
+          <Field label="紧急联络人2 电话" en="Emergency Contact 2 Phone">
             <input style={styles.input} inputMode="tel" value={person.parent_2_phone} onChange={(e) => onChange({ parent_2_phone: e.target.value })} />
           </Field>
         </>
       ) : null}
       {fieldOn(form, "address") ? (
-        <Field label="居住地址">
+        <Field label="居住地址" en="Address">
           <input style={styles.input} value={person.address} onChange={(e) => onChange({ address: e.target.value })} />
         </Field>
       ) : null}
       {fieldOn(form, "medical") ? (
-        <Field label="医疗备注">
+        <Field label="医疗备注" en="Medical Notes">
           <input style={styles.input} value={person.medical} onChange={(e) => onChange({ medical: e.target.value })} />
         </Field>
       ) : null}
       {fieldOn(form, "allergy") ? (
-        <Field label="过敏">
+        <Field label="过敏" en="Allergies">
           <input style={styles.input} value={person.allergy} onChange={(e) => onChange({ allergy: e.target.value })} />
         </Field>
       ) : null}
       {fieldOn(form, "other_remark") ? (
-        <Field label="其他备注">
+        <Field label="其他备注" en="Other Remarks">
           <input style={styles.input} value={person.other_remark} onChange={(e) => onChange({ other_remark: e.target.value })} />
         </Field>
       ) : null}
@@ -615,7 +658,7 @@ function PersonForm({
       ))}
 
       {slotPickerOn && flowSlots.length ? (
-        <Field label="参加时段">
+        <Field label="参加时段" en="Sessions">
           <div style={styles.slotList}>
             {flowSlots.map((slot) => {
               const checked = person.slots.some((ps) => ps.datetime === slot.startISO);
@@ -685,10 +728,13 @@ function ExtraField({
   );
 }
 
-function Field({ label, children }: { label: string; children: React.ReactNode }) {
+function Field({ label, en, children }: { label: string; en?: string; children: React.ReactNode }) {
   return (
     <div style={styles.field}>
-      <label style={styles.fieldLabel}>{label}</label>
+      <label style={styles.fieldLabel}>
+        {label}
+        {en ? <span style={styles.fieldLabelEn}>{en}</span> : null}
+      </label>
       {children}
     </div>
   );
@@ -703,12 +749,42 @@ const styles: Record<string, CSSProperties> = {
   head: { textAlign: "center", color: "#fff" },
   eyebrow: { margin: 0, fontSize: "12px", letterSpacing: "2px", fontWeight: 700, opacity: 0.9 },
   title: { margin: "6px 0 0", fontSize: "22px", fontWeight: 800 },
+  unitsBanner: {
+    margin: "12px auto 0",
+    maxWidth: "560px",
+    display: "flex",
+    flexDirection: "column",
+    gap: "8px",
+    padding: "10px 14px",
+    borderRadius: "14px",
+    background: "rgba(255, 255, 255, 0.12)",
+    border: "1px solid rgba(255, 255, 255, 0.22)",
+    backdropFilter: "blur(8px)",
+  },
+  unitsRow: { display: "flex", alignItems: "center", justifyContent: "center", gap: "8px", flexWrap: "wrap" },
+  unitsRole: { fontSize: "11.5px", fontWeight: 800, letterSpacing: "1px", opacity: 0.85, whiteSpace: "nowrap" },
+  unitsList: { display: "flex", alignItems: "center", gap: "8px", flexWrap: "wrap", justifyContent: "center" },
+  unitChip: {
+    display: "inline-flex",
+    alignItems: "center",
+    gap: "6px",
+    padding: "4px 10px 4px 4px",
+    borderRadius: "999px",
+    background: "rgba(255, 255, 255, 0.92)",
+    color: "#134e4a",
+    fontSize: "12.5px",
+    fontWeight: 700,
+    whiteSpace: "nowrap",
+  },
+  unitLogo: { width: 24, height: 24, borderRadius: "50%", objectFit: "contain", background: "#fff" },
   card: { background: "var(--x-color-panel-strongest)", borderRadius: "var(--x-radius-lg)", boxShadow: "0 20px 50px var(--x-color-shadow)", padding: "18px 18px 20px", display: "flex", flexDirection: "column", gap: "12px" },
   stack: { display: "flex", flexDirection: "column", gap: "14px" },
   cardTitle: { margin: 0, fontSize: "16px", fontWeight: 800, color: "var(--x-color-ink)" },
   note: { margin: 0, fontSize: "12.5px", lineHeight: 1.5, color: "var(--x-color-ink-muted)" },
   field: { display: "flex", flexDirection: "column", gap: "5px" },
   fieldLabel: { fontSize: "13px", fontWeight: 600, color: "var(--x-color-ink)" },
+  // 中文标签旁的小号英文（不懂中文的报名者也能看懂）
+  fieldLabelEn: { marginLeft: "6px", fontSize: "11px", fontWeight: 500, color: "var(--x-color-ink-muted)", letterSpacing: "0.2px" },
   input: { width: "100%", boxSizing: "border-box", padding: "11px 12px", fontSize: "15px", borderRadius: "var(--x-radius-sm)", border: "1px solid var(--x-color-line)", background: "var(--x-color-panel)", color: "var(--x-color-ink)", outline: "none" },
   textarea: { width: "100%", boxSizing: "border-box", minHeight: "70px", resize: "vertical", padding: "11px 12px", fontSize: "14px", borderRadius: "var(--x-radius-sm)", border: "1px solid var(--x-color-line)", background: "var(--x-color-panel)", color: "var(--x-color-ink)" },
   ageRow: { display: "flex", alignItems: "center", gap: "10px", padding: "8px 12px", borderRadius: "var(--x-radius-sm)", background: "var(--x-color-panel-alt)" },
