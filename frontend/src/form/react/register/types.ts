@@ -26,6 +26,7 @@ export type PublicEvent = {
   event_name?: string | null;
   datetime?: string | null;
   end_datetime?: string | null;
+  location_name?: string | null;
   location?: string | null;
   place_id?: string | null;
   lat?: number | null;

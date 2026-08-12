@@ -691,6 +691,8 @@ def save_event(data):
                 event_code=f"{prefix}{new_num:03d}",
                 user_id=current_user.id,
                 album=False,
+                # 地点名称默认自家场地，需要时在基本设置改
+                location_name=(data.get("location_name") or "").strip() or "地南佛学会",
             )
             db.session.add(event)
             db.session.flush()
@@ -739,6 +741,7 @@ def save_event(data):
 
         for field in [
             "event_name",
+            "location_name",
             "location",
             "place_id",
             "lat",

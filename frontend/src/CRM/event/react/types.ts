@@ -36,6 +36,7 @@ export type EventRecord = {
   event_name?: string;
   datetime?: string;
   end_datetime?: string;
+  location_name?: string;
   location?: string;
   place_id?: string | null;
   lat?: number | null;

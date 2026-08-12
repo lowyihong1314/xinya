@@ -485,6 +485,12 @@ function EventDetail({ form, closed, onNext }: { form: PublicForm; closed: boole
           </dl>
           {event.place_id || event.location ? (
             <div style={{ marginTop: 10 }}>
+              {event.location_name ? (
+                <div style={styles.venueName}>
+                  <i className="fa-solid fa-location-dot" aria-hidden="true" style={{ color: "var(--x-color-accent, #0f766e)" }} />
+                  {event.location_name}
+                </div>
+              ) : null}
               <GoogleMapEmbed placeId={event.place_id} lat={event.lat} lng={event.lng} query={event.location} height={200} />
             </div>
           ) : null}
@@ -777,6 +783,7 @@ const styles: Record<string, CSSProperties> = {
     whiteSpace: "nowrap",
   },
   unitLogo: { width: 24, height: 24, borderRadius: "50%", objectFit: "contain", background: "#fff" },
+  venueName: { display: "flex", alignItems: "center", gap: "6px", margin: "0 0 6px", fontSize: "13.5px", fontWeight: 800, color: "var(--x-color-ink)" },
   card: { background: "var(--x-color-panel-strongest)", borderRadius: "var(--x-radius-lg)", boxShadow: "0 20px 50px var(--x-color-shadow)", padding: "18px 18px 20px", display: "flex", flexDirection: "column", gap: "12px" },
   stack: { display: "flex", flexDirection: "column", gap: "14px" },
   cardTitle: { margin: 0, fontSize: "16px", fontWeight: 800, color: "var(--x-color-ink)" },

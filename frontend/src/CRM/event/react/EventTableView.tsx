@@ -389,6 +389,7 @@ export function EventTableView(props: {
                     <EditableFact label="类型" value={event.type || ""} editable={canEditEvent} onSave={(v) => props.onUpdateEvent({ type: v })} />
                     <EditableFact label="开始时间" value={toDatetimeLocal(event.datetime)} kind="datetime" editable={canEditEvent} onSave={(v) => props.onUpdateEvent({ datetime: v || null })} />
                     <EditableFact label="结束时间" value={toDatetimeLocal(event.end_datetime)} kind="datetime" editable={canEditEvent} onSave={(v) => props.onUpdateEvent({ end_datetime: v || null })} />
+                    <EditableFact label="地点名称" value={event.location_name || ""} editable={canEditEvent} onSave={(v) => props.onUpdateEvent({ location_name: v })} />
                     <LocationFact event={event} editable={canEditEvent} onUpdate={props.onUpdateEvent} />
                     <EditableFact label="对象" value={event.target || ""} editable={canEditEvent} onSave={(v) => props.onUpdateEvent({ target: v })} />
                     <EditableFact label="活动说明" value={event.purpose || ""} kind="textarea" editable={canEditEvent} onSave={(v) => props.onUpdateEvent({ purpose: v })} />

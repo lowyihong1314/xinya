@@ -24,6 +24,8 @@ class EventData(db.Model):
     end_datetime = db.Column(db.DateTime, nullable=True)
 
     event_name = db.Column(db.String(255), nullable=True)
+    # 地点名称（场地叫什么，如「地南佛学会」）；location 是详细地址。
+    location_name = db.Column(db.String(255), nullable=True)
     location = db.Column(db.Text, nullable=True)
     # Google 地点：强制通过 Google 选择，存 place_id + 经纬度用于地图显示。
     place_id = db.Column(db.String(255), nullable=True)
@@ -121,6 +123,7 @@ class EventData(db.Model):
                 for u in self.organizers
             ],
             "event_name": self.event_name,
+            "location_name": self.location_name,
             "location": self.location,
             "place_id": self.place_id,
             "lat": self.lat,
