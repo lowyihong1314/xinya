@@ -20,6 +20,7 @@ from models.event_data import (
     EventData,
     EventFile,
     EventFlowData,
+    EventOrganizingUnit,
     EventTaskData,
 )
 from models.finance import ManualIncome, ReimbursementRequest
@@ -592,6 +593,74 @@ def set_event_poster(event_id, file_id):
         return jsonify({"status": "error", "message": str(exc)}), 500
 
 
+# ---- 进行单位（主办/协办/协调，一个活动多个，各带名称与 logo） ----
+
+EVENT_UNIT_ROLES = ("主办单位", "协办单位", "协调单位")
+EVENT_UNIT_LOGO_DIR = DATA_ROOT / "NAS" / "UTBA" / "event_unit_logo"
+_UNIT_LOGO_EXTENSIONS = {".png", ".jpg", ".jpeg", ".webp", ".gif", ".svg"}
+
+
+def _save_unit_logo(uploaded_file) -> str:
+    extension = os.path.splitext(os.path.basename(uploaded_file.filename or ""))[1].lower()
+    if extension not in _UNIT_LOGO_EXTENSIONS:
+        raise ValueError("logo 只支持图片文件（png / jpg / webp / gif / svg）")
+    EVENT_UNIT_LOGO_DIR.mkdir(parents=True, exist_ok=True)
+    target_path = EVENT_UNIT_LOGO_DIR / f"{secrets.token_hex(8)}{extension}"
+    uploaded_file.save(target_path)
+    return to_short_data_path(str(target_path))
+
+
+def save_event_unit(form, files):
+    event_id = form.get("event_id", type=int) if hasattr(form, "get") else None
+    unit_id = form.get("unit_id", type=int)
+    role = (form.get("role") or "").strip()
+    unit_name = (form.get("unit_name") or "").strip()
+    logo_file = files.get("logo")
+
+    if role not in EVENT_UNIT_ROLES:
+        return jsonify({"status": "error", "message": f"role 必须是 {' / '.join(EVENT_UNIT_ROLES)}"}), 400
+    if not unit_name:
+        return jsonify({"status": "error", "message": "单位名称必填"}), 400
+
+    if unit_id:
+        unit = EventOrganizingUnit.query.get(unit_id)
+        if not unit:
+            return jsonify({"status": "error", "message": "单位不存在"}), 404
+    else:
+        event = EventData.query.get(event_id) if event_id else None
+        if not event:
+            return jsonify({"status": "error", "message": "Event 不存在"}), 404
+        max_sort = (
+            db.session.query(db.func.max(EventOrganizingUnit.sort_order))
+            .filter_by(event_id=event.id)
+            .scalar()
+            or 0
+        )
+        unit = EventOrganizingUnit(event_id=event.id, sort_order=max_sort + 1)
+        db.session.add(unit)
+
+    unit.role = role
+    unit.unit_name = unit_name
+    if logo_file and getattr(logo_file, "filename", ""):
+        try:
+            unit.logo_path = _save_unit_logo(logo_file)
+        except ValueError as exc:
+            db.session.rollback()
+            return jsonify({"status": "error", "message": str(exc)}), 400
+
+    db.session.commit()
+    return jsonify({"status": "success", "message": "进行单位已保存", "data": unit.to_dict()})
+
+
+def delete_event_unit(unit_id):
+    unit = EventOrganizingUnit.query.get(unit_id)
+    if not unit:
+        return jsonify({"status": "error", "message": "单位不存在"}), 404
+    db.session.delete(unit)
+    db.session.commit()
+    return jsonify({"status": "success", "message": "已删除"})
+
+
 def save_event(data):
     try:
         event_id = data.get("event_id")
@@ -624,6 +693,16 @@ def save_event(data):
                 album=False,
             )
             db.session.add(event)
+            db.session.flush()
+            # 默认进行单位：主办 = 地南佛学会（logo 硬编码站点素材，见模型 logo_url）。
+            db.session.add(
+                EventOrganizingUnit(
+                    event_id=event.id,
+                    role="主办单位",
+                    unit_name=EventOrganizingUnit.OWN_UNIT_NAME,
+                    sort_order=1,
+                )
+            )
 
         for legacy_field in ["date", "time", "end_date", "end_time", "start_datetime"]:
             if legacy_field in data and str(data.get(legacy_field)).strip():

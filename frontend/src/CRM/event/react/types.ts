@@ -20,6 +20,17 @@ export type EventAttachmentRecord = {
   user_name?: string;
 };
 
+export type EventUnitRole = "主办单位" | "协办单位" | "协调单位";
+
+export type EventOrganizingUnit = {
+  id: number;
+  event_id: number;
+  role: EventUnitRole;
+  unit_name: string;
+  logo_url?: string | null;
+  sort_order?: number;
+};
+
 export type EventRecord = {
   id: number;
   event_name?: string;
@@ -41,6 +52,7 @@ export type EventRecord = {
   display_name?: string;
   organizers?: Organizer[];
   organizers_ids?: number[];
+  organizing_units?: EventOrganizingUnit[];
   event_image?: EventImageRef | null;
 };
 

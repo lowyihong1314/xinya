@@ -21,7 +21,8 @@ import { EventBudgetTab } from "./EventBudgetTab";
 import { EventCheckinTab } from "./EventCheckinTab";
 import { EventFlowTab } from "./EventFlowTab";
 import { EventTaskTab } from "./EventTaskTab";
-import type { EventCreatePayload, EventMutationPayload, EventRecord } from "./types";
+import { deleteEventUnit, saveEventUnit } from "./api";
+import type { EventCreatePayload, EventMutationPayload, EventOrganizingUnit, EventRecord } from "./types";
 import type { FormRecord } from "../../form/react/types";
 
 type Toast = { type: "success" | "error"; text: string } | null;
@@ -392,6 +393,11 @@ export function EventTableView(props: {
                     <EditableFact label="对象" value={event.target || ""} editable={canEditEvent} onSave={(v) => props.onUpdateEvent({ target: v })} />
                     <EditableFact label="活动说明" value={event.purpose || ""} kind="textarea" editable={canEditEvent} onSave={(v) => props.onUpdateEvent({ purpose: v })} />
                   </div>
+                  <OrganizingUnitsSection
+                    event={event}
+                    canEdit={canEditEvent}
+                    onChanged={props.onRefresh}
+                  />
                   <a href={`#/event/${event.id}`} style={viewEventLinkStyle}>
                     <i className="fa-solid fa-arrow-up-right-from-square" aria-hidden="true" />
                     查看活动页
@@ -779,6 +785,193 @@ function LinkedFormHeadChip({ event, form, onOpen }: { event: EventRecord | null
   );
 }
 
+// ---- 进行单位（主办/协办/协调，一个活动多个，各带名称与 logo） ----
+
+const UNIT_ROLES = ["主办单位", "协办单位", "协调单位"] as const;
+const OWN_UNIT_NAME = "地南佛学会";
+const OWN_LOGO_URL = "/static/images/logo/logo.png";
+
+function OrganizingUnitsSection({
+  event,
+  canEdit,
+  onChanged,
+}: {
+  event: EventRecord;
+  canEdit: boolean;
+  onChanged: () => void;
+}) {
+  const units = event.organizing_units || [];
+  // 允许同时挂多行「未保存草稿」，加号常驻，逐行保存。
+  const [draftKeys, setDraftKeys] = useState<number[]>([]);
+  const nextDraftKey = useRef(1);
+
+  function addDraft() {
+    setDraftKeys((keys) => [...keys, nextDraftKey.current++]);
+  }
+
+  function removeDraft(key: number) {
+    setDraftKeys((keys) => keys.filter((k) => k !== key));
+  }
+
+  return (
+    <div style={unitsSectionStyle}>
+      <div style={unitsHeadStyle}>
+        <span style={factLabelStyle}>进行单位（主办 / 协办 / 协调，可多个）</span>
+        {canEdit ? (
+          <button type="button" style={unitAddButtonStyle} onClick={addDraft}>
+            + 添加单位
+          </button>
+        ) : null}
+      </div>
+      <div style={unitsListStyle}>
+        {units.map((unit) => (
+          <UnitRow key={unit.id} unit={unit} canEdit={canEdit} onChanged={onChanged} />
+        ))}
+        {draftKeys.map((key) => (
+          <UnitRow
+            key={`draft-${key}`}
+            unit={null}
+            eventId={event.id}
+            canEdit
+            onChanged={() => {
+              removeDraft(key);
+              onChanged();
+            }}
+            onCancel={() => removeDraft(key)}
+          />
+        ))}
+        {!units.length && !draftKeys.length ? (
+          <span style={unitEmptyStyle}>暂无进行单位{canEdit ? "，点右上「+ 添加单位」开始" : ""}</span>
+        ) : null}
+      </div>
+    </div>
+  );
+}
+
+function UnitRow({
+  unit,
+  eventId,
+  canEdit,
+  onChanged,
+  onCancel,
+}: {
+  unit: EventOrganizingUnit | null;
+  eventId?: number;
+  canEdit: boolean;
+  onChanged: () => void;
+  onCancel?: () => void;
+}) {
+  const [role, setRole] = useState<string>(unit?.role || "协办单位");
+  const [name, setName] = useState(unit?.unit_name || "");
+  const [logo, setLogo] = useState<File | null>(null);
+  const [saving, setSaving] = useState(false);
+  const logoInputRef = useRef<HTMLInputElement | null>(null);
+
+  const isOwn = name.trim() === OWN_UNIT_NAME;
+  const logoUrl = isOwn ? OWN_LOGO_URL : unit?.logo_url || null;
+  const dirty = !unit || role !== unit.role || name.trim() !== unit.unit_name || logo != null;
+
+  async function handleSave() {
+    if (!name.trim()) {
+      show_alert("error", "单位名称必填");
+      return;
+    }
+    setSaving(true);
+    try {
+      const res = await saveEventUnit({
+        eventId: unit ? undefined : eventId,
+        unitId: unit?.id,
+        role,
+        unitName: name.trim(),
+        logo,
+      });
+      if (res.status !== "success") {
+        throw new Error(res.message || "保存失败");
+      }
+      show_alert("success", "进行单位已保存");
+      setLogo(null);
+      onChanged();
+    } catch (e) {
+      show_alert("error", e instanceof Error ? e.message : "保存失败");
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  async function handleDelete() {
+    if (!unit) return;
+    setSaving(true);
+    try {
+      await deleteEventUnit(unit.id);
+      onChanged();
+    } catch (e) {
+      show_alert("error", e instanceof Error ? e.message : "删除失败");
+      setSaving(false);
+    }
+  }
+
+  return (
+    <div style={unitRowStyle}>
+      {logo ? (
+        <img src={URL.createObjectURL(logo)} alt="logo" style={unitLogoStyle} />
+      ) : logoUrl ? (
+        <img src={logoUrl} alt="logo" style={unitLogoStyle} />
+      ) : (
+        <span style={unitLogoPlaceholderStyle}>
+          <i className="fa-regular fa-image" aria-hidden="true" />
+        </span>
+      )}
+
+      <select style={unitSelectStyle} value={role} disabled={!canEdit || saving} onChange={(e) => setRole(e.target.value)}>
+        {UNIT_ROLES.map((option) => (
+          <option key={option} value={option}>{option}</option>
+        ))}
+      </select>
+
+      <input
+        style={{ ...factInputStyle, flex: 1, minWidth: 0 }}
+        value={name}
+        placeholder="单位名称"
+        disabled={!canEdit || saving}
+        onChange={(e) => setName(e.target.value)}
+      />
+
+      {canEdit ? (
+        <>
+          {!isOwn ? (
+            <>
+              <input
+                ref={logoInputRef}
+                type="file"
+                accept="image/*"
+                style={{ display: "none" }}
+                onChange={(e) => setLogo(e.target.files?.[0] || null)}
+              />
+              <button type="button" style={unitGhostButtonStyle} disabled={saving} onClick={() => logoInputRef.current?.click()}>
+                {logo ? "已选 logo" : unit?.logo_url ? "换 logo" : "上传 logo"}
+              </button>
+            </>
+          ) : null}
+          {dirty ? (
+            <button type="button" style={unitPrimaryButtonStyle} disabled={saving} onClick={() => void handleSave()}>
+              {saving ? "…" : "保存"}
+            </button>
+          ) : null}
+          {unit ? (
+            <button type="button" style={unitDangerButtonStyle} disabled={saving} onClick={() => void handleDelete()}>
+              移除
+            </button>
+          ) : (
+            <button type="button" style={unitGhostButtonStyle} disabled={saving} onClick={onCancel}>
+              取消
+            </button>
+          )}
+        </>
+      ) : null}
+    </div>
+  );
+}
+
 function LocationFact({
   event,
   editable,
@@ -1009,6 +1202,18 @@ function detailGridStyle(isMobile: boolean): CSSProperties {
 const factStyle: CSSProperties = { padding: "10px 12px", borderRadius: "8px", background: "var(--x-color-panel-alt)", border: "1px solid var(--x-color-line-soft)", display: "grid", gap: "3px" };
 const factHeadStyle: CSSProperties = { display: "flex", alignItems: "center", justifyContent: "space-between", gap: "8px" };
 const factLabelStyle: CSSProperties = { fontSize: "10.5px", letterSpacing: "0.06em", textTransform: "uppercase", color: "var(--x-color-ink-muted)" };
+const unitsSectionStyle: CSSProperties = { marginTop: "14px", display: "flex", flexDirection: "column", gap: "8px", padding: "12px", borderRadius: "10px", border: "1px solid var(--x-color-line-soft)", background: "var(--x-color-panel-alt)" };
+const unitsHeadStyle: CSSProperties = { display: "flex", alignItems: "center", justifyContent: "space-between", gap: "8px" };
+const unitsListStyle: CSSProperties = { display: "flex", flexDirection: "column", gap: "6px" };
+const unitRowStyle: CSSProperties = { display: "flex", alignItems: "center", gap: "8px", flexWrap: "wrap" };
+const unitLogoStyle: CSSProperties = { width: 34, height: 34, borderRadius: "8px", objectFit: "contain", background: "#fff", border: "1px solid var(--x-color-line-soft)", flexShrink: 0 };
+const unitLogoPlaceholderStyle: CSSProperties = { width: 34, height: 34, borderRadius: "8px", display: "flex", alignItems: "center", justifyContent: "center", background: "var(--x-color-panel)", border: "1px dashed var(--x-color-line)", color: "var(--x-color-ink-muted)", fontSize: "13px", flexShrink: 0 };
+const unitSelectStyle: CSSProperties = { padding: "7px 9px", borderRadius: "7px", border: "1px solid var(--x-color-line)", background: "var(--x-color-panel)", color: "var(--x-color-ink)", fontSize: "13px", fontWeight: 600, flexShrink: 0 };
+const unitAddButtonStyle: CSSProperties = { padding: "4px 10px", borderRadius: "999px", border: "1px solid var(--x-color-accent-border)", background: "var(--x-color-accent-soft)", color: "var(--x-color-accent-strong)", fontSize: "12px", fontWeight: 700, cursor: "pointer" };
+const unitGhostButtonStyle: CSSProperties = { padding: "6px 10px", borderRadius: "7px", border: "1px solid var(--x-color-line)", background: "var(--x-color-panel)", color: "var(--x-color-ink)", fontSize: "12px", fontWeight: 600, cursor: "pointer", whiteSpace: "nowrap" };
+const unitPrimaryButtonStyle: CSSProperties = { padding: "6px 12px", borderRadius: "7px", border: "none", background: "var(--x-color-accent)", color: "#fff", fontSize: "12px", fontWeight: 700, cursor: "pointer", whiteSpace: "nowrap" };
+const unitDangerButtonStyle: CSSProperties = { padding: "6px 10px", borderRadius: "7px", border: "1px solid var(--x-color-danger-border)", background: "var(--x-color-danger-soft)", color: "var(--x-color-danger)", fontSize: "12px", fontWeight: 600, cursor: "pointer", whiteSpace: "nowrap", flexShrink: 0 };
+const unitEmptyStyle: CSSProperties = { fontSize: "12.5px", color: "var(--x-color-ink-muted)" };
 const factValueStyle: CSSProperties = { fontSize: "13px", lineHeight: 1.5, wordBreak: "break-word", fontWeight: 600 };
 const factIconGroupStyle: CSSProperties = { display: "inline-flex", gap: "4px" };
 const factIconButtonStyle: CSSProperties = { display: "inline-flex", alignItems: "center", justifyContent: "center", width: "24px", height: "24px", borderRadius: "6px", border: "1px solid var(--x-color-line)", background: "var(--x-color-panel)", color: "var(--x-color-ink-muted)", cursor: "pointer", fontSize: "11px", flexShrink: 0 };

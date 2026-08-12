@@ -48,6 +48,36 @@ export async function createEvent(payload: EventCreatePayload) {
   return parseJson<{ status?: string; data?: EventRecord; message?: string }>(response);
 }
 
+export async function saveEventUnit(params: {
+  eventId?: number;
+  unitId?: number;
+  role: string;
+  unitName: string;
+  logo?: File | null;
+}) {
+  const formData = new FormData();
+  if (params.eventId) formData.append("event_id", String(params.eventId));
+  if (params.unitId) formData.append("unit_id", String(params.unitId));
+  formData.append("role", params.role);
+  formData.append("unit_name", params.unitName);
+  if (params.logo) formData.append("logo", params.logo);
+
+  const response = await apiFetch("/api/event_data/units/save", {
+    method: "POST",
+    credentials: "include",
+    body: formData,
+  });
+  return parseJson<{ status?: string; message?: string; data?: unknown }>(response);
+}
+
+export async function deleteEventUnit(unitId: number) {
+  const response = await apiFetch(`/api/event_data/units/delete/${unitId}`, {
+    method: "POST",
+    credentials: "include",
+  });
+  return parseJson<{ status?: string; message?: string }>(response);
+}
+
 export async function deleteEvent(eventId: number) {
   const response = await apiFetch(`/api/event_data/delete_event/${eventId}`, {
     method: "DELETE",

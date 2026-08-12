@@ -140,6 +140,8 @@ class EventData(db.Model):
             "event_image": self.event_image.to_dict() if self.event_image else None,
             "event_files": [file.to_dict() for file in self.event_files[:12]],
 
+            "organizing_units": [unit.to_dict() for unit in (self.organizing_units or [])],
+
             "user_id": self.user_id,
             "username": getattr(self.user, "username", None),
             "display_name": getattr(self.user, "display_name", None)
@@ -355,6 +357,55 @@ class EventBudgetData(db.Model):
             "actual_amount": float(self.actual_amount) if self.actual_amount is not None else None,
             "remark": self.remark,
             "created_at": self.created_at.isoformat() if self.created_at else None,
+        }
+
+
+class EventOrganizingUnit(db.Model):
+    """活动的进行单位（主办/协办/协调），一个活动可挂多个，各带名称与 logo。"""
+
+    __tablename__ = "event_organizing_unit"
+
+    id = db.Column(db.Integer, primary_key=True, autoincrement=True)
+    event_id = db.Column(
+        db.Integer,
+        db.ForeignKey("event_data.id", name="fk_event_unit_event", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    role = db.Column(db.String(20), nullable=False, default="主办单位")  # 主办单位 / 协办单位 / 协调单位
+    unit_name = db.Column(db.String(200), nullable=False)
+    logo_path = db.Column(db.String(255), nullable=True)  # media 短路径；地南佛学会走硬编码 logo
+    sort_order = db.Column(db.Integer, nullable=False, default=0)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+
+    event = db.relationship(
+        "EventData",
+        backref=db.backref(
+            "organizing_units",
+            lazy="selectin",
+            cascade="all, delete-orphan",
+            passive_deletes=True,
+            order_by="EventOrganizingUnit.sort_order",
+        ),
+    )
+
+    # 地南佛学会（自己）的 logo 硬编码用站点素材，无需上传。
+    OWN_UNIT_NAME = "地南佛学会"
+    OWN_LOGO_URL = "/static/images/logo/logo.png"
+
+    def logo_url(self):
+        if (self.unit_name or "").strip() == self.OWN_UNIT_NAME:
+            return self.OWN_LOGO_URL
+        return f"/media_file/{self.logo_path}" if self.logo_path else None
+
+    def to_dict(self):
+        return {
+            "id": self.id,
+            "event_id": self.event_id,
+            "role": self.role,
+            "unit_name": self.unit_name,
+            "logo_url": self.logo_url(),
+            "sort_order": self.sort_order,
         }
 
 

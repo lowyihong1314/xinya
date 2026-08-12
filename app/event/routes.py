@@ -201,6 +201,20 @@ def new_or_edit_event():
     return services.save_event(request.json or request.form or {})
 
 
+@event_data_bp.route("/units/save", methods=["POST"])
+@login_required
+@permission_required("event_edit")
+def save_event_unit():
+    return services.save_event_unit(request.form, request.files)
+
+
+@event_data_bp.route("/units/delete/<int:unit_id>", methods=["POST", "DELETE"])
+@login_required
+@permission_required("event_edit")
+def delete_event_unit(unit_id):
+    return services.delete_event_unit(unit_id)
+
+
 @event_data_bp.route("/set_album/<int:event_id>", methods=["POST"])
 @login_required
 @permission_required("event_edit")
