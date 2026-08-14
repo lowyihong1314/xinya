@@ -878,9 +878,10 @@ const styles: Record<string, CSSProperties> = {
     backdropFilter: "blur(8px)",
     textAlign: "left", // head 是居中的，这块单位横幅自己靠左
   },
-  unitsRow: { display: "flex", alignItems: "center", justifyContent: "flex-start", gap: "8px", flexWrap: "wrap", minWidth: 0 },
+  // 角色标签自己一行，单位排它下面（名字里的换行由 unitChipName 的 pre-wrap 保留）
+  unitsRow: { display: "flex", flexDirection: "column", alignItems: "flex-start", gap: "5px", minWidth: 0 },
   unitsRole: { fontSize: "11.5px", fontWeight: 800, letterSpacing: "1px", opacity: 0.85, whiteSpace: "nowrap", flexShrink: 0 },
-  unitsList: { display: "flex", alignItems: "center", gap: "8px", flexWrap: "wrap", justifyContent: "flex-start", minWidth: 0, flex: "1 1 auto" },
+  unitsList: { display: "flex", alignItems: "center", gap: "8px", flexWrap: "wrap", justifyContent: "flex-start", minWidth: 0, width: "100%" },
   unitChip: {
     display: "inline-flex",
     alignItems: "center",
