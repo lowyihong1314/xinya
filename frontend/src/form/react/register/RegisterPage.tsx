@@ -767,10 +767,11 @@ const styles: Record<string, CSSProperties> = {
     background: "rgba(255, 255, 255, 0.12)",
     border: "1px solid rgba(255, 255, 255, 0.22)",
     backdropFilter: "blur(8px)",
+    textAlign: "left", // head 是居中的，这块单位横幅自己靠左
   },
-  unitsRow: { display: "flex", alignItems: "center", justifyContent: "center", gap: "8px", flexWrap: "wrap" },
+  unitsRow: { display: "flex", alignItems: "center", justifyContent: "flex-start", gap: "8px", flexWrap: "wrap" },
   unitsRole: { fontSize: "11.5px", fontWeight: 800, letterSpacing: "1px", opacity: 0.85, whiteSpace: "nowrap" },
-  unitsList: { display: "flex", alignItems: "center", gap: "8px", flexWrap: "wrap", justifyContent: "center" },
+  unitsList: { display: "flex", alignItems: "center", gap: "8px", flexWrap: "wrap", justifyContent: "flex-start" },
   unitChip: {
     display: "inline-flex",
     alignItems: "center",

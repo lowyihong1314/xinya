@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, type CSSProperties, type FormEvent, type RefObject } from "react";
+import { useEffect, useMemo, useRef, useState, type CSSProperties, type FormEvent, type RefObject } from "react";
 
 import { CachedImage } from "../../../components/CachedMedia";
 import { GoogleMapEmbed } from "../../../components/GoogleMapEmbed";
@@ -908,6 +908,15 @@ function UnitRow({
 
   const isOwn = name.trim() === OWN_UNIT_NAME;
   const logoUrl = isOwn ? OWN_LOGO_URL : unit?.logo_url || null;
+  // 选中文件的预览 URL 跟着文件走，换/清空时释放，避免每次 render 都新建一个。
+  const logoPreviewUrl = useMemo(() => (logo ? URL.createObjectURL(logo) : null), [logo]);
+  useEffect(() => {
+    if (!logoPreviewUrl) return;
+    return () => URL.revokeObjectURL(logoPreviewUrl);
+  }, [logoPreviewUrl]);
+  const shownLogoUrl = logoPreviewUrl || logoUrl;
+  // 自家单位 logo 硬编码，不给换；其余点 logo / 占位框直接选文件。
+  const canPickLogo = canEdit && !isOwn && !saving;
   const dirty = !unit || role !== unit.role || name.trim() !== unit.unit_name || logo != null;
 
   async function handleSave() {
@@ -974,10 +983,37 @@ function UnitRow({
         </span>
       ) : null}
 
-      {logo ? (
-        <img src={URL.createObjectURL(logo)} alt="logo" style={unitLogoStyle} />
-      ) : logoUrl ? (
-        <img src={logoUrl} alt="logo" style={unitLogoStyle} />
+      {canEdit && !isOwn ? (
+        <input
+          ref={logoInputRef}
+          type="file"
+          accept="image/*"
+          style={{ display: "none" }}
+          onChange={(e) => {
+            setLogo(e.target.files?.[0] || null);
+            e.target.value = ""; // 清空后同一个文件再选一次也能触发 change
+          }}
+        />
+      ) : null}
+
+      {canPickLogo ? (
+        <button
+          type="button"
+          style={unitLogoTriggerStyle}
+          title={shownLogoUrl ? "点击更换 logo" : "点击上传 logo"}
+          aria-label={shownLogoUrl ? "更换 logo" : "上传 logo"}
+          onClick={() => logoInputRef.current?.click()}
+        >
+          {shownLogoUrl ? (
+            <img src={shownLogoUrl} alt="logo" style={unitLogoStyle} />
+          ) : (
+            <span style={unitLogoPlaceholderStyle}>
+              <i className="fa-regular fa-image" aria-hidden="true" />
+            </span>
+          )}
+        </button>
+      ) : shownLogoUrl ? (
+        <img src={shownLogoUrl} alt="logo" style={unitLogoStyle} />
       ) : (
         <span style={unitLogoPlaceholderStyle}>
           <i className="fa-regular fa-image" aria-hidden="true" />
@@ -1000,20 +1036,6 @@ function UnitRow({
 
       {canEdit ? (
         <>
-          {!isOwn ? (
-            <>
-              <input
-                ref={logoInputRef}
-                type="file"
-                accept="image/*"
-                style={{ display: "none" }}
-                onChange={(e) => setLogo(e.target.files?.[0] || null)}
-              />
-              <button type="button" style={unitGhostButtonStyle} disabled={saving} onClick={() => logoInputRef.current?.click()}>
-                {logo ? "已选 logo" : unit?.logo_url ? "换 logo" : "上传 logo"}
-              </button>
-            </>
-          ) : null}
           {dirty ? (
             <button type="button" style={unitPrimaryButtonStyle} disabled={saving} onClick={() => void handleSave()}>
               {saving ? "…" : "保存"}
@@ -1275,6 +1297,7 @@ const unitAddButtonStyle: CSSProperties = { padding: "4px 10px", borderRadius: "
 const unitGhostButtonStyle: CSSProperties = { padding: "6px 10px", borderRadius: "7px", border: "1px solid var(--x-color-line)", background: "var(--x-color-panel)", color: "var(--x-color-ink)", fontSize: "12px", fontWeight: 600, cursor: "pointer", whiteSpace: "nowrap" };
 const unitPrimaryButtonStyle: CSSProperties = { padding: "6px 12px", borderRadius: "7px", border: "none", background: "var(--x-color-accent)", color: "#fff", fontSize: "12px", fontWeight: 700, cursor: "pointer", whiteSpace: "nowrap" };
 const unitDangerButtonStyle: CSSProperties = { padding: "6px 10px", borderRadius: "7px", border: "1px solid var(--x-color-danger-border)", background: "var(--x-color-danger-soft)", color: "var(--x-color-danger)", fontSize: "12px", fontWeight: 600, cursor: "pointer", whiteSpace: "nowrap", flexShrink: 0 };
+const unitLogoTriggerStyle: CSSProperties = { padding: 0, border: "none", background: "none", display: "flex", cursor: "pointer", flexShrink: 0 };
 const unitMoveGroupStyle: CSSProperties = { display: "flex", flexDirection: "column", gap: "2px", flexShrink: 0 };
 const unitMoveButtonStyle: CSSProperties = { width: 22, height: 16, display: "flex", alignItems: "center", justifyContent: "center", padding: 0, borderRadius: "4px", border: "1px solid var(--x-color-line)", background: "var(--x-color-panel)", color: "var(--x-color-ink-muted)", fontSize: "10px", lineHeight: 1, cursor: "pointer" };
 const unitEmptyStyle: CSSProperties = { fontSize: "12.5px", color: "var(--x-color-ink-muted)" };
