@@ -111,13 +111,13 @@ export function RegisterPage({ formId }: { formId: number }) {
   }
 
   function validatePerson(p: Person): string | null {
-    if (!p.name_cn.trim()) return "请填写中文名";
-    if (!/^[A-Z ]+$/.test(p.name.trim())) return "请填写 IC 英文名（大写字母）";
-    if (String(p.nric).replace(/\D/g, "").length < 6) return "请填写正确的 IC 号码";
-    if (!p.phone.trim()) return "请填写手机号码";
-    if (!p.gender) return "请选择性别";
+    if (!p.name_cn.trim()) return "请填写中文名 / Please enter your Chinese name";
+    if (!/^[A-Z ]+$/.test(p.name.trim())) return "请填写 IC 英文名（大写字母）/ Please enter your name as per IC (capital letters)";
+    if (String(p.nric).replace(/\D/g, "").length < 6) return "请填写正确的 IC 号码 / Please enter a valid IC number";
+    if (!p.phone.trim()) return "请填写手机号码 / Please enter your phone number";
+    if (!p.gender) return "请选择性别 / Please select gender";
     if (fieldOn(form, "parent_1") && (!p.parent_1.trim() || !p.parent_1_phone.trim())) {
-      return "请填写紧急联络人1的称呼与电话";
+      return "请填写紧急联络人1的称呼与电话 / Please fill in emergency contact 1 name and phone";
     }
     return null;
   }
@@ -197,7 +197,7 @@ export function RegisterPage({ formId }: { formId: number }) {
         setStep("done");
       }
     } catch (err) {
-      setError(err instanceof Error ? err.message : "提交失败，请稍后再试");
+      setError(err instanceof Error ? err.message : "提交失败，请稍后再试 / Submission failed, please try again later");
     } finally {
       setSubmitting(false);
     }
@@ -258,7 +258,7 @@ export function RegisterPage({ formId }: { formId: number }) {
         parent_nric: typeof parental.parent_nric === "string" ? parental.parent_nric : "",
       });
     } catch (err) {
-      setError(err instanceof Error ? err.message : "同意书提交失败");
+      setError(err instanceof Error ? err.message : "同意书提交失败 / Consent submission failed");
     }
   }
 
@@ -284,7 +284,7 @@ export function RegisterPage({ formId }: { formId: number }) {
   useEffect(() => {
     if (step === "consent" && consentQueue.length && consentQueue.every((c) => c.done)) {
       clearDraft(formId);
-      setMessage("全部家长同意书已完成。");
+      setMessage("全部家长同意书已完成。/ All parental consent forms are complete.");
       setStep("done");
     }
   }, [step, consentQueue, formId]);
@@ -321,7 +321,10 @@ export function RegisterPage({ formId }: { formId: number }) {
       </div>
       <div style={styles.shell}>
         <header style={styles.head}>
-          <p style={styles.eyebrow}>活动报名</p>
+          <p style={styles.eyebrow}>
+            活动报名
+            <span style={styles.eyebrowEn}>Event Registration</span>
+          </p>
           <h1 style={styles.title}>{currentYearTitle}</h1>
           {showUnitsBanner ? (
             <div style={styles.unitsBanner}>
@@ -349,9 +352,13 @@ export function RegisterPage({ formId }: { formId: number }) {
 
         {resumePending.length && step === "detail" ? (
           <div style={styles.resumeBox}>
-            <span>你还有 {resumePending.length} 位的家长同意书未完成。</span>
+            <span>
+              你还有 {resumePending.length} 位的家长同意书未完成。
+              <span style={styles.noteEn}>{resumePending.length} parental consent form(s) still incomplete.</span>
+            </span>
             <button type="button" style={styles.resumeButton} onClick={resumeConsent}>
               继续完成家长同意书
+              <span style={styles.btnEn}>Continue Parental Consent</span>
             </button>
           </div>
         ) : null}
@@ -362,7 +369,8 @@ export function RegisterPage({ formId }: { formId: number }) {
 
         {step === "choose" ? (
           <section style={styles.card}>
-            <p style={styles.cardTitle}>请选择报名方式</p>
+            <BackButton onClick={() => setStep("detail")} />
+            <SectionTitle cn="请选择报名方式" en="Choose How to Register" />
             <button
               type="button"
               style={styles.choiceCard}
@@ -372,8 +380,12 @@ export function RegisterPage({ formId }: { formId: number }) {
                 setStep("form");
               }}
             >
-              <span style={styles.choiceTitle}>个人报名</span>
+              <span style={styles.choiceTitle}>
+                个人报名
+                <span style={styles.choiceTitleEn}>Individual</span>
+              </span>
               <span style={styles.choiceMeta}>为自己/一个人报名</span>
+              <span style={styles.choiceMetaEn}>Register yourself or one person</span>
             </button>
             <button
               type="button"
@@ -384,17 +396,19 @@ export function RegisterPage({ formId }: { formId: number }) {
                 setStep("form");
               }}
             >
-              <span style={styles.choiceTitle}>多人报名（家庭）</span>
+              <span style={styles.choiceTitle}>
+                多人报名（家庭）
+                <span style={styles.choiceTitleEn}>Family / Group</span>
+              </span>
               <span style={styles.choiceMeta}>一次为多位家人报名</span>
-            </button>
-            <button type="button" style={styles.ghostButton} onClick={() => setStep("detail")}>
-              ← 返回
+              <span style={styles.choiceMetaEn}>Register several family members at once</span>
             </button>
           </section>
         ) : null}
 
         {step === "form" ? (
           <section style={styles.stack}>
+            <BackButton onClick={() => setStep("choose")} disabled={submitting} />
             {people.map((person, index) => (
               <PersonForm
                 key={index}
@@ -410,9 +424,15 @@ export function RegisterPage({ formId }: { formId: number }) {
             {path === "family" ? (
               <button type="button" style={styles.addButton} onClick={() => setPeople((cur) => [...cur, makePerson(cur[cur.length - 1])])}>
                 + 添加一位家人
+                <span style={styles.btnEn}>Add Family Member</span>
               </button>
             ) : null}
-            <p style={styles.note}>提交后基本资料会先保存；未成年人的家长同意书在下一步完成（可稍后同设备继续）。</p>
+            <p style={styles.note}>
+              提交后基本资料会先保存；未成年人的家长同意书在下一步完成（可稍后同设备继续）。
+              <span style={styles.noteEn}>
+                Your details are saved first. Parental consent for minors is completed in the next step (you may continue later on this device).
+              </span>
+            </p>
             <button
               type="button"
               style={{ ...styles.primaryButton, ...(submitting ? styles.buttonDisabled : {}) }}
@@ -420,9 +440,11 @@ export function RegisterPage({ formId }: { formId: number }) {
               disabled={submitting}
             >
               {submitting ? "提交中…" : "提交报名"}
+              <span style={styles.btnEn}>{submitting ? "Submitting…" : "Submit Registration"}</span>
             </button>
             <button type="button" style={styles.ghostButton} onClick={() => setStep("choose")} disabled={submitting}>
               ← 返回
+              <span style={styles.btnEn}>Back</span>
             </button>
           </section>
         ) : null}
@@ -430,26 +452,33 @@ export function RegisterPage({ formId }: { formId: number }) {
         {step === "consent" ? (
           <section style={styles.stack}>
             <div style={styles.card}>
-              <p style={styles.cardTitle}>家长同意书</p>
-              <p style={styles.note}>以下未成年人需要家长同意书，请逐位完成（也可稍后同设备继续）。</p>
+              <SectionTitle cn="家长同意书" en="Parental Consent" />
+              <p style={styles.note}>
+                以下未成年人需要家长同意书，请逐位完成（也可稍后同设备继续）。
+                <span style={styles.noteEn}>
+                  The minors below need parental consent. Please complete them one by one (you may continue later on this device).
+                </span>
+              </p>
             </div>
             {consentQueue.map((item) => (
               <div key={item.nric} style={styles.consentRow}>
                 <div style={styles.consentInfo}>
                   <span style={styles.consentName}>{item.name_cn || item.name || item.nric}</span>
-                  <span style={styles.consentMeta}>{item.done ? "已完成" : "待完成"}</span>
+                  <span style={styles.consentMeta}>{item.done ? "已完成 Completed" : "待完成 Pending"}</span>
                 </div>
                 {item.done ? (
-                  <span style={styles.doneChip}>✓ 已完成</span>
+                  <span style={styles.doneChip}>✓ 已完成 Done</span>
                 ) : (
                   <button type="button" style={styles.smallPrimary} onClick={() => void handleConsent(item)}>
                     填写同意书
+                    <span style={styles.btnEn}>Fill Consent</span>
                   </button>
                 )}
               </div>
             ))}
             <button type="button" style={styles.ghostButton} onClick={() => setStep("done")}>
               稍后再填，先完成
+              <span style={styles.btnEn}>Finish Now, Fill Later</span>
             </button>
           </section>
         ) : null}
@@ -457,11 +486,15 @@ export function RegisterPage({ formId }: { formId: number }) {
         {step === "done" ? (
           <section style={styles.card}>
             <div style={styles.doneIcon}>✓</div>
-            <p style={styles.cardTitle}>报名完成</p>
-            <p style={styles.note}>我们已收到你的报名资料。</p>
+            <SectionTitle cn="报名完成" en="Registration Complete" />
+            <p style={styles.note}>
+              我们已收到你的报名资料。
+              <span style={styles.noteEn}>We have received your registration.</span>
+            </p>
             {hasFees ? (
               <a href={`/api/form/pay_register/${formId}`} style={styles.primaryLink}>
                 前往付款
+                <span style={styles.btnEn}>Proceed to Payment</span>
               </a>
             ) : null}
           </section>
@@ -479,10 +512,10 @@ function EventDetail({ form, closed, onNext }: { form: PublicForm; closed: boole
         <>
           {event.event_name ? <p style={styles.cardTitle}>{event.event_name}</p> : null}
           <dl style={styles.factList}>
-            {event.datetime ? <Fact label="时间" value={new Date(event.datetime).toLocaleString()} /> : null}
-            {event.location ? <Fact label="地点" value={event.location} /> : null}
-            {event.target ? <Fact label="对象" value={event.target} /> : null}
-            {event.purpose ? <Fact label="目的" value={event.purpose} /> : null}
+            {event.datetime ? <Fact label="时间" en="Date & Time" value={new Date(event.datetime).toLocaleString()} /> : null}
+            {event.location ? <Fact label="地点" en="Venue" value={event.location} /> : null}
+            {event.target ? <Fact label="对象" en="Who Can Join" value={event.target} /> : null}
+            {event.purpose ? <Fact label="目的" en="Purpose" value={event.purpose} /> : null}
           </dl>
           {event.place_id || event.location ? (
             <div style={{ marginTop: 10 }}>
@@ -498,10 +531,21 @@ function EventDetail({ form, closed, onNext }: { form: PublicForm; closed: boole
         </>
       ) : null}
       {form.detail ? <div style={styles.detailText}>{form.detail}</div> : null}
-      {form.expired ? <p style={styles.note}>报名截止：{form.expired}</p> : null}
+      {form.expired ? (
+        <p style={styles.note}>
+          <span style={styles.noteLabel}>
+            报名截止
+            <span style={styles.fieldLabelEn}>Registration Deadline</span>
+          </span>
+          <span style={styles.noteValue}>{form.expired}</span>
+        </p>
+      ) : null}
       {form.fees && form.fees.length ? (
         <div style={styles.feeBox}>
-          <span style={styles.feeTitle}>费用</span>
+          <span style={styles.feeTitle}>
+            费用
+            <span style={styles.fieldLabelEn}>Fees</span>
+          </span>
           {form.fees.map((fee, i) => (
             <div key={i} style={styles.feeLine}>
               {fee.category || "费用"}：RM {Number(fee.amount).toFixed(2)}
@@ -511,22 +555,54 @@ function EventDetail({ form, closed, onNext }: { form: PublicForm; closed: boole
       ) : null}
 
       {closed ? (
-        <div style={styles.closedBox}>报名已截止</div>
+        <div style={styles.closedBox}>
+          报名已截止
+          <span style={styles.closedBoxEn}>Registration Closed</span>
+        </div>
       ) : (
         <button type="button" style={styles.primaryButton} onClick={onNext}>
           开始报名
+          <span style={styles.btnEn}>Start Registration</span>
         </button>
       )}
     </section>
   );
 }
 
-function Fact({ label, value }: { label: string; value: string }) {
+function Fact({ label, en, value }: { label: string; en?: string; value: string }) {
   return (
     <div style={styles.factRow}>
-      <dt style={styles.factLabel}>{label}</dt>
+      <dt style={styles.factLabel}>
+        {label}
+        {en ? <span style={styles.fieldLabelEn}>{en}</span> : null}
+      </dt>
       <dd style={styles.factValue}>{value}</dd>
     </div>
+  );
+}
+
+// 中文粗体 + 后缀小号英文的区块标题（各步骤共用）。
+function SectionTitle({ cn, en }: { cn: string; en: string }) {
+  return (
+    <p style={styles.cardTitle}>
+      {cn}
+      <span style={styles.cardTitleEn}>{en}</span>
+    </p>
+  );
+}
+
+// 步骤顶部的返回按钮（选择报名方式 / 填写资料都用它）。
+function BackButton({ onClick, disabled }: { onClick: () => void; disabled?: boolean }) {
+  return (
+    <button
+      type="button"
+      style={{ ...styles.backButton, ...(disabled ? styles.buttonDisabled : {}) }}
+      onClick={onClick}
+      disabled={disabled}
+    >
+      ← 返回
+      <span style={styles.backButtonEn}>Back</span>
+    </button>
   );
 }
 
@@ -563,7 +639,7 @@ function PersonForm({
       <div style={styles.personHead}>
         <span style={styles.cardTitle}>
           报名人 {index + 1}
-          <span style={styles.fieldLabelEn}>Participant {index + 1}</span>
+          <span style={styles.cardTitleEn}>Participant {index + 1}</span>
         </span>
         {showRemove ? (
           <button type="button" style={styles.removePerson} onClick={onRemove}>
@@ -593,7 +669,8 @@ function PersonForm({
       </Field>
       <div style={styles.ageRow}>
         <span style={styles.ageLabel}>
-          年龄<span style={styles.fieldLabelEn}>Age</span>
+          年龄
+          <span style={styles.fieldLabelEn}>Age</span>
         </span>
         <span style={styles.ageValue}>{age != null ? `${age} 岁` : "—"}</span>
         {needConsent ? <span style={styles.parentalPill}>需家长同意书 Parental Consent</span> : null}
@@ -697,7 +774,7 @@ function ExtraField({
     return (
       <label style={styles.checkboxRow}>
         <input type="checkbox" checked={Boolean(value)} onChange={(e) => onChange(e.target.checked)} />
-        <span>{config.label}</span>
+        <span style={styles.fieldLabel}>{config.label}</span>
       </label>
     );
   }
@@ -706,7 +783,7 @@ function ExtraField({
     return (
       <Field label={config.label}>
         <select style={styles.input} value={String(value ?? "")} onChange={(e) => onChange(e.target.value)}>
-          <option value="">请选择</option>
+          <option value="">请选择 / Select</option>
           {options.map((opt) => (
             <option key={opt} value={opt}>
               {opt}
@@ -754,7 +831,8 @@ const styles: Record<string, CSSProperties> = {
   posterOverlay: { position: "absolute", inset: 0, background: "linear-gradient(160deg, rgba(18,52,59,0.72), rgba(15,118,110,0.55))" },
   shell: { position: "relative", zIndex: 1, maxWidth: 480, margin: "0 auto", padding: "28px 16px 48px", display: "flex", flexDirection: "column", gap: "14px" },
   head: { textAlign: "center", color: "#fff" },
-  eyebrow: { margin: 0, fontSize: "12px", letterSpacing: "2px", fontWeight: 700, opacity: 0.9 },
+  eyebrow: { margin: 0, fontSize: "12px", letterSpacing: "2px", fontWeight: 800, opacity: 0.9 },
+  eyebrowEn: { marginLeft: "7px", fontSize: "10.5px", fontWeight: 600, letterSpacing: "0.6px", opacity: 0.8 },
   title: { margin: "6px 0 0", fontSize: "22px", fontWeight: 800 },
   unitsBanner: {
     margin: "12px auto 0",
@@ -789,48 +867,61 @@ const styles: Record<string, CSSProperties> = {
   card: { background: "var(--x-color-panel-strongest)", borderRadius: "var(--x-radius-lg)", boxShadow: "0 20px 50px var(--x-color-shadow)", padding: "18px 18px 20px", display: "flex", flexDirection: "column", gap: "12px" },
   stack: { display: "flex", flexDirection: "column", gap: "14px" },
   cardTitle: { margin: 0, fontSize: "16px", fontWeight: 800, color: "var(--x-color-ink)" },
+  // 区块标题后缀的小号英文
+  cardTitleEn: { marginLeft: "7px", fontSize: "11.5px", fontWeight: 600, color: "var(--x-color-ink-muted)", letterSpacing: "0.2px" },
   note: { margin: 0, fontSize: "12.5px", lineHeight: 1.5, color: "var(--x-color-ink-muted)" },
+  // 说明文字里的英文：另起一行、更淡，不跟中文抢
+  noteEn: { display: "block", marginTop: "2px", fontSize: "11.5px", lineHeight: 1.45, opacity: 0.8 },
+  noteLabel: { display: "block", fontSize: "13.5px", fontWeight: 800, color: "var(--x-color-ink)" },
+  noteValue: { display: "block", marginTop: "2px", fontSize: "13px", fontWeight: 700, color: "var(--x-color-ink)" },
   field: { display: "flex", flexDirection: "column", gap: "5px" },
-  fieldLabel: { fontSize: "13px", fontWeight: 600, color: "var(--x-color-ink)" },
+  fieldLabel: { fontSize: "13.5px", fontWeight: 800, color: "var(--x-color-ink)" },
   // 中文标签旁的小号英文（不懂中文的报名者也能看懂）
   fieldLabelEn: { marginLeft: "6px", fontSize: "11px", fontWeight: 500, color: "var(--x-color-ink-muted)", letterSpacing: "0.2px" },
+  // 按钮里第二行的小号英文（继承按钮颜色，只压低不透明度）
+  btnEn: { fontSize: "11px", fontWeight: 600, letterSpacing: "0.3px", opacity: 0.78 },
   input: { width: "100%", boxSizing: "border-box", padding: "11px 12px", fontSize: "15px", borderRadius: "var(--x-radius-sm)", border: "1px solid var(--x-color-line)", background: "var(--x-color-panel)", color: "var(--x-color-ink)", outline: "none" },
   textarea: { width: "100%", boxSizing: "border-box", minHeight: "70px", resize: "vertical", padding: "11px 12px", fontSize: "14px", borderRadius: "var(--x-radius-sm)", border: "1px solid var(--x-color-line)", background: "var(--x-color-panel)", color: "var(--x-color-ink)" },
   ageRow: { display: "flex", alignItems: "center", gap: "10px", padding: "8px 12px", borderRadius: "var(--x-radius-sm)", background: "var(--x-color-panel-alt)" },
-  ageLabel: { fontSize: "13px", color: "var(--x-color-ink-muted)" },
+  ageLabel: { fontSize: "13.5px", fontWeight: 800, color: "var(--x-color-ink)" },
   ageValue: { fontSize: "15px", fontWeight: 700 },
   parentalPill: { marginLeft: "auto", fontSize: "12px", fontWeight: 700, color: "var(--x-color-warning)", background: "var(--x-color-warning-soft)", border: "1px solid var(--x-color-warning-border)", borderRadius: "999px", padding: "2px 10px" },
   checkboxRow: { display: "flex", alignItems: "center", gap: "8px", fontSize: "14px" },
   slotList: { display: "flex", flexDirection: "column", gap: "6px" },
   slotItem: { display: "flex", alignItems: "center", gap: "8px", fontSize: "13px", padding: "6px 8px", borderRadius: "8px", background: "var(--x-color-panel-alt)" },
-  primaryButton: { width: "100%", padding: "13px 16px", fontSize: "15px", fontWeight: 700, color: "#fff", background: "var(--x-color-accent)", border: "none", borderRadius: "var(--x-radius-sm)", cursor: "pointer" },
-  primaryLink: { display: "block", textAlign: "center", padding: "13px 16px", fontSize: "15px", fontWeight: 700, color: "#fff", background: "var(--x-color-accent)", borderRadius: "var(--x-radius-sm)", textDecoration: "none" },
+  primaryButton: { width: "100%", display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: "1px", lineHeight: 1.25, padding: "12px 16px", fontSize: "15px", fontWeight: 700, color: "#fff", background: "var(--x-color-accent)", border: "none", borderRadius: "var(--x-radius-sm)", cursor: "pointer" },
+  primaryLink: { display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: "1px", lineHeight: 1.25, textAlign: "center", padding: "12px 16px", fontSize: "15px", fontWeight: 700, color: "#fff", background: "var(--x-color-accent)", borderRadius: "var(--x-radius-sm)", textDecoration: "none" },
   buttonDisabled: { opacity: 0.55, cursor: "not-allowed" },
-  ghostButton: { width: "100%", padding: "11px 16px", fontSize: "14px", fontWeight: 600, color: "#fff", background: "rgba(255,255,255,0.16)", border: "none", borderRadius: "var(--x-radius-sm)", cursor: "pointer" },
-  addButton: { width: "100%", padding: "12px", fontSize: "14px", fontWeight: 700, color: "var(--x-color-accent-strong)", background: "var(--x-color-panel-strongest)", border: "1px dashed var(--x-color-accent-border)", borderRadius: "var(--x-radius-sm)", cursor: "pointer" },
+  ghostButton: { width: "100%", display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: "1px", lineHeight: 1.25, padding: "10px 16px", fontSize: "14px", fontWeight: 600, color: "#fff", background: "rgba(255,255,255,0.16)", border: "none", borderRadius: "var(--x-radius-sm)", cursor: "pointer" },
+  addButton: { width: "100%", display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: "1px", lineHeight: 1.25, padding: "11px 12px", fontSize: "14px", fontWeight: 700, color: "var(--x-color-accent-strong)", background: "var(--x-color-panel-strongest)", border: "1px dashed var(--x-color-accent-border)", borderRadius: "var(--x-radius-sm)", cursor: "pointer" },
   choiceCard: { display: "flex", flexDirection: "column", gap: "3px", textAlign: "left", padding: "16px", borderRadius: "var(--x-radius-md)", border: "1px solid var(--x-color-accent-border)", background: "var(--x-color-accent-soft)", cursor: "pointer" },
   choiceTitle: { fontSize: "16px", fontWeight: 800, color: "var(--x-color-accent-strong)" },
-  choiceMeta: { fontSize: "12px", color: "var(--x-color-ink-muted)" },
+  choiceTitleEn: { marginLeft: "7px", fontSize: "11.5px", fontWeight: 600, opacity: 0.75 },
+  choiceMeta: { fontSize: "12.5px", fontWeight: 600, color: "var(--x-color-ink)" },
+  choiceMetaEn: { fontSize: "11px", color: "var(--x-color-ink-muted)", opacity: 0.9 },
+  backButton: { alignSelf: "flex-start", display: "inline-flex", alignItems: "baseline", gap: "6px", padding: "7px 14px", fontSize: "13.5px", fontWeight: 800, color: "var(--x-color-accent-strong)", background: "var(--x-color-accent-soft)", border: "1px solid var(--x-color-accent-border)", borderRadius: "999px", cursor: "pointer" },
+  backButtonEn: { fontSize: "11px", fontWeight: 600, color: "var(--x-color-ink-muted)" },
   personHead: { display: "flex", alignItems: "center", justifyContent: "space-between" },
   removePerson: { padding: "5px 10px", fontSize: "12px", fontWeight: 600, color: "var(--x-color-danger)", background: "var(--x-color-danger-soft)", border: "1px solid var(--x-color-danger-border)", borderRadius: "8px", cursor: "pointer" },
   errorBox: { padding: "10px 14px", borderRadius: "var(--x-radius-sm)", background: "var(--x-color-danger-soft)", color: "var(--x-color-danger)", border: "1px solid var(--x-color-danger-border)", fontSize: "13px" },
   successBox: { padding: "10px 14px", borderRadius: "var(--x-radius-sm)", background: "var(--x-color-success-soft)", color: "var(--x-color-success)", border: "1px solid rgba(21,128,61,0.28)", fontSize: "13px" },
   resumeBox: { display: "flex", flexDirection: "column", gap: "8px", padding: "12px 14px", borderRadius: "var(--x-radius-md)", background: "var(--x-color-warning-soft)", border: "1px solid var(--x-color-warning-border)", color: "var(--x-color-warning)", fontSize: "13px", fontWeight: 600 },
-  resumeButton: { padding: "9px 14px", fontSize: "13px", fontWeight: 700, color: "#fff", background: "var(--x-color-accent)", border: "none", borderRadius: "8px", cursor: "pointer" },
+  resumeButton: { display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: "1px", lineHeight: 1.25, padding: "8px 14px", fontSize: "13px", fontWeight: 700, color: "#fff", background: "var(--x-color-accent)", border: "none", borderRadius: "8px", cursor: "pointer" },
   factList: { margin: 0, display: "flex", flexDirection: "column", gap: "12px" },
   factRow: { display: "flex", flexDirection: "column", gap: "2px", margin: 0 },
-  factLabel: { margin: 0, fontSize: "12px", color: "var(--x-color-ink-muted)" },
+  factLabel: { margin: 0, fontSize: "13.5px", fontWeight: 800, color: "var(--x-color-ink)" },
   factValue: { margin: 0, fontSize: "13px", color: "var(--x-color-ink)", whiteSpace: "pre-wrap" },
   detailText: { fontSize: "13px", lineHeight: 1.6, color: "var(--x-color-ink)", whiteSpace: "pre-wrap" },
   feeBox: { display: "flex", flexDirection: "column", gap: "4px", padding: "10px 12px", borderRadius: "var(--x-radius-sm)", background: "var(--x-color-panel-alt)" },
-  feeTitle: { fontSize: "12px", fontWeight: 700, color: "var(--x-color-ink-muted)" },
+  feeTitle: { fontSize: "13.5px", fontWeight: 800, color: "var(--x-color-ink)" },
   feeLine: { fontSize: "13px", color: "var(--x-color-ink)" },
-  closedBox: { padding: "12px", textAlign: "center", borderRadius: "var(--x-radius-sm)", background: "var(--x-color-danger-soft)", color: "var(--x-color-danger)", fontWeight: 700 },
+  closedBox: { display: "flex", flexDirection: "column", alignItems: "center", gap: "1px", padding: "12px", textAlign: "center", borderRadius: "var(--x-radius-sm)", background: "var(--x-color-danger-soft)", color: "var(--x-color-danger)", fontWeight: 800 },
+  closedBoxEn: { fontSize: "11px", fontWeight: 600, opacity: 0.8 },
   consentRow: { display: "flex", alignItems: "center", justifyContent: "space-between", gap: "10px", padding: "14px 16px", borderRadius: "var(--x-radius-md)", background: "var(--x-color-panel-strongest)", boxShadow: "0 12px 30px var(--x-color-shadow-soft)" },
   consentInfo: { display: "flex", flexDirection: "column", gap: "3px" },
-  consentName: { fontSize: "14px", fontWeight: 700, color: "var(--x-color-ink)" },
+  consentName: { fontSize: "14px", fontWeight: 800, color: "var(--x-color-ink)" },
   consentMeta: { fontSize: "12px", color: "var(--x-color-ink-muted)" },
-  smallPrimary: { padding: "9px 16px", fontSize: "13px", fontWeight: 700, color: "#fff", background: "var(--x-color-accent)", border: "none", borderRadius: "8px", cursor: "pointer" },
+  smallPrimary: { flexShrink: 0, whiteSpace: "nowrap", display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: "1px", lineHeight: 1.25, padding: "8px 14px", fontSize: "13px", fontWeight: 700, color: "#fff", background: "var(--x-color-accent)", border: "none", borderRadius: "8px", cursor: "pointer" },
   doneChip: { fontSize: "13px", fontWeight: 700, color: "var(--x-color-success)" },
   doneIcon: { width: 54, height: 54, borderRadius: "50%", alignSelf: "center", display: "flex", alignItems: "center", justifyContent: "center", fontSize: "26px", color: "#fff", background: "var(--x-color-success)" },
 };
