@@ -81,6 +81,8 @@ export type Person = {
   name_cn: string;
   name: string; // IC name（英文，大写）
   nric: string;
+  // 由 IC 自动算出并填入，仍可手动改（IC 再变会重新覆盖）
+  age: string;
   phone: string;
   gender: string;
   email: string;
@@ -101,6 +103,7 @@ export function emptyPerson(): Person {
     name_cn: "",
     name: "",
     nric: "",
+    age: "",
     phone: "",
     gender: "",
     email: "",

@@ -31,6 +31,16 @@ declare global {
   }
 }
 
+// 年龄口径：手填的优先（可改），没填就回退 IC 推算；两者都没有就是 null。
+function resolveAge(person: Pick<Person, "age" | "nric">): number | null {
+  const typed = String(person.age ?? "").trim();
+  if (typed !== "") {
+    const n = Number(typed);
+    return Number.isFinite(n) ? n : null;
+  }
+  return calcAgeFromIc(person.nric);
+}
+
 function fieldOn(form: PublicForm, key: keyof PublicForm): boolean {
   const sw = form.field_switches;
   if (sw && key in sw) return Boolean(sw[key as string]);
@@ -116,6 +126,12 @@ export function RegisterPage({ formId }: { formId: number }) {
     if (String(p.nric).replace(/\D/g, "").length < 6) return "请填写正确的 IC 号码 / Please enter a valid IC number";
     if (!p.phone.trim()) return "请填写手机号码 / Please enter your phone number";
     if (!p.gender) return "请选择性别 / Please select gender";
+    if (String(p.age).trim() !== "") {
+      const typedAge = Number(p.age);
+      if (!Number.isInteger(typedAge) || typedAge < 0 || typedAge > 120) {
+        return "年龄请填 0–120 的整数 / Age must be a whole number between 0 and 120";
+      }
+    }
     if (fieldOn(form, "parent_1") && (!p.parent_1.trim() || !p.parent_1_phone.trim())) {
       return "请填写紧急联络人1的称呼与电话 / Please fill in emergency contact 1 name and phone";
     }
@@ -123,7 +139,7 @@ export function RegisterPage({ formId }: { formId: number }) {
   }
 
   function personPayload(p: Person) {
-    const age = calcAgeFromIc(p.nric);
+    const age = resolveAge(p);
     const needConsent = Boolean(form.parental_form) && age != null && age < 19;
     return {
       force: Boolean(form.force),
@@ -427,7 +443,7 @@ export function RegisterPage({ formId }: { formId: number }) {
                 <span style={styles.btnEn}>Add Family Member</span>
               </button>
             ) : null}
-            <p style={styles.note}>
+            <p style={styles.noteOnPoster}>
               提交后基本资料会先保存；未成年人的家长同意书在下一步完成（可稍后同设备继续）。
               <span style={styles.noteEn}>
                 Your details are saved first. Parental consent for minors is completed in the next step (you may continue later on this device).
@@ -514,7 +530,7 @@ function EventDetail({ form, closed, onNext }: { form: PublicForm; closed: boole
           <dl style={styles.factList}>
             {event.datetime ? <Fact label="时间" en="Date & Time" value={new Date(event.datetime).toLocaleString()} /> : null}
             {event.location ? <Fact label="地点" en="Venue" value={event.location} /> : null}
-            {event.target ? <Fact label="对象" en="Who Can Join" value={event.target} /> : null}
+            {event.target ? <Fact label="对象" en="Target Audience" value={event.target} /> : null}
             {event.purpose ? <Fact label="目的" en="Purpose" value={event.purpose} /> : null}
           </dl>
           {event.place_id || event.location ? (
@@ -623,7 +639,7 @@ function PersonForm({
   onChange: (patch: Partial<Person>) => void;
   onRemove: () => void;
 }) {
-  const age = calcAgeFromIc(person.nric);
+  const age = resolveAge(person);
   const needConsent = Boolean(form.parental_form) && age != null && age < 19;
   // 只有开启「弹性参加时段」才渲染时段选择器；否则不显示（提交时默认全选）。
   const slotPickerOn = fieldOn(form, "flexible_time_slot");
@@ -664,7 +680,12 @@ function PersonForm({
           style={styles.input}
           inputMode="numeric"
           value={person.nric}
-          onChange={(e) => onChange({ nric: e.target.value.replace(/\D/g, "") })}
+          onChange={(e) => {
+            const nric = e.target.value.replace(/\D/g, "");
+            // IC 一变就按新 IC 重算年龄填进去；算不出来（位数不够/日期不合法）就保留原本填的。
+            const autoAge = calcAgeFromIc(nric);
+            onChange(autoAge != null ? { nric, age: String(autoAge) } : { nric });
+          }}
         />
       </Field>
       <div style={styles.ageRow}>
@@ -672,7 +693,17 @@ function PersonForm({
           年龄
           <span style={styles.fieldLabelEn}>Age</span>
         </span>
-        <span style={styles.ageValue}>{age != null ? `${age} 岁` : "—"}</span>
+        {/* 年龄先锁死只读：由 IC 自动带出。要不要开放手改还在讨论（会牵动报名费年龄档）。 */}
+        <input
+          style={{ ...styles.ageInput, ...styles.ageInputReadonly }}
+          inputMode="numeric"
+          readOnly
+          title="由 IC 号码自动带出 / Auto-filled from IC"
+          placeholder="自动 / auto"
+          value={person.age}
+          onChange={(e) => onChange({ age: e.target.value.replace(/\D/g, "").slice(0, 3) })}
+        />
+        <span style={styles.ageUnit}>岁 years</span>
         {needConsent ? <span style={styles.parentalPill}>需家长同意书 Parental Consent</span> : null}
       </div>
       <Field label="手机号码 *" en="Phone No.">
@@ -870,6 +901,8 @@ const styles: Record<string, CSSProperties> = {
   // 区块标题后缀的小号英文
   cardTitleEn: { marginLeft: "7px", fontSize: "11.5px", fontWeight: 600, color: "var(--x-color-ink-muted)", letterSpacing: "0.2px" },
   note: { margin: 0, fontSize: "12.5px", lineHeight: 1.5, color: "var(--x-color-ink-muted)" },
+  // 直接压在海报背景上的说明（不在白卡里）：深色字看不清，改白字 + 毛玻璃底
+  noteOnPoster: { margin: 0, padding: "10px 14px", borderRadius: "var(--x-radius-md)", background: "rgba(0, 0, 0, 0.28)", border: "1px solid rgba(255, 255, 255, 0.22)", backdropFilter: "blur(8px)", fontSize: "12.5px", lineHeight: 1.5, fontWeight: 600, color: "#fff" },
   // 说明文字里的英文：另起一行、更淡，不跟中文抢
   noteEn: { display: "block", marginTop: "2px", fontSize: "11.5px", lineHeight: 1.45, opacity: 0.8 },
   noteLabel: { display: "block", fontSize: "13.5px", fontWeight: 800, color: "var(--x-color-ink)" },
@@ -884,7 +917,9 @@ const styles: Record<string, CSSProperties> = {
   textarea: { width: "100%", boxSizing: "border-box", minHeight: "70px", resize: "vertical", padding: "11px 12px", fontSize: "14px", borderRadius: "var(--x-radius-sm)", border: "1px solid var(--x-color-line)", background: "var(--x-color-panel)", color: "var(--x-color-ink)" },
   ageRow: { display: "flex", alignItems: "center", gap: "10px", padding: "8px 12px", borderRadius: "var(--x-radius-sm)", background: "var(--x-color-panel-alt)" },
   ageLabel: { fontSize: "13.5px", fontWeight: 800, color: "var(--x-color-ink)" },
-  ageValue: { fontSize: "15px", fontWeight: 700 },
+  ageInput: { width: "112px", flexShrink: 0, boxSizing: "border-box", padding: "8px 10px", fontSize: "15px", fontWeight: 700, borderRadius: "var(--x-radius-sm)", border: "1px solid var(--x-color-line)", background: "var(--x-color-panel)", color: "var(--x-color-ink)", outline: "none" },
+  ageInputReadonly: { background: "var(--x-color-panel-alt)", color: "var(--x-color-ink-muted)", cursor: "default" },
+  ageUnit: { fontSize: "12.5px", color: "var(--x-color-ink-muted)" },
   parentalPill: { marginLeft: "auto", fontSize: "12px", fontWeight: 700, color: "var(--x-color-warning)", background: "var(--x-color-warning-soft)", border: "1px solid var(--x-color-warning-border)", borderRadius: "999px", padding: "2px 10px" },
   checkboxRow: { display: "flex", alignItems: "center", gap: "8px", fontSize: "14px" },
   slotList: { display: "flex", flexDirection: "column", gap: "6px" },
