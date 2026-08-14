@@ -20,7 +20,7 @@ export type EventAttachmentRecord = {
   user_name?: string;
 };
 
-export type EventUnitRole = "主办单位" | "协办单位" | "协调单位";
+export type EventUnitRole = "主催单位" | "主办单位" | "承办单位" | "协办单位" | "协调单位";
 
 export type EventOrganizingUnit = {
   id: number;

@@ -20,6 +20,7 @@ export type PublicEventUnit = {
   role?: string | null;
   unit_name?: string | null;
   logo_url?: string | null;
+  sort_order?: number | null;
 };
 
 export type PublicEvent = {

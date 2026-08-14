@@ -21,7 +21,7 @@ import { EventBudgetTab } from "./EventBudgetTab";
 import { EventCheckinTab } from "./EventCheckinTab";
 import { EventFlowTab } from "./EventFlowTab";
 import { EventTaskTab } from "./EventTaskTab";
-import { deleteEventUnit, saveEventUnit } from "./api";
+import { deleteEventUnit, reorderEventUnits, saveEventUnit } from "./api";
 import type { EventCreatePayload, EventMutationPayload, EventOrganizingUnit, EventRecord } from "./types";
 import type { FormRecord } from "../../form/react/types";
 
@@ -786,9 +786,9 @@ function LinkedFormHeadChip({ event, form, onOpen }: { event: EventRecord | null
   );
 }
 
-// ---- 进行单位（主办/协办/协调，一个活动多个，各带名称与 logo） ----
+// ---- 进行单位（主催/主办/承办/协办/协调，一个活动多个，各带名称与 logo，可上下调顺序） ----
 
-const UNIT_ROLES = ["主办单位", "协办单位", "协调单位"] as const;
+const UNIT_ROLES = ["主催单位", "主办单位", "承办单位", "协办单位", "协调单位"] as const;
 const OWN_UNIT_NAME = "地南佛学会";
 const OWN_LOGO_URL = "/static/images/logo/logo.png";
 
@@ -804,6 +804,7 @@ function OrganizingUnitsSection({
   const units = event.organizing_units || [];
   // 允许同时挂多行「未保存草稿」，加号常驻，逐行保存。
   const [draftKeys, setDraftKeys] = useState<number[]>([]);
+  const [reordering, setReordering] = useState(false);
   const nextDraftKey = useRef(1);
 
   function addDraft() {
@@ -814,10 +815,30 @@ function OrganizingUnitsSection({
     setDraftKeys((keys) => keys.filter((k) => k !== key));
   }
 
+  // 上下移动：整份 id 顺序发回后端重排 sort_order，公开报名页照这个顺序渲染。
+  async function moveUnit(index: number, direction: -1 | 1) {
+    const target = index + direction;
+    if (target < 0 || target >= units.length) return;
+    const ids = units.map((u) => u.id);
+    [ids[index], ids[target]] = [ids[target], ids[index]];
+    setReordering(true);
+    try {
+      const res = await reorderEventUnits(event.id, ids);
+      if (res.status !== "success") {
+        throw new Error(res.message || "排序失败");
+      }
+      onChanged();
+    } catch (e) {
+      show_alert("error", e instanceof Error ? e.message : "排序失败");
+    } finally {
+      setReordering(false);
+    }
+  }
+
   return (
     <div style={unitsSectionStyle}>
       <div style={unitsHeadStyle}>
-        <span style={factLabelStyle}>进行单位（主办 / 协办 / 协调，可多个）</span>
+        <span style={factLabelStyle}>进行单位（主催 / 主办 / 承办 / 协办 / 协调，可多个，↑↓ 调顺序）</span>
         {canEdit ? (
           <button type="button" style={unitAddButtonStyle} onClick={addDraft}>
             + 添加单位
@@ -825,8 +846,17 @@ function OrganizingUnitsSection({
         ) : null}
       </div>
       <div style={unitsListStyle}>
-        {units.map((unit) => (
-          <UnitRow key={unit.id} unit={unit} canEdit={canEdit} onChanged={onChanged} />
+        {units.map((unit, index) => (
+          <UnitRow
+            key={unit.id}
+            unit={unit}
+            canEdit={canEdit}
+            onChanged={onChanged}
+            canMoveUp={canEdit && index > 0}
+            canMoveDown={canEdit && index < units.length - 1}
+            reordering={reordering}
+            onMove={(direction) => void moveUnit(index, direction)}
+          />
         ))}
         {draftKeys.map((key) => (
           <UnitRow
@@ -855,12 +885,20 @@ function UnitRow({
   canEdit,
   onChanged,
   onCancel,
+  canMoveUp = false,
+  canMoveDown = false,
+  reordering = false,
+  onMove,
 }: {
   unit: EventOrganizingUnit | null;
   eventId?: number;
   canEdit: boolean;
   onChanged: () => void;
   onCancel?: () => void;
+  canMoveUp?: boolean;
+  canMoveDown?: boolean;
+  reordering?: boolean;
+  onMove?: (direction: -1 | 1) => void;
 }) {
   const [role, setRole] = useState<string>(unit?.role || "协办单位");
   const [name, setName] = useState(unit?.unit_name || "");
@@ -913,6 +951,29 @@ function UnitRow({
 
   return (
     <div style={unitRowStyle}>
+      {onMove ? (
+        <span style={unitMoveGroupStyle}>
+          <button
+            type="button"
+            style={unitMoveButtonStyle}
+            disabled={!canMoveUp || saving || reordering}
+            title="上移"
+            onClick={() => onMove(-1)}
+          >
+            ↑
+          </button>
+          <button
+            type="button"
+            style={unitMoveButtonStyle}
+            disabled={!canMoveDown || saving || reordering}
+            title="下移"
+            onClick={() => onMove(1)}
+          >
+            ↓
+          </button>
+        </span>
+      ) : null}
+
       {logo ? (
         <img src={URL.createObjectURL(logo)} alt="logo" style={unitLogoStyle} />
       ) : logoUrl ? (
@@ -1214,6 +1275,8 @@ const unitAddButtonStyle: CSSProperties = { padding: "4px 10px", borderRadius: "
 const unitGhostButtonStyle: CSSProperties = { padding: "6px 10px", borderRadius: "7px", border: "1px solid var(--x-color-line)", background: "var(--x-color-panel)", color: "var(--x-color-ink)", fontSize: "12px", fontWeight: 600, cursor: "pointer", whiteSpace: "nowrap" };
 const unitPrimaryButtonStyle: CSSProperties = { padding: "6px 12px", borderRadius: "7px", border: "none", background: "var(--x-color-accent)", color: "#fff", fontSize: "12px", fontWeight: 700, cursor: "pointer", whiteSpace: "nowrap" };
 const unitDangerButtonStyle: CSSProperties = { padding: "6px 10px", borderRadius: "7px", border: "1px solid var(--x-color-danger-border)", background: "var(--x-color-danger-soft)", color: "var(--x-color-danger)", fontSize: "12px", fontWeight: 600, cursor: "pointer", whiteSpace: "nowrap", flexShrink: 0 };
+const unitMoveGroupStyle: CSSProperties = { display: "flex", flexDirection: "column", gap: "2px", flexShrink: 0 };
+const unitMoveButtonStyle: CSSProperties = { width: 22, height: 16, display: "flex", alignItems: "center", justifyContent: "center", padding: 0, borderRadius: "4px", border: "1px solid var(--x-color-line)", background: "var(--x-color-panel)", color: "var(--x-color-ink-muted)", fontSize: "10px", lineHeight: 1, cursor: "pointer" };
 const unitEmptyStyle: CSSProperties = { fontSize: "12.5px", color: "var(--x-color-ink-muted)" };
 const factValueStyle: CSSProperties = { fontSize: "13px", lineHeight: 1.5, wordBreak: "break-word", fontWeight: 600 };
 const factIconGroupStyle: CSSProperties = { display: "inline-flex", gap: "4px" };

@@ -293,9 +293,13 @@ export function RegisterPage({ formId }: { formId: number }) {
   const currentYearTitle = form.title || "活动报名";
 
   // 进行单位：只有默认的「主办单位 · 地南佛学会」一条时不特别展示；
-  // 有协办/协调或其他主办时按角色分组显示在页头（带 logo）。
+  // 有主催/承办/协办/协调或其他主办时按角色分组显示在页头（带 logo）。
   const latestEvent = form.events?.length ? form.events[form.events.length - 1] : null;
-  const organizingUnits = (latestEvent?.organizing_units || []).filter((u) => (u.unit_name || "").trim());
+  // 顺序完全跟 CRM 基本设置里排的 sort_order 走（后端已排好，这里再兜一次底）。
+  const organizingUnits = (latestEvent?.organizing_units || [])
+    .filter((u) => (u.unit_name || "").trim())
+    .slice()
+    .sort((a, b) => (a.sort_order ?? 0) - (b.sort_order ?? 0) || (a.id ?? 0) - (b.id ?? 0));
   const showUnitsBanner =
     organizingUnits.length > 0 &&
     !(
@@ -303,13 +307,10 @@ export function RegisterPage({ formId }: { formId: number }) {
       organizingUnits[0].role === "主办单位" &&
       (organizingUnits[0].unit_name || "").trim() === "地南佛学会"
     );
-  const unitRoleOrder = ["主办单位", "协办单位", "协调单位"];
-  const unitRoles = [
-    ...unitRoleOrder.filter((role) => organizingUnits.some((u) => u.role === role)),
-    ...Array.from(new Set(organizingUnits.map((u) => u.role || ""))).filter(
-      (role) => role && !unitRoleOrder.includes(role),
-    ),
-  ];
+  // 角色分组的先后 = 该角色第一个单位在排序里的位置，所以 CRM 调顺序这里立刻跟着变。
+  const unitRoles = Array.from(
+    new Set(organizingUnits.map((u) => (u.role || "").trim()).filter(Boolean)),
+  );
 
   return (
     <div style={styles.page}>
@@ -329,7 +330,7 @@ export function RegisterPage({ formId }: { formId: number }) {
                   <span style={styles.unitsRole}>{role}</span>
                   <span style={styles.unitsList}>
                     {organizingUnits
-                      .filter((u) => u.role === role)
+                      .filter((u) => (u.role || "").trim() === role)
                       .map((u, idx) => (
                         <span key={u.id ?? `${role}-${idx}`} style={styles.unitChip}>
                           {u.logo_url ? <img src={u.logo_url} alt="" style={styles.unitLogo} /> : null}

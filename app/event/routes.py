@@ -208,6 +208,13 @@ def save_event_unit():
     return services.save_event_unit(request.form, request.files)
 
 
+@event_data_bp.route("/units/reorder", methods=["POST"])
+@login_required
+@permission_required("event_edit")
+def reorder_event_units():
+    return services.reorder_event_units(request.get_json(silent=True) or {})
+
+
 @event_data_bp.route("/units/delete/<int:unit_id>", methods=["POST", "DELETE"])
 @login_required
 @permission_required("event_edit")

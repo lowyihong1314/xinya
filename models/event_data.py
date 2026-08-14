@@ -364,7 +364,7 @@ class EventBudgetData(db.Model):
 
 
 class EventOrganizingUnit(db.Model):
-    """活动的进行单位（主办/协办/协调），一个活动可挂多个，各带名称与 logo。"""
+    """活动的进行单位（主催/主办/承办/协办/协调），一个活动可挂多个，各带名称与 logo，sort_order 决定展示顺序。"""
 
     __tablename__ = "event_organizing_unit"
 
@@ -375,7 +375,8 @@ class EventOrganizingUnit(db.Model):
         nullable=False,
         index=True,
     )
-    role = db.Column(db.String(20), nullable=False, default="主办单位")  # 主办单位 / 协办单位 / 协调单位
+    # 主催单位 / 主办单位 / 承办单位 / 协办单位 / 协调单位（服务层 EVENT_UNIT_ROLES 为准）
+    role = db.Column(db.String(20), nullable=False, default="主办单位")
     unit_name = db.Column(db.String(200), nullable=False)
     logo_path = db.Column(db.String(255), nullable=True)  # media 短路径；地南佛学会走硬编码 logo
     sort_order = db.Column(db.Integer, nullable=False, default=0)
@@ -388,7 +389,7 @@ class EventOrganizingUnit(db.Model):
             lazy="selectin",
             cascade="all, delete-orphan",
             passive_deletes=True,
-            order_by="EventOrganizingUnit.sort_order",
+            order_by="EventOrganizingUnit.sort_order, EventOrganizingUnit.id",
         ),
     )
 

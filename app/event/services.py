@@ -593,9 +593,10 @@ def set_event_poster(event_id, file_id):
         return jsonify({"status": "error", "message": str(exc)}), 500
 
 
-# ---- 进行单位（主办/协办/协调，一个活动多个，各带名称与 logo） ----
+# ---- 进行单位（主催/主办/承办/协办/协调，一个活动多个，各带名称与 logo） ----
 
-EVENT_UNIT_ROLES = ("主办单位", "协办单位", "协调单位")
+# 白名单兼下拉顺序；实际展示顺序以每条记录的 sort_order 为准（见 reorder_event_units）。
+EVENT_UNIT_ROLES = ("主催单位", "主办单位", "承办单位", "协办单位", "协调单位")
 EVENT_UNIT_LOGO_DIR = DATA_ROOT / "NAS" / "UTBA" / "event_unit_logo"
 _UNIT_LOGO_EXTENSIONS = {".png", ".jpg", ".jpeg", ".webp", ".gif", ".svg"}
 
@@ -650,6 +651,38 @@ def save_event_unit(form, files):
 
     db.session.commit()
     return jsonify({"status": "success", "message": "进行单位已保存", "data": unit.to_dict()})
+
+
+def reorder_event_units(data):
+    """按前端给的 unit_id 顺序重排某个活动的进行单位（sort_order 从 1 递增）。"""
+    event_id = data.get("event_id")
+    unit_ids = data.get("unit_ids") or []
+    if not event_id:
+        return jsonify({"status": "error", "message": "event_id 必填"}), 400
+    if not isinstance(unit_ids, (list, tuple)) or not unit_ids:
+        return jsonify({"status": "error", "message": "unit_ids 必填"}), 400
+
+    try:
+        ordered_ids = [int(uid) for uid in unit_ids]
+    except (TypeError, ValueError):
+        return jsonify({"status": "error", "message": "unit_ids 必须是整数列表"}), 400
+
+    units = EventOrganizingUnit.query.filter_by(event_id=int(event_id)).all()
+    units_by_id = {unit.id: unit for unit in units}
+    if set(ordered_ids) != set(units_by_id.keys()):
+        return jsonify({"status": "error", "message": "unit_ids 与该活动的进行单位不匹配"}), 400
+
+    for index, unit_id in enumerate(ordered_ids, start=1):
+        units_by_id[unit_id].sort_order = index
+
+    db.session.commit()
+    return jsonify(
+        {
+            "status": "success",
+            "message": "顺序已更新",
+            "data": [units_by_id[uid].to_dict() for uid in ordered_ids],
+        }
+    )
 
 
 def delete_event_unit(unit_id):

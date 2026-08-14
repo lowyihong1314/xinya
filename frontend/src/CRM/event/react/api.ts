@@ -70,6 +70,16 @@ export async function saveEventUnit(params: {
   return parseJson<{ status?: string; message?: string; data?: unknown }>(response);
 }
 
+export async function reorderEventUnits(eventId: number, unitIds: number[]) {
+  const response = await apiFetch("/api/event_data/units/reorder", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    credentials: "include",
+    body: JSON.stringify({ event_id: eventId, unit_ids: unitIds }),
+  });
+  return parseJson<{ status?: string; message?: string }>(response);
+}
+
 export async function deleteEventUnit(unitId: number) {
   const response = await apiFetch(`/api/event_data/units/delete/${unitId}`, {
     method: "POST",
