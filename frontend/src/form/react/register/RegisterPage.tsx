@@ -353,7 +353,7 @@ export function RegisterPage({ formId }: { formId: number }) {
                       .map((u, idx) => (
                         <span key={u.id ?? `${role}-${idx}`} style={styles.unitChip}>
                           {u.logo_url ? <img src={u.logo_url} alt="" style={styles.unitLogo} /> : null}
-                          {u.unit_name}
+                          <span style={styles.unitChipName}>{u.unit_name}</span>
                         </span>
                       ))}
                   </span>
@@ -878,22 +878,26 @@ const styles: Record<string, CSSProperties> = {
     backdropFilter: "blur(8px)",
     textAlign: "left", // head 是居中的，这块单位横幅自己靠左
   },
-  unitsRow: { display: "flex", alignItems: "center", justifyContent: "flex-start", gap: "8px", flexWrap: "wrap" },
-  unitsRole: { fontSize: "11.5px", fontWeight: 800, letterSpacing: "1px", opacity: 0.85, whiteSpace: "nowrap" },
-  unitsList: { display: "flex", alignItems: "center", gap: "8px", flexWrap: "wrap", justifyContent: "flex-start" },
+  unitsRow: { display: "flex", alignItems: "center", justifyContent: "flex-start", gap: "8px", flexWrap: "wrap", minWidth: 0 },
+  unitsRole: { fontSize: "11.5px", fontWeight: 800, letterSpacing: "1px", opacity: 0.85, whiteSpace: "nowrap", flexShrink: 0 },
+  unitsList: { display: "flex", alignItems: "center", gap: "8px", flexWrap: "wrap", justifyContent: "flex-start", minWidth: 0, flex: "1 1 auto" },
   unitChip: {
     display: "inline-flex",
     alignItems: "center",
     gap: "6px",
     padding: "4px 10px 4px 4px",
-    borderRadius: "999px",
+    // 名字可能折成两行，用 16px 圆角比胶囊形更耐看（单行时看起来仍接近胶囊）
+    borderRadius: "16px",
     background: "rgba(255, 255, 255, 0.92)",
     color: "#134e4a",
     fontSize: "12.5px",
     fontWeight: 700,
-    whiteSpace: "nowrap",
+    maxWidth: "100%",
+    minWidth: 0,
   },
-  unitLogo: { width: 24, height: 24, borderRadius: "50%", objectFit: "contain", background: "#fff" },
+  // 单位名可能是「中文 + 英文全称」很长，甚至在 CRM 里手动打了换行：保留换行 + 自动折行
+  unitChipName: { minWidth: 0, whiteSpace: "pre-wrap", overflowWrap: "anywhere", lineHeight: 1.35, textAlign: "left" },
+  unitLogo: { width: 24, height: 24, flexShrink: 0, borderRadius: "50%", objectFit: "contain", background: "#fff" },
   venueName: { display: "flex", alignItems: "center", gap: "6px", margin: "0 0 6px", fontSize: "13.5px", fontWeight: 800, color: "var(--x-color-ink)" },
   card: { background: "var(--x-color-panel-strongest)", borderRadius: "var(--x-radius-lg)", boxShadow: "0 20px 50px var(--x-color-shadow)", padding: "18px 18px 20px", display: "flex", flexDirection: "column", gap: "12px" },
   stack: { display: "flex", flexDirection: "column", gap: "14px" },

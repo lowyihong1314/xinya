@@ -1026,10 +1026,13 @@ function UnitRow({
         ))}
       </select>
 
-      <input
-        style={{ ...factInputStyle, flex: 1, minWidth: 0 }}
+      {/* 单位名常是「中文 + 英文全称」，用 textarea 让长名字能换行，报名页会原样保留这些换行 */}
+      <textarea
+        style={unitNameInputStyle}
+        rows={2}
+        maxLength={200}
         value={name}
-        placeholder="单位名称"
+        placeholder="单位名称（可换行，报名页照样显示）"
         disabled={!canEdit || saving}
         onChange={(e) => setName(e.target.value)}
       />
@@ -1297,6 +1300,7 @@ const unitAddButtonStyle: CSSProperties = { padding: "4px 10px", borderRadius: "
 const unitGhostButtonStyle: CSSProperties = { padding: "6px 10px", borderRadius: "7px", border: "1px solid var(--x-color-line)", background: "var(--x-color-panel)", color: "var(--x-color-ink)", fontSize: "12px", fontWeight: 600, cursor: "pointer", whiteSpace: "nowrap" };
 const unitPrimaryButtonStyle: CSSProperties = { padding: "6px 12px", borderRadius: "7px", border: "none", background: "var(--x-color-accent)", color: "#fff", fontSize: "12px", fontWeight: 700, cursor: "pointer", whiteSpace: "nowrap" };
 const unitDangerButtonStyle: CSSProperties = { padding: "6px 10px", borderRadius: "7px", border: "1px solid var(--x-color-danger-border)", background: "var(--x-color-danger-soft)", color: "var(--x-color-danger)", fontSize: "12px", fontWeight: 600, cursor: "pointer", whiteSpace: "nowrap", flexShrink: 0 };
+const unitNameInputStyle: CSSProperties = { flex: 1, minWidth: "160px", boxSizing: "border-box", padding: "7px 9px", borderRadius: "7px", border: "1px solid var(--x-color-line)", background: "var(--x-color-panel)", color: "var(--x-color-ink)", fontSize: "13px", fontFamily: "inherit", lineHeight: 1.4, resize: "vertical" };
 const unitLogoTriggerStyle: CSSProperties = { padding: 0, border: "none", background: "none", display: "flex", cursor: "pointer", flexShrink: 0 };
 const unitMoveGroupStyle: CSSProperties = { display: "flex", flexDirection: "column", gap: "2px", flexShrink: 0 };
 const unitMoveButtonStyle: CSSProperties = { width: 22, height: 16, display: "flex", alignItems: "center", justifyContent: "center", padding: 0, borderRadius: "4px", border: "1px solid var(--x-color-line)", background: "var(--x-color-panel)", color: "var(--x-color-ink-muted)", fontSize: "10px", lineHeight: 1, cursor: "pointer" };
