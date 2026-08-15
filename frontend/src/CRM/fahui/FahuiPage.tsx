@@ -29,6 +29,8 @@ import {
   fetchYlpOrderDetail,
   fetchYlpPayments,
   fetchYlpVersions,
+  fetchYlpVersionEvent,
+  setYlpVersionEvent,
   downloadYlpPaiweiJob,
   getYlpPaiweiJobStatus,
   listYlpOrdersForExport,
@@ -42,6 +44,7 @@ import {
   updateYlpOrderItem,
   updateYlpOrderStatus,
 } from "./api";
+import { showEventPicker } from "../shared/showEventPicker";
 import { PaiweiEditorModal } from "./intake/PaiweiEditorModal";
 import { buildItemPayload, createDraft, draftFromItem } from "./intake/paiwei";
 import { connectFahuiSocket } from "./socket";
@@ -53,6 +56,7 @@ import type {
   YlpOrderSummary,
   YlpPagination,
   YlpPaymentRecord,
+  YlpVersionEventBinding,
 } from "./types";
 
 const PAGE_SIZE = 8;
@@ -376,6 +380,9 @@ export function FahuiPage() {
   const [paymentError, setPaymentError] = useState("");
   const [actionMessage, setActionMessage] = useState("");
   const [ylpVersions, setYlpVersions] = useState<string[]>([]);
+  // 当前版本绑定的活动（绑定后该版本收入会进活动预算）
+  const [versionEvent, setVersionEvent] = useState<YlpVersionEventBinding | null>(null);
+  const [versionEventBusy, setVersionEventBusy] = useState(false);
   const [ylpVersion, setYlpVersion] = useState(initialRouteState.ylpVersion);
   const [ylpQueryInput, setYlpQueryInput] = useState(initialRouteState.ylpQuery);
   const [ylpQuery, setYlpQuery] = useState(initialRouteState.ylpQuery);
@@ -1688,6 +1695,111 @@ export function FahuiPage() {
     }
   }
 
+  // 版本切换就重新拉「这个版本绑了哪个活动」
+  useEffect(() => {
+    if (screen.kind !== "workspace" || screen.workspace !== "ylp" || screen.section !== "orders" || !ylpVersion) {
+      return;
+    }
+    let cancelled = false;
+    void (async () => {
+      try {
+        const res = await fetchYlpVersionEvent(ylpVersion);
+        if (!cancelled) setVersionEvent(res.data || null);
+      } catch {
+        if (!cancelled) setVersionEvent(null);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [screen, ylpVersion]);
+
+  async function handleBindVersionEvent() {
+    if (versionEventBusy || !ylpVersion) {
+      return;
+    }
+    if (ylpVersion === "DELETE") {
+      show_alert("error", "DELETE 版本不能绑定活动");
+      return;
+    }
+    const picked = await showEventPicker();
+    if (!picked) {
+      return;
+    }
+    setVersionEventBusy(true);
+    try {
+      const res = await setYlpVersionEvent(ylpVersion, picked.id);
+      setVersionEvent(res.data || null);
+      show_alert("success", `${ylpVersion} 已绑定「${picked.event_name || "未命名活动"}」，收入会进该活动预算`);
+    } catch (error) {
+      show_alert("error", error instanceof Error ? error.message : "绑定失败");
+    } finally {
+      setVersionEventBusy(false);
+    }
+  }
+
+  async function handleUnbindVersionEvent() {
+    if (versionEventBusy || !versionEvent) {
+      return;
+    }
+    const confirmed = await showConfirmDialog({
+      title: "解除绑定",
+      message: `解除 ${ylpVersion} 与「${versionEvent.event_name || `活动 #${versionEvent.event_id}`}」的绑定？该版本的收入会从活动预算里移除。`,
+    });
+    if (!confirmed) {
+      return;
+    }
+    setVersionEventBusy(true);
+    try {
+      await setYlpVersionEvent(ylpVersion, null);
+      setVersionEvent(null);
+      show_alert("success", "已解除绑定");
+    } catch (error) {
+      show_alert("error", error instanceof Error ? error.message : "解除绑定失败");
+    } finally {
+      setVersionEventBusy(false);
+    }
+  }
+
+  function renderVersionEventBar() {
+    return (
+      <section style={styles.bindBar}>
+        <span style={styles.bindLabel}>
+          <i className="fa-solid fa-link" aria-hidden="true" style={{ marginRight: 6 }} />
+          绑定活动
+        </span>
+        {versionEvent ? (
+          <>
+            <span style={styles.bindChip}>
+              {versionEvent.event_name || `活动 #${versionEvent.event_id}`}
+              {versionEvent.event_datetime ? ` · ${versionEvent.event_datetime.slice(0, 10)}` : ""}
+            </span>
+            <button
+              type="button"
+              style={styles.bindLink}
+              onClick={() => navigate(`/crm/event_table?event_id=${versionEvent.event_id}&event_tab=budget`)}
+            >
+              查看活动预算
+            </button>
+            <button type="button" style={styles.bindGhost} disabled={versionEventBusy} onClick={() => void handleBindVersionEvent()}>
+              更换活动
+            </button>
+            <button type="button" style={styles.bindGhost} disabled={versionEventBusy} onClick={() => void handleUnbindVersionEvent()}>
+              解除绑定
+            </button>
+          </>
+        ) : (
+          <>
+            <span style={styles.bindHint}>{`${ylpVersion || "本版本"} 还没绑定活动，绑定后这个版本的订单收入会自动进该活动的预算`}</span>
+            <button type="button" style={styles.bindAction} disabled={versionEventBusy || ylpVersion === "DELETE"} onClick={() => void handleBindVersionEvent()}>
+              {versionEventBusy ? "处理中…" : "绑定活动"}
+            </button>
+          </>
+        )}
+      </section>
+    );
+  }
+
   function renderYlpOrderList() {
     return (
       <>
@@ -1744,6 +1856,8 @@ export function FahuiPage() {
 
           <p style={styles.summary}>{`共 ${ylpPagination?.total || 0} 条 · ${ylpSafePage}/${ylpTotalPages} 页`}</p>
         </section>
+
+        {renderVersionEventBar()}
 
         {ylpLoading ? <section style={styles.stateCard}>加载中…</section> : null}
         {!ylpLoading && ylpError ? <section style={styles.stateCard}>{ylpError}</section> : null}
@@ -3188,6 +3302,67 @@ const styles = {
     gap: "8px",
     alignItems: "center",
   }),
+  bindBar: {
+    display: "flex",
+    flexWrap: "wrap" as const,
+    alignItems: "center",
+    gap: "8px",
+    padding: "8px 10px",
+    borderRadius: "10px",
+    border: "1px solid var(--x-color-line)",
+    background: "var(--x-color-panel-alt)",
+  },
+  bindLabel: {
+    fontSize: "12.5px",
+    fontWeight: 800,
+    color: "var(--x-color-ink)",
+    whiteSpace: "nowrap" as const,
+  },
+  bindHint: {
+    fontSize: "11.5px",
+    color: "var(--x-color-ink-muted)",
+    flex: "1 1 220px",
+    minWidth: 0,
+  },
+  bindChip: {
+    padding: "3px 10px",
+    borderRadius: "999px",
+    background: "var(--x-color-accent-soft)",
+    border: "1px solid var(--x-color-accent-border)",
+    color: "var(--x-color-accent-strong)",
+    fontSize: "12px",
+    fontWeight: 700,
+  },
+  bindAction: {
+    padding: "6px 14px",
+    borderRadius: "8px",
+    border: "none",
+    background: "var(--x-color-accent)",
+    color: "#fff",
+    fontSize: "12.5px",
+    fontWeight: 800,
+    cursor: "pointer",
+  },
+  bindGhost: {
+    padding: "5px 12px",
+    borderRadius: "8px",
+    border: "1px solid var(--x-color-line)",
+    background: "var(--x-color-panel)",
+    color: "var(--x-color-ink)",
+    fontSize: "12px",
+    fontWeight: 700,
+    cursor: "pointer",
+  },
+  bindLink: {
+    padding: "5px 12px",
+    borderRadius: "8px",
+    border: "1px solid var(--x-color-accent-border)",
+    background: "var(--x-color-panel)",
+    color: "var(--x-color-accent-strong)",
+    fontSize: "12px",
+    fontWeight: 700,
+    cursor: "pointer",
+  },
   searchInput: {
     width: "100%",
     padding: "6px 8px",

@@ -154,6 +154,24 @@ export type YlpOrderDetailResponse = {
   data?: YlpOrderDetail;
 };
 
+// 版本 ⇄ 活动绑定：绑定后该版本的订单收入会进活动预算
+export type YlpVersionEventBinding = {
+  id: number;
+  workspace: string;
+  version: string;
+  event_id: number;
+  event_name?: string | null;
+  event_datetime?: string | null;
+  created_at?: string | null;
+};
+
+export type YlpVersionEventResponse = {
+  status?: string;
+  message?: string;
+  error?: string;
+  data?: YlpVersionEventBinding | null;
+};
+
 export type YlpVersionResponse = {
   status?: string;
   message?: string;

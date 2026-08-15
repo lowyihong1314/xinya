@@ -1,3 +1,5 @@
+from datetime import datetime
+
 from models import db
 
 
@@ -24,6 +26,49 @@ class FahuiVersion(db.Model):
 
     id = db.Column(db.Integer, primary_key=True, autoincrement=True)
     version = db.Column(db.String(50), nullable=False)
+
+
+class FahuiVersionEvent(db.Model):
+    """法会版本 ↔ 活动绑定：把某个版本（例：2026_YLP）挂到活动上，
+    该版本的订单/付款就会作为收入行出现在活动预算里（做法同报名表格收入）。"""
+
+    __tablename__ = "fahui_version_event"
+    __table_args__ = (
+        db.UniqueConstraint("workspace", "version", name="uq_fahui_version_event"),
+    )
+
+    id = db.Column(db.Integer, primary_key=True, autoincrement=True)
+    # ylp / lamp，目前只接了 ylp，留着以后灯会也能绑
+    workspace = db.Column(db.String(16), nullable=False, default="ylp", index=True)
+    version = db.Column(db.String(50), nullable=False, index=True)
+    event_id = db.Column(
+        db.Integer,
+        db.ForeignKey("event_data.id", ondelete="CASCADE", onupdate="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    created_at = db.Column(db.DateTime, default=datetime.utcnow, nullable=False)
+    created_by_user_id = db.Column(
+        db.Integer,
+        db.ForeignKey("user_data.id", ondelete="SET NULL"),
+        nullable=True,
+    )
+
+    event = db.relationship(
+        "EventData",
+        backref=db.backref("fahui_version_bindings", lazy="selectin", cascade="all, delete-orphan", passive_deletes=True),
+    )
+
+    def to_dict(self):
+        return {
+            "id": self.id,
+            "workspace": self.workspace,
+            "version": self.version,
+            "event_id": self.event_id,
+            "event_name": getattr(self.event, "event_name", None),
+            "event_datetime": self.event.datetime.isoformat() if getattr(self.event, "datetime", None) else None,
+            "created_at": self.created_at.isoformat() if self.created_at else None,
+        }
 
 
 class FahuiOrder(db.Model):

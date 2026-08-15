@@ -1134,6 +1134,111 @@ def _registration_income_rows(event, include_pending=False):
     return rows
 
 
+def _fahui_income_rows(event, include_pending=False):
+    """法会（YLP）收入合成行（只读，不入库）：做法与报名表格收入一致。
+
+    绑定关系来自 fahui_version_event（在法会工作区「绑定活动」）：
+    预期 = 该版本所有有效订单的牌位金额合计；已收 = 已审核付款合计
+    （include_pending=True 时把待审核的付款也算进已收，供财政报告用）。
+    """
+    from models.fahui import FahuiOrder, FahuiOrderItem, FahuiPayment, fahui_payment_order
+
+    bindings = list(getattr(event, "fahui_version_bindings", None) or [])
+    if not bindings:
+        return []
+
+    rows = []
+    for binding in bindings:
+        version = binding.version
+        # 软删除的订单（status=delete / DELETE 版本）不算收入
+        order_query = FahuiOrder.query.filter(
+            FahuiOrder.version == version,
+            db.func.coalesce(FahuiOrder.status, "") != "delete",
+        )
+        order_ids = [row.id for row in order_query.with_entities(FahuiOrder.id).all()]
+        if not order_ids:
+            rows.append({
+                "id": f"fahui-{binding.id}",
+                "no": 0,
+                "type": "income",
+                "source": "fahui_ylp",
+                "editable": False,
+                "locked": True,
+                "fahui_version": version,
+                "fahui_workspace": binding.workspace,
+                "category": f"法会收入：{version}",
+                "budget_amount": 0.0,
+                "actual_amount": 0.0,
+                "remark": None,
+                "claim": None,
+                "stats": {"total": 0, "paid": 0, "approved": 0},
+            })
+            continue
+
+        expected = (
+            db.session.query(db.func.coalesce(db.func.sum(FahuiOrderItem.price), 0))
+            .filter(FahuiOrderItem.order_id.in_(order_ids))
+            .scalar()
+            or 0
+        )
+
+        # 付款既可能直接挂 order_id，也可能通过 fahui_payment_order 覆盖多张订单，
+        # 用 distinct 保证一条付款只算一次。
+        grouped_payment_ids = [
+            row[0]
+            for row in db.session.query(fahui_payment_order.c.payment_id)
+            .filter(fahui_payment_order.c.order_id.in_(order_ids))
+            .distinct()
+            .all()
+        ]
+        payments = FahuiPayment.query.filter(
+            db.or_(
+                FahuiPayment.order_id.in_(order_ids),
+                FahuiPayment.id.in_(grouped_payment_ids) if grouped_payment_ids else db.false(),
+            )
+        ).all()
+
+        collected_statuses = {"approved", "pending"} if include_pending else {"approved"}
+        collected = 0.0
+        paid_order_ids = set()
+        approved_order_ids = set()
+        for payment in payments:
+            status = str(payment.status or "").strip().lower()
+            status = {"approve": "approved", "reject": "rejected", "panding": "pending"}.get(status, status)
+            if status == "rejected":
+                continue
+            covered = {payment.order_id} if payment.order_id else set()
+            covered |= {order.id for order in (payment.grouped_orders or [])}
+            covered &= set(order_ids)
+            paid_order_ids |= covered
+            if status == "approved":
+                approved_order_ids |= covered
+            if status in collected_statuses:
+                collected += float(payment.total_price or 0)
+
+        rows.append({
+            "id": f"fahui-{binding.id}",
+            "no": 0,
+            "type": "income",
+            "source": "fahui_ylp",
+            "editable": False,
+            "locked": True,
+            "fahui_version": version,
+            "fahui_workspace": binding.workspace,
+            "category": f"法会收入：{version}",
+            "budget_amount": round(float(expected), 2),
+            "actual_amount": round(collected, 2),
+            "remark": None,
+            "claim": None,
+            "stats": {
+                "total": len(order_ids),
+                "paid": len(paid_order_ids),
+                "approved": len(approved_order_ids),
+            },
+        })
+    return rows
+
+
 def _manual_income_rows(event_id):
     """把该活动的手动收款（收款审核·捐赠收入等，按 event_id）作为只读收入行拼进预算：
     锁定不可编辑，按收款审核状态上色（process 绿 / checked 蓝 / fail 红）。
@@ -1186,8 +1291,14 @@ def event_budget_list_response(event_id):
         d["locked"] = False
         d["claim"] = None
         manual.append(d)
-    # 统一列表：报名收入(只读) + 手动收款(只读，按 event_id) + 手动预算行 + 该活动的报销(只读，按 event_id)。
-    data = _registration_income_rows(event) + _manual_income_rows(event_id) + manual + _event_claim_rows(event_id)
+    # 统一列表：报名收入 + 法会收入(绑定版本) + 手动收款 + 手动预算行 + 该活动的报销（前四类只读）。
+    data = (
+        _registration_income_rows(event)
+        + _fahui_income_rows(event)
+        + _manual_income_rows(event_id)
+        + manual
+        + _event_claim_rows(event_id)
+    )
     return jsonify({"status": "success", "data": data})
 
 
@@ -1208,6 +1319,7 @@ def event_budget_report_pdf_response(event_id):
         manual.append(d)
     rows = (
         _registration_income_rows(event, include_pending=True)
+        + _fahui_income_rows(event, include_pending=True)
         + _manual_income_rows(event_id)
         + manual
         + _event_claim_rows(event_id)

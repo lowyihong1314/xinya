@@ -14,7 +14,10 @@ from .services import (
     create_order_shell,
     get_order_detail,
     get_orders_by_phone,
+    get_version_event_binding,
     list_available_versions,
+    list_version_event_bindings,
+    set_version_event_binding,
     list_orders_for_export,
     search_orders,
 )
@@ -178,3 +181,30 @@ def delete_open_window_route(window_id: int):
 @fahui_bp.route("/get_versions", methods=["GET"])
 def list_versions_route():
     return jsonify({"status": "success", "data": list_available_versions()})
+
+
+@fahui_bp.route("/versions/bindings", methods=["GET"])
+@permission_required_any(*FAHUI_READ_PERMISSION_NAMES)
+def list_version_bindings_route():
+    workspace = request.args.get("workspace", default="ylp", type=str)
+    return jsonify({"status": "success", "data": list_version_event_bindings(workspace)})
+
+
+@fahui_bp.route("/versions/<path:version>/event", methods=["GET"])
+@permission_required_any(*FAHUI_READ_PERMISSION_NAMES)
+def get_version_event_route(version):
+    workspace = request.args.get("workspace", default="ylp", type=str)
+    return jsonify({"status": "success", "data": get_version_event_binding(version, workspace)})
+
+
+@fahui_bp.route("/versions/<path:version>/event", methods=["PUT", "POST"])
+@login_required
+@permission_required_any(*FAHUI_READ_PERMISSION_NAMES)
+def set_version_event_route(version):
+    payload = _json_payload()
+    workspace = payload.get("workspace") or "ylp"
+    try:
+        data = set_version_event_binding(version, payload.get("event_id"), workspace)
+    except ValueError as exc:
+        return jsonify({"status": "error", "message": str(exc)}), 400
+    return jsonify({"status": "success", "data": data})

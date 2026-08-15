@@ -107,6 +107,9 @@ def _row_status(row):
         if stats.get("removed_paid"):
             text += f"/移{stats['removed_paid']}"
         return text
+    if row.get("source") == "fahui_ylp":
+        stats = row.get("stats") or {}
+        return f"{stats.get('total', 0)}单/付{stats.get('paid', 0)}/审{stats.get('approved', 0)}"
     return ""
 
 

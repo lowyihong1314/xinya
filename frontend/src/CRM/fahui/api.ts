@@ -12,6 +12,7 @@ import type {
   YlpPaymentChannelMutationResponse,
   YlpPaymentRecord,
   YlpRelationOptionListResponse,
+  YlpVersionEventResponse,
   YlpVersionResponse,
 } from "./types";
 import { apiFetch } from "../../js/apiFetch";
@@ -87,6 +88,27 @@ export async function fetchYlpVersions() {
   });
 
   return parseJson<YlpVersionResponse>(response);
+}
+
+/** 读某个版本绑定了哪个活动（没绑定返回 data: null）。 */
+export async function fetchYlpVersionEvent(version: string) {
+  const response = await apiFetch(`/api/fahui_router/versions/${encodeURIComponent(version)}/event`, {
+    credentials: "include",
+  });
+
+  return parseJson<YlpVersionEventResponse>(response);
+}
+
+/** 绑定 / 解绑（eventId 传 null 就是解绑）。 */
+export async function setYlpVersionEvent(version: string, eventId: number | null) {
+  const response = await apiFetch(`/api/fahui_router/versions/${encodeURIComponent(version)}/event`, {
+    method: "PUT",
+    headers: { "Content-Type": "application/json" },
+    credentials: "include",
+    body: JSON.stringify({ event_id: eventId }),
+  });
+
+  return parseJson<YlpVersionEventResponse>(response);
 }
 
 export async function searchYlpOrders(params: {

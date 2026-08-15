@@ -10,6 +10,7 @@ from models import db
 from models.fahui import (
     FahuiItemFormData,
     FahuiOrder,
+    FahuiVersionEvent,
     FahuiOrderItem,
     FahuiPayment,
     FahuiPdfPageData,
@@ -512,6 +513,57 @@ def create_customer(data: dict) -> tuple[dict, int]:
 def list_available_versions() -> list[str]:
     rows = db.session.query(FahuiOrder.version).distinct().order_by(FahuiOrder.version.desc()).all()
     return [value for (value,) in rows if value]
+
+
+# ---- 版本 ↔ 活动绑定（绑定后该版本的订单收入会进活动预算，做法同报名表格） ----
+
+def get_version_event_binding(version: str, workspace: str = "ylp") -> dict | None:
+    version = normalize_version(version) if version else ""
+    if not version:
+        return None
+    row = FahuiVersionEvent.query.filter_by(workspace=workspace, version=version).first()
+    return row.to_dict() if row else None
+
+
+def list_version_event_bindings(workspace: str = "ylp") -> list[dict]:
+    rows = FahuiVersionEvent.query.filter_by(workspace=workspace).order_by(FahuiVersionEvent.version.desc()).all()
+    return [row.to_dict() for row in rows]
+
+
+def set_version_event_binding(version: str, event_id, workspace: str = "ylp") -> dict | None:
+    """event_id 传 None / 空 = 解除绑定；一个版本同时只能绑一个活动。"""
+    from models.event_data import EventData
+
+    version = normalize_version(version) if version else ""
+    if not version:
+        raise ValueError("缺少版本")
+    if version == "DELETE":
+        raise ValueError("DELETE 版本不能绑定活动")
+
+    row = FahuiVersionEvent.query.filter_by(workspace=workspace, version=version).first()
+
+    if event_id in (None, "", 0, "0"):
+        if row:
+            db.session.delete(row)
+            db.session.commit()
+        return None
+
+    try:
+        event_id = int(event_id)
+    except (TypeError, ValueError) as exc:
+        raise ValueError("event_id 格式错误") from exc
+
+    event = EventData.query.get(event_id)
+    if not event:
+        raise ValueError("活动不存在")
+
+    if not row:
+        row = FahuiVersionEvent(workspace=workspace, version=version)
+        db.session.add(row)
+    row.event_id = event.id
+    row.created_by_user_id = getattr(current_user, "id", None)
+    db.session.commit()
+    return row.to_dict()
 
 
 def get_available_versions() -> list[str]:

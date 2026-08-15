@@ -25,8 +25,15 @@ type BudgetItem = {
   source?: string;
   editable?: boolean;
   form_id?: number;
+  fahui_version?: string;
+  fahui_workspace?: string;
   stats?: BudgetStats;
 };
+
+// 报名表格 / 法会版本这类「名单 + 收款」型收入，用同一张只读卡片展示
+function isIntakeIncome(it: BudgetItem): boolean {
+  return it.source === "registration" || it.source === "fahui_ylp";
+}
 
 function fmt(n: number | null | undefined): string {
   if (n == null) return "—";
@@ -181,15 +188,31 @@ export function EventBudgetTab({
           <div style={mutedStyle}>预算 {fmt(totals.incB)} · 实际 {fmt(totals.incA)}</div>
         </div>
 
-        {income.filter((it) => it.source === "registration").map((it) => (
+        {income.filter((it) => isIntakeIncome(it)).map((it) => (
           <div key={it.id} style={regCardStyle}>
             <div style={{ display: "flex", justifyContent: "space-between", gap: 10, flexWrap: "wrap" }}>
-              <span style={{ fontWeight: 700 }}>{it.category}</span>
+              <span style={{ fontWeight: 700 }}>
+                {it.category}
+                {/* 法会收入：点进对应版本的工作区核对订单 */}
+                {it.source === "fahui_ylp" && it.fahui_version ? (
+                  <button
+                    type="button"
+                    style={{ ...linkBtnStyle, marginLeft: 8 }}
+                    onClick={() =>
+                      navigate(
+                        `/crm/dharma_event?fahui_view=workspace&fahui_workspace=${it.fahui_workspace || "ylp"}&fahui_section=orders&fahui_ylp_version=${encodeURIComponent(it.fahui_version!)}`,
+                      )
+                    }
+                  >
+                    查看法会订单
+                  </button>
+                ) : null}
+              </span>
               <span style={{ fontFamily: "var(--x-font-mono)", fontSize: 12.5 }}>预期 {fmt(it.budget_amount)} · 已收 {fmt(it.actual_amount)}</span>
             </div>
             {it.stats ? (
               <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
-                <span style={statChipStyle}>总人数 {it.stats.total}</span>
+                <span style={statChipStyle}>{it.source === "fahui_ylp" ? "订单数" : "总人数"} {it.stats.total}</span>
                 <span style={{ ...statChipStyle, background: "var(--x-color-warning-soft)", color: "var(--x-color-warning)" }}>已支付 {it.stats.paid}</span>
                 <span style={{ ...statChipStyle, background: "var(--x-color-success-soft)", color: "var(--x-color-success)" }}>已批准 {it.stats.approved}</span>
                 {it.stats.removed_paid ? (
@@ -202,9 +225,9 @@ export function EventBudgetTab({
           </div>
         ))}
 
-        {income.filter((it) => it.source !== "registration").length ? (
+        {income.filter((it) => !isIntakeIncome(it)).length ? (
           <div style={{ display: "grid", gap: 6 }}>
-            {income.filter((it) => it.source !== "registration").map((it) => (
+            {income.filter((it) => !isIntakeIncome(it)).map((it) => (
               <EditableRow key={it.id} it={it} isMobile={isMobile} canEdit={canEdit} locked={!!it.locked}
                 tone={paymentTone(it.payment?.status)}
                 onPatch={patch} onRemove={remove} action={paymentView(it)} />
