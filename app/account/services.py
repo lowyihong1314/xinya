@@ -1110,10 +1110,12 @@ def update_claim_event(request_id, payload, user):
 
     if request_obj.is_locked:
         raise PermissionDenied("该申请已锁定，不能修改活动")
-    _ensure_claim_not_approved(request_obj, "修改活动")
+    # 「关联活动」只改记账归属，不动金额 / 明细 / 用途，所以已批准的单也允许改，
+    # 否则旧单永远没法归到活动底下。改动一律进修改记录。
 
     raw_event_id = (payload or {}).get("event_id")
     if raw_event_id in (None, "", 0, "0"):
+        _record_claim_change(request_obj, "event_id", request_obj.event_id, None, user)
         request_obj.event_id = None
         db.session.commit()
         return request_obj
@@ -1127,6 +1129,7 @@ def update_claim_event(request_id, payload, user):
     if not event:
         raise ValidationError("活动不存在")
 
+    _record_claim_change(request_obj, "event_id", request_obj.event_id, event.id, user)
     request_obj.event_id = event.id
     db.session.commit()
     return request_obj

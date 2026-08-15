@@ -124,7 +124,8 @@ export function ClaimDetail({
   const claimStatus = useMemo(() => getClaimStatus(claim), [claim]);
   // 一旦有人批准（reject=false 的审批记录），申请锁定：不能编辑/删除，除非批准人先撤回签名。
   const hasApproval = useMemo(() => (claim.approver_data || []).some((item) => !item.reject), [claim]);
-  const canEditEvent = Boolean(!claim.is_locked && !hasApproval && (canEditClaims || claim.applicant_user_id === currentUserId));
+  // 关联活动只是记账归属，已批准也允许改（和后端 update_claim_event 一致）
+  const canEditEvent = Boolean(!claim.is_locked && (canEditClaims || claim.applicant_user_id === currentUserId));
   const canEditClaim = Boolean(!claim.is_locked && !hasApproval && canEditClaims);
   const canEditAttachments = Boolean(!claim.is_locked && !hasApproval && (canEditClaims || claim.applicant_user_id === currentUserId));
 
@@ -512,7 +513,7 @@ export function ClaimDetail({
             </div>
 
             <Field label="活动">
-              {editingClaim && canEditEvent ? (
+              {canEditEvent ? (
                 <div style={{ display: "flex", gap: "6px", flexWrap: "wrap", alignItems: "center" }}>
                   <span style={chipStyle}>{claim.event_id ? `${claim.event_name || "未命名活动"} (#${claim.event_id})` : "未关联活动"}</span>
                   <button type="button" style={disabledStyle(buttonSecondaryStyle, savingEvent)} disabled={savingEvent} onClick={() => void handlePickEvent()}>

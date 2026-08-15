@@ -7,7 +7,7 @@ import { downloadBlobOrShare } from "../../../../js/browserActions";
 import { showConfirmDialog, showPromptDialog } from "../../../../js/dialogs";
 import { showEventPicker } from "../../../shared/showEventPicker";
 import { render_sign_modal } from "../../../../../../static/js/sign_tools.js";
-import { decideClaim, deleteClaim, downloadClaimReport, fetchClaims, readClaimBill, submitClaim } from "./api";
+import { decideClaim, deleteClaim, downloadClaimReport, fetchClaims, readClaimBill, submitClaim, updateClaimEvent } from "./api";
 import { buildClaimFormData, buildInitialCreateState, validateCreateState } from "./submitCreate";
 import { ClaimBatchAiPage } from "./ClaimBatchAiPage";
 import { ClaimCreateForm, isReadableBillFile, type CreateState } from "./ClaimCreateForm";
@@ -69,6 +69,7 @@ export function ClaimWorkspace() {
   const [statusFilter, setStatusFilter] = useState<ClaimStatusFilter>("all");
   const [page, setPage] = useState(1);
   const [selectedClaimIds, setSelectedClaimIds] = useState<Set<number>>(() => new Set());
+  const [linkingEvent, setLinkingEvent] = useState(false);
   const [exportingSelected, setExportingSelected] = useState(false);
   const [exportingReport, setExportingReport] = useState(false);
   const [batchJeOpen, setBatchJeOpen] = useState(false);
@@ -454,6 +455,52 @@ export function ClaimWorkspace() {
     }
   }
 
+  // 选中的申请全部都没有关联活动时，列表上才出现「关联活动」批量按钮
+  const selectedClaims = claims.filter((claim) => selectedClaimIds.has(claim.id));
+  const canBatchLinkEvent =
+    selectedClaims.length > 0 && selectedClaims.every((claim) => !claim.event_id);
+
+  async function handleBatchLinkEvent() {
+    if (linkingEvent || !selectedClaims.length) {
+      return;
+    }
+    const picked = await showEventPicker();
+    if (!picked) {
+      return;
+    }
+
+    setError(null);
+    setMessage(null);
+    setLinkingEvent(true);
+    const failed: string[] = [];
+    const updatedClaims: ClaimRecord[] = [];
+    try {
+      for (const claim of selectedClaims) {
+        try {
+          updatedClaims.push(await updateClaimEvent(claim.id, picked.id));
+        } catch (err) {
+          failed.push(`#${claim.id}（${err instanceof Error ? err.message : "失败"}）`);
+        }
+      }
+
+      if (updatedClaims.length) {
+        const updatedMap = new Map(updatedClaims.map((claim) => [claim.id, claim]));
+        setClaims((prev) => prev.map((claim) => updatedMap.get(claim.id) || claim));
+      }
+
+      const eventLabel = `${picked.event_name || "未命名活动"} #${picked.id}`;
+      if (failed.length) {
+        setError(`${failed.length} 笔没能关联：${failed.slice(0, 3).join("、")}${failed.length > 3 ? " 等" : ""}`);
+      }
+      if (updatedClaims.length) {
+        setMessage(`已把 ${updatedClaims.length} 笔申请关联到「${eventLabel}」`);
+        setSelectedClaimIds(new Set());
+      }
+    } finally {
+      setLinkingEvent(false);
+    }
+  }
+
   function handleClaimUpdated(nextClaim: ClaimRecord) {
     setClaims((prev) => prev.map((claim) => (claim.id === nextClaim.id ? nextClaim : claim)));
     setMessage("申请已更新");
@@ -591,6 +638,9 @@ export function ClaimWorkspace() {
           onDownloadSelectedReport={() => void handleDownloadSelectedReport()}
           onBatchWriteJE={() => setBatchJeOpen(true)}
           canBatchJe={canEditClaims}
+          canBatchLinkEvent={canBatchLinkEvent}
+          linkingEvent={linkingEvent}
+          onBatchLinkEvent={() => void handleBatchLinkEvent()}
           scopeLabel={canViewAll || canReadAllClaims ? "范围：全部申请" : "范围：我的申请"}
           onRefresh={() => void loadClaims()}
           canCreate={canSubmitClaims}

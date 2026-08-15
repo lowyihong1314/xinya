@@ -42,6 +42,10 @@ type ClaimListProps = {
   onDownloadSelectedReport: () => void;
   onBatchWriteJE: () => void;
   canBatchJe: boolean;
+  // 选中的申请「全部都没有关联活动」时才出现的批量关联入口
+  canBatchLinkEvent: boolean;
+  linkingEvent: boolean;
+  onBatchLinkEvent: () => void;
   scopeLabel: string;
   onRefresh: () => void;
   onCreate: () => void;
@@ -86,6 +90,9 @@ export function ClaimList(props: ClaimListProps) {
     onDownloadSelectedReport,
     onBatchWriteJE,
     canBatchJe,
+    canBatchLinkEvent,
+    linkingEvent,
+    onBatchLinkEvent,
     scopeLabel,
     onRefresh,
     onCreate,
@@ -212,6 +219,17 @@ export function ClaimList(props: ClaimListProps) {
             {canBatchJe ? (
               <button type="button" style={disabledBtn(primaryButtonStyle, selectedCount <= 0)} onClick={onBatchWriteJE} disabled={selectedCount <= 0}>
                 批量写 JE
+              </button>
+            ) : null}
+            {selectedCount > 0 && canBatchLinkEvent ? (
+              <button
+                type="button"
+                style={disabledBtn(primaryButtonStyle, linkingEvent)}
+                onClick={onBatchLinkEvent}
+                disabled={linkingEvent}
+                title={`把选中的 ${selectedCount} 笔申请关联到同一个活动`}
+              >
+                {linkingEvent ? "关联中…" : `关联活动（${selectedCount}）`}
               </button>
             ) : null}
           </div>
