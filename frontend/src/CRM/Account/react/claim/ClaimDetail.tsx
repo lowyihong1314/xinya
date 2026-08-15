@@ -10,6 +10,14 @@ import { showEventPicker } from "../../../shared/showEventPicker";
 import { downloadBlobOrShare } from "../../../../js/browserActions";
 import { deleteClaimAttachment, downloadPaymentVoucher, updateClaim, updateClaimEvent, uploadClaimAttachments, withdrawClaimDecision } from "./api";
 import { displayPurpose } from "./purpose";
+import { LineItemsEditor, LineItemsTable } from "./LineItemsEditor";
+import {
+  lineItemsToDrafts,
+  lineItemsTotal,
+  serializeLineItems,
+  validateLineItems,
+  type LineItemDraft,
+} from "./lineItems";
 import {
   approverAvatarStyle,
   approverCardStyle,
@@ -55,8 +63,7 @@ type ClaimEditDraft = {
   request_date: string;
   department_name: string;
   purpose: string;
-  ref1: string;
-  ref2: string;
+  lineItems: LineItemDraft[];
   vendor_name: string;
   vendor_address: string;
   vendor_contact_number: string;
@@ -236,14 +243,19 @@ export function ClaimDetail({
     setEditFeedback("");
     setEditError("");
     try {
+      const lineItemsError = validateLineItems(editDraft.lineItems);
+      if (lineItemsError) {
+        setEditError(lineItemsError);
+        return;
+      }
+
       const updated = await updateClaim(claim.id, {
         applicant_name: editDraft.applicant_name.trim(),
-        amount: editDraft.amount,
+        // 金额由明细合计决定，不再单独提交
+        line_items: serializeLineItems(editDraft.lineItems),
         request_date: editDraft.request_date,
         department_name: editDraft.department_name.trim(),
         purpose: editDraft.purpose.trim(),
-        ref1: editDraft.ref1.trim(),
-        ref2: editDraft.ref2.trim(),
         vendor_name: editDraft.vendor_name.trim(),
         vendor_address: editDraft.vendor_address.trim(),
         vendor_contact_number: editDraft.vendor_contact_number.trim(),
@@ -462,7 +474,7 @@ export function ClaimDetail({
               </Field>
               <Field label="金额">
                 {editingClaim ? (
-                  <input type="number" inputMode="decimal" style={inputStyle} value={editDraft.amount} onChange={(e) => setEditDraft((p) => ({ ...p, amount: e.target.value }))} />
+                  <FieldValue value={`RM ${lineItemsTotal(editDraft.lineItems).toFixed(2)}（明细合计）`} />
                 ) : (
                   <FieldValue value={`RM ${safeMoney(claim.amount)}`} />
                 )}
@@ -522,6 +534,20 @@ export function ClaimDetail({
               {eventError ? <span style={{ ...chipStyle, color: "var(--x-color-danger)" }}>{eventError}</span> : null}
             </Field>
 
+            <Field label="用途明细">
+              {editingClaim ? (
+                <LineItemsEditor
+                  isMobile={isMobile}
+                  lines={editDraft.lineItems}
+                  onChange={(lineItems) => setEditDraft((p) => ({ ...p, lineItems }))}
+                />
+              ) : claim.line_items?.length ? (
+                <LineItemsTable isMobile={isMobile} lines={lineItemsToDrafts(claim.line_items)} />
+              ) : (
+                <FieldValue value="-" />
+              )}
+            </Field>
+
             <Field label="用途说明">
               {editingClaim ? (
                 <textarea rows={3} style={textareaStyle} value={editDraft.purpose} onChange={(e) => setEditDraft((p) => ({ ...p, purpose: e.target.value }))} />
@@ -532,12 +558,6 @@ export function ClaimDetail({
 
             {editingClaim ? (
               <>
-                <Field label="AI说明 ref1">
-                  <textarea rows={2} style={textareaStyle} value={editDraft.ref1} onChange={(e) => setEditDraft((p) => ({ ...p, ref1: e.target.value }))} />
-                </Field>
-                <Field label="AI项目内容 ref2">
-                  <textarea rows={3} style={textareaStyle} value={editDraft.ref2} onChange={(e) => setEditDraft((p) => ({ ...p, ref2: e.target.value }))} />
-                </Field>
                 <div style={fieldsGridStyle}>
                   <Field label="商家名称"><input style={inputStyle} value={editDraft.vendor_name} onChange={(e) => setEditDraft((p) => ({ ...p, vendor_name: e.target.value }))} /></Field>
                   <Field label="商家联络号码"><input style={inputStyle} value={editDraft.vendor_contact_number} onChange={(e) => setEditDraft((p) => ({ ...p, vendor_contact_number: e.target.value }))} /></Field>
@@ -546,8 +566,6 @@ export function ClaimDetail({
               </>
             ) : (
               <>
-                {claim.ref1 ? (<Field label="AI说明 ref1"><FieldValue value={claim.ref1} multiline /></Field>) : null}
-                {claim.ref2 ? (<Field label="AI项目内容 ref2"><FieldValue value={claim.ref2} multiline /></Field>) : null}
                 {claim.vendor_name || claim.vendor_address || claim.vendor_contact_number ? (
                   <Field label="商家资料">
                     <FieldValue multiline value={[claim.vendor_name ? `商家名称：${claim.vendor_name}` : "", claim.vendor_contact_number ? `联络号码：${claim.vendor_contact_number}` : "", claim.vendor_address ? `地址：${claim.vendor_address}` : ""].filter(Boolean).join("\n")} />
@@ -838,8 +856,7 @@ function buildEditDraft(claim: ClaimRecord): ClaimEditDraft {
     request_date: claim.request_date || "",
     department_name: claim.department_name || "",
     purpose: claim.purpose || "",
-    ref1: claim.ref1 || "",
-    ref2: claim.ref2 || "",
+    lineItems: lineItemsToDrafts(claim.line_items),
     vendor_name: claim.vendor_name || "",
     vendor_address: claim.vendor_address || "",
     vendor_contact_number: claim.vendor_contact_number || "",

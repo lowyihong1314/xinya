@@ -45,6 +45,17 @@ export type ClaimChangeLog = {
   created_at?: string;
 };
 
+export type ClaimLineItem = {
+  id?: number;
+  request_id?: number;
+  line_no?: number;
+  description: string;
+  category?: string | null;
+  quantity?: number | null;
+  unit_price?: number | null;
+  amount: number;
+};
+
 export type ClaimRecord = {
   id: number;
   applicant_user_id?: number | null;
@@ -53,8 +64,8 @@ export type ClaimRecord = {
   request_date?: string;
   department_name?: string;
   purpose?: string;
-  ref1?: string | null;
-  ref2?: string | null;
+  // 用途明细（line item）：整单金额 = 各行合计
+  line_items?: ClaimLineItem[];
   vendor_name?: string | null;
   vendor_address?: string | null;
   vendor_contact_number?: string | null;

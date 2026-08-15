@@ -19,27 +19,17 @@ import {
   wideFieldStyle,
 } from "./claimStyles";
 import { readClaimBill, submitClaim, type ReadBillModel } from "./api";
+import { ClaimFormSections, type CreateState } from "./ClaimCreateForm";
+import { buildClaimFormData, buildInitialCreateState } from "./submitCreate";
+import { buildReadBillFill, confidencePercent } from "./readBillFill";
+import { hasFilledLine, lineItemsTotal, validateLineItems } from "./lineItems";
+import type { AiFillOutcome } from "./AiFillPanel";
 import type { AccountUser, ReadBillData, ReadBillUploadResponse } from "./types";
 import { showEventPicker, type EventPickerRecord } from "../../../shared/showEventPicker";
 
 type ClaimBatchAiPageProps = {
   onBack: () => void;
   onSubmitted?: (result: { count: number; claimIds: number[] }) => void | Promise<void>;
-};
-
-type BatchAiClaimDraft = {
-  applicant_name: string;
-  request_date: string;
-  amount: string;
-  department_name: string;
-  acctDept: string;
-  purpose: string;
-  ref1: string;
-  ref2: string;
-  vendor_name: string;
-  vendor_address: string;
-  vendor_contact_number: string;
-  purchase_datetime: string;
 };
 
 type BatchAiImageItem = {
@@ -49,7 +39,8 @@ type BatchAiImageItem = {
   parsing: boolean;
   parseError: string;
   parseResult: ReadBillUploadResponse | null;
-  draft: BatchAiClaimDraft;
+  // 和「新建申请」完全一样的表单状态，信息弹窗直接复用同一套输入布局
+  draft: CreateState;
 };
 
 export function ClaimBatchAiPage({ onBack, onSubmitted }: ClaimBatchAiPageProps) {
@@ -67,6 +58,19 @@ export function ClaimBatchAiPage({ onBack, onSubmitted }: ClaimBatchAiPageProps)
   const [batchParsing, setBatchParsing] = useState(false);
   const previewItem = items.find((item) => item.id === previewItemId) ?? null;
   const infoItem = items.find((item) => item.id === infoItemId) ?? null;
+  const infoOutcome: AiFillOutcome =
+    infoItem?.parseResult?.data
+      ? (() => {
+          const fill = buildReadBillFill(infoItem.parseResult!.data as ReadBillData);
+          return {
+            filledLabels: fill.filledLabels,
+            lineCount: fill.lineCount,
+            total: fill.total,
+            confidence: infoItem.parseResult!.meta?.confidence,
+            model: "auto" as const,
+          };
+        })()
+      : null;
 
   useEffect(() => {
     return () => {
@@ -106,7 +110,7 @@ export function ClaimBatchAiPage({ onBack, onSubmitted }: ClaimBatchAiPageProps)
         parsing: false,
         parseError: "",
         parseResult: null,
-        draft: buildInitialDraft(accountUser),
+        draft: { ...buildInitialCreateState(accountUser), files: [file] },
       };
     });
 
@@ -152,14 +156,6 @@ export function ClaimBatchAiPage({ onBack, onSubmitted }: ClaimBatchAiPageProps)
       return;
     }
 
-    const zeroAmountItems = items
-      .map((item, index) => ({ index, amount: getDraftAmountNumber(item.draft) }))
-      .filter((item) => item.amount <= 0);
-    if (zeroAmountItems.length) {
-      setBatchSubmitError(`文件 ${zeroAmountItems.map((item) => item.index + 1).join("、")} 金额为 0，不能批量提交`);
-      return;
-    }
-
     const missingItems = getMissingSubmitItems(items);
     if (missingItems.length) {
       setBatchSubmitError(
@@ -182,19 +178,19 @@ export function ClaimBatchAiPage({ onBack, onSubmitted }: ClaimBatchAiPageProps)
         return;
       }
 
-      const signJsonData = {
-        version: 1,
-        signed_at: new Date().toISOString(),
-        signed_by_user_id: accountUser?.id || null,
-        signed_by_username: accountUser?.username || null,
-        signed_by_name: accountUser?.display_name || accountUser?.name_NRIC || null,
-        strokes: sign.strokes,
-      };
-
       const claimIds: number[] = [];
       for (const [index, item] of items.entries()) {
         setSubmitProgress(`提交中 ${index + 1}/${items.length}`);
-        const formData = buildSubmitFormData(item, selectedEvent.id, signJsonData);
+        // 走和单张申请同一个 FormData 组装逻辑（含明细 line_items）
+        const formData = buildClaimFormData(
+          {
+            ...item.draft,
+            files: [item.file],
+            selectedEvent: { id: selectedEvent.id, event_name: selectedEvent.event_name },
+            signJsonData: { strokes: sign.strokes },
+          },
+          accountUser,
+        );
         const result = await submitClaim(formData);
         const claimId = Number(result.data?.id || result.request_id || 0);
         submittedCount += 1;
@@ -249,7 +245,7 @@ export function ClaimBatchAiPage({ onBack, onSubmitted }: ClaimBatchAiPageProps)
                 parsing: false,
                 parseError: "",
                 parseResult: result,
-                draft: mergeDraftWithReadBill(current.draft, result.data),
+                draft: { ...current.draft, ...buildReadBillFill(result.data).patch },
               }
             : current,
         ),
@@ -267,15 +263,6 @@ export function ClaimBatchAiPage({ onBack, onSubmitted }: ClaimBatchAiPageProps)
 
   async function handleParseItem(item: BatchAiImageItem, index: number) {
     await parseItem(item, index, "auto", { debug: true });
-  }
-
-  async function handleProParseInfoItem() {
-    if (!infoItem) {
-      return;
-    }
-
-    const index = items.findIndex((item) => item.id === infoItem.id);
-    await parseItem(infoItem, index >= 0 ? index : 0, "byteplus", { debug: true });
   }
 
   async function handleBatchParse() {
@@ -308,9 +295,13 @@ export function ClaimBatchAiPage({ onBack, onSubmitted }: ClaimBatchAiPageProps)
     setInfoItemId(item.id);
   }
 
-  function updateItemDraft(itemId: string, updates: Partial<BatchAiClaimDraft>) {
+  function updateItemDraft(itemId: string, updater: CreateState | ((prev: CreateState) => CreateState)) {
     setItems((prev) =>
-      prev.map((current) => (current.id === itemId ? { ...current, draft: { ...current.draft, ...updates } } : current)),
+      prev.map((current) =>
+        current.id === itemId
+          ? { ...current, draft: typeof updater === "function" ? updater(current.draft) : updater }
+          : current,
+      ),
     );
   }
 
@@ -406,11 +397,12 @@ export function ClaimBatchAiPage({ onBack, onSubmitted }: ClaimBatchAiPageProps)
                   {item.parseResult || hasVisibleSummary(item.draft) ? (
                     <div className="claim-batch-ai-page__summary" style={summaryBoxStyle}>
                       {item.parseResult ? <ConfidenceMeter value={item.parseResult.meta?.confidence} /> : null}
-                      <SummaryLine label="金额" value={item.draft.amount ? `RM ${item.draft.amount}` : ""} />
+                      <SummaryLine label="金额" value={`RM ${formatMoney(draftTotal(item.draft))}`} />
+                      <SummaryLine label="明细" value={`${item.draft.lineItems.filter((line) => line.description.trim()).length} 行`} />
                       <SummaryLine label="日期" value={item.draft.request_date} />
                       <SummaryLine label="商家" value={item.draft.vendor_name} />
                       <SummaryLine label="采购时间" value={formatDraftDateTime(item.draft.purchase_datetime)} />
-                      <SummaryLine label="说明" value={item.draft.ref1 || item.draft.purpose} multiline />
+                      <SummaryLine label="说明" value={item.draft.purpose} multiline />
                     </div>
                   ) : null}
                   <div className="claim-batch-ai-page__card-actions" style={cardActionRowStyle}>
@@ -516,132 +508,56 @@ export function ClaimBatchAiPage({ onBack, onSubmitted }: ClaimBatchAiPageProps)
               ) : (
                 <span style={chipStyle}>尚未解析</span>
               )}
-              <button
-                type="button"
-                title="PRO BytePlus 解析"
-                style={disabledStyle(proParseButtonStyle, infoItem.parsing)}
-                onClick={() => void handleProParseInfoItem()}
-                disabled={infoItem.parsing}
-              >
-                <i className="fa-solid fa-wand-magic-sparkles" aria-hidden="true" />
-                {infoItem.parsing ? "PRO…" : "PRO"}
-              </button>
+              <span style={{ ...chipStyle, background: "var(--x-color-accent-tint)", color: "var(--x-color-accent-strong)", fontWeight: 800 }}>
+                合计 RM {formatMoney(draftTotal(infoItem.draft))}
+              </span>
             </div>
 
-            <div className="claim-batch-ai-page__info-grid" style={formGridStyle(isMobile)}>
-              <InfoField label="姓名">
-                <input
-                  value={infoItem.draft.applicant_name}
-                  onChange={(event) => updateItemDraft(infoItem.id, { applicant_name: event.target.value })}
-                  style={inputStyle}
-                />
-              </InfoField>
-              <InfoField label="日期">
-                <input
-                  type="date"
-                  value={infoItem.draft.request_date}
-                  onChange={(event) => updateItemDraft(infoItem.id, { request_date: event.target.value })}
-                  style={inputStyle}
-                />
-              </InfoField>
-              <InfoField label="金额">
-                <input
-                  type="number"
-                  inputMode="decimal"
-                  value={infoItem.draft.amount}
-                  onChange={(event) => updateItemDraft(infoItem.id, { amount: event.target.value })}
-                  style={inputStyle}
-                />
-              </InfoField>
-              <InfoField label="部门">
-                <select
-                  value={infoItem.draft.department_name}
-                  onChange={(event) => updateItemDraft(infoItem.id, { department_name: event.target.value })}
-                  style={inputStyle}
-                >
-                  <option value="">请选择部门</option>
-                  {(accountUser?.departments || []).map((department) => (
-                    <option key={department.id} value={department.name}>
-                      {department.name}
-                    </option>
-                  ))}
-                </select>
-              </InfoField>
-              <InfoField label="做账分配">
-                <select
-                  value={infoItem.draft.acctDept}
-                  onChange={(event) => updateItemDraft(infoItem.id, { acctDept: event.target.value })}
-                  style={inputStyle}
-                >
-                  <option value="">请选择</option>
-                  {ACCT_DEPARTMENTS.map((department) => (
-                    <option key={department} value={department}>
-                      {department}
-                    </option>
-                  ))}
-                </select>
-              </InfoField>
-              <InfoField label="用途说明" wide>
-                <textarea
-                  rows={5}
-                  value={infoItem.draft.purpose}
-                  onChange={(event) => updateItemDraft(infoItem.id, { purpose: event.target.value })}
-                  style={textareaStyle}
-                />
-              </InfoField>
-              <InfoField label="AI说明 ref1" wide>
-                <textarea
-                  rows={3}
-                  value={infoItem.draft.ref1}
-                  onChange={(event) => updateItemDraft(infoItem.id, { ref1: event.target.value })}
-                  style={textareaStyle}
-                />
-              </InfoField>
-              <InfoField label="AI项目内容 ref2" wide>
-                <textarea
-                  rows={4}
-                  value={infoItem.draft.ref2}
-                  onChange={(event) => updateItemDraft(infoItem.id, { ref2: event.target.value })}
-                  style={textareaStyle}
-                />
-              </InfoField>
-              <InfoField label="商家名称">
-                <input
-                  value={infoItem.draft.vendor_name}
-                  onChange={(event) => updateItemDraft(infoItem.id, { vendor_name: event.target.value })}
-                  style={inputStyle}
-                />
-              </InfoField>
-              <InfoField label="商家联络号码">
-                <input
-                  value={infoItem.draft.vendor_contact_number}
-                  onChange={(event) => updateItemDraft(infoItem.id, { vendor_contact_number: event.target.value })}
-                  style={inputStyle}
-                />
-              </InfoField>
-              <InfoField label="商家地址" wide>
-                <input
-                  value={infoItem.draft.vendor_address}
-                  onChange={(event) => updateItemDraft(infoItem.id, { vendor_address: event.target.value })}
-                  style={inputStyle}
-                />
-              </InfoField>
-              <InfoField label="采购日期 purchase_datetime">
-                <input
-                  type="datetime-local"
-                  value={infoItem.draft.purchase_datetime}
-                  onChange={(event) => updateItemDraft(infoItem.id, { purchase_datetime: event.target.value })}
-                  style={inputStyle}
-                />
-              </InfoField>
-            </div>
+            {/* 和「新建申请」同一套输入布局：附件与签名 / 金额与关联 / 申请信息 / 用途与明细 / 商家信息 */}
+            <ClaimFormSections
+              isMobile={isMobile}
+              state={infoItem.draft}
+              user={accountUser}
+              onChange={(value) => updateItemDraft(infoItem.id, value)}
+              lockedEvent
+              showSign={false}
+              ai={{
+                parsing: infoItem.parsing,
+                canParse: !infoItem.parsing,
+                onParse: (model) => void parseItem(infoItem, items.findIndex((item) => item.id === infoItem.id), model, { debug: true }),
+                outcome: infoOutcome,
+                error: infoItem.parseError || null,
+                hideUpload: true,
+                note: "这张卡片的收据已带上，点下面按钮重新识别",
+              }}
+              attachmentSlot={
+                <div style={infoAttachmentRowStyle}>
+                  {isPdfFile(infoItem.file) ? (
+                    <span style={infoThumbFallbackStyle}>
+                      <i className="fa-regular fa-file-pdf" aria-hidden="true" />
+                    </span>
+                  ) : (
+                    <img src={infoItem.previewUrl} alt={infoItem.file.name} style={infoThumbStyle} />
+                  )}
+                  <span style={infoAttachmentMetaStyle}>
+                    <strong>{infoItem.file.name}</strong>
+                    <span>
+                      {formatReceiptFileKind(infoItem.file)} · {Math.round(infoItem.file.size / 1024)} KB
+                    </span>
+                  </span>
+                  <button type="button" style={buttonSecondaryStyle} onClick={() => setPreviewItemId(infoItem.id)}>
+                    大图预览
+                  </button>
+                </div>
+              }
+            />
 
             <div className="claim-batch-ai-page__info-footer" style={footerActionsStyle}>
               <button type="button" style={buttonGhostStyle} onClick={() => setInfoItemId(null)}>
                 关闭
               </button>
               <button type="button" style={buttonPrimaryStyle} onClick={() => setInfoItemId(null)}>
-                暂存
+                完成填写
               </button>
             </div>
           </div>
@@ -651,327 +567,54 @@ export function ClaimBatchAiPage({ onBack, onSubmitted }: ClaimBatchAiPageProps)
   );
 }
 
-const ACCT_DEPARTMENTS = ["法会", "心芽", "芽芽", "母会基建", "母会设备"];
-
 function isPdfFile(file: File) {
   return file.type === "application/pdf" || /\.pdf$/i.test(file.name);
 }
 
 function isSupportedReceiptFile(file: File) {
-  return file.type.startsWith("image/") || isPdfFile(file) || /\.(jpe?g|png|webp|bmp|tiff?)$/i.test(file.name);
+  return file.type.startsWith("image/") || isPdfFile(file);
 }
 
 function formatReceiptFileKind(file: File) {
   return isPdfFile(file) ? "PDF" : "图片";
 }
 
-function todayIsoDate() {
-  const now = new Date();
-  const yyyy = now.getFullYear();
-  const mm = String(now.getMonth() + 1).padStart(2, "0");
-  const dd = String(now.getDate()).padStart(2, "0");
-  return `${yyyy}-${mm}-${dd}`;
-}
-
-function buildInitialDraft(user: AccountUser | null): BatchAiClaimDraft {
-  return {
-    applicant_name: String(user?.display_name || user?.name_NRIC || user?.username || ""),
-    request_date: todayIsoDate(),
-    amount: "",
-    department_name: user?.departments?.[0]?.name || "",
-    acctDept: "",
-    purpose: "",
-    ref1: "",
-    ref2: "",
-    vendor_name: "",
-    vendor_address: "",
-    vendor_contact_number: "",
-    purchase_datetime: "",
-  };
-}
-
-function stringValue(value: unknown) {
-  return value == null ? "" : String(value).trim();
-}
-
-function normalizeMoneyValue(value: unknown) {
-  if (value == null || value === "") {
-    return "";
-  }
-  if (typeof value === "number") {
-    return Number.isFinite(value) && value > 0 ? value.toFixed(2) : "";
-  }
-  const match = String(value).replace(/,/g, "").match(/-?\d+(?:\.\d+)?/);
-  if (!match) {
-    return "";
-  }
-  const amount = Number(match[0]);
-  return Number.isFinite(amount) && amount > 0 ? amount.toFixed(2) : "";
-}
-
-function toDateInputValue(date: Date) {
-  const yyyy = date.getFullYear();
-  const mm = String(date.getMonth() + 1).padStart(2, "0");
-  const dd = String(date.getDate()).padStart(2, "0");
-  return `${yyyy}-${mm}-${dd}`;
-}
-
-function normalizeReceiptDate(value: unknown) {
-  const rawValue = stringValue(value);
-  if (!rawValue) {
-    return "";
-  }
-
-  const isoMatch = rawValue.match(/^(\d{4})[-/.](\d{1,2})[-/.](\d{1,2})$/);
-  if (isoMatch) {
-    const [, yyyy, mm, dd] = isoMatch;
-    return `${yyyy}-${mm.padStart(2, "0")}-${dd.padStart(2, "0")}`;
-  }
-
-  const slashMatch = rawValue.match(/^(\d{1,2})[-/.](\d{1,2})[-/.](\d{4})$/);
-  if (slashMatch) {
-    const [, first, second, yyyy] = slashMatch;
-    const dd = Number(first) > 12 ? first : Number(second) > 12 ? second : first;
-    const mm = dd === first ? second : first;
-    return `${yyyy}-${mm.padStart(2, "0")}-${dd.padStart(2, "0")}`;
-  }
-
-  const parsed = new Date(rawValue);
-  return Number.isNaN(parsed.getTime()) ? "" : toDateInputValue(parsed);
-}
-
-function buildPurposeFromReadBill(data: ReadBillData) {
-  const merchantName = stringValue(data.merchantName || data.merchant_name);
-  const receiptNumber = stringValue(data.receiptNumber || data.receipt_number);
-  const expenseCategory = stringValue(data.expenseCategory || data.expense_category);
-  const description = stringValue(data.description);
-  const itemSummary = (data.receiptItems || data.receipt_items || [])
-    .map((item) => {
-      const itemDescription = stringValue(item.description);
-      const lineTotal = normalizeMoneyValue(item.lineTotal || item.line_total);
-      return [itemDescription, lineTotal ? `RM ${lineTotal}` : ""].filter(Boolean).join(" ");
-    })
-    .filter(Boolean)
-    .slice(0, 6)
-    .join(" / ");
-
-  return [
-    merchantName ? `商家：${merchantName}` : "",
-    receiptNumber ? `收据号：${receiptNumber}` : "",
-    expenseCategory && expenseCategory !== "OTHER" ? `分类：${expenseCategory}` : "",
-    description ? `说明：${description}` : "",
-    itemSummary ? `项目：${itemSummary}` : "",
-  ]
-    .filter(Boolean)
-    .join("\n");
-}
-
-function mergeDraftWithReadBill(draft: BatchAiClaimDraft, data: ReadBillData): BatchAiClaimDraft {
-  const amount = normalizeMoneyValue(data.totalAmount || data.total_amount);
-  const requestDate = normalizeReceiptDate(data.receiptDate || data.receipt_date || data.purchaseDate || data.purchase_date);
-  const purchaseDateTime = normalizeReceiptDateTime(
-    data.purchaseDateTime ||
-      data.purchaseDatetime ||
-      data.purchase_datetime ||
-      data.receiptDateTime ||
-      data.receipt_date_time ||
-      data.receiptDate ||
-      data.receipt_date,
-  );
-  const purpose = buildPurposeFromReadBill(data);
-  const ref1 = stringValue(data.description);
-  const ref2 = buildReceiptItemsText(data);
-  const vendorFields = buildVendorFieldsFromReadBill(data);
-
-  return {
-    ...draft,
-    amount: amount || draft.amount,
-    request_date: requestDate || draft.request_date,
-    purpose: purpose || draft.purpose,
-    ref1: ref1 || draft.ref1,
-    ref2: ref2 || draft.ref2,
-    vendor_name: vendorFields.vendor_name || draft.vendor_name,
-    vendor_address: vendorFields.vendor_address || draft.vendor_address,
-    vendor_contact_number: vendorFields.vendor_contact_number || draft.vendor_contact_number,
-    purchase_datetime: purchaseDateTime || draft.purchase_datetime,
-  };
-}
-
-function normalizeReceiptDateTime(value: unknown) {
-  const rawValue = stringValue(value);
-  if (!rawValue) {
-    return "";
-  }
-
-  const normalized = rawValue.replace(" ", "T");
-  const match = normalized.match(/^(\d{4})[-/.](\d{1,2})[-/.](\d{1,2})(?:T(\d{1,2}):(\d{2})(?::\d{2})?)?/);
-  if (match) {
-    const [, yyyy, mm, dd, hh = "00", min = "00"] = match;
-    return `${yyyy}-${mm.padStart(2, "0")}-${dd.padStart(2, "0")}T${hh.padStart(2, "0")}:${min}`;
-  }
-
-  const parsed = new Date(rawValue);
-  if (Number.isNaN(parsed.getTime())) {
-    return "";
-  }
-  const yyyy = parsed.getFullYear();
-  const mm = String(parsed.getMonth() + 1).padStart(2, "0");
-  const dd = String(parsed.getDate()).padStart(2, "0");
-  const hh = String(parsed.getHours()).padStart(2, "0");
-  const min = String(parsed.getMinutes()).padStart(2, "0");
-  return `${yyyy}-${mm}-${dd}T${hh}:${min}`;
-}
-
-function buildReceiptItemsText(data: ReadBillData) {
-  return (data.receiptItems || data.receipt_items || [])
-    .map((item, index) => {
-      const itemNumber = stringValue(item.itemNumber || item.item_number) || String(index + 1);
-      const description = stringValue(item.description);
-      const quantity = stringValue(item.quantity);
-      const category = stringValue(item.expenseCategory || item.expense_category);
-      const lineTotal = normalizeMoneyValue(item.lineTotal || item.line_total);
-      return [
-        `${itemNumber}.`,
-        description,
-        quantity ? `x${quantity}` : "",
-        category && category !== "OTHER" ? category : "",
-        lineTotal ? `RM ${lineTotal}` : "",
-      ]
-        .filter(Boolean)
-        .join(" ");
-    })
-    .filter(Boolean)
-    .join("\n");
-}
-
-function buildVendorFieldsFromReadBill(data: ReadBillData) {
-  const vendorPayload =
-    data.vendorData && typeof data.vendorData === "object"
-      ? (data.vendorData as Record<string, unknown>)
-      : data.vendor_data && typeof data.vendor_data === "object"
-        ? (data.vendor_data as Record<string, unknown>)
-        : {};
-
-  return {
-    vendor_name: stringValue(
-      data.vendorName || data.vendor_name || data.merchantName || data.merchant_name || vendorPayload.name,
-    ),
-    vendor_address: stringValue(
-      data.vendorAddress || data.vendor_address || data.merchantAddress || data.merchant_address || vendorPayload.address,
-    ),
-    vendor_contact_number: stringValue(
-      data.vendorPhone ||
-        data.vendor_phone ||
-        data.merchantPhone ||
-        data.merchant_phone ||
-        data.contactNumber ||
-        data.contact_number ||
-        vendorPayload.phone ||
-        vendorPayload.contact_number ||
-        vendorPayload.tel,
-    ),
-  };
-}
-
-function getConfidencePercent(value: unknown) {
-  if (value == null || value === "") {
-    return null;
-  }
-  const numeric = Number(String(value).replace("%", ""));
-  if (!Number.isFinite(numeric)) {
-    return null;
-  }
-  const percent = numeric <= 1 ? numeric * 100 : numeric;
-  return Math.max(0, Math.min(100, Math.round(percent)));
-}
-
-function formatConfidencePercent(value: unknown) {
-  const percent = getConfidencePercent(value);
-  return percent == null ? "" : `${percent}%`;
-}
-
 function formatDraftDateTime(value: string) {
   return value ? value.replace("T", " ") : "";
 }
 
-function hasVisibleSummary(draft: BatchAiClaimDraft) {
+function draftTotal(draft: CreateState) {
+  return lineItemsTotal(draft.lineItems);
+}
+
+function hasVisibleSummary(draft: CreateState) {
   return Boolean(
-    draft.amount ||
+    draftTotal(draft) ||
       draft.request_date ||
       draft.vendor_name ||
       draft.purchase_datetime ||
-      draft.ref1 ||
-      draft.purpose,
+      draft.purpose ||
+      hasFilledLine(draft.lineItems),
   );
 }
 
 function sumDraftAmounts(items: BatchAiImageItem[]) {
-  return items.reduce((total, item) => {
-    const amount = getDraftAmountNumber(item.draft);
-    return Number.isFinite(amount) ? total + amount : total;
-  }, 0);
+  return items.reduce((total, item) => total + draftTotal(item.draft), 0);
 }
 
-function getDraftAmountNumber(draft: BatchAiClaimDraft) {
-  const amount = Number(String(draft.amount || "").replace(/,/g, ""));
-  return Number.isFinite(amount) ? amount : 0;
-}
-
-function getPurposeForSubmit(draft: BatchAiClaimDraft) {
-  const purpose = draft.purpose.trim();
-  return draft.acctDept ? `【做账分配：${draft.acctDept}】\n${purpose}` : purpose;
-}
-
+/** 每张单提交前的必填检查（签名与活动是整批共用的，不在这里查）。 */
 function getMissingSubmitItems(items: BatchAiImageItem[]) {
   return items
     .map((item, index) => {
       const fields: string[] = [];
-      if (!item.draft.applicant_name.trim()) {
-        fields.push("姓名");
-      }
-      if (!item.draft.request_date) {
-        fields.push("日期");
-      }
-      if (getDraftAmountNumber(item.draft) <= 0) {
-        fields.push("金额");
-      }
-      if (!item.draft.department_name.trim()) {
-        fields.push("部门");
-      }
-      if (!item.draft.purpose.trim()) {
-        fields.push("用途说明");
-      }
+      if (!item.draft.applicant_name.trim()) fields.push("姓名");
+      if (!item.draft.request_date) fields.push("日期");
+      if (!item.draft.department_name.trim()) fields.push("部门");
+      const lineError = validateLineItems(item.draft.lineItems);
+      if (lineError) fields.push(lineError);
       return { index, fields };
     })
     .filter((item) => item.fields.length);
-}
-
-function appendTrimmed(formData: FormData, key: string, value: string) {
-  const text = value.trim();
-  if (text) {
-    formData.append(key, text);
-  }
-}
-
-function buildSubmitFormData(item: BatchAiImageItem, eventId: number, signJsonData: unknown) {
-  const formData = new FormData();
-  formData.append("sign_json_data", JSON.stringify(signJsonData));
-  formData.append("applicant_name", item.draft.applicant_name.trim());
-  formData.append("request_date", item.draft.request_date);
-  formData.append("amount", item.draft.amount);
-  formData.append("department_name", item.draft.department_name.trim());
-  formData.append("purpose", getPurposeForSubmit(item.draft));
-  formData.append("event_id", String(eventId));
-  appendTrimmed(formData, "ref1", item.draft.ref1);
-  appendTrimmed(formData, "ref2", item.draft.ref2);
-  appendTrimmed(formData, "vendor_name", item.draft.vendor_name);
-  appendTrimmed(formData, "vendor_address", item.draft.vendor_address);
-  appendTrimmed(formData, "vendor_contact_number", item.draft.vendor_contact_number);
-  if (item.draft.purchase_datetime) {
-    formData.append("purchase_datetime", item.draft.purchase_datetime);
-  }
-  formData.append("files", item.file);
-  return formData;
 }
 
 function formatMoney(value: number) {
@@ -979,7 +622,7 @@ function formatMoney(value: number) {
 }
 
 function ConfidenceMeter({ value }: { value: unknown }) {
-  const percent = getConfidencePercent(value);
+  const percent = confidencePercent(value);
   if (percent == null) {
     return null;
   }
@@ -1031,6 +674,43 @@ function disabledStyle(style: CSSProperties, disabled: boolean): CSSProperties {
   };
 }
 
+const infoAttachmentRowStyle: CSSProperties = {
+  display: "flex",
+  alignItems: "center",
+  gap: "10px",
+  padding: "8px",
+  borderRadius: "10px",
+  border: "1px solid var(--x-color-line)",
+  background: "var(--x-color-panel-alt)",
+  flexWrap: "wrap",
+};
+const infoThumbStyle: CSSProperties = {
+  width: 54,
+  height: 54,
+  borderRadius: "8px",
+  objectFit: "cover",
+  background: "var(--x-color-panel)",
+};
+const infoThumbFallbackStyle: CSSProperties = {
+  width: 54,
+  height: 54,
+  borderRadius: "8px",
+  display: "flex",
+  alignItems: "center",
+  justifyContent: "center",
+  background: "var(--x-color-panel)",
+  color: "var(--x-color-danger)",
+  fontSize: "20px",
+};
+const infoAttachmentMetaStyle: CSSProperties = {
+  display: "flex",
+  flexDirection: "column",
+  gap: "2px",
+  fontSize: "12px",
+  color: "var(--x-color-ink-muted)",
+  minWidth: 0,
+  flex: 1,
+};
 const actionRowStyle: CSSProperties = {
   display: "flex",
   gap: "8px",
@@ -1263,20 +943,6 @@ const batchParseButtonStyle: CSSProperties = {
   boxShadow: "0 6px 14px rgba(37,99,235,0.22)",
 };
 
-const proParseButtonStyle: CSSProperties = {
-  border: "1px solid rgba(124,58,237,0.28)",
-  borderRadius: "999px",
-  padding: "5px 8px",
-  background: "linear-gradient(135deg, rgba(37,99,235,0.12), rgba(124,58,237,0.16))",
-  color: "#5b21b6",
-  cursor: "pointer",
-  display: "inline-flex",
-  alignItems: "center",
-  justifyContent: "center",
-  gap: "5px",
-  fontSize: "11px",
-  fontWeight: 900,
-};
 
 const infoButtonStyle: CSSProperties = {
   border: "1px solid var(--x-color-line-soft)",

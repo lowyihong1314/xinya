@@ -5,6 +5,7 @@ import { TablePagination } from "../../../shared/TablePagination";
 import type { GLSourceEntryRef } from "../gl/api";
 import { sortArrow, sortableThStyle, type SortState } from "../shared/tableSort";
 import { displayPurpose } from "./purpose";
+import { summarizeLineItems } from "./lineItems";
 import type { ApproverUserProfile, ClaimRecord } from "./types";
 
 type ClaimStatusFilter = "all" | "approved" | "unapproved";
@@ -266,7 +267,13 @@ export function ClaimList(props: ClaimListProps) {
                       <td style={cellStrongStyle}>{claim.applicant_name || "未填姓名"}</td>
                       <td style={cellStrongStyle}>RM {safeMoney(claim.amount)}</td>
                       <td>{claim.event_name || "-"}</td>
-                      <td style={purposeCellStyle} title={displayPurpose(claim.purpose)}>{displayPurpose(claim.purpose) || "-"}</td>
+                      {/* 用途优先显示明细摘要，没有明细才退回文字说明 */}
+                      <td
+                        style={purposeCellStyle}
+                        title={[summarizeLineItems(claim.line_items), displayPurpose(claim.purpose)].filter(Boolean).join("\n")}
+                      >
+                        {summarizeLineItems(claim.line_items) || displayPurpose(claim.purpose) || "-"}
+                      </td>
                       <td style={monoCellStyle}>#{claim.id}</td>
                       <td style={monoCellStyle}>{claim.request_date || "-"}</td>
                       <td>

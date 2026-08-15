@@ -302,6 +302,29 @@ def _draw_centered_image(pdf, image, left, bottom, width, height):
     pdf.drawImage(ImageReader(image), draw_left, draw_bottom, width=draw_width, height=draw_height)
 
 
+def _format_claim_line_items(line_items):
+    """明细行渲染成「1. 项目 x2 RM 12.00」这样的多行文本。"""
+    lines = []
+    for index, item in enumerate(line_items or [], start=1):
+        quantity = item.get("quantity")
+        quantity_text = ""
+        if quantity not in (None, ""):
+            quantity_value = float(quantity)
+            quantity_text = f"x{quantity_value:g}"
+        parts = [
+            f"{index}.",
+            str(item.get("description") or "").replace("\n", " ").strip(),
+            quantity_text,
+            f"RM {float(item.get('amount') or 0):.2f}",
+        ]
+        lines.append(" ".join(part for part in parts if part))
+    return "\n".join(lines)
+
+
+def _claim_purpose_note(claim):
+    return str(claim.get("purpose") or "").strip()
+
+
 def _draw_claim_report_page(pdf, claim, index, total, page_width, page_height):
     margin = 14 * mm
     title_height = 13 * mm
@@ -398,11 +421,13 @@ def _draw_claim_report_page(pdf, claim, index, total, page_width, page_height):
             current_y -= 4 * mm
         return current_y - 1 * mm
 
-    y = draw_block("用途", claim.get("purpose"), y, 5)
-    refs = [claim.get("ref1") or "", claim.get("ref2") or ""]
-    ref_text = "\n".join(item for item in refs if item.strip())
-    if ref_text and y > info_bottom + 13 * mm:
-        draw_block("备注", ref_text, y, 3)
+    # 用途明细（line item）优先占版面，剩余空间才放文字说明
+    line_items = claim.get("line_items") or []
+    if line_items:
+        y = draw_block("用途明细", _format_claim_line_items(line_items), y, 6)
+    purpose_text = _claim_purpose_note(claim)
+    if purpose_text and y > info_bottom + 13 * mm:
+        draw_block("说明", purpose_text, y, 3)
 
 
 def _draw_summary_page(pdf, claims, page_width, page_height):
@@ -522,6 +547,21 @@ def build_payment_voucher_pdf(data, approver_list):
         ensure_space()
         pdf.drawString(x, y, line)
         y -= 5.5 * mm
+
+    line_items = data.get("line_items") or []
+    if line_items:
+        ensure_space()
+        draw_section("Items 用途明细")
+        pdf.setFont(PDF_FONT, 10)
+        for line in _format_claim_line_items(line_items).split("\n"):
+            for wrapped in _wrap_text(pdf, line, max_width, PDF_FONT, 10)[:3]:
+                ensure_space()
+                pdf.drawString(x, y, wrapped)
+                y -= 5.5 * mm
+        ensure_space()
+        pdf.setFont(PDF_FONT_BOLD, 10)
+        pdf.drawString(x, y, f"Total 合计: RM {float(data.get('amount') or 0):.2f}")
+        y -= 6.5 * mm
 
     ensure_space()
     draw_section("Attachments 附件")

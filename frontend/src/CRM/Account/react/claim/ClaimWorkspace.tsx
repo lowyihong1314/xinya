@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import type { ChangeEvent, CSSProperties } from "react";
+import type { CSSProperties } from "react";
 import { useSearchParams } from "react-router-dom";
 
 import { useUserState } from "../../../../app/UserState";
@@ -10,7 +10,10 @@ import { render_sign_modal } from "../../../../../../static/js/sign_tools.js";
 import { decideClaim, deleteClaim, downloadClaimReport, fetchClaims, readClaimBill, submitClaim } from "./api";
 import { buildClaimFormData, buildInitialCreateState, validateCreateState } from "./submitCreate";
 import { ClaimBatchAiPage } from "./ClaimBatchAiPage";
-import { ClaimCreateForm, type CreateState } from "./ClaimCreateForm";
+import { ClaimCreateForm, isReadableBillFile, type CreateState } from "./ClaimCreateForm";
+import { buildReadBillFill } from "./readBillFill";
+import { summarizeLineItems } from "./lineItems";
+import type { AiFillOutcome } from "./AiFillPanel";
 import { ClaimDetail } from "./ClaimDetail";
 import { ClaimList } from "./ClaimList";
 import { BatchWriteJEModal } from "../shared/BatchWriteJEModal";
@@ -23,7 +26,7 @@ import {
   noticeTextStyle,
   noticeTitleStyle,
 } from "./claimStyles";
-import type { AccountUser, ClaimRecord, ReadBillData } from "./types";
+import type { AccountUser, ClaimRecord } from "./types";
 
 type ViewState =
   | { kind: "list" }
@@ -36,174 +39,6 @@ type ClaimStatusFilter = "all" | "approved" | "unapproved";
 const PAGE_SIZE_DESKTOP = 8;
 const PAGE_SIZE_MOBILE = 6;
 
-
-function isReadableBillFile(file: File) {
-  return (
-    file.type.startsWith("image/") ||
-    file.type === "application/pdf" ||
-    /\.(jpe?g|png|webp|bmp|tiff?|pdf)$/i.test(file.name)
-  );
-}
-
-function stringValue(value: unknown) {
-  return value == null ? "" : String(value).trim();
-}
-
-function normalizeMoneyValue(value: unknown) {
-  if (value == null || value === "") {
-    return "";
-  }
-  if (typeof value === "number") {
-    return Number.isFinite(value) && value > 0 ? value.toFixed(2) : "";
-  }
-  const match = String(value).replace(/,/g, "").match(/-?\d+(?:\.\d+)?/);
-  if (!match) {
-    return "";
-  }
-  const amount = Number(match[0]);
-  return Number.isFinite(amount) && amount > 0 ? amount.toFixed(2) : "";
-}
-
-function toDateInputValue(date: Date) {
-  const yyyy = date.getFullYear();
-  const mm = String(date.getMonth() + 1).padStart(2, "0");
-  const dd = String(date.getDate()).padStart(2, "0");
-  return `${yyyy}-${mm}-${dd}`;
-}
-
-function normalizeReceiptDate(value: unknown) {
-  const rawValue = stringValue(value);
-  if (!rawValue) {
-    return "";
-  }
-
-  const isoMatch = rawValue.match(/^(\d{4})[-/.](\d{1,2})[-/.](\d{1,2})$/);
-  if (isoMatch) {
-    const [, yyyy, mm, dd] = isoMatch;
-    return `${yyyy}-${mm.padStart(2, "0")}-${dd.padStart(2, "0")}`;
-  }
-
-  const slashMatch = rawValue.match(/^(\d{1,2})[-/.](\d{1,2})[-/.](\d{4})$/);
-  if (slashMatch) {
-    const [, first, second, yyyy] = slashMatch;
-    const dd = Number(first) > 12 ? first : Number(second) > 12 ? second : first;
-    const mm = dd === first ? second : first;
-    return `${yyyy}-${mm.padStart(2, "0")}-${dd.padStart(2, "0")}`;
-  }
-
-  const parsed = new Date(rawValue);
-  return Number.isNaN(parsed.getTime()) ? "" : toDateInputValue(parsed);
-}
-
-function buildPurposeFromReadBill(data: ReadBillData) {
-  const merchantName = stringValue(data.merchantName || data.merchant_name);
-  const receiptNumber = stringValue(data.receiptNumber || data.receipt_number);
-  const expenseCategory = stringValue(data.expenseCategory || data.expense_category);
-  const description = stringValue(data.description);
-  const itemSummary = (data.receiptItems || data.receipt_items || [])
-    .map((item) => {
-      const itemDescription = stringValue(item.description);
-      const lineTotal = normalizeMoneyValue(item.lineTotal || item.line_total);
-      return [itemDescription, lineTotal ? `RM ${lineTotal}` : ""].filter(Boolean).join(" ");
-    })
-    .filter(Boolean)
-    .slice(0, 6)
-    .join(" / ");
-
-  return [
-    merchantName ? `商家：${merchantName}` : "",
-    receiptNumber ? `收据号：${receiptNumber}` : "",
-    expenseCategory && expenseCategory !== "OTHER" ? `分类：${expenseCategory}` : "",
-    description ? `说明：${description}` : "",
-    itemSummary ? `项目：${itemSummary}` : "",
-  ]
-    .filter(Boolean)
-    .join("\n");
-}
-
-function normalizeReceiptDateTime(value: unknown) {
-  const rawValue = stringValue(value);
-  if (!rawValue) {
-    return "";
-  }
-
-  const normalized = rawValue.replace(" ", "T");
-  const match = normalized.match(/^(\d{4})[-/.](\d{1,2})[-/.](\d{1,2})(?:T(\d{1,2}):(\d{2})(?::\d{2})?)?/);
-  if (match) {
-    const [, yyyy, mm, dd, hh = "00", min = "00"] = match;
-    return `${yyyy}-${mm.padStart(2, "0")}-${dd.padStart(2, "0")}T${hh.padStart(2, "0")}:${min}`;
-  }
-
-  const parsed = new Date(rawValue);
-  if (Number.isNaN(parsed.getTime())) {
-    return "";
-  }
-  const yyyy = parsed.getFullYear();
-  const mm = String(parsed.getMonth() + 1).padStart(2, "0");
-  const dd = String(parsed.getDate()).padStart(2, "0");
-  const hh = String(parsed.getHours()).padStart(2, "0");
-  const min = String(parsed.getMinutes()).padStart(2, "0");
-  return `${yyyy}-${mm}-${dd}T${hh}:${min}`;
-}
-
-function buildReceiptItemsText(data: ReadBillData) {
-  return (data.receiptItems || data.receipt_items || [])
-    .map((item, index) => {
-      const itemNumber = stringValue(item.itemNumber || item.item_number) || String(index + 1);
-      const description = stringValue(item.description);
-      const quantity = stringValue(item.quantity);
-      const category = stringValue(item.expenseCategory || item.expense_category);
-      const lineTotal = normalizeMoneyValue(item.lineTotal || item.line_total);
-      return [
-        `${itemNumber}.`,
-        description,
-        quantity ? `x${quantity}` : "",
-        category && category !== "OTHER" ? category : "",
-        lineTotal ? `RM ${lineTotal}` : "",
-      ]
-        .filter(Boolean)
-        .join(" ");
-    })
-    .filter(Boolean)
-    .join("\n");
-}
-
-function buildVendorFieldsFromReadBill(data: ReadBillData) {
-  const vendorPayload =
-    data.vendorData && typeof data.vendorData === "object"
-      ? (data.vendorData as Record<string, unknown>)
-      : data.vendor_data && typeof data.vendor_data === "object"
-        ? (data.vendor_data as Record<string, unknown>)
-        : {};
-
-  return {
-    vendor_name: stringValue(
-      data.vendorName || data.vendor_name || data.merchantName || data.merchant_name || vendorPayload.name,
-    ),
-    vendor_address: stringValue(
-      data.vendorAddress || data.vendor_address || data.merchantAddress || data.merchant_address || vendorPayload.address,
-    ),
-    vendor_contact_number: stringValue(
-      data.vendorPhone ||
-        data.vendor_phone ||
-        data.merchantPhone ||
-        data.merchant_phone ||
-        data.contactNumber ||
-        data.contact_number ||
-        vendorPayload.phone ||
-        vendorPayload.contact_number ||
-        vendorPayload.tel,
-    ),
-  };
-}
-
-function formatConfidence(value: unknown) {
-  if (value == null || value === "") {
-    return "";
-  }
-  const numeric = Number(value);
-  return Number.isFinite(numeric) ? numeric.toFixed(2) : String(value);
-}
 
 export function ClaimWorkspace() {
   const { user, isMobile } = useUserState();
@@ -224,6 +59,10 @@ export function ClaimWorkspace() {
   const [loading, setLoading] = useState(true);
   const [submitting, setSubmitting] = useState(false);
   const [aiFilling, setAiFilling] = useState(false);
+  const [aiOutcome, setAiOutcome] = useState<AiFillOutcome>(null);
+  const [aiError, setAiError] = useState<string | null>(null);
+  // AI 填写前的整份状态，供「撤销这次填写」还原
+  const [aiSnapshot, setAiSnapshot] = useState<CreateState | null>(null);
   const [message, setMessage] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [query, setQuery] = useState("");
@@ -335,8 +174,7 @@ export function ClaimWorkspace() {
         claim.id,
         claim.applicant_name,
         claim.purpose,
-        claim.ref1,
-        claim.ref2,
+        summarizeLineItems(claim.line_items),
         claim.vendor_name,
         claim.vendor_address,
         claim.vendor_contact_number,
@@ -445,7 +283,7 @@ export function ClaimWorkspace() {
     setCreateState((prev) => ({ ...prev, signJsonData: nextSign }));
   }
 
-  async function handleAiFillClaim() {
+  async function handleAiFillClaim(model: "auto" | "byteplus" = "auto") {
     setError(null);
     setMessage(null);
 
@@ -456,99 +294,49 @@ export function ClaimWorkspace() {
 
     const receiptFile = createState.files.find(isReadableBillFile);
     if (!receiptFile) {
-      setError("请先上传图片或 PDF 附件");
+      setAiError("请先选择收据图片或 PDF");
       return;
     }
 
+    setAiError(null);
     setAiFilling(true);
     try {
-      const result = await readClaimBill(receiptFile);
+      const result = await readClaimBill(receiptFile, model);
       const data = result.data;
       if (!data) {
-        throw new Error("AI fillin 没有返回识别结果");
+        throw new Error("AI 读单没有返回识别结果");
       }
 
-      const updates: Partial<
-        Pick<
-          CreateState,
-          | "amount"
-          | "request_date"
-          | "purpose"
-          | "ref1"
-          | "ref2"
-          | "vendor_name"
-          | "vendor_address"
-          | "vendor_contact_number"
-          | "purchase_datetime"
-        >
-      > = {};
-      const updatedFields: string[] = [];
-      const amount = normalizeMoneyValue(data.totalAmount || data.total_amount);
-      const requestDate = normalizeReceiptDate(data.receiptDate || data.receipt_date || data.purchaseDate || data.purchase_date);
-      const purchaseDateTime = normalizeReceiptDateTime(
-        data.purchaseDateTime ||
-          data.purchaseDatetime ||
-          data.purchase_datetime ||
-          data.receiptDateTime ||
-          data.receipt_date_time ||
-          data.receiptDate ||
-          data.receipt_date,
-      );
-      const purpose = buildPurposeFromReadBill(data);
-      const ref1 = stringValue(data.description);
-      const ref2 = buildReceiptItemsText(data);
-      const vendorFields = buildVendorFieldsFromReadBill(data);
-
-      if (amount) {
-        updates.amount = amount;
-        updatedFields.push("金额");
-      }
-      if (requestDate) {
-        updates.request_date = requestDate;
-        updatedFields.push("日期");
-      }
-      if (purpose) {
-        updates.purpose = purpose;
-        updatedFields.push("用途说明");
-      }
-      if (ref1) {
-        updates.ref1 = ref1;
-        updatedFields.push("AI说明");
-      }
-      if (ref2) {
-        updates.ref2 = ref2;
-        updatedFields.push("AI项目内容");
-      }
-      if (vendorFields.vendor_name) {
-        updates.vendor_name = vendorFields.vendor_name;
-        updatedFields.push("商家名称");
-      }
-      if (vendorFields.vendor_address) {
-        updates.vendor_address = vendorFields.vendor_address;
-        updatedFields.push("商家地址");
-      }
-      if (vendorFields.vendor_contact_number) {
-        updates.vendor_contact_number = vendorFields.vendor_contact_number;
-        updatedFields.push("商家联络号码");
-      }
-      if (purchaseDateTime) {
-        updates.purchase_datetime = purchaseDateTime;
-        updatedFields.push("采购日期");
-      }
-
-      if (!updatedFields.length) {
-        setError("AI fillin 没有识别到可填写内容，请手动输入");
+      const { patch, filledLabels, lineCount, total } = buildReadBillFill(data);
+      if (!filledLabels.length) {
+        setAiError("AI 没有识别到可填写的内容，请手动输入");
         return;
       }
 
-      setCreateState((prev) => ({ ...prev, ...updates }));
-      const confidence = formatConfidence(result.meta?.confidence);
-      setMessage(`AI fillin 已填写：${updatedFields.join("、")}${confidence ? `（信心 ${confidence}）` : ""}`);
+      // 存一份填写前的状态，让「撤销这次填写」能一键还原
+      setAiSnapshot(createState);
+      setCreateState((prev) => ({ ...prev, ...patch }));
+      setAiOutcome({
+        filledLabels,
+        lineCount,
+        total,
+        confidence: result.meta?.confidence,
+        model,
+      });
+      setMessage(`AI 读单已填写：${filledLabels.join("、")}`);
     } catch (err) {
-      setError(err instanceof Error ? err.message : "AI fillin 失败");
+      setAiError(err instanceof Error ? err.message : "AI 读单失败");
     } finally {
       setAiFilling(false);
     }
+  }
+
+  function handleUndoAiFill() {
+    if (!aiSnapshot) return;
+    setCreateState(aiSnapshot);
+    setAiSnapshot(null);
+    setAiOutcome(null);
+    setMessage("已撤销这次 AI 填写");
   }
 
   async function handleCreateSubmit() {
@@ -572,6 +360,9 @@ export function ClaimWorkspace() {
       const result = await submitClaim(formData);
       await loadClaims();
       setCreateState(buildInitialCreateState(accountUser));
+      setAiOutcome(null);
+      setAiSnapshot(null);
+      setAiError(null);
       setView({ kind: "list" });
       setMessage(`提交成功${result.request_id ? `，单号 #${result.request_id}` : ""}`);
     } catch (err) {
@@ -661,13 +452,6 @@ export function ClaimWorkspace() {
     } catch (err) {
       setError(err instanceof Error ? err.message : "删除失败");
     }
-  }
-
-  function handleFilesChange(event: ChangeEvent<HTMLInputElement>) {
-    setCreateState((prev) => ({
-      ...prev,
-      files: Array.from(event.target.files || []),
-    }));
   }
 
   function handleClaimUpdated(nextClaim: ClaimRecord) {
@@ -848,14 +632,19 @@ export function ClaimWorkspace() {
           state={createState}
           user={accountUser}
           submitting={submitting}
-          aiFilling={aiFilling}
           onBack={() => setView({ kind: "list" })}
           onChange={setCreateState}
-          onAiFill={() => void handleAiFillClaim()}
           onPickEvent={() => void handlePickEvent()}
           onSign={() => void handleSignClaim()}
           onSubmit={() => void handleCreateSubmit()}
-          onFilesChange={handleFilesChange}
+          ai={{
+            parsing: aiFilling,
+            canParse: createState.files.some(isReadableBillFile),
+            onParse: (model) => void handleAiFillClaim(model),
+            outcome: aiOutcome,
+            error: aiError,
+            onUndo: aiSnapshot ? handleUndoAiFill : undefined,
+          }}
         />
       ) : null}
 
@@ -959,7 +748,7 @@ function getClaimSortValue(
     case "event":
       return claim.event_name || "";
     case "purpose":
-      return claim.purpose || "";
+      return summarizeLineItems(claim.line_items) || claim.purpose || "";
     case "id":
       return claim.id;
     case "request_date":
@@ -1033,9 +822,9 @@ async function exportClaimsToExcel(claims: ClaimRecord[], isMobile: boolean) {
       金额: formatExportMoney(claim.amount),
       申请日期: claim.request_date || "",
       部门: claim.department_name || "",
-      用途: claim.purpose || "",
-      Ref1: claim.ref1 || "",
-      Ref2: claim.ref2 || "",
+      用途说明: claim.purpose || "",
+      用途明细: summarizeLineItems(claim.line_items),
+      明细行数: (claim.line_items || []).length,
       商家名称: claim.vendor_name || "",
       商家地址: claim.vendor_address || "",
       商家联络号码: claim.vendor_contact_number || "",

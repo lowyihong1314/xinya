@@ -13,8 +13,8 @@ def serialize_request_data(request_obj, with_children=True):
         "department_id": None,
         "department_name": request_obj.department_name,
         "purpose": request_obj.purpose,
-        "ref1": request_obj.ref1,
-        "ref2": request_obj.ref2,
+        # 逐项明细（line item）：整单金额 = 各行 amount 合计
+        "line_items": [line.to_dict() for line in (request_obj.lines or [])],
         "vendor_name": request_obj.vendor_name,
         "vendor_address": request_obj.vendor_address,
         "vendor_contact_number": request_obj.vendor_contact_number,

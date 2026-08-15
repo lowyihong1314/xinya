@@ -2,6 +2,7 @@
 // 供 finance 的 ClaimWorkspace 与预算 tab 的 ClaimCreateModal 复用，避免重复。
 import { submitClaim } from "./api";
 import type { CreateState } from "./ClaimCreateForm";
+import { emptyLineItems, lineItemsTotal, serializeLineItems, validateLineItems } from "./lineItems";
 import type { AccountUser } from "./types";
 
 export function todayIsoDate(): string {
@@ -16,12 +17,10 @@ export function buildInitialCreateState(user: AccountUser | null): CreateState {
   return {
     applicant_name: String(user?.display_name || user?.name_NRIC || user?.username || ""),
     request_date: todayIsoDate(),
-    amount: "",
     department_name: user?.departments?.[0]?.name || "",
     acctDept: "",
     purpose: "",
-    ref1: "",
-    ref2: "",
+    lineItems: emptyLineItems(),
     vendor_name: "",
     vendor_address: "",
     vendor_contact_number: "",
@@ -36,10 +35,8 @@ export function validateCreateState(s: CreateState): string | null {
   if (!s.signJsonData?.strokes?.length) return "请先签名";
   if (!s.applicant_name.trim()) return "请填写姓名";
   if (!s.request_date) return "请选择日期";
-  if (!s.amount || Number(s.amount) <= 0) return "请输入正确金额";
   if (!s.department_name.trim()) return "请选择部门";
-  if (!s.purpose.trim()) return "请填写用途说明";
-  return null;
+  return validateLineItems(s.lineItems);
 }
 
 export function buildClaimFormData(
@@ -61,14 +58,12 @@ export function buildClaimFormData(
   );
   fd.append("applicant_name", s.applicant_name.trim());
   fd.append("request_date", s.request_date);
-  fd.append("amount", s.amount);
+  // 金额以明细合计为准，后端也会自己再算一次
+  fd.append("amount", lineItemsTotal(s.lineItems).toFixed(2));
   fd.append("department_name", s.department_name.trim());
-  fd.append(
-    "purpose",
-    s.acctDept ? `【做账分配：${s.acctDept}】\n${s.purpose.trim()}` : s.purpose.trim(),
-  );
-  if (s.ref1.trim()) fd.append("ref1", s.ref1.trim());
-  if (s.ref2.trim()) fd.append("ref2", s.ref2.trim());
+  fd.append("line_items", JSON.stringify(serializeLineItems(s.lineItems)));
+  const purpose = s.purpose.trim();
+  fd.append("purpose", s.acctDept ? `【做账分配：${s.acctDept}】${purpose ? `\n${purpose}` : ""}` : purpose);
   if (s.vendor_name.trim()) fd.append("vendor_name", s.vendor_name.trim());
   if (s.vendor_address.trim()) fd.append("vendor_address", s.vendor_address.trim());
   if (s.vendor_contact_number.trim()) fd.append("vendor_contact_number", s.vendor_contact_number.trim());

@@ -6,6 +6,7 @@ import type {
   ReadBillUploadResponse,
 } from "./types";
 import { apiFetch } from "../../../../js/apiFetch";
+import type { serializeLineItems } from "./lineItems";
 
 export type ReadBillModel = "auto" | "byteplus" | "local";
 
@@ -147,15 +148,16 @@ export async function updateClaim(
       | "request_date"
       | "department_name"
       | "purpose"
-      | "ref1"
-      | "ref2"
       | "vendor_name"
       | "vendor_address"
       | "vendor_contact_number"
       | "purchase_datetime"
       | "event_id"
     >
-  >,
+  > & {
+    // 传了就整组替换明细，后端会把整单金额重算成合计
+    line_items?: ReturnType<typeof serializeLineItems>;
+  },
 ) {
   const response = await apiFetch(`/api/account/claim/${requestId}`, {
     method: "PUT",

@@ -24,6 +24,7 @@ from models.finance import (
     ManualIncome,
     ReimbursementApproverData,
     ReimbursementAttachment,
+    ReimbursementLine,
     ReimbursementRequestChangeLog,
     ReimbursementRequest,
 )
@@ -57,8 +58,10 @@ CLAIM_EDIT_FIELD_LABELS = {
     "amount": "金额",
     "department_name": "部门",
     "purpose": "用途说明",
-    "ref1": "AI说明",
-    "ref2": "AI项目内容",
+    "line_items": "用途明细",
+    # 旧字段（已下线）：保留标签让历史修改记录仍显示中文
+    "ref1": "AI说明（旧）",
+    "ref2": "AI项目内容（旧）",
     "vendor_name": "商家名称",
     "vendor_address": "商家地址",
     "vendor_contact_number": "商家联络号码",
@@ -546,6 +549,100 @@ def _record_claim_change(request_obj, field_name, old_value, new_value, user):
     )
 
 
+MAX_CLAIM_LINES = 100
+
+
+def _parse_decimal(value, field_name, allow_negative=False):
+    if value in (None, ""):
+        return None
+    try:
+        number = float(str(value).replace(",", "").strip())
+    except Exception as exc:
+        raise ValidationError(f"{field_name}格式错误") from exc
+    if number != number or number in (float("inf"), float("-inf")):
+        raise ValidationError(f"{field_name}格式错误")
+    if not allow_negative and number < 0:
+        raise ValidationError(f"{field_name}不能是负数")
+    return round(number, 2)
+
+
+def normalize_claim_line_items(raw_value):
+    """把前端传来的明细（JSON 字符串或 list）整理成干净的 dict 列表。
+
+    退款/折扣行允许负数，但整单合计必须 > 0（合计校验在调用方做）。
+    """
+    if raw_value in (None, ""):
+        return []
+    items = _parse_json_text(raw_value, "用途明细") if isinstance(raw_value, str) else raw_value
+    if not isinstance(items, (list, tuple)):
+        raise ValidationError("用途明细必须是数组")
+    if len(items) > MAX_CLAIM_LINES:
+        raise ValidationError(f"用途明细最多 {MAX_CLAIM_LINES} 行")
+
+    normalized = []
+    for index, item in enumerate(items, start=1):
+        if not isinstance(item, dict):
+            raise ValidationError(f"第 {index} 行明细格式错误")
+        description = str(item.get("description") or "").strip()
+        amount = _parse_decimal(item.get("amount"), f"第 {index} 行金额", allow_negative=True)
+        quantity = _parse_decimal(item.get("quantity"), f"第 {index} 行数量")
+        unit_price = _parse_decimal(item.get("unit_price"), f"第 {index} 行单价", allow_negative=True)
+        category = _optional_text(item.get("category"), 64, "明细分类")
+
+        # 整行皆空的草稿行直接丢掉，不当成错误
+        if not description and amount in (None, 0) and quantity is None and unit_price is None:
+            continue
+        if not description:
+            raise ValidationError(f"第 {index} 行请填写项目说明")
+        if len(description) > 2000:
+            raise ValidationError(f"第 {index} 行项目说明过长")
+        if amount is None:
+            # 有数量与单价时自动算小计，省得前端漏传
+            amount = round((quantity or 0) * (unit_price or 0), 2) if (quantity and unit_price) else None
+        if amount is None:
+            raise ValidationError(f"第 {index} 行请填写金额")
+
+        normalized.append(
+            {
+                "description": description,
+                "category": category,
+                "quantity": quantity,
+                "unit_price": unit_price,
+                "amount": amount,
+            }
+        )
+    return normalized
+
+
+def claim_lines_total(items):
+    return round(sum(float(item["amount"]) for item in items), 2)
+
+
+def _format_claim_lines_for_log(items):
+    return " | ".join(
+        f"{index}. {item['description']} RM {float(item['amount']):.2f}"
+        for index, item in enumerate(items, start=1)
+    )
+
+
+def _replace_claim_lines(request_obj, items):
+    """整组替换明细行（先清空再按顺序写入），返回合计金额。"""
+    request_obj.lines.clear()
+    db.session.flush()
+    for line_no, item in enumerate(items, start=1):
+        request_obj.lines.append(
+            ReimbursementLine(
+                line_no=line_no,
+                description=item["description"],
+                category=item["category"],
+                quantity=item["quantity"],
+                unit_price=item["unit_price"],
+                amount=item["amount"],
+            )
+        )
+    return claim_lines_total(items)
+
+
 def _optional_text(value, max_length=None, field_name="字段"):
     text = str(value or "").strip()
     if max_length and len(text) > max_length:
@@ -663,38 +760,45 @@ def create_claim_from_form(form, files, current_user=None):
     applicant_name = form.get("applicant_name")
     request_date_raw = form.get("request_date")
     amount_raw = form.get("amount")
-    purpose = form.get("purpose")
+    purpose = _optional_text(form.get("purpose"))
     event_id_raw = form.get("event_id")
     sign_json_data_raw = form.get("sign_json_data")
     department_name = _resolve_claim_department_name(form)
-    ref1 = _optional_text(form.get("ref1"))
-    ref2 = _optional_text(form.get("ref2"))
+    line_items = normalize_claim_line_items(form.get("line_items"))
     vendor_name = _optional_text(form.get("vendor_name"), 255, "商家名称")
     vendor_address = _optional_text(form.get("vendor_address"))
     vendor_contact_number = _optional_text(form.get("vendor_contact_number"), 80, "商家联络号码")
     purchase_datetime = _parse_optional_datetime(form.get("purchase_datetime"), "采购日期")
 
-    if not all(
-        [
-            applicant_name,
-            request_date_raw,
-            amount_raw,
-            purpose,
-            sign_json_data_raw,
-        ]
-    ):
+    if not all([applicant_name, request_date_raw, sign_json_data_raw]):
         raise ValidationError("缺少必要字段")
 
     sign_json_data = _normalize_sign_json(sign_json_data_raw)
 
     try:
         request_date = datetime.strptime(request_date_raw, "%Y-%m-%d").date()
-        amount = float(amount_raw)
         event_id = int(event_id_raw) if event_id_raw else None
     except Exception as exc:
         raise ValidationError("数据格式错误") from exc
+
+    # 没传明细的老客户端：拿用途 + 金额兜底成一行，保证每张单都有明细
+    if not line_items:
+        fallback_amount = _parse_decimal(amount_raw, "金额")
+        if not fallback_amount:
+            raise ValidationError("请至少填写一行用途明细")
+        line_items = [
+            {
+                "description": (purpose or "报销").strip()[:2000],
+                "category": None,
+                "quantity": None,
+                "unit_price": None,
+                "amount": fallback_amount,
+            }
+        ]
+
+    amount = claim_lines_total(line_items)
     if amount <= 0:
-        raise ValidationError("金额必须大于 0")
+        raise ValidationError("明细合计金额必须大于 0")
 
     request_obj = ReimbursementRequest(
         applicant_user_id=getattr(current_user, "id", None),
@@ -703,8 +807,6 @@ def create_claim_from_form(form, files, current_user=None):
         amount=amount,
         department_name=department_name,
         purpose=purpose,
-        ref1=ref1,
-        ref2=ref2,
         vendor_name=vendor_name,
         vendor_address=vendor_address,
         vendor_contact_number=vendor_contact_number,
@@ -716,6 +818,8 @@ def create_claim_from_form(form, files, current_user=None):
     )
     db.session.add(request_obj)
     db.session.flush()
+
+    _replace_claim_lines(request_obj, line_items)
 
     for uploaded_file in files.getlist("files"):
         _save_claim_attachment(request_obj, uploaded_file, current_user)
@@ -864,7 +968,25 @@ def update_claim(request_id, payload, user):
         _record_claim_change(request_obj, "request_date", request_obj.request_date, request_date, user)
         request_obj.request_date = request_date
 
-    if "amount" in payload:
+    if "line_items" in payload:
+        line_items = normalize_claim_line_items(payload.get("line_items"))
+        if not line_items:
+            raise ValidationError("请至少填写一行用途明细")
+        next_amount = claim_lines_total(line_items)
+        if next_amount <= 0:
+            raise ValidationError("明细合计金额必须大于 0")
+        old_lines_text = _format_claim_lines_for_log(
+            [line.to_dict() for line in (request_obj.lines or [])]
+        )
+        _replace_claim_lines(request_obj, line_items)
+        _record_claim_change(
+            request_obj, "line_items", old_lines_text, _format_claim_lines_for_log(line_items), user
+        )
+        # 整单金额永远等于明细合计
+        if float(request_obj.amount or 0) != next_amount:
+            _record_claim_change(request_obj, "amount", request_obj.amount, next_amount, user)
+            request_obj.amount = next_amount
+    elif "amount" in payload:
         try:
             amount = float(payload.get("amount"))
         except Exception as exc:
@@ -884,9 +1006,8 @@ def update_claim(request_id, payload, user):
         request_obj.department_name = department_name
 
     if "purpose" in payload:
-        purpose = str(payload.get("purpose") or "").strip()
-        if not purpose:
-            raise ValidationError("用途说明不能为空")
+        # 用途说明现在是可选的补充说明（必填的是明细行）
+        purpose = str(payload.get("purpose") or "").strip() or None
         _record_claim_change(request_obj, "purpose", request_obj.purpose, purpose, user)
         request_obj.purpose = purpose
 
@@ -894,7 +1015,7 @@ def update_claim(request_id, payload, user):
         "vendor_name": (255, "商家名称"),
         "vendor_contact_number": (80, "商家联络号码"),
     }
-    for optional_field in ("ref1", "ref2", "vendor_name", "vendor_address", "vendor_contact_number"):
+    for optional_field in ("vendor_name", "vendor_address", "vendor_contact_number"):
         if optional_field in payload:
             max_length, field_label = optional_field_limits.get(optional_field, (None, "字段"))
             next_value = _optional_text(payload.get(optional_field), max_length, field_label)
