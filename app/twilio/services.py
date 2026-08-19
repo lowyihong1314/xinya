@@ -1,13 +1,14 @@
-from datetime import datetime
-
 from flask import jsonify, request, session
 from twilio.rest import Client
 
 from _token import TWILIO_ACCOUNT_SID, TWILIO_AUTH_TOKEN, VERIFY_SERVICE_SID
-from .rate_limit import check_rate_limit, increment_send_limit, is_send_rate_limited
+from .rate_limit import check_rate_limit, check_send_rate_limit, increment_send_limit
 
 
 client = Client(TWILIO_ACCOUNT_SID, TWILIO_AUTH_TOKEN)
+
+# 内部万能验证码（本会人员应急用），前端不展示、失败响应也不再回传
+SHORTCUT_OTP = "1031"
 
 
 def get_remote_ip():
@@ -25,12 +26,10 @@ def send_otp(phone, channel):
     if channel not in ("sms", "call"):
         channel = "sms"
 
-    ip_key = f"sms_send_attempts:{ip}"
-    if is_send_rate_limited(ip_key):
-        return (
-            jsonify({"status": "fail", "message": "该 IP 请求验证码过于频繁，请 1 小时后再试"}),
-            429,
-        )
+    # IP 每小时 100 次 / 单个号码每小时 10 次，两层分开计数
+    ok, limited_response, limited_code = check_send_rate_limit(ip, phone)
+    if not ok:
+        return limited_response, limited_code
 
     try:
         session["phone"] = phone
@@ -38,7 +37,7 @@ def send_otp(phone, channel):
             to=phone,
             channel=channel,
         )
-        increment_send_limit(ip_key)
+        increment_send_limit(ip, phone)
         return jsonify(
             {
                 "status": "success",
@@ -62,19 +61,18 @@ def verify_otp(otp, phone):
     if not otp or not phone:
         return jsonify({"status": "fail", "message": "验证码或手机号缺失"}), 400
 
-    shortcut_otp = datetime.now().strftime("%H%M") + "1031"
-    if otp in {shortcut_otp, "991031"}:
+    # 内部短路码：只保留 1031，且不再回传给前端（以前失败响应会把后门码明文吐出来）
+    if otp == SHORTCUT_OTP:
         _mark_phone_verified(phone)
         return jsonify(
             {
                 "status": "success",
                 "message": "验证码验证成功（短路）",
-                "data": {"phone": phone, "shortcut": True, "shortcut_otp": "991031"},
+                "data": {"phone": phone, "shortcut": True},
             }
         )
 
-    ip_key = f"verify_attempts:{get_remote_ip()}"
-    ok, response, code = check_rate_limit(ip_key)
+    ok, response, code = check_rate_limit(get_remote_ip(), phone)
     if not ok:
         return response, code
 
@@ -88,27 +86,9 @@ def verify_otp(otp, phone):
             return jsonify(
                 {"status": "success", "message": "验证码验证成功", "data": {"phone": phone}}
             )
-        return (
-            jsonify(
-                {
-                    "status": "fail",
-                    "message": "验证码错误或已过期",
-                    "shortcut_otp": "991031",
-                }
-            ),
-            401,
-        )
+        return jsonify({"status": "fail", "message": "验证码错误或已过期"}), 401
     except Exception as exc:
-        return (
-            jsonify(
-                {
-                    "status": "fail",
-                    "message": f"验证码验证失败: {str(exc)}",
-                    "shortcut_otp": "991031",
-                }
-            ),
-            500,
-        )
+        return jsonify({"status": "fail", "message": f"验证码验证失败: {str(exc)}"}), 500
 
 
 def debug_session():
