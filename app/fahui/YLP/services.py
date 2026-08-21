@@ -454,8 +454,14 @@ def create_order_shell(data: dict) -> tuple[dict, int]:
     else:
         member_name = (data.get("member_name") or None)
 
+    # force_new：明确要另开一张（同一个人同一年可能交好几张不同的单据），
+    # 不走「姓名+电话+版本」去重，免得第二张把第一张覆盖掉。
+    force_new = str(data.get("force_new") or "").strip().lower() in {"1", "true", "yes", "on"} or data.get("force_new") is True
+
     existing = (
-        db.session.query(FahuiOrder)
+        None
+        if force_new
+        else db.session.query(FahuiOrder)
         .filter(
             FahuiOrder.name == name,
             FahuiOrder.phone == phone,

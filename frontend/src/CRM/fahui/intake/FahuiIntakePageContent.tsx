@@ -420,27 +420,28 @@ function FahuiIntakePageInner() {
       if (activeEntry && String(activeEntry.summary.version || "") !== version) {
         throw new Error(`只能登记 ${version.replace("_YLP", "")} 年的牌位，请从往年记录「复制到今年」再提交。`);
       }
+      // 已付款的订单不给改（原本这层检查挂在「同名同号去重」那条分支上，去重取消后补到这里）
+      if (activeEntry && isLockedOrderStatus(activeEntry.summary.status)) {
+        throw new Error(`${currentYearLabel} 年这张订单已经付款，不能再修改。`);
+      }
 
       let orderId = activeOrderId;
       let replaceExistingItems = Boolean(activeOrderId);
 
       if (!orderId) {
+        // 新提交一律另开一张：以前同名同号会命中去重、然后把那张单的牌位全删掉重写，
+        // 同一个人交第二份单据时第一份就没了。要改旧单请从下面的记录里点「编辑」。
         const createPayload = await createYlpOrder({
           name: contactName,
           customer_name: customerName,
           phone: verifiedPhone,
           email,
           version,
+          force_new: true,
         });
         orderId = createPayload.order?.id || null;
         if (!orderId) {
           throw new Error(createPayload.message || "创建订单失败");
-        }
-        if (createPayload.duplicated) {
-          if (isLockedOrderStatus(createPayload.order?.status)) {
-            throw new Error(`${currentYearLabel} 年资料已经付款，不能再修改。`);
-          }
-          replaceExistingItems = true;
         }
       }
 

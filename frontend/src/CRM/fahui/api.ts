@@ -272,6 +272,8 @@ export async function createYlpOrder(payload: {
   email?: string;
   /** 登记页固定传今年的 `YYYY_YLP`；后端同样锁死今年，这里只是显式表明意图。 */
   version?: string;
+  /** true = 就算同名同号也另开一张，不去重（避免第二张单覆盖第一张）。 */
+  force_new?: boolean;
 }) {
   const response = await apiFetch("/api/fahui_router/orders", {
     method: "POST",
