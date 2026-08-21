@@ -4,6 +4,7 @@ import { useLocation, useNavigate } from "react-router-dom";
 
 import { useEnsureDesignTokens } from "../../theme/designTokens";
 import { useUserState } from "../../app/UserState";
+import { getUserPermissionNames } from "../../app/permissions";
 import { CachedImage } from "../../components/CachedMedia";
 import { showChoiceDialog, showConfirmDialog } from "../../js/dialogs";
 import { copyTextToClipboard, downloadBlobOrShare, downloadUrlOrShare } from "../../js/browserActions";
@@ -37,6 +38,7 @@ import {
   listYlpRelationOptions,
   previewYlpPaiwei,
   startYlpPaiweiJob,
+  withdrawPayment,
   removePayment,
   revokePayment,
   searchYlpOrders,
@@ -45,8 +47,14 @@ import {
   updateYlpOrderStatus,
 } from "./api";
 import { showEventPicker } from "../shared/showEventPicker";
+import { YlpDrawer } from "./YlpDrawer";
+import { YlpItemModal } from "./YlpItemModal";
+import { YlpPaymentModal } from "./YlpPaymentModal";
+import { YlpOrderSummaryDrawer } from "./YlpOrderSummaryDrawer";
+import { PaymentProofButton } from "./PaymentProof";
 import { PaiweiEditorModal } from "./intake/PaiweiEditorModal";
-import { buildItemPayload, createDraft, draftFromItem } from "./intake/paiwei";
+import { paiweiFieldLabel } from "./intake/paiwei";
+import { orderStatusLabel, paymentStatusLabel } from "./orderStatus";
 import { connectFahuiSocket } from "./socket";
 import type {
   PaymentRecord,
@@ -347,10 +355,12 @@ function buildFahuiSearchParams(
   return params;
 }
 
-type YlpSortKey = "status" | "id" | "customer" | "phone" | "total" | "maintainer" | "created_at";
+type YlpSortKey = "status" | "order_status" | "id" | "customer" | "phone" | "total" | "maintainer" | "created_at";
 
 const YLP_ORDER_COLUMNS: { key: YlpSortKey; label: string }[] = [
-  { key: "status", label: "状态" },
+  // 两个状态分开列：订单流程 vs 付款汇总，之前只显示后者、表头却写「状态」，很容易误读
+  { key: "order_status", label: "订单" },
+  { key: "status", label: "付款" },
   { key: "id", label: "单号" },
   { key: "customer", label: "功德主" },
   { key: "phone", label: "电话" },
@@ -364,9 +374,11 @@ export function FahuiPage() {
 
   const location = useLocation();
   const navigate = useNavigate();
-  const { isMobile } = useUserState();
+  const { user, isMobile } = useUserState();
   // 顶部导航条是 sticky 的，右侧面板贴顶/算高度都要把它让出来（导航条藏起来时测得 0）。
   const navbarHeight = useOptionalAppChrome()?.navbarHeight ?? 60;
+  // 审核付款要 account_edit，和后端 /api/payment/review/* 的权限一致
+  const canReviewPayment = useMemo(() => getUserPermissionNames(user).has("account_edit"), [user]);
   const initialRouteState = parseFahuiRouteState(location.search);
   const [screen, setScreen] = useState<ScreenState>(initialRouteState.screen);
   const [payments, setPayments] = useState<PaymentRecord[]>([]);
@@ -398,11 +410,8 @@ export function FahuiPage() {
   const [ylpRowMenu, setYlpRowMenu] = useState<{ orderId: number; x: number; y: number } | null>(null);
   const [ylpRowBusy, setYlpRowBusy] = useState(false);
   const [ylpRowPreview, setYlpRowPreview] = useState<{ orderId: number; url: string | null; error: string } | null>(null);
-  const [ylpRowDetail, setYlpRowDetail] = useState<{
-    orderId: number;
-    order: YlpOrderDetail | null;
-    error: string;
-  } | null>(null);
+  // 列表点行弹出的摘要：只记订单号，内容与编辑能力全交给共享的 YlpOrderSummaryDrawer
+  const [ylpRowDetailId, setYlpRowDetailId] = useState<number | null>(null);
   const [paiweiJob, setPaiweiJob] = useState<{ percent: number; status: "running" | "done" | "error"; message?: string } | null>(null);
   const paiweiPollRef = useRef<number | null>(null);
   const [ylpPagination, setYlpPagination] = useState<YlpPagination | null>(null);
@@ -852,6 +861,32 @@ export function FahuiPage() {
     }));
   }
 
+  /** 撤回一条待审核的付款：只标成「已拒绝」，订单状态不动。 */
+  async function handleWithdrawPayment(paymentId: number, orderId: number) {
+    const confirmed = await showConfirmDialog({
+      title: "撤回付款",
+      message: `撤回付款 #${paymentId}？这条记录会变成「已拒绝」，凭证保留，**订单状态不变**，之后可以重新提交付款。`,
+      tone: "danger",
+    });
+    if (!confirmed) {
+      return;
+    }
+    setStatusSaving(true);
+    try {
+      const result = await withdrawPayment(paymentId);
+      if (result.success === false || result.status === "error") {
+        throw new Error(result.message || result.error || "撤回失败");
+      }
+      // 付款状态变了会连带影响订单的付款汇总，整份详情重载一次最稳
+      await loadYlpDetail(orderId);
+      setActionMessage(`付款 #${paymentId} 已撤回`);
+    } catch (withdrawError) {
+      show_alert("error", withdrawError instanceof Error ? withdrawError.message : "撤回失败");
+    } finally {
+      setStatusSaving(false);
+    }
+  }
+
   async function handleDownloadPaiwei(orderId: number) {
     try {
       const result = await downloadYlpPaiwei(orderId);
@@ -962,7 +997,7 @@ export function FahuiPage() {
 
   async function handleDeleteYlpOrder(orderId: number) {
     const confirmed = await showConfirmDialog({
-      message: `确认删除订单 #${orderId}？删除后会从列表隐藏。`,
+      message: `确认删除订单 #${orderId}？订单会移入「DELETE」版本（软删除），切到 DELETE 版本还能找回或彻底删除。`,
       tone: "danger",
     });
     if (!confirmed) {
@@ -970,8 +1005,13 @@ export function FahuiPage() {
     }
     setStatusSaving(true);
     try {
-      await updateYlpOrderStatus(orderId, "delete");
-      setActionMessage("订单已删除");
+      // 软删除只认一套约定：把版本改成 DELETE（deleteYlpOrdersBatch 就是这么做的），
+      // 不能再去改 status —— 那样订单在自己版本里被藏起来、在 DELETE 版本里又找不到，会全版本隐身。
+      const res = await deleteYlpOrdersBatch([orderId]);
+      if (res.status === "error") {
+        throw new Error(res.message || "删除订单失败");
+      }
+      setActionMessage("订单已移入 DELETE 版本");
       setScreen({ kind: "workspace", workspace: "ylp", section: "orders" });
       void loadYlpOrders();
     } catch (deleteError) {
@@ -1068,7 +1108,7 @@ export function FahuiPage() {
   // 右侧那一栏同一时间只放一块内容：填写页 / 牌位预览 / 订单摘要。
   function closeYlpRowPanels() {
     setIntakeDrawerOpen(false);
-    setYlpRowDetail(null);
+    setYlpRowDetailId(null);
     closeYlpRowPreview();
   }
 
@@ -1085,24 +1125,9 @@ export function FahuiPage() {
   }
 
   // 点行只在右侧看摘要，要改动再按「进入订单详情」。
-  async function openYlpRowDetail(orderId: number) {
+  function openYlpRowDetail(orderId: number) {
     closeYlpRowPanels();
-    setYlpRowDetail({ orderId, order: null, error: "" });
-
-    try {
-      const response = await fetchYlpOrderDetail(orderId);
-      setYlpRowDetail((prev) => {
-        if (!prev || prev.orderId !== orderId) {
-          return prev;
-        }
-        return response.data
-          ? { orderId, order: response.data, error: "" }
-          : { orderId, order: null, error: response.message || "订单加载失败" };
-      });
-    } catch (loadError) {
-      const message = loadError instanceof Error ? loadError.message : "订单加载失败";
-      setYlpRowDetail((prev) => (prev && prev.orderId === orderId ? { orderId, order: null, error: message } : prev));
-    }
+    setYlpRowDetailId(orderId);
   }
 
   // 列表行的「预览」＝订单详情那颗「预览牌位」，只是渲染进右侧抽屉而不是弹窗。
@@ -1148,8 +1173,9 @@ export function FahuiPage() {
       await updateYlpOrderStatus(orderId, "confirm");
       show_alert("success", `订单 #${orderId} 已确认`);
       void loadYlpOrders();
-      if (ylpRowDetail?.orderId === orderId) {
-        void openYlpRowDetail(orderId);
+      if (ylpRowDetailId === orderId) {
+        // 抽屉自己会重拉，这里只要保证它还开着即可
+        setYlpRowDetailId(orderId);
       }
     } catch (confirmError) {
       show_alert("error", confirmError instanceof Error ? confirmError.message : "确认订单失败");
@@ -1203,8 +1229,8 @@ export function FahuiPage() {
       if (ylpRowPreview?.orderId === orderId) {
         closeYlpRowPreview();
       }
-      if (ylpRowDetail?.orderId === orderId) {
-        setYlpRowDetail(null);
+      if (ylpRowDetailId === orderId) {
+        setYlpRowDetailId(null);
       }
       setYlpSelected((current) => current.filter((id) => id !== orderId));
       void loadYlpOrders();
@@ -1574,7 +1600,8 @@ export function FahuiPage() {
       const XLSX = await import("xlsx");
       const data = rows.map((order) => ({
         单号: order.id,
-        付款状态: order.status || "",
+        订单状态: orderStatusLabel(order.order_status),
+        付款状态: paymentStatusLabel(order.status),
         功德主: order.customer_name || order.name || "",
         联络人: order.name || "",
         电话: order.phone || "",
@@ -1923,7 +1950,7 @@ export function FahuiPage() {
                     <tr
                       key={order.id}
                       className={
-                        ylpRowDetail?.orderId === order.id ? "ylp-order-row ylp-order-row-active" : "ylp-order-row"
+                        ylpRowDetailId === order.id ? "ylp-order-row ylp-order-row-active" : "ylp-order-row"
                       }
                       onClick={() => void openYlpRowDetail(order.id)}
                       onContextMenu={(event) => {
@@ -1963,7 +1990,12 @@ export function FahuiPage() {
                         </button>
                       </td>
                       <td>
-                        <span style={ylpStatusChipStyle(order.status)}>{order.status || "-"}</span>
+                        <span style={ylpStatusChipStyle(order.order_status || "Draft")}>
+                          {orderStatusLabel(order.order_status)}
+                        </span>
+                      </td>
+                      <td>
+                        <span style={ylpStatusChipStyle(order.status)}>{paymentStatusLabel(order.status)}</span>
                       </td>
                       <td style={styles.cellMono}>{`#${order.id}`}</td>
                       <td style={styles.cellStrong}>{order.customer_name || order.name || "-"}</td>
@@ -2136,7 +2168,10 @@ export function FahuiPage() {
 
             <section style={styles.statusEditRow}>
               <span style={styles.statusEditLabel}>订单状态</span>
-              <span style={ylpStatusChipStyle(orderStatus)}>{orderStatus}</span>
+              <span style={ylpStatusChipStyle(orderStatus)}>{orderStatusLabel(orderStatus)}</span>
+              <span style={ylpStatusChipStyle(ylpDetail.order.status)}>
+                {`付款：${paymentStatusLabel(ylpDetail.order.status)}`}
+              </span>
               {!versionEditable ? (
                 <span style={ylpStatusChipStyle("none")}>{`历史版本（${ylpDetail.order.version}）只读`}</span>
               ) : null}
@@ -2283,7 +2318,7 @@ export function FahuiPage() {
                   付款记录（共 {(ylpDetail.payments || []).length} 条）
                 </h4>
                 <div style={styles.itemActionCell}>
-                  <span style={ylpStatusChipStyle(ylpDetail.order.status)}>{`汇总：${ylpDetail.order.status || "none"}`}</span>
+                  <span style={ylpStatusChipStyle(ylpDetail.order.status)}>{`汇总：${paymentStatusLabel(ylpDetail.order.status)}`}</span>
                   {versionEditable ? (
                     <button type="button" style={styles.addItemToggle} onClick={() => setPaymentModalOpen(true)}>
                       + 新增付款记录
@@ -2304,6 +2339,7 @@ export function FahuiPage() {
                         <th>金额</th>
                         <th>状态</th>
                         <th>时间</th>
+                        <th>操作</th>
                       </tr>
                     </thead>
                     <tbody>
@@ -2314,10 +2350,31 @@ export function FahuiPage() {
                           <td>{`RM ${payment.total_price ?? 0}`}</td>
                           <td>
                             <span style={ylpStatusChipStyle(payment.is_approved ? "approved" : payment.status)}>
-                              {payment.is_approved ? "approved" : payment.status || "-"}
+                              {paymentStatusLabel(payment.is_approved ? "approved" : payment.status)}
                             </span>
                           </td>
                           <td>{payment.created_at || "-"}</td>
+                          <td>
+                            <div style={styles.itemActionCell}>
+                              {/* 有上传凭证就能看，不分付款方式 */}
+                              <PaymentProofButton payment={payment} />
+                            {/* 待审核的付款可以撤回（改成已拒绝），已审核的走上面的撤销审核 */}
+                            {!payment.is_approved &&
+                            String(payment.status || "").toLowerCase() === "pending" ? (
+                              <button
+                                type="button"
+                                style={{
+                                  ...styles.itemEditButton,
+                                  ...(statusSaving ? styles.pageButtonDisabled : null),
+                                }}
+                                disabled={statusSaving}
+                                onClick={() => void handleWithdrawPayment(payment.id, ylpDetail.orderId)}
+                              >
+                                撤回
+                              </button>
+                            ) : null}
+                            </div>
+                          </td>
                         </tr>
                       ))}
                     </tbody>
@@ -2396,6 +2453,8 @@ export function FahuiPage() {
         {paymentModalOpen && ylpDetail ? (
           <YlpPaymentModal
             orderId={ylpDetail.orderId}
+            defaultAmount={ylpDetail.order?.total_amount ?? 0}
+            canApprove={canReviewPayment}
             onClose={() => setPaymentModalOpen(false)}
             onSaved={() => {
               setPaymentModalOpen(false);
@@ -2485,31 +2544,22 @@ export function FahuiPage() {
         </div>
 
         {intakeDrawerOpen ? (
-          <aside style={styles.intakeDockPanel(isMobile, navbarHeight)} className="ylp-intake-drawer">
-            <style>{INTAKE_DRAWER_CSS}</style>
-            <header style={styles.intakeDrawerHeader}>
-              <div>
-                <p style={styles.intakeDrawerEyebrow}>牌位填写页 · 手机预览</p>
-                <p style={styles.intakeDrawerHint}>在此模拟手机端直接测试填写流程</p>
-              </div>
-              <div style={styles.itemActionCell}>
-                <a
-                  href="/#/ylp-registration"
-                  target="_blank"
-                  rel="noreferrer"
-                  style={styles.itemEditButton}
-                >
+          <YlpDrawer
+            isMobile={isMobile}
+            navbarHeight={navbarHeight}
+            title="牌位填写页 · 手机预览"
+            hint="在此模拟手机端直接测试填写流程"
+            actions={
+              <>
+                <a href="/#/ylp-registration" target="_blank" rel="noreferrer" style={styles.itemEditButton}>
                   新标签打开
                 </a>
-                <button
-                  type="button"
-                  style={styles.addItemCancel}
-                  onClick={() => setIntakeDrawerOpen(false)}
-                >
+                <button type="button" style={styles.addItemCancel} onClick={() => setIntakeDrawerOpen(false)}>
                   关闭
                 </button>
-              </div>
-            </header>
+              </>
+            }
+          >
             <div style={styles.intakePhoneShell}>
               <div style={styles.intakePhoneNotch} />
               <div style={styles.intakePhoneScreenWrap}>
@@ -2521,20 +2571,31 @@ export function FahuiPage() {
               </div>
               <div style={styles.intakePhoneHomeBar} />
             </div>
-          </aside>
+          </YlpDrawer>
         ) : null}
 
-        {ylpRowDetail ? renderYlpRowDetailPanel(ylpRowDetail) : null}
+        {ylpRowDetailId != null ? (
+          <YlpOrderSummaryDrawer
+            orderId={ylpRowDetailId}
+            isMobile={isMobile}
+            navbarHeight={navbarHeight}
+            onClose={() => setYlpRowDetailId(null)}
+            onOpenDetail={(id) => {
+              setYlpRowDetailId(null);
+              openYlpDetail(id);
+            }}
+            onChanged={() => void loadYlpOrders()}
+          />
+        ) : null}
 
         {ylpRowPreview ? (
-          <aside style={styles.intakeDockPanel(isMobile, navbarHeight)} className="ylp-intake-drawer">
-            <style>{INTAKE_DRAWER_CSS}</style>
-            <header style={styles.intakeDrawerHeader}>
-              <div>
-                <p style={styles.intakeDrawerEyebrow}>{`订单 #${ylpRowPreview.orderId} · 牌位打印预览`}</p>
-                <p style={styles.intakeDrawerHint}>与订单详情的「预览牌位」是同一份打印结果</p>
-              </div>
-              <div style={styles.itemActionCell}>
+          <YlpDrawer
+            isMobile={isMobile}
+            navbarHeight={navbarHeight}
+            title={`订单 #${ylpRowPreview.orderId} · 牌位打印预览`}
+            hint="与订单详情的「预览牌位」是同一份打印结果"
+            actions={
+              <>
                 {ylpRowPreview.url ? (
                   <a href={ylpRowPreview.url} target="_blank" rel="noreferrer" style={styles.itemEditButton}>
                     新标签打开
@@ -2543,8 +2604,9 @@ export function FahuiPage() {
                 <button type="button" style={styles.addItemCancel} onClick={closeYlpRowPreview}>
                   关闭
                 </button>
-              </div>
-            </header>
+              </>
+            }
+          >
             {ylpRowPreview.url ? (
               <iframe
                 key={ylpRowPreview.url}
@@ -2555,7 +2617,7 @@ export function FahuiPage() {
             ) : (
               <section style={styles.stateCard}>{ylpRowPreview.error || "正在生成牌位预览…"}</section>
             )}
-          </aside>
+          </YlpDrawer>
         ) : null}
       </div>
 
@@ -2610,107 +2672,6 @@ export function FahuiPage() {
       {renderYlpRowMenu()}
     </section>
   );
-
-  // 点行弹出的订单摘要：订单详情的只读节选，改动仍然走「进入订单详情」。
-  function renderYlpRowDetailPanel(panel: { orderId: number; order: YlpOrderDetail | null; error: string }) {
-    const order = panel.order;
-    const items = order?.order_items || [];
-
-    return (
-      <aside style={styles.intakeDockPanel(isMobile, navbarHeight)} className="ylp-intake-drawer">
-        <style>{INTAKE_DRAWER_CSS}</style>
-        <style>{YLP_DETAIL_TABLE_CSS}</style>
-        <style>{YLP_ROW_DETAIL_CSS}</style>
-
-        <header style={styles.intakeDrawerHeader}>
-          <div>
-            <p style={styles.intakeDrawerEyebrow}>{`订单 #${panel.orderId} · 摘要`}</p>
-            <p style={styles.intakeDrawerHint}>只读节选，要改动请进入订单详情</p>
-          </div>
-          <div style={styles.itemActionCell}>
-            <button type="button" style={styles.primaryAction} onClick={() => openYlpDetail(panel.orderId)}>
-              进入订单详情
-            </button>
-            <button type="button" style={styles.addItemCancel} onClick={() => setYlpRowDetail(null)}>
-              关闭
-            </button>
-          </div>
-        </header>
-
-        {panel.error ? <section style={styles.stateCard}>{panel.error}</section> : null}
-        {!panel.error && !order ? <section style={styles.stateCard}>加载中…</section> : null}
-
-        {order ? (
-          <>
-            <section style={styles.statusEditRow}>
-              <span style={ylpStatusChipStyle(order.order_status)}>{order.order_status || "Draft"}</span>
-              <span style={ylpStatusChipStyle(order.status)}>{`付款：${order.status || "none"}`}</span>
-              {!isCurrentYlpVersion(order.version) ? (
-                <span style={ylpStatusChipStyle("none")}>{`历史版本（${order.version}）只读`}</span>
-              ) : null}
-            </section>
-
-            <div style={styles.tableWrap}>
-              <table className="ylp-detail-table ylp-row-detail-table">
-                <tbody>
-                  <tr>
-                    <th style={{ width: 84 }}>功德主</th>
-                    <td>{order.customer_name || order.name || "-"}</td>
-                  </tr>
-                  <tr>
-                    <th>联系电话</th>
-                    <td>{order.phone || "-"}</td>
-                  </tr>
-                  <tr>
-                    <th>Email</th>
-                    <td>{order.email || "-"}</td>
-                  </tr>
-                  <tr>
-                    <th>总额</th>
-                    <td>{order.total_amount != null ? `RM ${order.total_amount}` : "-"}</td>
-                  </tr>
-                  <tr>
-                    <th>版本</th>
-                    <td>{order.version || "-"}</td>
-                  </tr>
-                  <tr>
-                    <th>维护人</th>
-                    <td>{order.maintainer_name || "-"}</td>
-                  </tr>
-                  <tr>
-                    <th>创建时间</th>
-                    <td>{order.created_at || "-"}</td>
-                  </tr>
-                </tbody>
-              </table>
-            </div>
-
-            <section style={styles.detailSection}>
-              <header style={styles.detailSectionHeader}>
-                <h4 style={styles.detailSectionTitle}>{`牌位项目（${items.length}）`}</h4>
-              </header>
-              {items.length ? (
-                <div style={styles.rowDetailItemList}>
-                  {items.map((item) => (
-                    <article key={item.id} style={styles.rowDetailItemCard}>
-                      <div style={styles.rowDetailItemHead}>
-                        <span style={styles.cellStrong}>{item.item_name || item.code || "项目"}</span>
-                        <span style={styles.cellMono}>{`RM ${item.price ?? 0}`}</span>
-                      </div>
-                      <YlpItemFields item={item} />
-                      <p style={styles.rowDetailItemLocation}>{`位置：${ylpItemLocationText(item) || "-"}`}</p>
-                    </article>
-                  ))}
-                </div>
-              ) : (
-                <p style={styles.emptyText}>暂无项目内容</p>
-              )}
-            </section>
-          </>
-        ) : null}
-      </aside>
-    );
-  }
 
   function renderYlpRowMenu() {
     if (!ylpRowMenu) {
@@ -2826,11 +2787,6 @@ function DetailField({
   );
 }
 
-const INTAKE_DRAWER_CSS = `
-@keyframes ylpIntakeSlideIn { from { transform: translateX(100%); } to { transform: translateX(0); } }
-.ylp-intake-drawer { animation: ylpIntakeSlideIn 0.28s cubic-bezier(0.22, 1, 0.36, 1); }
-`;
-
 // 行操作菜单是 fixed 定位的，翻转/夹边需要提前知道尺寸。
 const ROW_MENU_WIDTH = 148;
 const ROW_MENU_ITEM_HEIGHT = 38;
@@ -2886,22 +2842,6 @@ const YLP_DETAIL_TABLE_CSS = `
 `;
 
 // 抽屉只有 400px 宽，资料表不需要撑到共用样式那个 480px 下限。
-const YLP_ROW_DETAIL_CSS = `
-.ylp-detail-table.ylp-row-detail-table { min-width: 0; }
-.ylp-detail-table.ylp-row-detail-table td { word-break: break-word; }
-`;
-
-const PAIWEI_FIELD_LABELS: Record<string, string> = {
-  owner: "阳上",
-  deceased: "对象",
-  relation: "关系",
-  surname: "姓氏",
-  suffix: "内容",
-  father: "显考",
-  mother: "显妣",
-  quantity: "数量",
-  note: "备注",
-};
 
 const PAIWEI_FIELD_ORDER = ["owner", "deceased", "relation", "surname", "suffix", "father", "mother", "quantity", "note"];
 
@@ -2924,7 +2864,7 @@ function YlpItemFields({ item }: { item: YlpOrderItem }) {
         return (
           <div key={key} style={styles.itemFieldRow}>
             <span style={styles.itemFieldLabel}>
-              {key === "deceased" ? paiweiDeceasedLabel(item.code) : PAIWEI_FIELD_LABELS[key] || key}
+              {paiweiFieldLabel(key, item.code)}
             </span>
             <span style={styles.itemFieldValues}>
               {values.map((value, index) => (
@@ -2940,141 +2880,6 @@ function YlpItemFields({ item }: { item: YlpOrderItem }) {
   );
 }
 
-// 无缘子女用「子女」，其余（超度亡灵 / 冤亲债主）用「对象」。
-function paiweiDeceasedLabel(code?: string | null): string {
-  return code === "A3" || code === "B3" ? "子女" : "对象";
-}
-
-const YLP_PAYMENT_MODES: { value: string; label: string }[] = [
-  { value: "bank", label: "银行转账" },
-  { value: "qr", label: "扫码" },
-  { value: "cash", label: "现金" },
-];
-
-function YlpPaymentModal({
-  orderId,
-  onClose,
-  onSaved,
-}: {
-  orderId: number;
-  onClose: () => void;
-  onSaved: () => void;
-}) {
-  const [mode, setMode] = useState("bank");
-  const [file, setFile] = useState<File | null>(null);
-  const [saving, setSaving] = useState(false);
-  const [error, setError] = useState("");
-
-  async function submit() {
-    setSaving(true);
-    setError("");
-    try {
-      const res = await createYlpOrderPayment(orderId, mode, file);
-      if (res.success === false) {
-        setError(res.message || "保存失败");
-        return;
-      }
-      onSaved();
-    } catch (saveError) {
-      setError(saveError instanceof Error ? saveError.message : "保存失败");
-    } finally {
-      setSaving(false);
-    }
-  }
-
-  return (
-    <div style={styles.itemModalOverlay} onClick={saving ? undefined : onClose}>
-      <div style={styles.itemModalContent} onClick={(event) => event.stopPropagation()}>
-        <div style={styles.addItemHeader}>
-          <span style={styles.detailSectionTitle}>新增付款记录</span>
-          <button type="button" style={styles.addItemCancel} onClick={onClose} disabled={saving}>
-            关闭
-          </button>
-        </div>
-
-        {error ? <div style={styles.paymentModalError}>{error}</div> : null}
-
-        <div style={styles.paymentModalBody}>
-          <div>
-            <span style={styles.paymentModalLabel}>付款方式</span>
-            <div style={styles.paymentModeRow}>
-              {YLP_PAYMENT_MODES.map((option) => (
-                <button
-                  key={option.value}
-                  type="button"
-                  disabled={saving}
-                  style={{
-                    ...styles.paymentModeButton,
-                    ...(mode === option.value ? styles.paymentModeButtonActive : null),
-                  }}
-                  onClick={() => setMode(option.value)}
-                >
-                  {option.label}
-                </button>
-              ))}
-            </div>
-          </div>
-
-          <div>
-            <span style={styles.paymentModalLabel}>付款凭证（选填，图片）</span>
-            <input
-              type="file"
-              accept="image/*,application/pdf"
-              disabled={saving}
-              onChange={(event) => setFile(event.target.files?.[0] || null)}
-            />
-            {file ? <p style={styles.paymentModalHint}>已选择:{file.name}</p> : null}
-          </div>
-        </div>
-
-        <div style={styles.paymentModalFooter}>
-          <button
-            type="button"
-            style={{ ...styles.primaryAction, ...(saving ? styles.pageButtonDisabled : null) }}
-            disabled={saving}
-            onClick={() => void submit()}
-          >
-            {saving ? "保存中…" : "保存"}
-          </button>
-        </div>
-      </div>
-    </div>
-  );
-}
-
-function YlpItemModal({
-  orderId,
-  item,
-  relationOptions,
-  onClose,
-  onSaved,
-}: {
-  orderId: number;
-  item: YlpOrderItem | null;
-  relationOptions: string[];
-  onClose: () => void;
-  onSaved: () => void;
-}) {
-  const isEdit = item != null;
-  return (
-    <PaiweiEditorModal
-      initialDraft={item ? draftFromItem(item) : createDraft("A1")}
-      isEdit={isEdit}
-      relationOptions={relationOptions}
-      saveLabel={isEdit ? "保存修改" : "添加牌位"}
-      onCancel={onClose}
-      onSave={async (draft) => {
-        const payload = buildItemPayload(draft);
-        if (item) {
-          await updateYlpOrderItem(orderId, item.id, payload);
-        } else {
-          await createYlpOrderItem(orderId, payload);
-        }
-        onSaved();
-      }}
-    />
-  );
-}
 
 function ylpItemLocationText(item: YlpOrderItem): string {
   return (item.item_location || [])
@@ -3739,41 +3544,6 @@ const styles = {
     minWidth: 0,
     width: "100%",
   },
-  intakeDockPanel: (isMobile: boolean, navbarHeight: number) => ({
-    width: isMobile ? "100%" : "min(400px, 42vw)",
-    flexShrink: 0,
-    position: (isMobile ? "static" : "sticky") as "static" | "sticky",
-    top: `${navbarHeight + 12}px`,
-    alignSelf: "flex-start" as const,
-    maxHeight: isMobile ? "none" : `calc(100vh - ${navbarHeight + 24}px)`,
-    overflowY: "auto" as const,
-    display: "grid",
-    gridTemplateRows: "auto auto",
-    gap: "12px",
-    padding: "16px",
-    boxSizing: "border-box" as const,
-    background: "var(--x-color-panel)",
-    border: "1px solid var(--x-color-line)",
-    borderRadius: "16px",
-    boxShadow: "0 24px 60px var(--x-color-shadow)",
-  }),
-  intakeDrawerHeader: {
-    display: "flex",
-    justifyContent: "space-between",
-    alignItems: "flex-start",
-    gap: "12px",
-  },
-  intakeDrawerEyebrow: {
-    margin: 0,
-    fontSize: "14px",
-    fontWeight: 800,
-    color: "var(--x-color-ink)",
-  },
-  intakeDrawerHint: {
-    margin: "4px 0 0",
-    fontSize: "12px",
-    color: "var(--x-color-ink-muted)",
-  },
   intakePhoneShell: {
     position: "relative" as const,
     width: "min(340px, 100%)",
@@ -4076,29 +3846,6 @@ const styles = {
   rowMenuItemDisabled: {
     opacity: 0.4,
     cursor: "not-allowed",
-  },
-  rowDetailItemList: {
-    display: "grid",
-    gap: "8px",
-  },
-  rowDetailItemCard: {
-    display: "grid",
-    gap: "6px",
-    padding: "10px",
-    borderRadius: "10px",
-    border: "1px solid var(--x-color-line-soft)",
-    background: "var(--x-color-canvas-alt)",
-  },
-  rowDetailItemHead: {
-    display: "flex",
-    justifyContent: "space-between",
-    alignItems: "baseline",
-    gap: "8px",
-  },
-  rowDetailItemLocation: {
-    margin: 0,
-    fontSize: "12px",
-    color: "var(--x-color-ink-muted)",
   },
   // 抽屉容器的行高是 auto，height:100% 会塌成 0，所以按视窗高度减掉导航条和抽屉自身的边距给个实数。
   previewFrame: (navbarHeight: number) => ({

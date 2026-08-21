@@ -71,8 +71,9 @@ export const PAIWEI_TEMPLATES: PaiweiTemplate[] = [
     code: "A3",
     title: "大牌位_无缘子女",
     price: 100,
-    hint: "可填写阳上与无缘子女名号。",
-    fields: { owner: true, deceased: true },
+    // 无缘子女没有「显考/显妣」——父母是在生的阳上，牌位印「阳上 父 X 母 Y」。
+    hint: "填写无缘子女名号，以及在生的父／母（阳上）。",
+    fields: { owner: true, deceased: true, father: true, mother: true },
   },
   {
     code: "B1",
@@ -93,8 +94,8 @@ export const PAIWEI_TEMPLATES: PaiweiTemplate[] = [
     code: "B3",
     title: "小牌位_无缘子女",
     price: 35,
-    hint: "结构与 A3 相同，尺寸较小。",
-    fields: { owner: true, deceased: true },
+    hint: "结构与 A3 相同，尺寸较小。父／母同样是在生的阳上。",
+    fields: { owner: true, deceased: true, father: true, mother: true },
   },
   {
     code: "C",
@@ -213,6 +214,27 @@ export function draftFromItem(item: YlpOrderItem): PaiweiDraft {
   };
 }
 
+/** 无缘子女（A3/B3）的父母是在生的阳上，不能叫显考/显妣。 */
+export function isWuyuanCode(code?: string | null): boolean {
+  return code === "A3" || code === "B3";
+}
+
+export function paiweiFieldLabel(key: string, code?: string | null): string {
+  const wuyuan = isWuyuanCode(code);
+  const labels: Record<string, string> = {
+    owner: "阳上",
+    deceased: wuyuan ? "子女" : "对象",
+    relation: "关系",
+    surname: "姓氏",
+    suffix: "内容",
+    father: wuyuan ? "阳上 父" : "显考",
+    mother: wuyuan ? "阳上 母" : "显妣",
+    quantity: "数量",
+    note: "备注",
+  };
+  return labels[key] || key;
+}
+
 export function buildItemPayload(draft: PaiweiDraft) {
   const template = getTemplate(draft.code);
   const ownerValues = splitLines(draft.owner);
@@ -276,6 +298,15 @@ export function validateDraft(draft: PaiweiDraft) {
     }
     if (ownerValues.length > 1) {
       return `${template.title} 只能填写一位阳上姓名`;
+    }
+  } else if (isWuyuanCode(draft.code)) {
+    // 无缘子女的阳上（含父 / 母）最多两位，公开端与 CRM 同一条规则
+    const parents = [draft.father?.trim(), draft.mother?.trim()].filter(Boolean).length;
+    if (ownerValues.length + parents > 2) {
+      return `${template.title} 的阳上最多只能填两位`;
+    }
+    if (!ownerValues.length && !parents && !deceasedValues.length) {
+      return `${template.title} 至少要填写阳上或子女其中一项`;
     }
   } else if (!ownerValues.length && !deceasedValues.length) {
     return `${template.title} 至少要填写阳上或对象其中一项`;

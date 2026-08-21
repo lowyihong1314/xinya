@@ -28,7 +28,7 @@ export function CRMHomePage() {
       <section style={moduleListStyle}>
         {CRM_MODULES.map((module) => {
           // 「看板」并入「法会」分组；「文件系统（新版）」并入「文件系统」分组，首页不单独列。
-          if (module.key === "ylp_board" || module.key === "files_v2") {
+          if (module.key === "ylp_board" || module.key === "fahui_raw_docs" || module.key === "files_v2") {
             return null;
           }
           const children = getSidebarChildren(module.key, searchParams, false, location.pathname);

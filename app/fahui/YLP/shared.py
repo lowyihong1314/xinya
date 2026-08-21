@@ -101,15 +101,6 @@ def latest_payment(order: FahuiOrder) -> FahuiPayment | None:
     return max(payments, key=lambda item: (item.created_at or datetime.min, item.id or 0))
 
 
-def order_payment_status(order: FahuiOrder) -> str:
-    payments = order_all_payments(order)
-    if not payments:
-        return "none"
-    if any(normalize_fahui_payment_status(payment.status) == "approved" for payment in payments):
-        return "paid"
-    return "pending"
-
-
 def order_payment_state(order: FahuiOrder) -> str:
     # 精确状态（含合并付款），用于「我要付款」时判断订单能否被选：
     # none/rejected → 可选；pending/paid → 不可选（除非失败=rejected）。
@@ -121,3 +112,14 @@ def order_payment_state(order: FahuiOrder) -> str:
     if any(status != "rejected" for status in statuses):
         return "pending"
     return "rejected"
+
+
+def order_payment_status(order: FahuiOrder) -> str:
+    """订单的付款汇总：none / pending / paid / rejected。
+
+    以前被拒绝（含撤回）的付款也会被算成 pending —— 撤回后界面还显示「待审核」，
+    所以这里和 order_payment_state 用同一套判定。
+    """
+    return order_payment_state(order)
+
+

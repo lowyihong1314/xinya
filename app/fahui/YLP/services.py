@@ -282,6 +282,9 @@ def _order_sort_columns(sort: str | None, direction: str | None):
         primary = func.coalesce(maintainer_name, FahuiOrder.member_name)
     elif sort == "created_at":
         primary = FahuiOrder.created_at
+    elif sort == "order_status":
+        # 订单本身的流程状态（orders.status 列），空值当 Draft 排在一起
+        primary = func.coalesce(func.nullif(FahuiOrder.status, ""), "Draft")
     elif sort == "status":
         # 与 serialize 的汇总付款状态一致：paid(2) > pending(1) > none(0)。
         direct_approved = (

@@ -532,9 +532,13 @@ def generate_paiwei(paiwei_type, fahui_data, point_data, source_name, need_barco
             elif paiwei_type in ["A1", "B1"]:
                 xiankao, xianbi = "显考 ", "显妣 "
                 center_text = f"{info.get('surname', '')}{info.get('suffix', '门堂上历代祖先')}"
-            elif paiwei_type in ["A2", "B2", "A3", "B3"]:
+            elif paiwei_type in ["A2", "B2"]:
                 xiankao = xianbi = " "
-                center_text = "" if paiwei_type in ["A2", "B2"] else " "
+                center_text = ""
+            elif paiwei_type in ["A3", "B3"]:
+                # 无缘子女没有显考/显妣；父母作为阳上另外排（见下方 owner 分支）。
+                xiankao = xianbi = " "
+                center_text = " "
             else:
                 xiankao, xianbi = "显考 ", "显妣 "
                 center_text = f"{info.get('surname', '')}{info.get('suffix', '')}"
@@ -554,11 +558,27 @@ def generate_paiwei(paiwei_type, fahui_data, point_data, source_name, need_barco
             draw_text_vertical(position, "baijian", "拜荐", base_x, base_y, info)
             draw_text_vertical(position, "lianwei", "莲位", base_x, base_y, info)
             draw_text_vertical(position, "yangshang", "阳上", base_x, base_y, info)
-            draw_text_vertical(position, "owner", info.get("owner", ""), base_x, base_y, info)
-            if info.get("father"):
-                draw_text_vertical(position, "father", f"{xiankao}{info['father']}", base_x, base_y, info)
-            if info.get("mother"):
-                draw_text_vertical(position, "mother", f"{xianbi}{info['mother']}", base_x, base_y, info)
+
+            owner_text = info.get("owner", "")
+            if paiwei_type in ["A3", "B3"]:
+                # 无缘子女：父母是在生的阳上，要排在「阳上」下面，
+                # 不能占显考/显妣那两个点位（那是给历代祖先牌位用的）。
+                owner_names = owner_text if isinstance(owner_text, list) else [
+                    name for name in re.split(r"[,\s]+", str(owner_text).strip()) if name
+                ]
+                for label, key in (("父", "father"), ("母", "mother")):
+                    value = info.get(key)
+                    if not value:
+                        continue
+                    values = value if isinstance(value, list) else [value]
+                    owner_names += [f"{label} {str(one).strip()}" for one in values if str(one).strip()]
+                draw_text_vertical(position, "owner", owner_names, base_x, base_y, info)
+            else:
+                draw_text_vertical(position, "owner", owner_text, base_x, base_y, info)
+                if info.get("father"):
+                    draw_text_vertical(position, "father", f"{xiankao}{info['father']}", base_x, base_y, info)
+                if info.get("mother"):
+                    draw_text_vertical(position, "mother", f"{xianbi}{info['mother']}", base_x, base_y, info)
             draw_text_vertical(position, "order_id", str(order_id), base_x, base_y, info)
             if paiwei_type not in ["A3", "B3"]:
                 draw_text_vertical(position, "deceased", info.get("deceased", ""), base_x, base_y, info)

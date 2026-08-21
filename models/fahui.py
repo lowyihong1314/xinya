@@ -28,6 +28,170 @@ class FahuiVersion(db.Model):
     version = db.Column(db.String(50), nullable=False)
 
 
+class FahuiRawDoc(db.Model):
+    """法会手写单据原图（DATA_ROOT/fahui_raw_img/images 下的一张图）。
+
+    一张单据可以录成多张订单（一页写了好几笔、或一叠单据拆单），所以
+    raw_doc 1 → N order，走 fahui_raw_doc_order 关联表。
+    """
+
+    __tablename__ = "fahui_raw_doc"
+
+    id = db.Column(db.Integer, primary_key=True, autoincrement=True)
+    filename = db.Column(db.String(255), nullable=False, unique=True, index=True)
+    # 归档时的来源目录（法会 / jiayee_fahui_project）
+    source = db.Column(db.String(64), nullable=True)
+    shot_date = db.Column(db.Date, nullable=True, index=True)
+    file_size = db.Column(db.Integer, nullable=True)
+    sha256 = db.Column(db.String(64), nullable=True, index=True)
+
+    # AI 抽取档（extracted/photoNNN.json）里读到的资料
+    extract_key = db.Column(db.String(32), nullable=True, index=True)
+    customer_name = db.Column(db.String(160), nullable=True)
+    phone = db.Column(db.String(64), nullable=True, index=True)
+    declared_total = db.Column(db.Numeric(10, 2), nullable=True)
+    review_flag_count = db.Column(db.Integer, nullable=True)
+    plan = db.Column(db.Text, nullable=True)
+    # 内容完全相同的另一张图（sha256 撞上），只留说明用
+    duplicate_of = db.Column(db.String(255), nullable=True)
+
+    created_at = db.Column(db.DateTime, default=datetime.utcnow, nullable=False)
+    updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow, nullable=False)
+
+    links = db.relationship(
+        "FahuiRawDocOrder",
+        back_populates="raw_doc",
+        lazy="selectin",
+        cascade="all, delete-orphan",
+        passive_deletes=True,
+    )
+    flags = db.relationship(
+        "FahuiRawDocFlag",
+        back_populates="raw_doc",
+        lazy="selectin",
+        cascade="all, delete-orphan",
+        passive_deletes=True,
+        order_by="FahuiRawDocFlag.seq, FahuiRawDocFlag.id",
+    )
+
+    def to_dict(self, include_links=True):
+        data = {
+            "id": self.id,
+            "filename": self.filename,
+            "source": self.source,
+            "date": self.shot_date.isoformat() if self.shot_date else None,
+            "size": self.file_size,
+            "extract": self.extract_key,
+            "customer": self.customer_name,
+            "phone": self.phone,
+            "declared_total": float(self.declared_total) if self.declared_total is not None else None,
+            "review_flags": self.review_flag_count,
+            "plan": self.plan,
+            "duplicate_of": self.duplicate_of,
+        }
+        if include_links:
+            data["orders"] = [link.to_dict() for link in (self.links or [])]
+            flags = [flag.to_dict() for flag in (self.flags or [])]
+            data["flags"] = flags
+            data["flags_open"] = sum(1 for flag in flags if not flag["resolved"])
+        return data
+
+
+class FahuiRawDocFlag(db.Model):
+    """抽取档里的 review_flags：AI 读单时留下的「这处要人工确认」备注，可逐条勾选已处理。"""
+
+    __tablename__ = "fahui_raw_doc_flag"
+    __table_args__ = (
+        db.UniqueConstraint("raw_doc_id", "text_hash", name="uq_fahui_raw_doc_flag"),
+    )
+
+    id = db.Column(db.Integer, primary_key=True, autoincrement=True)
+    raw_doc_id = db.Column(
+        db.Integer,
+        db.ForeignKey("fahui_raw_doc.id", ondelete="CASCADE", onupdate="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    # 原始顺序（抽取档里第几条）
+    seq = db.Column(db.Integer, nullable=False, default=0)
+    text = db.Column(db.Text, nullable=False)
+    # 文本指纹：重新扫描时靠它认出同一条备注，保住「已处理」状态
+    text_hash = db.Column(db.String(40), nullable=False)
+    resolved = db.Column(db.Boolean, nullable=False, default=False)
+    resolved_at = db.Column(db.DateTime, nullable=True)
+    resolved_by_user_id = db.Column(
+        db.Integer,
+        db.ForeignKey("user_data.id", ondelete="SET NULL"),
+        nullable=True,
+    )
+    created_at = db.Column(db.DateTime, default=datetime.utcnow, nullable=False)
+
+    raw_doc = db.relationship("FahuiRawDoc", back_populates="flags")
+    resolved_by = db.relationship("User", lazy="joined")
+
+    def to_dict(self):
+        return {
+            "id": self.id,
+            "seq": self.seq,
+            "text": self.text,
+            "resolved": bool(self.resolved),
+            "resolved_at": self.resolved_at.isoformat() if self.resolved_at else None,
+            "resolved_by": (
+                getattr(self.resolved_by, "display_name", None)
+                or getattr(self.resolved_by, "username", None)
+            ),
+        }
+
+
+class FahuiRawDocOrder(db.Model):
+    """原始文档 ↔ 订单 的关联（一张图可挂多张订单）。"""
+
+    __tablename__ = "fahui_raw_doc_order"
+    __table_args__ = (
+        db.UniqueConstraint("raw_doc_id", "order_id", name="uq_fahui_raw_doc_order"),
+    )
+
+    id = db.Column(db.Integer, primary_key=True, autoincrement=True)
+    raw_doc_id = db.Column(
+        db.Integer,
+        db.ForeignKey("fahui_raw_doc.id", ondelete="CASCADE", onupdate="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    order_id = db.Column(
+        db.Integer,
+        db.ForeignKey("orders.id", ondelete="CASCADE", onupdate="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    # 怎么对上的：phone_name_total / phone_total / phone_name / phone_only / manual
+    match_by = db.Column(db.String(32), nullable=True)
+    # high / medium / low / manual
+    confidence = db.Column(db.String(16), nullable=True)
+    note = db.Column(db.String(255), nullable=True)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow, nullable=False)
+
+    raw_doc = db.relationship("FahuiRawDoc", back_populates="links")
+    order = db.relationship("FahuiOrder", lazy="joined")
+
+    def to_dict(self):
+        order = self.order
+        items = list(getattr(order, "items", None) or [])
+        return {
+            "order_id": self.order_id,
+            "match_by": self.match_by,
+            "confidence": self.confidence,
+            "note": self.note,
+            "version": getattr(order, "version", None),
+            "customer_name": getattr(order, "customer_name", None) or getattr(order, "name", None),
+            "status": getattr(order, "status", None),
+            "phone": getattr(order, "phone", None),
+            # 审核用：订单实际金额与笔数，拿去和单据上申报的对比
+            "item_count": len(items),
+            "order_total": round(sum(float(item.price or 0) for item in items), 2),
+        }
+
+
 class FahuiVersionEvent(db.Model):
     """法会版本 ↔ 活动绑定：把某个版本（例：2026_YLP）挂到活动上，
     该版本的订单/付款就会作为收入行出现在活动预算里（做法同报名表格收入）。"""

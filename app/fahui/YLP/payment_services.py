@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import json
 from datetime import datetime
-from decimal import Decimal
+from decimal import Decimal, InvalidOperation
 from io import BytesIO
 from pathlib import Path
 
@@ -113,11 +113,23 @@ def create_payment_record(order_id: int):
     if upload and not is_allowed_upload(upload.filename):
         return jsonify({"success": False, "message": "文件类型不允许"}), 400
 
+    # 金额：不传就按订单总额，传了要是大于 0 的数字（补款 / 少收都可能和总额不同）
+    raw_amount = (payload.get("amount") or "").strip() if isinstance(payload.get("amount"), str) else payload.get("amount")
+    if raw_amount in (None, ""):
+        total_price = calculate_total_price(order)
+    else:
+        try:
+            total_price = Decimal(str(raw_amount))
+        except (InvalidOperation, TypeError, ValueError):
+            return jsonify({"success": False, "message": "金额格式错误"}), 400
+        if total_price <= 0:
+            return jsonify({"success": False, "message": "金额必须大于 0"}), 400
+
     try:
         payment = FahuiPayment(
             payment_type=PAYMENT_TYPE_YLP,
             order_id=order_id,
-            total_price=calculate_total_price(order),
+            total_price=total_price,
             payment_mode=payment_mode,
             document=None,
             status="pending",
@@ -252,11 +264,15 @@ def list_order_payment_data(order_id: int):
     if not user_can_view_order(order):
         return jsonify({"success": False, "message": "未登录或没有权限查看此订单"}), 403
 
-    payments = (
-        FahuiPayment.query.filter_by(order_id=order_id, payment_type=PAYMENT_TYPE_YLP)
-        .order_by(FahuiPayment.created_at.desc(), FahuiPayment.id.desc())
-        .all()
-    )
+    # 直接挂 order_id 的 + 通过 fahui_payment_order 合并进来的，两种都要
+    # （只查 order_id 的话，一次付款覆盖多张订单的那种在详情页会显示成「没有付款」，
+    #   但顶部的付款汇总又是按两种一起算的，前后自相矛盾）。
+    payments = [
+        payment
+        for payment in order_all_payments(order)
+        if payment.payment_type == PAYMENT_TYPE_YLP
+    ]
+    payments.sort(key=lambda item: (item.created_at or datetime.min, item.id or 0), reverse=True)
     if not payments:
         return jsonify({"success": False, "message": "该订单没有支付记录"}), 404
 
@@ -266,6 +282,8 @@ def list_order_payment_data(order_id: int):
             {
                 "id": payment.id,
                 "order_id": payment.order_id,
+                # 合并付款：这一笔实际覆盖了哪几张订单
+                "grouped_order_ids": [o.id for o in (payment.grouped_orders or [])],
                 "total_price": float(payment.total_price) if payment.total_price is not None else None,
                 "payment_mode": payment.payment_mode,
                 "document": payment.document,

@@ -12,6 +12,8 @@ import type {
   YlpPaymentChannelMutationResponse,
   YlpPaymentRecord,
   YlpRelationOptionListResponse,
+  FahuiRawDoc,
+  FahuiRawDocListResponse,
   YlpVersionEventResponse,
   YlpVersionResponse,
 } from "./types";
@@ -73,6 +75,16 @@ export async function revokePayment(paymentId: number) {
   return parseJson<PaymentActionResponse>(response);
 }
 
+/** 撤回一条付款：记录标成「已拒绝」，凭证保留，**订单状态保持不变**。 */
+export async function withdrawPayment(paymentId: number) {
+  const response = await apiFetch(`/api/payment/payments/${paymentId}/withdraw`, {
+    method: "POST",
+    credentials: "include",
+  });
+
+  return parseJson<PaymentActionResponse>(response);
+}
+
 export async function removePayment(paymentId: number) {
   const response = await apiFetch(`/api/payment/review/${paymentId}`, {
     method: "DELETE",
@@ -91,6 +103,102 @@ export async function fetchYlpVersions() {
 }
 
 /** 读某个版本绑定了哪个活动（没绑定返回 data: null）。 */
+export async function fetchFahuiRawDocs() {
+  const response = await apiFetch("/api/fahui_router/raw_docs", {
+    credentials: "include",
+  });
+
+  return parseJson<FahuiRawDocListResponse>(response);
+}
+
+export async function updateFahuiRawDocLink(
+  docId: number,
+  orderId: number,
+  action: "add" | "confirm" | "remove",
+) {
+  const response = await apiFetch(`/api/fahui_router/raw_docs/${docId}/link`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    credentials: "include",
+    body: JSON.stringify({ order_id: orderId, action }),
+  });
+
+  return parseJson<{ status?: string; message?: string; data?: FahuiRawDoc }>(response);
+}
+
+export async function setFahuiRawDocFlag(docId: number, flagId: number, resolved: boolean) {
+  const response = await apiFetch(`/api/fahui_router/raw_docs/${docId}/flag`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    credentials: "include",
+    body: JSON.stringify({ flag_id: flagId, resolved }),
+  });
+
+  return parseJson<{ status?: string; message?: string; data?: FahuiRawDoc }>(response);
+}
+
+export type FahuiOldOrderSuggestion = {
+  id: number;
+  version?: string;
+  customer_name?: string;
+  phone?: string;
+  total?: number;
+  item_count?: number;
+  created_at?: string | null;
+  score?: number;
+  reasons?: string[];
+};
+
+/** 上传原始单据图（可多选），后端按内容去重后写进 fahui_raw_doc。 */
+export async function uploadFahuiRawDocs(files: File[]) {
+  const formData = new FormData();
+  files.forEach((file) => formData.append("files", file));
+  const response = await apiFetch("/api/fahui_router/raw_docs/upload", {
+    method: "POST",
+    body: formData,
+    credentials: "include",
+  });
+
+  return parseJson<{
+    status?: string;
+    message?: string;
+    data?: { saved: string[]; skipped: { filename: string; reason: string }[]; total: number };
+  }>(response);
+}
+
+/** BytePlus 读图 + 拿单据资料去往年版本里找最像的订单（最多 3 张）。 */
+export async function suggestOldOrdersForRawDoc(docId: number) {
+  const response = await apiFetch(`/api/fahui_router/raw_docs/${docId}/suggest_old`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    credentials: "include",
+    body: JSON.stringify({ use_ocr: true }),
+  });
+
+  return parseJson<{
+    status?: string;
+    message?: string;
+    data?: {
+      doc: { id: number; filename: string; customer?: string | null; phone?: string | null; declared_total?: number | null };
+      ocr: {
+        ok: boolean;
+        error?: string | null;
+        model?: string | null;
+        customer?: string;
+        phones: string[];
+        printed_phones?: string[];
+        names?: string[];
+        totals: number[];
+        red_pen_number?: string;
+        item_count?: number | null;
+        text?: string;
+      };
+      current_version: string;
+      candidates: FahuiOldOrderSuggestion[];
+    };
+  }>(response);
+}
+
 export async function fetchYlpVersionEvent(version: string) {
   const response = await apiFetch(`/api/fahui_router/versions/${encodeURIComponent(version)}/event`, {
     credentials: "include",
@@ -232,9 +340,18 @@ export async function updateYlpOrderCustomer(
   return parseJson<{ success?: boolean; message?: string }>(response);
 }
 
-export async function createYlpOrderPayment(orderId: number, paymentMode: string, file?: File | null) {
+export async function createYlpOrderPayment(
+  orderId: number,
+  paymentMode: string,
+  file?: File | null,
+  amount?: string | number | null,
+) {
   const formData = new FormData();
   formData.append("payment_mode", paymentMode);
+  // 不传就按订单总额入账（后端默认值），传了就以这个金额为准
+  if (amount !== undefined && amount !== null && String(amount).trim() !== "") {
+    formData.append("amount", String(amount).trim());
+  }
   if (file) {
     formData.append("file", file);
   }

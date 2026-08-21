@@ -6,7 +6,9 @@ import {
   getDraftTotalPrice,
   getDraftUnitPrice,
   getTemplate,
+  isWuyuanCode,
   linesToArray,
+  paiweiFieldLabel,
   selectableTemplates,
   validateDraft,
   type PaiweiCode,
@@ -21,6 +23,8 @@ function initRows(value: string): string[] {
 }
 
 const MAX_OWNERS = 8;
+// 无缘子女（A3/B3）的阳上最多 2 位（父 + 母）—— 不看登录状态，公开端与 CRM 一样
+const MAX_WUYUAN_OWNER_ROWS = 2;
 const MAX_DECEASED = 6;
 
 function deceasedLabel(code: PaiweiCode): string {
@@ -51,6 +55,8 @@ export function PaiweiEditorModal({
 }: PaiweiEditorModalProps) {
   const [draft, setDraft] = useState<PaiweiDraft>(initialDraft);
   const [owners, setOwners] = useState<string[]>(() => initRows(initialDraft.owner));
+  // 无缘子女：阳上一行 = 名字 + 身份（父 / 母 / 留空），保存时拆回 owner / father / mother
+  const [ownerRoleRows, setOwnerRoleRows] = useState<OwnerRoleRow[]>(() => buildOwnerRoleRows(initialDraft));
   const [deceaseds, setDeceaseds] = useState<string[]>(() => initRows(initialDraft.deceased));
   const [relations, setRelations] = useState<string[]>(() => initRows(initialDraft.relation));
   const [saving, setSaving] = useState(false);
@@ -64,6 +70,8 @@ export function PaiweiEditorModal({
   }
 
   function changeCode(code: PaiweiCode) {
+    // 切到/切离无缘子女，阳上那几行的结构不同，重新拼一次
+    setOwnerRoleRows(buildOwnerRoleRows({ ...draft, code }));
     const nextTemplate = getTemplate(code);
     // 冤亲债主只允许一位阳上：切换过来时把多余的行裁掉。
     if (code === "C") {
@@ -88,6 +96,17 @@ export function PaiweiEditorModal({
   }
 
   function buildFinalDraft(): PaiweiDraft {
+    if (isWuyuanCode(draft.code)) {
+      const rows = ownerRoleRows.filter((row) => row.name.trim());
+      return {
+        ...draft,
+        owner: arrayToLines(rows.filter((row) => !row.role).map((row) => row.name.trim())),
+        father: rows.find((row) => row.role === "father")?.name.trim() || "",
+        mother: rows.find((row) => row.role === "mother")?.name.trim() || "",
+        deceased: template.fields.deceased ? arrayToLines(deceaseds) : "",
+        relation: "",
+      };
+    }
     return {
       ...draft,
       owner: template.fields.owner ? arrayToLines(owners) : "",
@@ -97,6 +116,15 @@ export function PaiweiEditorModal({
   }
 
   async function handleSave() {
+    if (isWuyuanCode(draft.code)) {
+      for (const [role, label] of [["father", "父"], ["mother", "母"]] as const) {
+        const hit = ownerRoleRows.filter((row) => row.role === role && row.name.trim());
+        if (hit.length > 1) {
+          setError(`「${label}」只能填一位`);
+          return;
+        }
+      }
+    }
     const finalDraft = buildFinalDraft();
     const validationError = validateDraft(finalDraft);
     if (validationError) {
@@ -147,7 +175,16 @@ export function PaiweiEditorModal({
             <p style={styles.hint}>{template.hint}</p>
           </div>
 
-          {template.fields.owner ? (
+          {template.fields.owner && isWuyuanCode(draft.code) ? (
+            <OwnerRoleRowList
+              rows={ownerRoleRows}
+              max={MAX_WUYUAN_OWNER_ROWS}
+              onChange={(next) => {
+                setOwnerRoleRows(next);
+                setError("");
+              }}
+            />
+          ) : template.fields.owner ? (
             <RowList
               label="阳上姓名"
               addLabel="添加阳上姓名"
@@ -185,11 +222,21 @@ export function PaiweiEditorModal({
             // 堂号固定为打印模板的「门堂上历代祖先」，不允许修改。
             <TextField label="堂号 / 内容" value={draft.suffix} placeholder="门堂上历代祖先" readOnly onChange={() => {}} />
           ) : null}
-          {template.fields.father ? (
-            <TextField label="显考" value={draft.father} placeholder="先父名讳" onChange={(v) => patch({ father: v })} />
+          {template.fields.father && !isWuyuanCode(draft.code) ? (
+            <TextField
+              label={paiweiFieldLabel("father", draft.code)}
+              value={draft.father}
+              placeholder={isWuyuanCode(draft.code) ? "在生父亲名讳" : "先父名讳"}
+              onChange={(v) => patch({ father: v })}
+            />
           ) : null}
-          {template.fields.mother ? (
-            <TextField label="显妣" value={draft.mother} placeholder="先母名讳" onChange={(v) => patch({ mother: v })} />
+          {template.fields.mother && !isWuyuanCode(draft.code) ? (
+            <TextField
+              label={paiweiFieldLabel("mother", draft.code)}
+              value={draft.mother}
+              placeholder={isWuyuanCode(draft.code) ? "在生母亲名讳" : "先母名讳"}
+              onChange={(v) => patch({ mother: v })}
+            />
           ) : null}
           {template.fields.quantity ? (
             <TextField
@@ -295,6 +342,82 @@ function RowList({
   );
 }
 
+type OwnerRoleRow = { name: string; role: "" | "father" | "mother" };
+
+/** 从 draft 拼出阳上行：先是没有身份的阳上，再是父、母；至少留一行空的。 */
+function buildOwnerRoleRows(draft: PaiweiDraft): OwnerRoleRow[] {
+  if (!isWuyuanCode(draft.code)) {
+    return [{ name: "", role: "" }];
+  }
+  const rows: OwnerRoleRow[] = initRows(draft.owner)
+    .filter((name) => name.trim())
+    .map((name) => ({ name, role: "" as const }));
+  if (draft.father?.trim()) rows.push({ name: draft.father.trim(), role: "father" });
+  if (draft.mother?.trim()) rows.push({ name: draft.mother.trim(), role: "mother" });
+  return rows.length ? rows.slice(0, MAX_WUYUAN_OWNER_ROWS) : [{ name: "", role: "" }];
+}
+
+/** 无缘子女的阳上：一行一个名字 + 身份下拉（父 / 母 / 留空）。 */
+function OwnerRoleRowList({
+  rows,
+  max,
+  onChange,
+}: {
+  rows: OwnerRoleRow[];
+  max: number;
+  onChange: (rows: OwnerRoleRow[]) => void;
+}) {
+  const list = rows.length ? rows : [{ name: "", role: "" as const }];
+
+  function update(index: number, patch: Partial<OwnerRoleRow>) {
+    onChange(list.map((row, i) => (i === index ? { ...row, ...patch } : row)));
+  }
+
+  return (
+    <div style={styles.field}>
+      <label style={styles.label}>阳上（在生者）</label>
+      <div style={styles.rows}>
+        {list.map((row, index) => (
+          <div key={index} style={styles.row}>
+            {/* 先选身份再填名字：读起来就是「父 ○○」「母 ○○」，和牌位印出来的顺序一致 */}
+            <select
+              style={{ ...styles.select, width: 96, flexShrink: 0 }}
+              value={row.role}
+              onChange={(event) => update(index, { role: event.target.value as OwnerRoleRow["role"] })}
+            >
+              <option value="">阳上</option>
+              <option value="father">父</option>
+              <option value="mother">母</option>
+            </select>
+            <input
+              style={{ ...styles.input, flex: 1 }}
+              value={row.name}
+              placeholder="姓名"
+              onChange={(event) => update(index, { name: event.target.value })}
+            />
+            {list.length > 1 ? (
+              <button
+                type="button"
+                style={styles.rowRemove}
+                aria-label="移除这一行"
+                onClick={() => onChange(list.filter((_, i) => i !== index))}
+              >
+                ✕
+              </button>
+            ) : null}
+          </div>
+        ))}
+      </div>
+      {list.length < max ? (
+        <button type="button" style={styles.addRow} onClick={() => onChange([...list, { name: "", role: "" }])}>
+          添加一行（最多 {max} 行）
+        </button>
+      ) : null}
+      <p style={styles.hint}>无缘子女的父母是在生的阳上，牌位会印成「阳上 父 ○○ / 母 ○○」。</p>
+    </div>
+  );
+}
+
 function PairRowList({
   nameLabel,
   deceaseds,
@@ -328,24 +451,17 @@ function PairRowList({
   }
   return (
     <div style={styles.field}>
-      <label style={styles.label}>{nameLabel}资料（关系 + 名字）</label>
+      <label style={styles.label}>{nameLabel}（关系 + 名字）</label>
       <div style={styles.rows}>
+        {/* 和无缘子女的阳上同一套排版：一行 = 关系下拉 + 名字，干净好扫 */}
         {rows.map((row, index) => (
-          <div key={index} style={styles.pairCard}>
-            <div style={styles.pairHead}>
-              <span style={styles.pairIndex}>{nameLabel} {index + 1}</span>
-              {rows.length > 1 || row.deceased || row.relation ? (
-                <button type="button" style={styles.rowRemove} onClick={() => remove(index)} aria-label="移除">
-                  ✕
-                </button>
-              ) : null}
-            </div>
+          <div key={index} style={styles.row}>
             <select
-              style={styles.select}
+              style={{ ...styles.select, width: 110, flexShrink: 0 }}
               value={row.relation}
               onChange={(event) => update(index, "relation", event.target.value)}
             >
-              <option value="">选择关系…</option>
+              <option value="">关系…</option>
               {row.relation && !relationOptions.includes(row.relation) ? (
                 <option value={row.relation}>{row.relation}</option>
               ) : null}
@@ -356,17 +472,22 @@ function PairRowList({
               ))}
             </select>
             <input
-              style={styles.input}
+              style={{ ...styles.input, flex: 1 }}
               value={row.deceased}
               placeholder={`${nameLabel}名字`}
               onChange={(event) => update(index, "deceased", event.target.value)}
             />
+            {rows.length > 1 ? (
+              <button type="button" style={styles.rowRemove} onClick={() => remove(index)} aria-label="移除这一行">
+                ✕
+              </button>
+            ) : null}
           </div>
         ))}
       </div>
       {rows.length < max ? (
         <button type="button" style={styles.addRow} onClick={add}>
-          + 添加{nameLabel}
+          添加一行（最多 {max} 行）
         </button>
       ) : null}
     </div>
@@ -539,25 +660,6 @@ const styles: Record<string, CSSProperties> = {
     border: "1px solid var(--x-color-accent-border)",
     borderRadius: "999px",
     cursor: "pointer",
-  },
-  pairCard: {
-    display: "flex",
-    flexDirection: "column",
-    gap: "8px",
-    padding: "10px 12px",
-    borderRadius: "var(--x-radius-md)",
-    background: "var(--x-color-panel-alt)",
-    border: "1px solid var(--x-color-line-soft)",
-  },
-  pairHead: {
-    display: "flex",
-    alignItems: "center",
-    justifyContent: "space-between",
-  },
-  pairIndex: {
-    fontSize: "12px",
-    fontWeight: 700,
-    color: "var(--x-color-ink-muted)",
   },
   error: {
     margin: "0 18px",

@@ -1,3 +1,5 @@
+from datetime import datetime
+
 from flask import Blueprint, jsonify, request
 from flask_login import current_user, login_required
 
@@ -20,6 +22,16 @@ from .services import (
     set_version_event_binding,
     list_orders_for_export,
     search_orders,
+)
+from .raw_docs import (
+    link_raw_docs_to_orders,
+    list_raw_docs,
+    raw_doc_file_response,
+    save_uploaded_raw_docs,
+    set_raw_doc_flag_resolved,
+    suggest_old_orders,
+    sync_raw_docs_from_disk,
+    update_raw_doc_link,
 )
 from .share_link import get_or_create_share_token, grant_session_phone, resolve_share_token
 
@@ -181,6 +193,86 @@ def delete_open_window_route(window_id: int):
 @fahui_bp.route("/get_versions", methods=["GET"])
 def list_versions_route():
     return jsonify({"status": "success", "data": list_available_versions()})
+
+
+@fahui_bp.route("/raw_docs", methods=["GET"])
+@permission_required_any(*FAHUI_READ_PERMISSION_NAMES)
+def list_raw_docs_route():
+    return jsonify({"status": "success", "data": list_raw_docs()})
+
+
+@fahui_bp.route("/raw_docs/file/<path:filename>", methods=["GET"])
+@permission_required_any(*FAHUI_READ_PERMISSION_NAMES)
+def raw_doc_file_route(filename):
+    # 单据上有姓名与电话，不走公开的 /media_file，这里带权限地送出去
+    response = raw_doc_file_response(filename)
+    if response is None:
+        return jsonify({"status": "error", "message": "文件不存在"}), 404
+    return response
+
+
+@fahui_bp.route("/raw_docs/<int:doc_id>/link", methods=["POST"])
+@login_required
+@permission_required_any(*FAHUI_READ_PERMISSION_NAMES)
+def update_raw_doc_link_route(doc_id):
+    payload = _json_payload()
+    try:
+        data = update_raw_doc_link(doc_id, payload.get("order_id"), (payload.get("action") or "").strip())
+    except ValueError as exc:
+        return jsonify({"status": "error", "message": str(exc)}), 400
+    if data is None:
+        return jsonify({"status": "error", "message": "单据不存在"}), 404
+    return jsonify({"status": "success", "data": data})
+
+
+@fahui_bp.route("/raw_docs/<int:doc_id>/flag", methods=["POST"])
+@login_required
+@permission_required_any(*FAHUI_READ_PERMISSION_NAMES)
+def update_raw_doc_flag_route(doc_id):
+    payload = _json_payload()
+    try:
+        data = set_raw_doc_flag_resolved(
+            doc_id, payload.get("flag_id"), bool(payload.get("resolved")), current_user
+        )
+    except ValueError as exc:
+        return jsonify({"status": "error", "message": str(exc)}), 400
+    if data is None:
+        return jsonify({"status": "error", "message": "单据不存在"}), 404
+    return jsonify({"status": "success", "data": data})
+
+
+@fahui_bp.route("/raw_docs/<int:doc_id>/suggest_old", methods=["POST"])
+@login_required
+@permission_required_any(*FAHUI_READ_PERMISSION_NAMES)
+def suggest_old_orders_route(doc_id):
+    payload = _json_payload()
+    use_ocr = payload.get("use_ocr")
+    data = suggest_old_orders(doc_id, use_ocr=True if use_ocr is None else bool(use_ocr))
+    if data is None:
+        return jsonify({"status": "error", "message": "单据不存在"}), 404
+    return jsonify({"status": "success", "data": data})
+
+
+@fahui_bp.route("/raw_docs/upload", methods=["POST"])
+@login_required
+@permission_required_any(*FAHUI_READ_PERMISSION_NAMES)
+def upload_raw_docs_route():
+    files = request.files.getlist("files") or request.files.getlist("file")
+    if not files:
+        return jsonify({"status": "error", "message": "没有收到文件"}), 400
+    return jsonify({"status": "success", "data": save_uploaded_raw_docs(files)})
+
+
+@fahui_bp.route("/raw_docs/sync", methods=["POST"])
+@login_required
+@permission_required_any(*FAHUI_READ_PERMISSION_NAMES)
+def sync_raw_docs_route():
+    """重新扫描存档目录并重算与订单的对应（手动挂的关联不会被覆盖）。"""
+    payload = _json_payload()
+    version = (payload.get("version") or "").strip() or f"{datetime.now().year}_YLP"
+    synced = sync_raw_docs_from_disk()
+    linked = link_raw_docs_to_orders(version)
+    return jsonify({"status": "success", "data": {"synced": synced, "linked": linked, "version": version}})
 
 
 @fahui_bp.route("/versions/bindings", methods=["GET"])

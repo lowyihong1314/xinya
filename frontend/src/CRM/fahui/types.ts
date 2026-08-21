@@ -59,6 +59,7 @@ export type PaymentListResponse = {
 };
 
 export type PaymentActionResponse = {
+  success?: boolean;
   payment?: PaymentRecord;
   message?: string;
   status?: string;
@@ -152,6 +153,55 @@ export type YlpOrderDetailResponse = {
   message?: string;
   error?: string;
   data?: YlpOrderDetail;
+};
+
+// 原始文档：手写单据原图存档（DATA_ROOT/fahui_raw_img）
+export type FahuiRawDocOrderLink = {
+  order_id: number;
+  phone?: string | null;
+  item_count?: number;
+  order_total?: number;
+  match_by?: string | null;
+  confidence?: "high" | "medium" | "low" | "manual" | string | null;
+  note?: string | null;
+  version?: string | null;
+  customer_name?: string | null;
+  status?: string | null;
+};
+
+export type FahuiRawDocFlag = {
+  id: number;
+  seq: number;
+  text: string;
+  resolved: boolean;
+  resolved_at?: string | null;
+  resolved_by?: string | null;
+};
+
+export type FahuiRawDoc = {
+  id?: number;
+  filename: string;
+  size: number;
+  date?: string;
+  source?: string;
+  extract?: string;
+  customer?: string;
+  phone?: string;
+  declared_total?: string;
+  review_flags?: string;
+  plan?: string;
+  duplicate_of?: string;
+  orders?: FahuiRawDocOrderLink[];
+  flags?: FahuiRawDocFlag[];
+  flags_open?: number;
+  flags_total?: number;
+};
+
+export type FahuiRawDocListResponse = {
+  status?: string;
+  message?: string;
+  error?: string;
+  data?: { items: FahuiRawDoc[]; total: number; root?: string; ready?: boolean; source?: string };
 };
 
 // 版本 ⇄ 活动绑定：绑定后该版本的订单收入会进活动预算

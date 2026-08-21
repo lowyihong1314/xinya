@@ -42,6 +42,14 @@ def revoke_payment(payment_id):
     return update_payment_review(payment_id, status="pending")
 
 
+@fahui_payment_bp.route("/review/<int:payment_id>/withdraw", methods=["POST"])
+@fahui_payment_bp.route("/payments/<int:payment_id>/withdraw", methods=["POST"])
+@permission_required_any("account_edit")
+def withdraw_payment(payment_id):
+    """撤回一条付款：只把这条记录标成「已拒绝」，订单状态保持原样。"""
+    return update_payment_review(payment_id, status="rejected", sync_owner_status=False)
+
+
 @fahui_payment_bp.route("/review/<int:payment_id>", methods=["DELETE"])
 @permission_required_any("account_edit")
 def delete_payment(payment_id):

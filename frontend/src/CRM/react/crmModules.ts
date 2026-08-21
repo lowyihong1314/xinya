@@ -2,6 +2,7 @@ import { CCTVPage } from '../CCTV/CCTVPage';
 import { EventTablePage } from '../event/react/EventTablePage';
 import { FahuiPage } from '../fahui/FahuiPage';
 import { BoardPage } from '../fahui/board/BoardPage';
+import { FahuiRawDocsPage } from '../fahui/RawDocsPage';
 import { FormWorkspacePage } from '../form/react/FormWorkspacePage';
 import { LongOpenRegistrationFormPage } from '../long_open_registration_form/react/LongOpenRegistrationFormPage';
 import { UserControlPage } from '../user_control/react/UserControlPage';
@@ -27,6 +28,7 @@ export type CRMModuleKey =
   | 'songbook'
   | 'permanent_registration'
   | 'ylp_board'
+  | 'fahui_raw_docs'
   | 'manual';
 
 export type CRMModuleSpec = {
@@ -65,6 +67,13 @@ export const CRM_MODULES: CRMModuleSpec[] = [
     icon: 'fas fa-border-all',
     description: '维护牌位贴在哪块大板的哪个位置，支持输单号查板。',
     Component: BoardPage,
+  },
+  {
+    key: 'fahui_raw_docs',
+    title: '法会原始文档',
+    icon: 'fa-solid fa-images',
+    description: '手写单据原图存档：左边清单，右边看大图。',
+    Component: FahuiRawDocsPage,
   },
   {
     key: 'finance',

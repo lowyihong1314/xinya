@@ -229,6 +229,7 @@ def set_payment_review_status(
     *,
     status: str,
     reviewer_user=None,
+    sync_owner_status: bool = True,
 ) -> None:
     normalized_status = normalize_fahui_payment_status(status)
     if normalized_status not in {"approved", "pending", "rejected"}:
@@ -251,6 +252,11 @@ def set_payment_review_status(
         payment.valid_by = None
         payment.valid_at = None
 
+    # 撤回付款时不要动订单状态：订单该是 Draft/confirm 就还是那样，
+    # 只有这条付款记录变成「已拒绝」。
+    if not sync_owner_status:
+        return
+
     if payment.payment_type == PAYMENT_TYPE_LAMP:
         for registration in payment.lamp_registrations:
             _refresh_registration_status(registration)
@@ -258,13 +264,21 @@ def set_payment_review_status(
         _refresh_order_status(payment.order)
 
 
-def update_payment_review(payment_id: int, *, status: str, payment_type: str | None = None):
+def update_payment_review(
+    payment_id: int,
+    *,
+    status: str,
+    payment_type: str | None = None,
+    sync_owner_status: bool = True,
+):
     payment = get_payment_or_404(payment_id, payment_type=payment_type)
     if not payment:
         return jsonify({"success": False, "status": "error", "message": "支付记录不存在"}), 404
 
     try:
-        set_payment_review_status(payment, status=status, reviewer_user=current_user)
+        set_payment_review_status(
+            payment, status=status, reviewer_user=current_user, sync_owner_status=sync_owner_status
+        )
         db.session.commit()
     except ValueError as exc:
         db.session.rollback()
