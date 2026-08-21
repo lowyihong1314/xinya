@@ -1150,11 +1150,8 @@ def _fahui_income_rows(event, include_pending=False):
     rows = []
     for binding in bindings:
         version = binding.version
-        # 软删除的订单（status=delete / DELETE 版本）不算收入
-        order_query = FahuiOrder.query.filter(
-            FahuiOrder.version == version,
-            db.func.coalesce(FahuiOrder.status, "") != "delete",
-        )
+        # 软删除的订单会被移到 "DELETE" 版本，按版本查就已经排除掉了
+        order_query = FahuiOrder.query.filter(FahuiOrder.version == version)
         order_ids = [row.id for row in order_query.with_entities(FahuiOrder.id).all()]
         if not order_ids:
             rows.append({

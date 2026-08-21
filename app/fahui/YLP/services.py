@@ -343,8 +343,10 @@ def search_orders(
             selectinload(FahuiOrder.items).selectinload(FahuiOrderItem.form_data),
             selectinload(FahuiOrder.payments),
         )
+        # 删除只认一套约定：软删除 = 移到 "DELETE" 版本（见 delete_order_batch）。
+        # 以前还有一套「status='delete'」的旧标记，两套并存会让订单在自己版本里被藏起来、
+        # 在 DELETE 版本里又找不到，等于全版本隐身，所以这里不再看 status。
         .filter(FahuiOrder.version == normalized_version)
-        .filter(or_(FahuiOrder.status.is_(None), FahuiOrder.status != "delete"))
     )
 
     if value:
@@ -381,8 +383,10 @@ def list_orders_for_export(version: object, value: str = "") -> dict:
     query = (
         db.session.query(FahuiOrder)
         .options(selectinload(FahuiOrder.payments))
+        # 删除只认一套约定：软删除 = 移到 "DELETE" 版本（见 delete_order_batch）。
+        # 以前还有一套「status='delete'」的旧标记，两套并存会让订单在自己版本里被藏起来、
+        # 在 DELETE 版本里又找不到，等于全版本隐身，所以这里不再看 status。
         .filter(FahuiOrder.version == normalized_version)
-        .filter(or_(FahuiOrder.status.is_(None), FahuiOrder.status != "delete"))
     )
 
     if value:
