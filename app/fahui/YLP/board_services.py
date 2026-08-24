@@ -26,7 +26,9 @@ from models.fahui import (
 )
 
 
+# 随缘供斋（D）金额自订，默认 0，实际以提交时传来的 price 为准
 PRICE_MAP = {
+    "D": 0,
     "A1": 100,
     "A2": 100,
     "A3": 100,
@@ -829,7 +831,8 @@ def _validate_item_payload(code: str, owner, deceased) -> str | None:
 
     if code in {"A2", "B2"} and not (has_valid_owner and has_valid_deceased):
         return "A2/B2 表单必须同时填写 owner 和 deceased"
-    if code != "D1" and not (has_valid_owner or has_valid_deceased):
+    # D1 普度贡品按数量、D 随缘供斋只填金额，两者都没有阳上/对象
+    if code not in {"D", "D1"} and not (has_valid_owner or has_valid_deceased):
         return "必须填写 owner 或 deceased 至少一项"
 
     return None

@@ -175,7 +175,24 @@ export function PaiweiEditorModal({
             <p style={styles.hint}>{template.hint}</p>
           </div>
 
-          {template.fields.owner && isWuyuanCode(draft.code) ? (
+          {template.customPrice ? (
+            <div style={styles.field}>
+              <label style={styles.label}>金额 (RM)</label>
+              <input
+                style={styles.input}
+                type="number"
+                inputMode="decimal"
+                step="0.01"
+                min="0"
+                value={draft.amount}
+                placeholder="例如 50"
+                onChange={(event) => patch({ amount: event.target.value.replace(/[^\d.]/g, "") })}
+              />
+              <p style={styles.hint}>随缘乐捐，金额自订；不需要填姓名，也不会印牌位。</p>
+            </div>
+          ) : null}
+
+          {!template.customPrice && template.fields.owner && isWuyuanCode(draft.code) ? (
             <OwnerRoleRowList
               rows={ownerRoleRows}
               max={MAX_WUYUAN_OWNER_ROWS}

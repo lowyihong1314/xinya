@@ -8,7 +8,7 @@ export function currentYlpVersion() {
 
 export const DEFAULT_VERSION = currentYlpVersion();
 
-export type PaiweiCode = "A1" | "A2" | "A3" | "B1" | "B2" | "B3" | "C" | "D1";
+export type PaiweiCode = "A1" | "A2" | "A3" | "B1" | "B2" | "B3" | "C" | "D" | "D1";
 
 export type PaiweiTemplate = {
   code: PaiweiCode;
@@ -17,6 +17,8 @@ export type PaiweiTemplate = {
   hint: string;
   /** 今年停售：不出现在「牌位类型」下拉里，但历史订单仍能正常显示与编辑。 */
   retired?: boolean;
+  /** 金额自订（随缘供斋这类乐捐性质的项目）：没有姓名栏，只填金额。 */
+  customPrice?: boolean;
   defaultSuffix?: string;
   fields: {
     owner?: boolean;
@@ -49,6 +51,8 @@ export type PaiweiDraft = {
   mother: string;
   quantity: string;
   note: string;
+  /** 自订金额（只有 customPrice 的类型用得上） */
+  amount: string;
 };
 
 export const PAIWEI_TEMPLATES: PaiweiTemplate[] = [
@@ -106,6 +110,15 @@ export const PAIWEI_TEMPLATES: PaiweiTemplate[] = [
     fields: { owner: true },
   },
   {
+    code: "D",
+    title: "随缘供斋",
+    price: 0,
+    // 乐捐性质：不印牌位，也没有阳上/对象，只记金额。
+    hint: "随缘乐捐，不需要填姓名，只填金额。",
+    customPrice: true,
+    fields: {},
+  },
+  {
     code: "D1",
     title: "普度贡品",
     price: 50,
@@ -161,7 +174,7 @@ export function getTemplate(code: PaiweiCode) {
 
 export function getDraftQuantity(draft: PaiweiDraft) {
   const template = getTemplate(draft.code);
-  if (!template.fields.quantity) {
+  if (template.customPrice || !template.fields.quantity) {
     return 1;
   }
   const parsed = Number.parseInt(draft.quantity || "1", 10);
@@ -169,7 +182,12 @@ export function getDraftQuantity(draft: PaiweiDraft) {
 }
 
 export function getDraftUnitPrice(draft: PaiweiDraft) {
-  return getTemplate(draft.code).price;
+  const template = getTemplate(draft.code);
+  if (template.customPrice) {
+    const parsed = Number(String(draft.amount || "").replace(/,/g, "").trim());
+    return Number.isFinite(parsed) && parsed > 0 ? Math.round(parsed * 100) / 100 : 0;
+  }
+  return template.price;
 }
 
 export function getDraftTotalPrice(draft: PaiweiDraft) {
@@ -190,6 +208,7 @@ export function createDraft(code: PaiweiCode = "A1"): PaiweiDraft {
     mother: "",
     quantity: template.fields.quantity ? "1" : "",
     note: "",
+    amount: "",
   };
 }
 
@@ -211,6 +230,8 @@ export function draftFromItem(item: YlpOrderItem): PaiweiDraft {
     mother: first("mother"),
     quantity: first("quantity") || base.quantity,
     note: first("note"),
+    // 金额自订的类型（随缘供斋）：金额直接来自已存的 price
+    amount: getTemplate(code).customPrice && item.price != null ? String(item.price) : "",
   };
 }
 
@@ -247,6 +268,12 @@ export function buildItemPayload(draft: PaiweiDraft) {
     price: getDraftTotalPrice(draft),
   };
 
+  if (template.customPrice) {
+    // 随缘供斋这类：只有金额，没有阳上/对象/姓氏等任何栏位
+    if (draft.note.trim()) payload.note = draft.note.trim();
+    return payload;
+  }
+
   const ownerValue = toSingleOrArray(ownerValues);
   const deceasedValue = toSingleOrArray(deceasedValues);
   const relationValue = toSingleOrArray(relationValues);
@@ -282,6 +309,13 @@ export function validateDraft(draft: PaiweiDraft) {
 
   if (deceasedValues.some((value) => value.length > 50)) {
     return `${template.title} 的对象姓名不能超过 50 个字`;
+  }
+
+  if (template.customPrice) {
+    if (getDraftTotalPrice(draft) <= 0) {
+      return `${template.title} 请填写大于 0 的金额`;
+    }
+    return null;
   }
 
   if (draft.code === "D1") {

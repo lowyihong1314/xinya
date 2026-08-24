@@ -69,6 +69,8 @@ function summarizeDraft(draft: PaiweiDraft): string {
   if (draft.deceased.trim()) parts.push(`对象：${draft.deceased.trim().split(/\r?\n/).join("、")}`);
   if (draft.surname.trim()) parts.push(`姓氏：${draft.surname.trim()}`);
   if (template.fields.quantity) parts.push(`数量：${getDraftQuantity(draft)}`);
+  // 随缘供斋这类只有金额、没有任何姓名栏，摘要就写金额
+  if (template.customPrice) parts.push(`金额：RM ${getDraftTotalPrice(draft)}`);
   return parts.join(" · ");
 }
 
