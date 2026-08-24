@@ -484,37 +484,47 @@ def generate_paiwei(paiwei_type, fahui_data, point_data, source_name, need_barco
                     break
 
             # 同一个人挂多个关系（例如 曹振华 既是「亡夫」又是「亡父」）：
-            # 名字只印一次放中间，关系用小一号的字分列左右，避免整个名字重复印两遍。
+            # 关系还是排在原来那两栏的位置，名字只印一次、接在关系下面并左右居中。
             named_relations = [str(rel).strip() for rel in relations[: len(people)] if str(rel or "").strip()]
             if len(people) > 1 and len(set(people)) == 1 and len(named_relations) > 1:
-                center_points = deceased_point.get("1") or points
-                cx, cy, csize, cspace = center_points[0]
                 name = people[0]
+                side_points = deceased_point.get(str(len(named_relations))) or points
+                if len(side_points) < len(named_relations):
+                    side_points = points
+                # point.json 里 3 人以上的位置全是同一个 x（等于没排版），
+                # 真撞上就按字号自己均分成几栏，免得几个关系叠在一起。
+                used = side_points[: len(named_relations)]
+                if len({round(point[0], 3) for point in used}) < len(used):
+                    _ox, oy, osize, ospace = used[0]
+                    step = osize + max(2.0, osize * 0.2)
+                    first = -step * (len(used) - 1) / 2.0 - osize / 2.0
+                    side_points = [
+                        (first + index * step, oy, osize, ospace) for index in range(len(used))
+                    ]
 
                 c.setFillColor(colors.black)
-                c.setFont(font_name, csize)
-                for char_index, char in enumerate(name):
-                    c.drawString(x_base + cx, y_base + cy - char_index * cspace, char)
-
-                # 名字是一字一行竖排，所以那一栏的宽度就等于字号本身；
-                # 关系取 55% 字号，贴着名字左右两侧排，并和名字上下居中对齐。
-                rel_size = max(9.0, round(csize * 0.55, 1))
-                rel_space = rel_size + 2
-                gap = max(3.0, round(csize * 0.16, 1))
-                name_center_y = cy + (csize - (len(name) - 1) * cspace) / 2.0
-
-                for index, relation in enumerate(named_relations):
-                    column = index // 2
-                    step = rel_size + gap
-                    if index % 2 == 0:
-                        # 竖排从右念起，第一个关系放右边
-                        rx = cx + csize + gap + column * step
-                    else:
-                        rx = cx - gap - rel_size - column * step
-                    ry = name_center_y + ((len(relation) - 1) * rel_space - rel_size) / 2.0
-                    c.setFont(font_name, rel_size)
+                columns = []
+                for index, relation in enumerate(named_relations[: len(side_points)]):
+                    ox, oy, osize, ospace = side_points[index]
+                    c.setFont(font_name, osize)
                     for char_index, char in enumerate(relation):
-                        c.drawString(x_base + rx, y_base + ry - char_index * rel_space, char)
+                        c.drawString(x_base + ox, y_base + oy - char_index * ospace, char)
+                    columns.append((ox, osize, oy - (len(relation) - 1) * ospace))
+
+                # 名字用单人牌位的字号（就一个名字），横向落在几栏关系的正中间，
+                # 纵向接在最低的那栏关系下面。「关系 名字」本来就是靠一个空格分开的，
+                # 这里照样空开一格：关系的行距 + 名字自己的行距。
+                center_points = deceased_point.get("1") or side_points
+                _cx, _cy, name_size, name_space = center_points[0]
+                left = min(ox for ox, _size, _bottom in columns)
+                right = max(ox + _size for ox, _size, _bottom in columns)
+                blank = max(size for _ox, size, _bottom in columns)
+                name_x = (left + right - name_size) / 2.0
+                name_y = min(bottom for _ox, _size, bottom in columns) - blank - name_space
+
+                c.setFont(font_name, name_size)
+                for char_index, char in enumerate(name):
+                    c.drawString(x_base + name_x, y_base + name_y - char_index * name_space, char)
                 return
 
             for index, name in enumerate(people[: len(points)]):
