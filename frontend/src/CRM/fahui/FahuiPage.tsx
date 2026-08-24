@@ -2843,13 +2843,17 @@ const YLP_DETAIL_TABLE_CSS = `
 
 // 抽屉只有 400px 宽，资料表不需要撑到共用样式那个 480px 下限。
 
-const PAIWEI_FIELD_ORDER = ["owner", "deceased", "relation", "surname", "suffix", "father", "mother", "quantity", "note"];
+const PAIWEI_FIELD_ORDER = ["owner", "deceased", "relation", "surname", "suffix", "father", "mother", "quantity"];
+// 附注已下线：历史数据里零星残留的 note 不再显示
+const PAIWEI_HIDDEN_FIELDS = new Set(["note"]);
 
 function YlpItemFields({ item }: { item: YlpOrderItem }) {
   const grouped = item.item_form_data || {};
   const keys = [
     ...PAIWEI_FIELD_ORDER.filter((key) => (grouped[key] || []).length),
-    ...Object.keys(grouped).filter((key) => !PAIWEI_FIELD_ORDER.includes(key) && (grouped[key] || []).length),
+    ...Object.keys(grouped).filter(
+      (key) => !PAIWEI_FIELD_ORDER.includes(key) && !PAIWEI_HIDDEN_FIELDS.has(key) && (grouped[key] || []).length,
+    ),
   ];
   if (!keys.length) {
     return <span style={styles.itemFieldEmpty}>—</span>;

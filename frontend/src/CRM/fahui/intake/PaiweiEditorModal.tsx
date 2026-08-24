@@ -265,15 +265,6 @@ export function PaiweiEditorModal({
             />
           ) : null}
 
-          <div style={styles.field}>
-            <label style={styles.label}>附注（选填）</label>
-            <textarea
-              style={styles.textarea}
-              value={draft.note}
-              placeholder="其他需要说明的内容"
-              onChange={(event) => patch({ note: event.target.value })}
-            />
-          </div>
         </div>
 
         {error ? <div style={styles.error}>{error}</div> : null}

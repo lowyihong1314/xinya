@@ -50,7 +50,6 @@ export type PaiweiDraft = {
   father: string;
   mother: string;
   quantity: string;
-  note: string;
   /** 自订金额（只有 customPrice 的类型用得上） */
   amount: string;
 };
@@ -207,7 +206,6 @@ export function createDraft(code: PaiweiCode = "A1"): PaiweiDraft {
     father: "",
     mother: "",
     quantity: template.fields.quantity ? "1" : "",
-    note: "",
     amount: "",
   };
 }
@@ -229,7 +227,6 @@ export function draftFromItem(item: YlpOrderItem): PaiweiDraft {
     father: first("father"),
     mother: first("mother"),
     quantity: first("quantity") || base.quantity,
-    note: first("note"),
     // 金额自订的类型（随缘供斋）：金额直接来自已存的 price
     amount: getTemplate(code).customPrice && item.price != null ? String(item.price) : "",
   };
@@ -251,7 +248,6 @@ export function paiweiFieldLabel(key: string, code?: string | null): string {
     father: wuyuan ? "阳上 父" : "显考",
     mother: wuyuan ? "阳上 母" : "显妣",
     quantity: "数量",
-    note: "备注",
   };
   return labels[key] || key;
 }
@@ -270,7 +266,6 @@ export function buildItemPayload(draft: PaiweiDraft) {
 
   if (template.customPrice) {
     // 随缘供斋这类：只有金额，没有阳上/对象/姓氏等任何栏位
-    if (draft.note.trim()) payload.note = draft.note.trim();
     return payload;
   }
 
@@ -286,7 +281,6 @@ export function buildItemPayload(draft: PaiweiDraft) {
   if (template.fields.father && draft.father.trim()) payload.father = draft.father.trim();
   if (template.fields.mother && draft.mother.trim()) payload.mother = draft.mother.trim();
   if (template.fields.quantity) payload.quantity = String(getDraftQuantity(draft));
-  if (draft.note.trim()) payload.note = draft.note.trim();
 
   return payload;
 }

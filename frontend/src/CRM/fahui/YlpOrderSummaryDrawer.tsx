@@ -30,7 +30,9 @@ import type { YlpOrderDetail, YlpOrderItem, YlpPaymentRecord } from "./types";
 
 // 摘要抽屉（沿用法会那只 ylp-intake-drawer 的外壳与宽度）：
 // 除了看，还能改功德主/电话、改状态、增删改牌位项目，以及下载牌位、下载报价单、复制公开链接。
-const PAIWEI_FIELD_ORDER = ["owner", "deceased", "relation", "surname", "suffix", "father", "mother", "quantity", "note"];
+const PAIWEI_FIELD_ORDER = ["owner", "deceased", "relation", "surname", "suffix", "father", "mother", "quantity"];
+// 附注已下线：历史数据里零星残留的 note 不再显示
+const PAIWEI_HIDDEN_FIELDS = new Set(["note"]);
 // 只放订单流程状态；删除不在这里，删除 = 移入 DELETE 版本（见下面的删除按钮）
 const STATUS_OPTIONS = ["Draft", "confirm", "paid", "cancel"];
 
@@ -394,7 +396,10 @@ export function YlpOrderSummaryDrawer({
                 const keys = [
                   ...PAIWEI_FIELD_ORDER.filter((key) => (grouped[key] || []).length),
                   ...Object.keys(grouped).filter(
-                    (key) => !PAIWEI_FIELD_ORDER.includes(key) && (grouped[key] || []).length,
+                    (key) =>
+                      !PAIWEI_FIELD_ORDER.includes(key) &&
+                      !PAIWEI_HIDDEN_FIELDS.has(key) &&
+                      (grouped[key] || []).length,
                   ),
                 ];
                 return (

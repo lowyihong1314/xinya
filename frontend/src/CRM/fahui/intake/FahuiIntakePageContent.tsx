@@ -131,7 +131,7 @@ function draftFromOrderItem(item: YlpOrderItem): PaiweiDraft {
     father: template.fields.father ? pickFirstValue(item, "father") : "",
     mother: template.fields.mother ? pickFirstValue(item, "mother") : "",
     quantity: template.fields.quantity ? pickFirstValue(item, "quantity") || "1" : "",
-    note: pickFirstValue(item, "note"),
+    amount: template.customPrice && item.price != null ? String(item.price) : "",
   };
 }
 
