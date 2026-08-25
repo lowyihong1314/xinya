@@ -8,6 +8,7 @@ import {
   getSavedVerifiedPhone,
 } from "../../../js/get_phone_on_localhost";
 import { API_BASE } from "../../../js/apiBase";
+import { downloadBlobOrShare } from "../../../js/browserActions";
 import { correctPhoneInputMY } from "../../../js/phone";
 import { useEnsureDesignTokens } from "../../../theme/designTokens";
 import {
@@ -17,6 +18,7 @@ import {
   deleteYlpOrderItem,
   fetchYlpOrderDetail,
   fetchYlpOrdersByPhone,
+  downloadYlpReceiptImage,
   listYlpPaymentChannels,
   listYlpRelationOptions,
   previewYlpPaiweiImages,
@@ -215,6 +217,8 @@ function FahuiIntakePageInner() {
   const [previewTablets, setPreviewTablets] = useState<YlpPaiweiTablet[]>([]);
   const [previewLoading, setPreviewLoading] = useState(false);
   const [previewTruncated, setPreviewTruncated] = useState(false);
+
+  const [receiptLoadingId, setReceiptLoadingId] = useState<number | null>(null);
 
   const [relationOptions, setRelationOptions] = useState<string[]>([]);
 
@@ -500,6 +504,25 @@ function FahuiIntakePageInner() {
 
   // ---- 付款 ----
 
+  // 收据只有付款审核通过才出得来（后端服务层也会再挡一次）
+  async function downloadReceipt(orderId: number) {
+    setError("");
+    setMessage("");
+    setReceiptLoadingId(orderId);
+    try {
+      const blob = await downloadYlpReceiptImage(orderId);
+      await downloadBlobOrShare(blob, `receipt_order_${orderId}.png`, {
+        isMobile,
+        title: `订单 #${orderId} 收据`,
+        mimeType: "image/png",
+      });
+    } catch (nextError) {
+      setError(nextError instanceof Error ? nextError.message : "下载收据失败");
+    } finally {
+      setReceiptLoadingId(null);
+    }
+  }
+
   async function openPreviewStep() {
     setError("");
     setMessage("");
@@ -679,23 +702,34 @@ function FahuiIntakePageInner() {
                     // 已付款的仍然列出来，只是点进去是只读的（编辑/删除/添加都不渲染）
                     const locked = isLockedOrderStatus(entry.summary.status);
                     return (
-                      <button
-                        key={entry.summary.id}
-                        type="button"
-                        style={locked ? { ...styles.entryCard, ...styles.entryCardLocked } : styles.entryCard}
-                        disabled={entryLoadingId === entry.summary.id}
-                        onClick={() => void openEntryForEditing(entry, "current")}
-                      >
-                        <div style={styles.entryTop}>
-                          <span style={styles.entryTitle}>
-                            {entry.summary.customer_name || "功德主"} · 订单 #{entry.summary.id}
+                      <div key={entry.summary.id} style={styles.entryWrap}>
+                        <button
+                          type="button"
+                          style={locked ? { ...styles.entryCard, ...styles.entryCardLocked } : styles.entryCard}
+                          disabled={entryLoadingId === entry.summary.id}
+                          onClick={() => void openEntryForEditing(entry, "current")}
+                        >
+                          <div style={styles.entryTop}>
+                            <span style={styles.entryTitle}>
+                              {entry.summary.customer_name || "功德主"} · 订单 #{entry.summary.id}
+                            </span>
+                            <span style={styles.entryStatus}>{getOrderStatusLabel(entry.summary.status)}</span>
+                          </div>
+                          <span style={styles.entryMeta}>
+                            {itemCount(entry)} 项牌位{locked ? " · 只能查看" : ""}
                           </span>
-                          <span style={styles.entryStatus}>{getOrderStatusLabel(entry.summary.status)}</span>
-                        </div>
-                        <span style={styles.entryMeta}>
-                          {itemCount(entry)} 项牌位{locked ? " · 只能查看" : ""}
-                        </span>
-                      </button>
+                        </button>
+                        {locked ? (
+                          <button
+                            type="button"
+                            style={styles.receiptButton}
+                            disabled={receiptLoadingId === entry.summary.id}
+                            onClick={() => void downloadReceipt(entry.summary.id)}
+                          >
+                            {receiptLoadingId === entry.summary.id ? "生成中…" : "查看收据"}
+                          </button>
+                        ) : null}
+                      </div>
                     );
                   })}
                 </div>
@@ -1265,6 +1299,22 @@ const styles: Record<string, any> = {
     display: "flex",
     flexDirection: "column",
     gap: "6px",
+  },
+  entryWrap: {
+    display: "flex",
+    flexDirection: "column",
+    gap: "6px",
+  },
+  receiptButton: {
+    alignSelf: "flex-start",
+    padding: "6px 14px",
+    fontSize: "12.5px",
+    fontWeight: 700,
+    color: "var(--x-color-accent-strong)",
+    background: "var(--x-color-accent-soft)",
+    border: "1px solid var(--x-color-accent-border)",
+    borderRadius: "var(--x-radius-sm)",
+    cursor: "pointer",
   },
   entryCardLocked: {
     opacity: 0.75,
