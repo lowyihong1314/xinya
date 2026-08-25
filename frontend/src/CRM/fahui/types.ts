@@ -75,6 +75,25 @@ export type YlpPagination = {
   has_prev?: boolean;
 };
 
+export type YlpPaiweiTablet = {
+  order_id: number;
+  item_id: number | null;
+  code: string;
+  width: number;
+  height: number;
+  /** data:image/jpeg;base64,... —— 后端从牌位 PDF 里裁出来的单张牌位 */
+  image: string;
+};
+
+export type YlpPaiweiPreviewResponse = {
+  status?: string;
+  message?: string;
+  data?: {
+    tablets: YlpPaiweiTablet[];
+    truncated?: boolean;
+  };
+};
+
 export type YlpOrderSummary = {
   id: number;
   status?: string | null;

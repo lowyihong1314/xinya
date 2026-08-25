@@ -282,6 +282,280 @@ def generate_paiwei_using_order_item_ids(order_item_ids, need_barcode=False):
     return output
 
 
+# 同一列的格心在 point.json 里会差个一两点（例如 paiwei_10 的 292 / 293），
+# 不聚类的话一列会被拆成两列，裁出来的图宽窄不一。
+_GRID_CLUSTER_TOLERANCE = 8.0
+
+# 背景模板扫一遍就够，结果按文件 mtime 缓存在进程里。
+_INK_SCAN_DPI = 72
+_INK_THRESHOLD = 200
+# 裁切留白上限；实际留白还会被相邻格子的空槽压到不超过一半，免得把隔壁带进来。
+_CELL_MARGIN_PT = 20.0
+_INK_BAND_CACHE: dict = {}
+
+
+def _cluster_axis(values):
+    """把相近的坐标归成同一行/列，返回 {原值: 该组的中心}。"""
+    mapping = {}
+    group = []
+    for value in sorted(values):
+        if group and value - group[-1] > _GRID_CLUSTER_TOLERANCE:
+            center = sum(group) / len(group)
+            mapping.update({item: center for item in group})
+            group = []
+        group.append(value)
+    if group:
+        center = sum(group) / len(group)
+        mapping.update({item: center for item in group})
+    return mapping
+
+
+def _grid_bounds(values, low, high):
+    # 相邻格心的中点当分界，最外侧顶到页边。
+    bounds = {}
+    for index, value in enumerate(values):
+        start = low if index == 0 else (values[index - 1] + value) / 2.0
+        end = high if index == len(values) - 1 else (value + values[index + 1]) / 2.0
+        bounds[value] = (start, end)
+    return bounds
+
+
+def _flag_bands(flags, scale):
+    bands = []
+    start = None
+    for index, flag in enumerate(flags):
+        if flag and start is None:
+            start = index
+        elif not flag and start is not None:
+            bands.append((start * scale, index * scale))
+            start = None
+    if start is not None:
+        bands.append((start * scale, len(flags) * scale))
+    return bands
+
+
+def _merge_bands_to_count(bands, count):
+    """把相邻间隙最小的band 依次合并，直到刚好剩 count 条；条数不够就放弃。
+
+    一张牌位的线稿本身会断成好几段（华盖 / 直线 / 莲花 / 编号），段间只差两三点，
+    而格与格之间隔着十几点的空槽 —— 从最小间隙开始合并正好先把同一张的碎片并回去。
+    """
+    bands = list(bands)
+    if count <= 0 or len(bands) < count:
+        return None
+    while len(bands) > count:
+        index = min(range(len(bands) - 1), key=lambda i: bands[i + 1][0] - bands[i][1])
+        bands[index : index + 2] = [(bands[index][0], bands[index + 1][1])]
+    return bands
+
+
+def _band_margins(bands, low, high, maximum):
+    """每条 band 能往外扩多少：不超过上限，也不超过和邻居空槽的一半。
+
+    背景模板量到的只是线稿，牌位编号这类叠上去的字会落在线稿外面一点，
+    所以要留白；但留过头就会把隔壁那张的边角带进来。
+    """
+    margins = []
+    for index, (start, end) in enumerate(bands):
+        before = start - low if index == 0 else start - bands[index - 1][1]
+        after = high - end if index == len(bands) - 1 else bands[index + 1][0] - end
+        margins.append(max(0.0, min(maximum, before / 2.0, after / 2.0)))
+    return margins
+
+
+def _template_ink_bands(source_name):
+    """量出背景模板上每一格牌位的实际范围（PDF 点，top-origin）。
+
+    直接按格心中点切会把隔壁那张的边角也带进来（格距 115pt，牌位本身只有 100pt），
+    所以改成扫背景模板的墨迹投影，拿到真正的列 / 行范围。
+    """
+    path = resolve_paiwei_pdf_template(source_name)
+    if not path:
+        return None
+
+    try:
+        stamp = (str(path), path.stat().st_mtime_ns)
+    except OSError:
+        return None
+    cached = _INK_BAND_CACHE.get(source_name)
+    if cached and cached[0] == stamp:
+        return cached[1]
+
+    try:
+        import fitz  # PyMuPDF
+        from PIL import Image
+    except ImportError:
+        return None
+
+    try:
+        document = fitz.open(str(path))
+        try:
+            page = document[0]
+            width, height = page.rect.width, page.rect.height
+            pixmap = page.get_pixmap(dpi=_INK_SCAN_DPI, colorspace=fitz.csGRAY)
+            image = Image.frombytes("L", (pixmap.width, pixmap.height), pixmap.samples)
+        finally:
+            document.close()
+        mask = image.point(lambda value: 1 if value < _INK_THRESHOLD else 0, mode="1")
+        col_flags, row_flags = mask.getprojection()
+    except Exception:  # noqa: BLE001
+        return None
+
+    result = (
+        _flag_bands(col_flags, width / max(1, len(col_flags))),
+        _flag_bands(row_flags, height / max(1, len(row_flags))),
+    )
+    _INK_BAND_CACHE[source_name] = (stamp, result)
+    return result
+
+
+def paiwei_cell_boxes(point_data, source_name):
+    """算出模板每一格在页面里的范围，返回比例值 (x0, y0, x1, y1)、左上角原点。
+
+    顺序和 generate_paiwei 里 sorted(point_dict) 的排版顺序一致。
+    优先用背景模板的墨迹范围；量不出来（模板缺失 / 段数对不上）就回落成按格心中点切。
+    """
+    from reportlab.lib.pagesizes import A4, landscape
+
+    width, height = landscape(A4) if source_name == "paiwei_5" else A4
+
+    point_dict = {}
+    for block in point_data or []:
+        point_dict.update(block)
+    positions = sorted(point_dict.keys())
+    if not positions:
+        return []
+
+    centers = {}
+    for key in positions:
+        for point in point_dict.get(key, []):
+            if "center_point" in point:
+                centers[key] = (float(point["center_point"][0]), float(point["center_point"][1]))
+                break
+    if len(centers) != len(positions):
+        return []
+
+    x_groups = _cluster_axis({center[0] for center in centers.values()})
+    y_groups = _cluster_axis({center[1] for center in centers.values()})
+    columns = sorted(set(x_groups.values()))            # 左 → 右
+    rows = sorted(set(y_groups.values()), reverse=True)  # 上 → 下（PDF 的 y 越大越靠上）
+
+    measured = _template_ink_bands(source_name)
+    col_bands = row_bands = None
+    if measured:
+        col_bands = _merge_bands_to_count(measured[0], len(columns))
+        row_bands = _merge_bands_to_count(measured[1], len(rows))
+
+    if col_bands and row_bands:
+        col_margins = _band_margins(col_bands, 0.0, width, _CELL_MARGIN_PT)
+        row_margins = _band_margins(row_bands, 0.0, height, _CELL_MARGIN_PT)
+        boxes = []
+        for key in positions:
+            col_index = columns.index(x_groups[centers[key][0]])
+            row_index = rows.index(y_groups[centers[key][1]])
+            cx0, cx1 = col_bands[col_index]
+            ry0, ry1 = row_bands[row_index]
+            cm, rm = col_margins[col_index], row_margins[row_index]
+            boxes.append(
+                (
+                    max(0.0, cx0 - cm) / width,
+                    max(0.0, ry0 - rm) / height,
+                    min(width, cx1 + cm) / width,
+                    min(height, ry1 + rm) / height,
+                )
+            )
+        return boxes
+
+    x_bounds = _grid_bounds(columns, 0.0, width)
+    y_bounds = _grid_bounds(sorted(set(y_groups.values())), 0.0, height)
+    boxes = []
+    for key in positions:
+        x0, x1 = x_bounds[x_groups[centers[key][0]]]
+        y0, y1 = y_bounds[y_groups[centers[key][1]]]
+        # PDF 原点在左下，图片在左上：y 要翻过来
+        boxes.append((x0 / width, (height - y1) / height, x1 / width, (height - y0) / height))
+    return boxes
+
+
+def generate_paiwei_preview_cells(order_item_ids):
+    """预览用：生成合并 PDF，并算出每一张牌位落在第几页的哪一格。
+
+    分组方式和 generate_paiwei_using_order_item_ids 完全一样，只是额外记下
+    「第 N 张牌位 → 第几页第几格」，好把 5 联 / 10 联的整版裁成单张。
+    返回 (buffer, cells)；cell["box"] 为 None 表示这一页没有格子概念，整页当一张。
+    """
+    items = FahuiOrderItem.query.filter(FahuiOrderItem.id.in_(order_item_ids)).all()
+    if not items:
+        return None, []
+
+    filtered_data = filter_fahui_data(items)
+    if not filtered_data:
+        return None, []
+
+    try:
+        from pypdf import PdfReader
+        from pypdf import PdfWriter as _PdfMerger
+    except ImportError:
+        return None, []
+
+    grouped_data = defaultdict(list)
+    for item in filtered_data:
+        grouped_data[item.get("code")].append(item)
+
+    merger = _PdfMerger()
+    cells = []
+    page_offset = 0
+    for code, grouped_items in grouped_data.items():
+        point_data, source_name = get_point_data(code)
+        if point_data:
+            buffer = generate_paiwei(code, grouped_items, point_data, source_name)
+            boxes = paiwei_cell_boxes(point_data, source_name)
+        else:
+            buffer = _generate_simple_paiwei_pdf(code, grouped_items)
+            boxes = []
+
+        buffer.seek(0)
+        page_count = len(PdfReader(buffer).pages)
+        buffer.seek(0)
+        merger.append(buffer)
+
+        if boxes:
+            per_page = len(boxes)
+            for index, entry in enumerate(grouped_items):
+                page = page_offset + index // per_page
+                if page >= page_offset + page_count:
+                    break
+                cells.append(
+                    {
+                        "order_id": entry.get("order_id"),
+                        "item_id": entry.get("id"),
+                        "code": code,
+                        "page": page,
+                        "box": boxes[index % per_page],
+                    }
+                )
+        else:
+            for offset in range(page_count):
+                entry = grouped_items[offset] if offset < len(grouped_items) else grouped_items[-1]
+                cells.append(
+                    {
+                        "order_id": entry.get("order_id"),
+                        "item_id": entry.get("id"),
+                        "code": code,
+                        "page": page_offset + offset,
+                        "box": None,
+                    }
+                )
+
+        page_offset += page_count
+
+    output = io.BytesIO()
+    merger.write(output)
+    merger.close()
+    output.seek(0)
+    return output, cells
+
+
 def generate_paiwei_using_order_ids(order_ids, need_barcode=False):
     items = FahuiOrderItem.query.join(FahuiOrder).filter(FahuiOrder.id.in_(order_ids)).all()
     if not items:

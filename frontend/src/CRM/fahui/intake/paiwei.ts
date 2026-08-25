@@ -171,6 +171,17 @@ export function getTemplate(code: PaiweiCode) {
   return PAIWEI_TEMPLATES.find((template) => template.code === code) || PAIWEI_TEMPLATES[0];
 }
 
+/** 后端回的是原始 code（A2 / C …），拿来显示模板名字。 */
+export function paiweiTitleForCode(raw: string | null | undefined): string {
+  const code = String(raw || "").trim().toUpperCase();
+  const template = PAIWEI_TEMPLATES.find((entry) => entry.code === code);
+  if (template) {
+    return template.title;
+  }
+  // 数据库里 D 与 D1 混着用，落到同一个模板上
+  return code === "D" ? getTemplate("D1").title : "牌位";
+}
+
 export function getDraftQuantity(draft: PaiweiDraft) {
   const template = getTemplate(draft.code);
   if (template.customPrice || !template.fields.quantity) {

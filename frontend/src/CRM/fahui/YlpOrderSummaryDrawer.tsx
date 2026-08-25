@@ -14,6 +14,7 @@ import {
   fetchYlpOrderDetail,
   fetchYlpPayments,
   listYlpRelationOptions,
+  previewYlpPaiweiImages,
   updateYlpOrderCustomer,
   updateYlpOrderStatus,
   withdrawPayment,
@@ -24,9 +25,9 @@ import { YlpPaymentModal } from "./YlpPaymentModal";
 import { PaymentProofButton } from "./PaymentProof";
 import { getUserPermissionNames } from "../../app/permissions";
 import { useUserState } from "../../app/UserState";
-import { paiweiFieldLabel } from "./intake/paiwei";
+import { paiweiFieldLabel, paiweiTitleForCode } from "./intake/paiwei";
 import { ORDER_STATUS_LABELS, orderStatusLabel, paymentStatusLabel } from "./orderStatus";
-import type { YlpOrderDetail, YlpOrderItem, YlpPaymentRecord } from "./types";
+import type { YlpOrderDetail, YlpOrderItem, YlpPaiweiTablet, YlpPaymentRecord } from "./types";
 
 // 摘要抽屉（沿用法会那只 ylp-intake-drawer 的外壳与宽度）：
 // 除了看，还能改功德主/电话、改状态、增删改牌位项目，以及下载牌位、下载报价单、复制公开链接。
@@ -58,6 +59,11 @@ export function YlpOrderSummaryDrawer({
   const [form, setForm] = useState({ customer_name: "", phone: "", email: "" });
   const [relationOptions, setRelationOptions] = useState<string[]>([]);
   const [itemModal, setItemModal] = useState<{ item: YlpOrderItem | null } | null>(null);
+  // 预览牌位：整只抽屉切成预览，顶部换成「返回」
+  const [previewOpen, setPreviewOpen] = useState(false);
+  const [previewTablets, setPreviewTablets] = useState<YlpPaiweiTablet[]>([]);
+  const [previewLoading, setPreviewLoading] = useState(false);
+  const [previewError, setPreviewError] = useState("");
   const [payments, setPayments] = useState<YlpPaymentRecord[]>([]);
   const [paymentsError, setPaymentsError] = useState("");
   const [paymentModalOpen, setPaymentModalOpen] = useState(false);
@@ -93,6 +99,13 @@ export function YlpOrderSummaryDrawer({
   useEffect(() => {
     void load();
   }, [load]);
+
+  // 抽屉是复用的（换订单不会重新挂载），切订单时把预览收回去
+  useEffect(() => {
+    setPreviewOpen(false);
+    setPreviewTablets([]);
+    setPreviewError("");
+  }, [orderId]);
 
   useEffect(() => {
     let cancelled = false;
@@ -203,6 +216,25 @@ export function YlpOrderSummaryDrawer({
       });
     });
 
+  // 后端把牌位 PDF 逐张裁成 JPEG 回来，抽屉里直接看，不用先下载 PDF
+  async function openPreview() {
+    setPreviewOpen(true);
+    setPreviewError("");
+    setPreviewTablets([]);
+    setPreviewLoading(true);
+    try {
+      const res = await previewYlpPaiweiImages([orderId]);
+      setPreviewTablets(res.data?.tablets || []);
+      if (!(res.data?.tablets || []).length) {
+        setPreviewError(res.message || "这张订单没有可预览的牌位");
+      }
+    } catch (nextError) {
+      setPreviewError(nextError instanceof Error ? nextError.message : "生成预览失败");
+    } finally {
+      setPreviewLoading(false);
+    }
+  }
+
   const downloadReceipt = () =>
     run(async () => {
       const blob = await downloadYlpReceiptImage(orderId);
@@ -229,23 +261,49 @@ export function YlpOrderSummaryDrawer({
       <YlpDrawer
         isMobile={isMobile}
         navbarHeight={navbarHeight}
-        title={`订单 #${orderId} · 摘要`}
-        hint="可直接改资料与项目，复杂操作请进订单详情"
+        title={`订单 #${orderId} · ${previewOpen ? "预览牌位" : "摘要"}`}
+        hint={previewOpen ? "打印出来就是这个样子，一张牌位一张图" : "可直接改资料与项目，复杂操作请进订单详情"}
         actions={
           <>
-            <button type="button" style={drawerStyles.button} onClick={() => onOpenDetail(orderId)}>
-              订单详情
-            </button>
+            {previewOpen ? (
+              <button type="button" style={drawerStyles.button} onClick={() => setPreviewOpen(false)}>
+                ← 返回
+              </button>
+            ) : (
+              <button type="button" style={drawerStyles.button} onClick={() => onOpenDetail(orderId)}>
+                订单详情
+              </button>
+            )}
             <button type="button" style={drawerStyles.buttonMuted} onClick={onClose}>
               关闭
             </button>
           </>
         }
       >
-        {loading && !order ? <section style={styles.state}>加载中…</section> : null}
-        {error ? <section style={styles.error}>{error}</section> : null}
+        {previewOpen ? (
+          <div style={styles.body}>
+            {previewLoading ? <p style={styles.state}>正在生成预览图…</p> : null}
+            {previewError ? <p style={styles.error}>{previewError}</p> : null}
+            {previewTablets.length ? (
+              <div style={styles.previewGrid}>
+                {previewTablets.map((tablet, index) => (
+                  <div key={tablet.item_id ?? index} style={styles.previewCard}>
+                    <img src={tablet.image} alt={paiweiTitleForCode(tablet.code)} style={styles.previewImage} />
+                    <span style={styles.previewCaption}>{paiweiTitleForCode(tablet.code)}</span>
+                  </div>
+                ))}
+              </div>
+            ) : null}
+            <button type="button" style={styles.backButton} onClick={() => setPreviewOpen(false)}>
+              ← 返回摘要
+            </button>
+          </div>
+        ) : null}
 
-        {order ? (
+        {!previewOpen && loading && !order ? <section style={styles.state}>加载中…</section> : null}
+        {!previewOpen && error ? <section style={styles.error}>{error}</section> : null}
+
+        {order && !previewOpen ? (
           <div style={styles.body}>
             {/* 状态 + 金额：一行搞定 */}
             <div style={styles.row}>
@@ -297,6 +355,9 @@ export function YlpOrderSummaryDrawer({
 
             {/* 工具条 */}
             <div style={styles.toolRow}>
+              <button type="button" style={styles.tool} disabled={busy} onClick={() => void openPreview()}>
+                <i className="fa-regular fa-image" aria-hidden="true" /> 预览
+              </button>
               <button type="button" style={styles.tool} disabled={busy} onClick={() => void downloadPaiwei()}>
                 <i className="fa-solid fa-file-arrow-down" aria-hidden="true" /> 牌位
               </button>
@@ -493,6 +554,44 @@ export function YlpOrderSummaryDrawer({
 
 const styles: Record<string, CSSProperties> = {
   body: { display: "flex", flexDirection: "column", gap: "8px" },
+  previewGrid: {
+    display: "grid",
+    gridTemplateColumns: "repeat(auto-fill, minmax(110px, 1fr))",
+    gap: "8px",
+  },
+  previewCard: {
+    display: "flex",
+    flexDirection: "column",
+    gap: "4px",
+    padding: "6px",
+    borderRadius: "10px",
+    background: "var(--x-color-panel)",
+    border: "1px solid var(--x-color-line)",
+  },
+  previewImage: {
+    width: "100%",
+    height: "auto",
+    display: "block",
+    borderRadius: "6px",
+    background: "#fff",
+  },
+  previewCaption: {
+    fontSize: "11px",
+    fontWeight: 600,
+    textAlign: "center",
+    color: "var(--x-color-ink-muted)",
+  },
+  backButton: {
+    marginTop: "4px",
+    padding: "8px 12px",
+    fontSize: "12.5px",
+    fontWeight: 700,
+    color: "var(--x-color-ink-muted)",
+    background: "var(--x-color-panel)",
+    border: "1px solid var(--x-color-line)",
+    borderRadius: "8px",
+    cursor: "pointer",
+  },
   row: { display: "flex", gap: "6px", alignItems: "center", flexWrap: "wrap" },
   statusSelect: {
     padding: "5px 8px",

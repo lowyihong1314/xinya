@@ -8,6 +8,7 @@ import type {
   YlpOrderSummary,
   YlpOrdersByPhoneResponse,
   YlpPagination,
+  YlpPaiweiPreviewResponse,
   YlpPaymentChannelListResponse,
   YlpPaymentChannelMutationResponse,
   YlpPaymentRecord,
@@ -561,6 +562,16 @@ export async function deleteYlpPaymentChannel(channelId: number) {
     credentials: "include",
   });
   return parseJson<{ status?: string; message?: string }>(response);
+}
+
+export async function previewYlpPaiweiImages(orderIds: number[]) {
+  const response = await apiFetch("/api/print_paiwei/orders/paiwei-preview", {
+    method: "POST",
+    credentials: "include",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ order_ids: orderIds }),
+  });
+  return parseJson<YlpPaiweiPreviewResponse>(response);
 }
 
 export async function createYlpGroupPayment(formData: FormData) {

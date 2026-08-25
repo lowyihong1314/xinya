@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import base64
 import os
 
 from flask import Blueprint, jsonify, render_template, request, send_file
@@ -16,6 +17,7 @@ from ..common.ylp_storage import preferred_dir, resolve_existing_path
 from .paiwei_job import get_job_state, resolve_template, start_paiwei_job
 from .print_generator import (
     generate_paiwei_pdf_by_source,
+    generate_paiwei_preview_cells,
     generate_paiwei_using_order_ids,
     generate_paiwei_using_order_item_ids,
 )
@@ -224,6 +226,108 @@ def preview_test_image_route():
 @print_paiwei_bp.route("/preview_order/<int:order_id>", methods=["GET"])
 def preview_order_route(order_id):
     return _build_order_paiwei_response(order_id, as_attachment=False)
+
+
+# 公开登记页「预览牌位」：裁出来的单张牌位统一渲染成长边约 1100px，
+# 张数封顶防止一次拉太多图。
+PREVIEW_TARGET_PIXELS = 1100
+PREVIEW_IMAGE_QUALITY = 72
+PREVIEW_MAX_TABLETS = 40
+
+
+def _preview_dpi(rect_height_pt: float) -> int:
+    # 裁完的格子有大有小（整版 A4 vs 10 联的一条），按长边反推 DPI，
+    # 出来的图高度才会差不多，前端排起来才整齐。
+    inches = max(float(rect_height_pt), 1.0) / 72.0
+    return max(90, min(220, int(PREVIEW_TARGET_PIXELS / inches)))
+
+
+@print_paiwei_bp.route("/orders/paiwei-preview", methods=["POST"])
+def preview_order_images_route():
+    """把订单的牌位逐张转成 JPEG 回给前端（公开登记页用）。
+
+    5 联 / 10 联的版面会按模板格心裁成单张，不会带着一排空位一起给。
+    权限和单张预览 PDF 那条一样走 user_can_view_order：OTP 验证过手机号的访客
+    看得到自己名下的订单，不需要后台权限。
+    """
+    data = request.get_json(silent=True) or {}
+    order_ids = []
+    for raw in data.get("order_ids") or []:
+        try:
+            order_ids.append(int(raw))
+        except (TypeError, ValueError):
+            continue
+    if not order_ids:
+        return jsonify({"status": "error", "message": "请选择订单"}), 400
+
+    try:
+        import fitz  # PyMuPDF：渲染 PDF 为图片，无需 poppler
+    except ImportError:
+        return jsonify({"status": "error", "message": "服务器缺少 PDF 渲染组件"}), 500
+
+    tablets = []
+    truncated = False
+    for order_id in dict.fromkeys(order_ids):  # 去重且保持顺序
+        order = FahuiOrder.query.get(order_id)
+        if not order:
+            return jsonify({"status": "error", "message": f"订单 {order_id} 不存在"}), 404
+        if not user_can_view_order(order):
+            return jsonify({"status": "error", "message": "未登录或没有权限查看此订单"}), 403
+
+        item_ids = [item.id for item in FahuiOrderItem.query.filter_by(order_id=order_id).all()]
+        if not item_ids:
+            continue
+
+        buffer, cells = generate_paiwei_preview_cells(item_ids)
+        if not buffer or not cells:
+            continue
+
+        document = fitz.open(stream=buffer.getvalue(), filetype="pdf")
+        try:
+            for cell in cells:
+                if len(tablets) >= PREVIEW_MAX_TABLETS:
+                    truncated = True
+                    break
+                if cell["page"] >= document.page_count:
+                    continue
+
+                page = document.load_page(cell["page"])
+                rect = page.rect
+                box = cell["box"]
+                if box:
+                    clip = fitz.Rect(
+                        rect.x0 + box[0] * rect.width,
+                        rect.y0 + box[1] * rect.height,
+                        rect.x0 + box[2] * rect.width,
+                        rect.y0 + box[3] * rect.height,
+                    )
+                else:
+                    clip = None
+
+                pixmap = page.get_pixmap(dpi=_preview_dpi(clip.height if clip else rect.height), clip=clip)
+                encoded = base64.b64encode(
+                    pixmap.tobytes("jpeg", jpg_quality=PREVIEW_IMAGE_QUALITY)
+                ).decode("ascii")
+                tablets.append(
+                    {
+                        "order_id": cell["order_id"] or order_id,
+                        "item_id": cell["item_id"],
+                        "code": cell["code"],
+                        "width": pixmap.width,
+                        "height": pixmap.height,
+                        "image": f"data:image/jpeg;base64,{encoded}",
+                    }
+                )
+        finally:
+            document.close()
+
+        if truncated:
+            break
+
+    if not tablets:
+        return jsonify({"status": "error", "message": "这些订单还没有可预览的牌位"}), 404
+
+    return jsonify({"status": "success", "data": {"tablets": tablets, "truncated": truncated}}), 200
 
 
 @print_paiwei_bp.route("/preview/by-orders", methods=["POST"])

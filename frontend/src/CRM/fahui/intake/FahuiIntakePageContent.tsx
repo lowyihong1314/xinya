@@ -19,6 +19,7 @@ import {
   fetchYlpOrdersByPhone,
   listYlpPaymentChannels,
   listYlpRelationOptions,
+  previewYlpPaiweiImages,
   updateYlpOrderCustomer,
 } from "../api";
 import { FahuiOpenGate } from "../FahuiOpenGate";
@@ -26,6 +27,7 @@ import type {
   YlpOrderDetail,
   YlpOrderItem,
   YlpOrderSummary,
+  YlpPaiweiTablet,
   YlpPaymentChannel,
   YlpRelationOption,
 } from "../types";
@@ -39,6 +41,7 @@ import {
   getDraftQuantity,
   getDraftTotalPrice,
   getTemplate,
+  paiweiTitleForCode,
   normalizePhoneMY,
   validateDraft,
   type OrderFormState,
@@ -46,7 +49,7 @@ import {
   type PaiweiDraft,
 } from "./paiwei";
 
-type IntakeStep = "phone" | "history" | "form" | "confirm" | "pay";
+type IntakeStep = "phone" | "history" | "form" | "confirm" | "pay" | "preview";
 
 type OrderHistoryEntry = {
   summary: YlpOrderSummary;
@@ -208,6 +211,11 @@ function FahuiIntakePageInner() {
   const [payProof, setPayProof] = useState<File | null>(null);
   const [paySubmitting, setPaySubmitting] = useState(false);
 
+  // 预览牌位（全部订单都已付款 / 审核中时才开放）
+  const [previewTablets, setPreviewTablets] = useState<YlpPaiweiTablet[]>([]);
+  const [previewLoading, setPreviewLoading] = useState(false);
+  const [previewTruncated, setPreviewTruncated] = useState(false);
+
   const [relationOptions, setRelationOptions] = useState<string[]>([]);
 
   const totalAmount = useMemo(
@@ -236,6 +244,22 @@ function FahuiIntakePageInner() {
   const hasLockedCurrentYear = useMemo(
     () => currentYearEntries.some((entry) => isLockedOrderStatus(entry.summary.status)),
     [currentYearEntries],
+  );
+  // 「我要付款」只在还有能付的订单时渲染；全部已付款或审核中就换成「预览牌位」。
+  const payableEntries = useMemo(
+    () => currentYearEntries.filter((entry) => isOrderPayable(entry.summary)),
+    [currentYearEntries],
+  );
+  const canPreviewPaiwei = currentYearEntries.length > 0 && payableEntries.length === 0;
+  const activeEntry = useMemo(
+    () => (activeOrderId ? historyEntries.find((entry) => entry.summary.id === activeOrderId) || null : null),
+    [activeOrderId, historyEntries],
+  );
+  // 已付款的订单只读。列表里本来就不会出现（currentEditableEntries 已过滤），
+  // 这里再兜一层：后台刚批准、页面数据还没刷新时，编辑 / 删除 / 添加一律不渲染。
+  const activeOrderLocked = useMemo(
+    () => Boolean(activeEntry && isLockedOrderStatus(activeEntry.summary.status)),
+    [activeEntry],
   );
 
   useEffect(() => {
@@ -416,14 +440,11 @@ function FahuiIntakePageInner() {
 
       // 这个页面只写今年：往年订单一律走「复制到今年」，不允许直接更新旧版本的订单。
       const version = currentYlpVersion();
-      const activeEntry = activeOrderId
-        ? historyEntries.find((entry) => entry.summary.id === activeOrderId)
-        : null;
       if (activeEntry && String(activeEntry.summary.version || "") !== version) {
         throw new Error(`只能登记 ${version.replace("_YLP", "")} 年的牌位，请从往年记录「复制到今年」再提交。`);
       }
       // 已付款的订单不给改（原本这层检查挂在「同名同号去重」那条分支上，去重取消后补到这里）
-      if (activeEntry && isLockedOrderStatus(activeEntry.summary.status)) {
+      if (activeOrderLocked) {
         throw new Error(`${currentYearLabel} 年这张订单已经付款，不能再修改。`);
       }
 
@@ -482,6 +503,26 @@ function FahuiIntakePageInner() {
   }
 
   // ---- 付款 ----
+
+  async function openPreviewStep() {
+    setError("");
+    setMessage("");
+    setPreviewTablets([]);
+    setPreviewTruncated(false);
+    setPreviewLoading(true);
+    setStep("preview");
+    scrollPageTop();
+    try {
+      // 后端把牌位 PDF 逐页转成 JPEG 回来（一次请求拿全部页）。
+      const res = await previewYlpPaiweiImages(currentYearEntries.map((entry) => entry.summary.id));
+      setPreviewTablets(res.data?.tablets || []);
+      setPreviewTruncated(Boolean(res.data?.truncated));
+    } catch (nextError) {
+      setError(consumeAccessError(nextError));
+    } finally {
+      setPreviewLoading(false);
+    }
+  }
 
   async function openPayStep() {
     setError("");
@@ -665,7 +706,12 @@ function FahuiIntakePageInner() {
               <button type="button" style={styles.addButton} onClick={startFreshCurrentYear}>
                 + 全新填写一张今年订单
               </button>
-              {currentYearEntries.length ? (
+              {canPreviewPaiwei ? (
+                <button type="button" style={styles.previewButton} onClick={() => void openPreviewStep()}>
+                  预览牌位
+                </button>
+              ) : null}
+              {payableEntries.length ? (
                 <button type="button" style={styles.payButton} onClick={() => void openPayStep()}>
                   我要付款
                 </button>
@@ -715,6 +761,7 @@ function FahuiIntakePageInner() {
               <input
                 style={styles.input}
                 placeholder="牌位上的功德主姓名"
+                readOnly={activeOrderLocked}
                 value={orderForm.customerName}
                 onChange={(event) => setOrderForm((c) => ({ ...c, customerName: event.target.value }))}
               />
@@ -722,6 +769,7 @@ function FahuiIntakePageInner() {
               <input
                 style={styles.input}
                 placeholder="留空则同功德主"
+                readOnly={activeOrderLocked}
                 value={orderForm.contactName}
                 onChange={(event) => setOrderForm((c) => ({ ...c, contactName: event.target.value }))}
               />
@@ -730,6 +778,7 @@ function FahuiIntakePageInner() {
                 style={styles.input}
                 inputMode="email"
                 placeholder="用于接收付款通知"
+                readOnly={activeOrderLocked}
                 value={orderForm.email}
                 onChange={(event) => setOrderForm((c) => ({ ...c, email: event.target.value }))}
               />
@@ -760,14 +809,16 @@ function FahuiIntakePageInner() {
                             <span style={styles.draftSummary}>{summarizeDraft(draft)}</span>
                           ) : null}
                         </div>
-                        <div style={styles.draftActions}>
-                          <button type="button" style={styles.smallButton} onClick={() => setEditorIndex(index)}>
-                            编辑
-                          </button>
-                          <button type="button" style={styles.smallDanger} onClick={() => removeDraft(index)}>
-                            删除
-                          </button>
-                        </div>
+                        {activeOrderLocked ? null : (
+                          <div style={styles.draftActions}>
+                            <button type="button" style={styles.smallButton} onClick={() => setEditorIndex(index)}>
+                              编辑
+                            </button>
+                            <button type="button" style={styles.smallDanger} onClick={() => removeDraft(index)}>
+                              删除
+                            </button>
+                          </div>
+                        )}
                       </div>
                     );
                   })}
@@ -776,9 +827,13 @@ function FahuiIntakePageInner() {
                 <p style={styles.emptyHint}>还没有添加牌位，点下方按钮开始添加。</p>
               )}
 
-              <button type="button" style={styles.addButton} onClick={() => setEditorIndex("new")}>
-                + 添加牌位
-              </button>
+              {activeOrderLocked ? (
+                <div style={styles.lockedChip}>这张订单已经付款，牌位不能再修改</div>
+              ) : (
+                <button type="button" style={styles.addButton} onClick={() => setEditorIndex("new")}>
+                  + 添加牌位
+                </button>
+              )}
             </div>
 
             <div style={styles.rowButtons}>
@@ -789,9 +844,11 @@ function FahuiIntakePageInner() {
               >
                 ← 返回
               </button>
-              <button type="button" style={styles.primaryButton} onClick={goToConfirm}>
-                下一步：确认
-              </button>
+              {activeOrderLocked ? null : (
+                <button type="button" style={styles.primaryButton} onClick={goToConfirm}>
+                  下一步：确认
+                </button>
+              )}
             </div>
           </section>
         ) : null}
@@ -944,6 +1001,53 @@ function FahuiIntakePageInner() {
               {paySubmitting ? "提交中…" : `提交付款（RM ${payTotal}）`}
             </button>
             <button type="button" style={styles.ghostButton} onClick={() => setStep("history")} disabled={paySubmitting}>
+              ← 返回
+            </button>
+          </section>
+        ) : null}
+
+        {step === "preview" ? (
+          <section style={styles.stack}>
+            <div style={styles.card}>
+              <p style={styles.cardTitle}>预览牌位</p>
+              <p style={styles.help}>
+                {currentYearLabel} 年名下牌位的打印效果，和现场张贴的版式一致。如有错字请联络工作人员。
+              </p>
+            </div>
+
+            {previewLoading ? (
+              <div style={styles.card}>
+                <p style={styles.emptyHint}>正在生成预览图…</p>
+              </div>
+            ) : previewTablets.length ? (
+              <div style={styles.stack}>
+                <div style={styles.previewGrid}>
+                  {previewTablets.map((tablet, index) => (
+                    <div key={`${tablet.order_id}-${tablet.item_id ?? index}`} style={styles.previewCard}>
+                      <img
+                        src={tablet.image}
+                        alt={`${paiweiTitleForCode(tablet.code)}（订单 ${tablet.order_id}）`}
+                        style={styles.previewImage}
+                      />
+                      <span style={styles.previewCaption}>
+                        {paiweiTitleForCode(tablet.code)} · #{tablet.order_id}
+                      </span>
+                    </div>
+                  ))}
+                </div>
+                {previewTruncated ? (
+                  <div style={styles.card}>
+                    <p style={styles.emptyHint}>牌位较多，这里只显示前 {previewTablets.length} 张。</p>
+                  </div>
+                ) : null}
+              </div>
+            ) : (
+              <div style={styles.card}>
+                <p style={styles.emptyHint}>没有可预览的牌位。</p>
+              </div>
+            )}
+
+            <button type="button" style={styles.ghostButton} onClick={() => setStep("history")}>
               ← 返回
             </button>
           </section>
@@ -1101,6 +1205,45 @@ const styles: Record<string, any> = {
     cursor: "pointer",
   },
   rowButtons: { display: "flex", gap: "10px", alignItems: "center" },
+  previewButton: {
+    width: "100%",
+    padding: "12px",
+    fontSize: "14px",
+    fontWeight: 700,
+    color: "var(--x-color-accent-strong)",
+    background: "var(--x-color-accent-soft)",
+    border: "1px solid var(--x-color-accent-border)",
+    borderRadius: "var(--x-radius-sm)",
+    cursor: "pointer",
+    marginTop: "4px",
+  },
+  previewGrid: {
+    display: "grid",
+    gridTemplateColumns: "repeat(auto-fill, minmax(140px, 1fr))",
+    gap: "10px",
+  },
+  previewCard: {
+    display: "flex",
+    flexDirection: "column",
+    gap: "6px",
+    padding: "8px",
+    borderRadius: "var(--x-radius-md)",
+    background: "var(--x-color-panel)",
+    border: "1px solid var(--x-color-line)",
+  },
+  previewCaption: {
+    fontSize: "11px",
+    fontWeight: 600,
+    textAlign: "center",
+    color: "var(--x-color-ink-muted)",
+  },
+  previewImage: {
+    width: "100%",
+    height: "auto",
+    display: "block",
+    borderRadius: "var(--x-radius-sm)",
+    background: "#fff",
+  },
   lockedChip: {
     padding: "8px 12px",
     borderRadius: "var(--x-radius-sm)",
