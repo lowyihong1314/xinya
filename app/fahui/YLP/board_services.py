@@ -769,7 +769,6 @@ def quick_search_orders(keyword: str | None, version: str | None = None) -> dict
             orders = (
                 base_query.filter(FahuiOrder.phone.like(f"%{needle}%"))
                 .order_by(FahuiOrder.created_at.desc())
-                .limit(5)
                 .all()
             )
     else:
@@ -782,7 +781,6 @@ def quick_search_orders(keyword: str | None, version: str | None = None) -> dict
                 )
             )
             .order_by(FahuiOrder.created_at.desc())
-            .limit(5)
             .all()
         )
 
@@ -796,30 +794,31 @@ def quick_search_orders(keyword: str | None, version: str | None = None) -> dict
                 orders = (
                     base_query.filter(FahuiOrder.phone.like(f"%{needle}%"))
                     .order_by(FahuiOrder.created_at.desc())
-                    .limit(5)
                     .all()
                 )
 
+    # 前面都没命中才翻牌位内容（阳上 / 对象的名字）。这里原本叠了三层截断
+    # （10 / 10 / 取前 5），现在一并去掉，全量返回。
     if not orders:
-        matched_item_ids = (
-            db.session.query(FahuiItemFormData.item_id)
-            .filter(FahuiItemFormData.field_value.ilike(f"%{keyword}%"))
-            .limit(10)
-            .all()
-        )
-        item_ids = [item_id for (item_id,) in matched_item_ids]
-        if item_ids:
-            order_ids = (
-                db.session.query(FahuiOrderItem.order_id)
-                .filter(FahuiOrderItem.id.in_(item_ids))
-                .limit(10)
-                .all()
+        matched_item_ids = {
+            item_id
+            for (item_id,) in db.session.query(FahuiItemFormData.item_id).filter(
+                FahuiItemFormData.field_value.ilike(f"%{keyword}%")
             )
-            flat_order_ids = [order_id for (order_id,) in order_ids]
-            if flat_order_ids:
-                top_ids = sorted(flat_order_ids, reverse=True)[:5]
-                orders = base_query.filter(FahuiOrder.id.in_(top_ids)).all()
-                orders.sort(key=lambda order: top_ids.index(order.id))
+        }
+        if matched_item_ids:
+            matched_order_ids = {
+                order_id
+                for (order_id,) in db.session.query(FahuiOrderItem.order_id).filter(
+                    FahuiOrderItem.id.in_(matched_item_ids)
+                )
+            }
+            if matched_order_ids:
+                orders = (
+                    base_query.filter(FahuiOrder.id.in_(matched_order_ids))
+                    .order_by(FahuiOrder.id.desc())
+                    .all()
+                )
 
     results = []
     for order in orders:
