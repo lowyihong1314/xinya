@@ -659,7 +659,10 @@ def update_order_customer(order_id: int, data: dict) -> tuple[dict, int]:
     order.customer_name = data.get("customer_name", order.customer_name)
     order.email = data.get("email", order.email)
 
-    new_phone = (data.get("phone") or "").strip()
+    from ..common.phone import normalize_phone_for_storage
+
+    # 后台改电话也走同一套规范化，别再往库里写第二种写法。
+    new_phone = normalize_phone_for_storage(data.get("phone")) or ""
     if new_phone and new_phone != (order.phone or "").strip():
         if _is_logged_in():
             order.phone = new_phone
@@ -759,8 +762,12 @@ def quick_search_orders(keyword: str | None, version: str | None = None) -> dict
                     orders = [order_item.order]
 
         if not orders:
+            # 库里统一存 +60…，但工作人员习惯输 0…，所以拿去掉国家码的核心号码去模糊匹配。
+            from ..common.phone import canonical_phone
+
+            needle = canonical_phone(keyword) or keyword
             orders = (
-                base_query.filter(FahuiOrder.phone.like(f"%{keyword}%"))
+                base_query.filter(FahuiOrder.phone.like(f"%{needle}%"))
                 .order_by(FahuiOrder.created_at.desc())
                 .limit(5)
                 .all()
@@ -778,6 +785,20 @@ def quick_search_orders(keyword: str | None, version: str | None = None) -> dict
             .limit(5)
             .all()
         )
+
+        # 带 + 或者中间有横线空格的号码（+60123…、012-345 6789）不是纯数字，
+        # 上面按姓名搜自然搜不到，这里补一次电话匹配。
+        if not orders:
+            from ..common.phone import canonical_phone
+
+            needle = canonical_phone(keyword)
+            if len(needle) >= 7:
+                orders = (
+                    base_query.filter(FahuiOrder.phone.like(f"%{needle}%"))
+                    .order_by(FahuiOrder.created_at.desc())
+                    .limit(5)
+                    .all()
+                )
 
     if not orders:
         matched_item_ids = (

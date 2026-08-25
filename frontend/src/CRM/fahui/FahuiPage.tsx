@@ -8,6 +8,7 @@ import { getUserPermissionNames } from "../../app/permissions";
 import { CachedImage } from "../../components/CachedMedia";
 import { showChoiceDialog, showConfirmDialog } from "../../js/dialogs";
 import { copyTextToClipboard, downloadBlobOrShare, downloadUrlOrShare } from "../../js/browserActions";
+import { correctPhoneInputMY } from "../../js/phone";
 import { show_alert } from "../../js/show_alert";
 import { LAMP_META } from "../../lamp/lampMeta";
 import { useOptionalAppChrome } from "../../router/AppChromeContext";
@@ -2273,7 +2274,10 @@ export function FahuiPage() {
                             style={styles.detailInput}
                             value={orderForm.phone}
                             disabled={orderSaving}
-                            onChange={(event) => setOrderForm((prev) => ({ ...prev, phone: event.target.value }))}
+                            placeholder="01X-XXXXXXX"
+                            onChange={(event) =>
+                              setOrderForm((prev) => ({ ...prev, phone: correctPhoneInputMY(event.target.value) }))
+                            }
                           />
                         ) : (
                           orderForm.phone || "-"

@@ -3,6 +3,7 @@ import type { CSSProperties } from "react";
 
 import { downloadBlobOrShare, copyTextToClipboard } from "../../js/browserActions";
 import { showConfirmDialog } from "../../js/dialogs";
+import { correctPhoneInputMY } from "../../js/phone";
 import { show_alert } from "../../js/show_alert";
 import {
   approvePayment,
@@ -334,10 +335,12 @@ export function YlpOrderSummaryDrawer({
               />
               <input
                 value={form.phone}
-                placeholder="联系电话"
+                placeholder="联系电话 01X-XXXXXXX"
                 disabled={busy}
                 style={styles.input}
-                onChange={(event) => setForm((current) => ({ ...current, phone: event.target.value }))}
+                onChange={(event) =>
+                  setForm((current) => ({ ...current, phone: correctPhoneInputMY(event.target.value) }))
+                }
               />
               <input
                 value={form.email}

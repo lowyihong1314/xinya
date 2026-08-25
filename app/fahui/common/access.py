@@ -3,21 +3,12 @@
 - 公开端：手机号经 OTP 验证后（session["verified_phones"]），只能读自己手机号名下的记录
 """
 
-import re
-
 from flask import jsonify, session
 from flask_login import current_user
 
+from .phone import canonical_phone as _canonical_phone
+
 FAHUI_READ_PERMISSION_NAMES = ("fahui_read", "account_read", "account_edit")
-
-
-def _canonical_phone(value):
-    digits = re.sub(r"\D", "", str(value or ""))
-    if digits.startswith("60"):
-        digits = digits[2:]
-    if digits.startswith("0"):
-        digits = digits[1:]
-    return digits
 
 
 def has_fahui_read():

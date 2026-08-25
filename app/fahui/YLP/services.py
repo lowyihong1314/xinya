@@ -415,15 +415,23 @@ def get_orders_by_phone(phone: str) -> tuple[dict, int]:
     if not phone:
         return {"status": "error", "message": "phone is required"}, 400
 
-    verified_owner = phone == current_session_phone() or phone in current_verified_phones()
+    from ..common.phone import phone_lookup_variants
+    from ..common.access import phones_match
+
+    verified_owner = (
+        phones_match(phone, current_session_phone())
+        or any(phones_match(phone, verified) for verified in current_verified_phones())
+    )
     logged_in = bool(current_user and current_user.is_authenticated)
     if not logged_in and not verified_owner:
         return {"status": "error", "message": "请先完成手机验证"}, 403
 
+    # 库里同一个号可能存成 +60… / 60… / 0…（公开页写一种，后台录入写另一种），
+    # 所以按各种写法一起查，别让人从公开页看不到自己的单。
     orders = (
         db.session.query(FahuiOrder)
         .options(selectinload(FahuiOrder.items).selectinload(FahuiOrderItem.form_data), selectinload(FahuiOrder.payments))
-        .filter(FahuiOrder.phone == phone)
+        .filter(FahuiOrder.phone.in_(phone_lookup_variants(phone)))
         .order_by(FahuiOrder.created_at.desc(), FahuiOrder.id.desc())
         .all()
     )
@@ -438,10 +446,17 @@ def get_orders_by_phone(phone: str) -> tuple[dict, int]:
 
 
 def create_order_shell(data: dict) -> tuple[dict, int]:
+    from ..common.phone import normalize_phone_for_storage, phone_lookup_variants
+
     name = (data.get("name") or "").strip()
     phone = (data.get("phone") or "").strip()
     if not name or not phone:
         return {"status": "error", "message": "name and phone are required"}, 400
+
+    # 一律按规范写法入库（+60…）；认不出来的座机等原样保留，纯垃圾则拒掉。
+    phone = normalize_phone_for_storage(phone) or ""
+    if not phone:
+        return {"status": "error", "message": "手机号码格式不正确"}, 400
 
     # 公开登记页（#/ylp-registration）唯一的建单入口：版本一律锁死今年，
     # 不接受 payload 传进来的 version —— 不可能从这里新建往年的牌位订单。
@@ -458,13 +473,14 @@ def create_order_shell(data: dict) -> tuple[dict, int]:
     # 不走「姓名+电话+版本」去重，免得第二张把第一张覆盖掉。
     force_new = str(data.get("force_new") or "").strip().lower() in {"1", "true", "yes", "on"} or data.get("force_new") is True
 
+    # 去重同样要认各种写法，否则同一个人换个格式提交就会被当成新客人。
     existing = (
         None
         if force_new
         else db.session.query(FahuiOrder)
         .filter(
             FahuiOrder.name == name,
-            FahuiOrder.phone == phone,
+            FahuiOrder.phone.in_(phone_lookup_variants(phone)),
             FahuiOrder.version == version,
         )
         .first()
