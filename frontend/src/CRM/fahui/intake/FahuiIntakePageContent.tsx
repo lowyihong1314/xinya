@@ -237,10 +237,6 @@ function FahuiIntakePageInner() {
       ),
     [historyEntries],
   );
-  const currentEditableEntries = useMemo(
-    () => currentYearEntries.filter((entry) => !isLockedOrderStatus(entry.summary.status)),
-    [currentYearEntries],
-  );
   const hasLockedCurrentYear = useMemo(
     () => currentYearEntries.some((entry) => isLockedOrderStatus(entry.summary.status)),
     [currentYearEntries],
@@ -672,36 +668,42 @@ function FahuiIntakePageInner() {
           <section style={styles.stack}>
             <div style={styles.card}>
               <p style={styles.cardTitle}>我的资料</p>
-              <p style={styles.help}>手机 {displayPhone} 名下的订单。请选择一项，或全新填写。</p>
+              <p style={styles.help}>手机 {displayPhone} 名下的订单。点一项查看或继续填写，也可以全新填写。</p>
             </div>
 
             <div style={styles.card}>
-              <p style={styles.cardTitle}>继续编辑今年（{currentYearLabel}）</p>
-              {currentEditableEntries.length ? (
+              <p style={styles.cardTitle}>今年（{currentYearLabel}）的订单</p>
+              {currentYearEntries.length ? (
                 <div style={styles.stack}>
-                  {currentEditableEntries.map((entry) => (
-                    <button
-                      key={entry.summary.id}
-                      type="button"
-                      style={styles.entryCard}
-                      disabled={entryLoadingId === entry.summary.id}
-                      onClick={() => void openEntryForEditing(entry, "current")}
-                    >
-                      <div style={styles.entryTop}>
-                        <span style={styles.entryTitle}>
-                          {entry.summary.customer_name || "功德主"} · 订单 #{entry.summary.id}
+                  {currentYearEntries.map((entry) => {
+                    // 已付款的仍然列出来，只是点进去是只读的（编辑/删除/添加都不渲染）
+                    const locked = isLockedOrderStatus(entry.summary.status);
+                    return (
+                      <button
+                        key={entry.summary.id}
+                        type="button"
+                        style={locked ? { ...styles.entryCard, ...styles.entryCardLocked } : styles.entryCard}
+                        disabled={entryLoadingId === entry.summary.id}
+                        onClick={() => void openEntryForEditing(entry, "current")}
+                      >
+                        <div style={styles.entryTop}>
+                          <span style={styles.entryTitle}>
+                            {entry.summary.customer_name || "功德主"} · 订单 #{entry.summary.id}
+                          </span>
+                          <span style={styles.entryStatus}>{getOrderStatusLabel(entry.summary.status)}</span>
+                        </div>
+                        <span style={styles.entryMeta}>
+                          {itemCount(entry)} 项牌位{locked ? " · 只能查看" : ""}
                         </span>
-                        <span style={styles.entryStatus}>{getOrderStatusLabel(entry.summary.status)}</span>
-                      </div>
-                      <span style={styles.entryMeta}>{itemCount(entry)} 项牌位</span>
-                    </button>
-                  ))}
+                      </button>
+                    );
+                  })}
                 </div>
               ) : (
-                <p style={styles.help}>今年还没有可编辑的订单。</p>
+                <p style={styles.help}>今年还没有订单。</p>
               )}
               {hasLockedCurrentYear ? (
-                <div style={styles.lockedChip}>今年另有已付款订单，无法再修改</div>
+                <div style={styles.lockedChip}>已付款的订单只能查看，不能再修改</div>
               ) : null}
               <button type="button" style={styles.addButton} onClick={startFreshCurrentYear}>
                 + 全新填写一张今年订单
@@ -1263,6 +1265,10 @@ const styles: Record<string, any> = {
     display: "flex",
     flexDirection: "column",
     gap: "6px",
+  },
+  entryCardLocked: {
+    opacity: 0.75,
+    borderStyle: "dashed",
   },
   entryCardTight: {
     textAlign: "left",

@@ -40,18 +40,15 @@ def is_junk_phone(value) -> bool:
 
 
 def normalize_phone(value) -> str | None:
-    """能确定归属就返回 E.164（+60… / +65…），认不出来返回 None，由调用方决定保留还是清掉。
-
-    座机（07…，位数不够 10 位）这类认不出来的一律原样保留 —— 它们是真号码，
-    只是收不了 OTP，硬转成 +60 也没有意义。
-    """
+    """能确定归属就返回 E.164（+60… / +65…），认不出来返回 None，由调用方决定保留还是清掉。"""
     raw = str(value or "").strip()
     digits = phone_digits(raw)
     if not digits or is_junk_phone(raw):
         return None
 
-    # 马来西亚手机：0XXXXXXXXX / 60XXXXXXXXX / 1XXXXXXXX
-    if digits.startswith("0") and 10 <= len(digits) <= 11:
+    # 马来西亚号码：手机 01X-XXXXXXX（10-11 位）与座机 0X-XXXXXXX（9 位）都算，
+    # 座机收不了 OTP，但它们是真号码，一样要写成 E.164。
+    if digits.startswith("0") and 9 <= len(digits) <= 11:
         return f"+60{digits[1:]}"
     if digits.startswith("60") and 11 <= len(digits) <= 12:
         return f"+{digits}"
