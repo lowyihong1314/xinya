@@ -374,29 +374,6 @@ export function EventDetailPage() {
           </div>
         </section>
 
-        {detail.fahui_registration ? (
-          <section id="event-detail-fahui-cta" style={fahuiCtaStyle(isMobile)}>
-            <div style={fahuiCtaTextStyle}>
-              <div style={fahuiCtaEyebrowStyle}>{detail.fahui_registration.label}</div>
-              <div style={fahuiCtaTitleStyle}>
-                {detail.fahui_registration.is_open ? "现在可以线上登记牌位" : "线上登记暂未开放"}
-              </div>
-              <div style={fahuiCtaHintStyle}>
-                {detail.fahui_registration.is_open
-                  ? "填写功德主与牌位资料，提交后可上传付款凭证、查看收据。"
-                  : "开放时间以佛学会公告为准；点进去可以看到今年的开放日期。"}
-              </div>
-            </div>
-            <button
-              type="button"
-              style={fahuiCtaButtonStyle(isMobile)}
-              onClick={() => navigate(detail.fahui_registration!.path)}
-            >
-              {detail.fahui_registration.is_open ? "前往登记牌位" : "查看登记页"}
-            </button>
-          </section>
-        ) : null}
-
         <section id="event-detail-toolbar" style={toolbarStyle(isMobile, isNarrowWidth)}>
           <div id="event-detail-toolbar-nav" style={toolbarGroupStyle(isMobile)}>
             <TabButton
@@ -495,6 +472,29 @@ export function EventDetailPage() {
             ) : null}
           </div>
         </section>
+
+        {detail.fahui_registration ? (
+          <section id="event-detail-fahui-cta" style={fahuiCtaStyle(isMobile)}>
+            <div style={fahuiCtaTextStyle}>
+              <div style={fahuiCtaEyebrowStyle}>{detail.fahui_registration.label}</div>
+              <div style={fahuiCtaTitleStyle}>
+                {detail.fahui_registration.is_open ? "现在可以线上登记牌位" : "线上登记暂未开放"}
+              </div>
+              <div style={fahuiCtaHintStyle}>
+                {detail.fahui_registration.is_open
+                  ? "填写功德主与牌位资料，提交后可上传付款凭证、查看收据。"
+                  : "开放时间以佛学会公告为准；点进去可以看到今年的开放日期。"}
+              </div>
+            </div>
+            <button
+              type="button"
+              style={fahuiCtaButtonStyle(isMobile)}
+              onClick={() => navigate(detail.fahui_registration!.path)}
+            >
+              {detail.fahui_registration.is_open ? "前往登记牌位" : "查看登记页"}
+            </button>
+          </section>
+        ) : null}
 
       <section id="event-detail-content" style={contentWrapStyle(isMobile, viewMode)}>
         {viewMode === "photos" ? (
@@ -1200,7 +1200,7 @@ function fahuiCtaStyle(isMobile: boolean): CSSProperties {
     alignItems: isMobile ? "stretch" : "center",
     justifyContent: "space-between",
     gap: "14px",
-    margin: "14px 0 0",
+    margin: "12px 0",
     padding: isMobile ? "16px" : "18px 22px",
     borderRadius: "16px",
     background: "var(--x-color-accent-soft)",
