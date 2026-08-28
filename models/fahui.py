@@ -1,5 +1,6 @@
 from datetime import datetime
 
+from app.timezone import malaysia_now_naive
 from models import db
 
 
@@ -232,6 +233,81 @@ class FahuiVersionEvent(db.Model):
             "event_name": getattr(self.event, "event_name", None),
             "event_datetime": self.event.datetime.isoformat() if getattr(self.event, "datetime", None) else None,
             "created_at": self.created_at.isoformat() if self.created_at else None,
+        }
+
+
+class FahuiOrderLog(db.Model):
+    """订单改动日志：谁在什么时候、把哪个字段从什么改成了什么。
+
+    公开登记页的访客没有账号，只有经过 OTP 验证的手机号，所以 user_id 和 phone
+    是二选一（后台操作记 user_id，访客记 phone）。旧数据没有日志，抽屉里显示为空即可。
+    """
+
+    __tablename__ = "fahui_order_log"
+
+    id = db.Column(db.Integer, primary_key=True, autoincrement=True)
+    order_id = db.Column(
+        db.Integer,
+        db.ForeignKey("orders.id", ondelete="CASCADE", onupdate="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    # 牌位项目级别的改动记这个；订单级别的留空
+    item_id = db.Column(db.Integer, nullable=True, index=True)
+
+    # order / item / customer / status / payment
+    target = db.Column(db.String(24), nullable=False, default="order")
+    # create / update / delete / restore
+    action = db.Column(db.String(24), nullable=False, default="update")
+    field = db.Column(db.String(64), nullable=True)
+    old_value = db.Column(db.Text, nullable=True)
+    new_value = db.Column(db.Text, nullable=True)
+    # 给人看的一句话，例如「牌位 #4291 超度亡灵：对象 李炳泉 → 李炳全」
+    summary = db.Column(db.Text, nullable=True)
+
+    user_id = db.Column(
+        db.Integer,
+        db.ForeignKey("user_data.id", ondelete="SET NULL"),
+        nullable=True,
+        index=True,
+    )
+    # 操作当下的显示名，账号改名或删号之后日志仍然读得懂
+    user_name = db.Column(db.String(120), nullable=True)
+    # 公开页访客：已验证的手机号
+    phone = db.Column(db.String(32), nullable=True, index=True)
+
+    created_at = db.Column(db.DateTime, default=malaysia_now_naive, nullable=False, index=True)
+
+    order = db.relationship(
+        "FahuiOrder",
+        backref=db.backref("logs", lazy="selectin", cascade="all, delete-orphan", passive_deletes=True),
+    )
+
+    def actor_label(self) -> str:
+        if self.user_name:
+            return self.user_name
+        if self.user_id:
+            return f"用户 #{self.user_id}"
+        if self.phone:
+            return self.phone
+        return "系统"
+
+    def to_dict(self):
+        return {
+            "id": self.id,
+            "order_id": self.order_id,
+            "item_id": self.item_id,
+            "target": self.target,
+            "action": self.action,
+            "field": self.field,
+            "old_value": self.old_value,
+            "new_value": self.new_value,
+            "summary": self.summary,
+            "user_id": self.user_id,
+            "user_name": self.user_name,
+            "phone": self.phone,
+            "actor": self.actor_label(),
+            "created_at": self.created_at.strftime("%Y-%m-%d %H:%M:%S") if self.created_at else None,
         }
 
 

@@ -656,19 +656,27 @@ def update_order_customer(order_id: int, data: dict) -> tuple[dict, int]:
     if denied:
         return denied
 
-    order.customer_name = data.get("customer_name", order.customer_name)
-    order.email = data.get("email", order.email)
-
     from ..common.phone import normalize_phone_for_storage
+    from .order_log import log_field_changes
+
+    changes = [
+        ("customer_name", order.customer_name, data.get("customer_name", order.customer_name)),
+        ("email", order.email, data.get("email", order.email)),
+    ]
 
     # 后台改电话也走同一套规范化，别再往库里写第二种写法。
     new_phone = normalize_phone_for_storage(data.get("phone")) or ""
     if new_phone and new_phone != (order.phone or "").strip():
         if _is_logged_in():
+            changes.append(("phone", order.phone, new_phone))
             order.phone = new_phone
         else:
             return {"success": False, "message": "未登录用户无法修改手机号"}, 403
 
+    order.customer_name = data.get("customer_name", order.customer_name)
+    order.email = data.get("email", order.email)
+
+    log_field_changes(order.id, changes, target="customer")
     _touch_maintainer(order)
     db.session.commit()
     _notify_order_updated(order.id)
@@ -688,6 +696,9 @@ def update_order_status(order_id: int, data: dict) -> tuple[dict, int]:
     if not status:
         return {"success": False, "message": "缺少 status"}, 400
 
+    from .order_log import log_field_changes
+
+    log_field_changes(order.id, [("status", order.status, status)], target="status")
     order.status = status
     _touch_maintainer(order)
     db.session.commit()
@@ -899,6 +910,19 @@ def create_order_item(order_id: int, data: dict) -> tuple[dict, int]:
     db.session.flush()
 
     _write_item_form_data(order_item.id, data)
+    db.session.flush()
+
+    from .order_log import describe_item, item_snapshot, log_order_change
+
+    snapshot = item_snapshot(order_item)
+    log_order_change(
+        order_id,
+        target="item",
+        action="create",
+        item_id=order_item.id,
+        new=describe_item(snapshot),
+        summary=f"新增牌位 #{order_item.id}：{describe_item(snapshot)}",
+    )
 
     _touch_maintainer(order)
     db.session.commit()
@@ -920,6 +944,10 @@ def update_order_item_fields(item_id: int, data: dict) -> tuple[dict, int]:
     if error:
         return {"success": False, "message": error}, 400
 
+    from .order_log import diff_item_snapshots, item_snapshot, log_field_changes
+
+    before = item_snapshot(item)
+
     item.code = code
     if data.get("item_name") is not None:
         item.item_name = data.get("item_name")
@@ -929,6 +957,19 @@ def update_order_item_fields(item_id: int, data: dict) -> tuple[dict, int]:
     # Replace form-data rows in place; the item row + its board/PDF links are kept.
     FahuiItemFormData.query.filter_by(item_id=item.id).delete()
     _write_item_form_data(item.id, data)
+    db.session.flush()
+
+    # 上面是批量删 + 重新插，item.form_data 这个 selectin 关系还缓存着旧行，
+    # 不 expire 的话前后快照会一模一样，改动就记不下来了。
+    db.session.expire(item, ["form_data"])
+    after = item_snapshot(item)
+    log_field_changes(
+        item.order_id,
+        diff_item_snapshots(before, after),
+        target="item",
+        item_id=item.id,
+        prefix=f"牌位 #{item.id} ",
+    )
 
     _touch_maintainer(item.order)
     db.session.commit()
@@ -946,6 +987,18 @@ def delete_order_item(item_id: int, order_id: int) -> tuple[dict, int]:
     denied = _require_order_access(item.order) or _require_current_version(item.order)
     if denied:
         return denied
+
+    from .order_log import describe_item, item_snapshot, log_order_change
+
+    snapshot = item_snapshot(item)
+    log_order_change(
+        order_id,
+        target="item",
+        action="delete",
+        item_id=item.id,
+        old=describe_item(snapshot),
+        summary=f"删除牌位 #{item.id}：{describe_item(snapshot)}",
+    )
 
     # 子行走 ORM 删除（不用批量 SQL）：item 加载时 form_data/pdf_pages 已被 selectin
     # 拉进 session，批量删除会让 ORM 在 commit 时对已消失的行发 UPDATE 而抛 StaleDataError。
@@ -975,14 +1028,27 @@ def delete_order_batch(data: dict) -> tuple[dict, int]:
     if not order_ids:
         return {"status": "error", "message": "数据中没有包含订单 ID"}, 400
 
+    from .order_log import log_order_change
+
     orders_to_delete = FahuiOrder.query.filter(FahuiOrder.id.in_(order_ids)).all()
     deleted_count = 0
     marked_count = 0
     for order in orders_to_delete:
         if str(order.version) == "DELETE":
+            # 已经在 DELETE 版本里再删一次 = 物理删除，日志会跟着订单一起 CASCADE 掉，
+            # 所以这一条不记（也记不住）。
             db.session.delete(order)
             deleted_count += 1
         else:
+            log_order_change(
+                order.id,
+                target="order",
+                action="delete",
+                field="version",
+                old=order.version,
+                new="DELETE",
+                summary=f"订单移入 DELETE 版本（原 {order.version}）",
+            )
             order.version = "DELETE"
             _touch_maintainer(order)
             marked_count += 1
@@ -994,6 +1060,20 @@ def delete_order_batch(data: dict) -> tuple[dict, int]:
         "marked": marked_count,
         "deleted": deleted_count,
     }, 200
+
+
+def _log_cloned_order(old_order: FahuiOrder, new_order: FahuiOrder) -> None:
+    from .order_log import log_order_change
+
+    log_order_change(
+        new_order.id,
+        target="order",
+        action="create",
+        field="version",
+        old=old_order.version,
+        new=new_order.version,
+        summary=f"由订单 #{old_order.id}（{old_order.version}）复制而来，共 {len(new_order.items or [])} 项牌位",
+    )
 
 
 def _clone_order_record(old_order: FahuiOrder, new_version: str) -> FahuiOrder:
@@ -1055,6 +1135,8 @@ def clone_order_to_version(data: dict) -> tuple[dict, int]:
         }, 400
 
     new_order = _clone_order_record(old_order, new_version)
+    db.session.flush()
+    _log_cloned_order(old_order, new_order)
     db.session.commit()
     return {"message": "Order copied successfully", "new_order_id": new_order.id}, 201
 
@@ -1080,6 +1162,8 @@ def copy_orders_to_current(data: dict) -> tuple[dict, int]:
             skipped.append({"id": order_id, "reason": f"已是今年版本（{active}）"})
             continue
         new_order = _clone_order_record(old_order, active)
+        db.session.flush()
+        _log_cloned_order(old_order, new_order)
         copied.append({"old_id": order_id, "new_id": new_order.id})
 
     if copied:
@@ -1113,6 +1197,17 @@ def update_order_item_form_value(data: dict) -> tuple[dict, int]:
     denied = _require_order_access(order) or _require_current_version(order)
     if denied:
         return denied
+
+    from .order_log import log_field_changes
+
+    if order is not None:
+        log_field_changes(
+            order.id,
+            [(item_form.field_name, item_form.field_value, str(new_value))],
+            target="item",
+            item_id=item_form.item_id,
+            prefix=f"牌位 #{item_form.item_id} ",
+        )
 
     item_form.field_value = str(new_value)
     _touch_maintainer(order)

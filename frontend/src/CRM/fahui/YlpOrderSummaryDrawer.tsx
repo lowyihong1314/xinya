@@ -13,6 +13,7 @@ import {
   downloadYlpPaiwei,
   downloadYlpReceiptImage,
   fetchYlpOrderDetail,
+  fetchYlpOrderLogs,
   fetchYlpPayments,
   listYlpRelationOptions,
   previewYlpPaiweiImages,
@@ -28,7 +29,7 @@ import { getUserPermissionNames } from "../../app/permissions";
 import { useUserState } from "../../app/UserState";
 import { paiweiFieldLabel, paiweiTitleForCode } from "./intake/paiwei";
 import { ORDER_STATUS_LABELS, orderStatusLabel, paymentStatusLabel } from "./orderStatus";
-import type { YlpOrderDetail, YlpOrderItem, YlpPaiweiTablet, YlpPaymentRecord } from "./types";
+import type { YlpOrderDetail, YlpOrderItem, YlpOrderLog, YlpPaiweiTablet, YlpPaymentRecord } from "./types";
 
 // 摘要抽屉（沿用法会那只 ylp-intake-drawer 的外壳与宽度）：
 // 除了看，还能改功德主/电话、改状态、增删改牌位项目，以及下载牌位、下载报价单、复制公开链接。
@@ -37,6 +38,26 @@ const PAIWEI_FIELD_ORDER = ["owner", "deceased", "relation", "surname", "suffix"
 const PAIWEI_HIDDEN_FIELDS = new Set(["note"]);
 // 只放订单流程状态；删除不在这里，删除 = 移入 DELETE 版本（见下面的删除按钮）
 const STATUS_OPTIONS = ["Draft", "confirm", "paid", "cancel"];
+
+const LOG_ACTION_LABELS: Record<string, string> = {
+  create: "新增",
+  update: "修改",
+  delete: "删除",
+  restore: "恢复",
+};
+const LOG_TARGET_LABELS: Record<string, string> = {
+  order: "订单",
+  customer: "功德主资料",
+  status: "订单状态",
+  item: "牌位",
+  payment: "付款",
+};
+
+function logChipTone(action: string): CSSProperties {
+  if (action === "create") return { color: "var(--x-color-success)", borderColor: "rgba(21,128,61,0.28)" };
+  if (action === "delete") return { color: "var(--x-color-danger)", borderColor: "rgba(190,18,60,0.28)" };
+  return { color: "var(--x-color-accent-strong)", borderColor: "var(--x-color-accent-border)" };
+}
 
 export function YlpOrderSummaryDrawer({
   orderId,
@@ -65,6 +86,11 @@ export function YlpOrderSummaryDrawer({
   const [previewTablets, setPreviewTablets] = useState<YlpPaiweiTablet[]>([]);
   const [previewLoading, setPreviewLoading] = useState(false);
   const [previewError, setPreviewError] = useState("");
+  // 改动记录：右上角小图标切进来，和预览一样是整只抽屉换内容
+  const [logsOpen, setLogsOpen] = useState(false);
+  const [logs, setLogs] = useState<YlpOrderLog[]>([]);
+  const [logsLoading, setLogsLoading] = useState(false);
+  const [logsError, setLogsError] = useState("");
   const [payments, setPayments] = useState<YlpPaymentRecord[]>([]);
   const [paymentsError, setPaymentsError] = useState("");
   const [paymentModalOpen, setPaymentModalOpen] = useState(false);
@@ -106,6 +132,9 @@ export function YlpOrderSummaryDrawer({
     setPreviewOpen(false);
     setPreviewTablets([]);
     setPreviewError("");
+    setLogsOpen(false);
+    setLogs([]);
+    setLogsError("");
   }, [orderId]);
 
   useEffect(() => {
@@ -217,6 +246,24 @@ export function YlpOrderSummaryDrawer({
       });
     });
 
+  async function openLogs() {
+    setLogsOpen(true);
+    setPreviewOpen(false);
+    setLogsError("");
+    setLogsLoading(true);
+    try {
+      const res = await fetchYlpOrderLogs(orderId);
+      setLogs(res.data || []);
+      if (!(res.data || []).length) {
+        setLogsError("这张订单还没有改动记录（旧数据不会有）");
+      }
+    } catch (nextError) {
+      setLogsError(nextError instanceof Error ? nextError.message : "读取改动记录失败");
+    } finally {
+      setLogsLoading(false);
+    }
+  }
+
   // 后端把牌位 PDF 逐张裁成 JPEG 回来，抽屉里直接看，不用先下载 PDF
   async function openPreview() {
     setPreviewOpen(true);
@@ -262,18 +309,42 @@ export function YlpOrderSummaryDrawer({
       <YlpDrawer
         isMobile={isMobile}
         navbarHeight={navbarHeight}
-        title={`订单 #${orderId} · ${previewOpen ? "预览牌位" : "摘要"}`}
-        hint={previewOpen ? "打印出来就是这个样子，一张牌位一张图" : "可直接改资料与项目，复杂操作请进订单详情"}
+        title={`订单 #${orderId} · ${previewOpen ? "预览牌位" : logsOpen ? "改动记录" : "摘要"}`}
+        hint={
+          previewOpen
+            ? "打印出来就是这个样子，一张牌位一张图"
+            : logsOpen
+              ? "谁在什么时候改了什么，从什么改成什么"
+              : "可直接改资料与项目，复杂操作请进订单详情"
+        }
         actions={
           <>
-            {previewOpen ? (
-              <button type="button" style={drawerStyles.button} onClick={() => setPreviewOpen(false)}>
+            {previewOpen || logsOpen ? (
+              <button
+                type="button"
+                style={drawerStyles.button}
+                onClick={() => {
+                  setPreviewOpen(false);
+                  setLogsOpen(false);
+                }}
+              >
                 ← 返回
               </button>
             ) : (
-              <button type="button" style={drawerStyles.button} onClick={() => onOpenDetail(orderId)}>
-                订单详情
-              </button>
+              <>
+                <button
+                  type="button"
+                  style={iconOnlyButtonStyle}
+                  title="查看改动记录"
+                  aria-label="查看改动记录"
+                  onClick={() => void openLogs()}
+                >
+                  <i className="fa-solid fa-clock-rotate-left" aria-hidden="true" />
+                </button>
+                <button type="button" style={drawerStyles.button} onClick={() => onOpenDetail(orderId)}>
+                  订单详情
+                </button>
+              </>
             )}
             <button type="button" style={drawerStyles.buttonMuted} onClick={onClose}>
               关闭
@@ -281,6 +352,36 @@ export function YlpOrderSummaryDrawer({
           </>
         }
       >
+        {logsOpen ? (
+          <div style={styles.body}>
+            {logsLoading ? <p style={styles.state}>读取中…</p> : null}
+            {logsError ? <p style={styles.state}>{logsError}</p> : null}
+            {logs.length ? (
+              <div style={styles.logList}>
+                {logs.map((entry) => (
+                  <div key={entry.id} style={styles.logRow}>
+                    <div style={styles.logTop}>
+                      <span style={{ ...styles.logChip, ...logChipTone(entry.action) }}>
+                        {LOG_ACTION_LABELS[entry.action] || entry.action}
+                      </span>
+                      <span style={styles.logTarget}>{LOG_TARGET_LABELS[entry.target] || entry.target}</span>
+                      <span style={styles.logTime}>{entry.created_at}</span>
+                    </div>
+                    <span style={styles.logSummary}>{entry.summary || entry.field || "—"}</span>
+                    <span style={styles.logActor}>
+                      <i className="fa-regular fa-user" aria-hidden="true" /> {entry.actor}
+                      {entry.phone ? "（手机号验证）" : ""}
+                    </span>
+                  </div>
+                ))}
+              </div>
+            ) : null}
+            <button type="button" style={styles.backButton} onClick={() => setLogsOpen(false)}>
+              ← 返回摘要
+            </button>
+          </div>
+        ) : null}
+
         {previewOpen ? (
           <div style={styles.body}>
             {previewLoading ? <p style={styles.state}>正在生成预览图…</p> : null}
@@ -301,10 +402,10 @@ export function YlpOrderSummaryDrawer({
           </div>
         ) : null}
 
-        {!previewOpen && loading && !order ? <section style={styles.state}>加载中…</section> : null}
-        {!previewOpen && error ? <section style={styles.error}>{error}</section> : null}
+        {!previewOpen && !logsOpen && loading && !order ? <section style={styles.state}>加载中…</section> : null}
+        {!previewOpen && !logsOpen && error ? <section style={styles.error}>{error}</section> : null}
 
-        {order && !previewOpen ? (
+        {order && !previewOpen && !logsOpen ? (
           <div style={styles.body}>
             {/* 状态 + 金额：一行搞定 */}
             <div style={styles.row}>
@@ -555,8 +656,43 @@ export function YlpOrderSummaryDrawer({
   );
 }
 
+const iconOnlyButtonStyle: CSSProperties = {
+  width: 30,
+  height: 28,
+  padding: 0,
+  borderRadius: "6px",
+  border: "1px solid var(--x-color-line)",
+  background: "var(--x-color-panel)",
+  color: "var(--x-color-ink-muted)",
+  fontSize: "12px",
+  cursor: "pointer",
+};
+
 const styles: Record<string, CSSProperties> = {
   body: { display: "flex", flexDirection: "column", gap: "8px" },
+  logList: { display: "flex", flexDirection: "column", gap: "8px" },
+  logRow: {
+    display: "flex",
+    flexDirection: "column",
+    gap: "4px",
+    padding: "8px 10px",
+    borderRadius: "10px",
+    background: "var(--x-color-panel-alt)",
+    border: "1px solid var(--x-color-line-soft)",
+  },
+  logTop: { display: "flex", alignItems: "center", gap: "6px", flexWrap: "wrap" },
+  logChip: {
+    padding: "1px 8px",
+    borderRadius: "999px",
+    border: "1px solid var(--x-color-line)",
+    background: "var(--x-color-panel)",
+    fontSize: "11px",
+    fontWeight: 800,
+  },
+  logTarget: { fontSize: "11.5px", fontWeight: 700, color: "var(--x-color-ink-muted)" },
+  logTime: { marginLeft: "auto", fontSize: "11px", color: "var(--x-color-ink-muted)" },
+  logSummary: { fontSize: "12.5px", color: "var(--x-color-ink)", overflowWrap: "anywhere", whiteSpace: "pre-wrap" },
+  logActor: { fontSize: "11px", color: "var(--x-color-ink-muted)" },
   previewGrid: {
     display: "grid",
     gridTemplateColumns: "repeat(auto-fill, minmax(110px, 1fr))",

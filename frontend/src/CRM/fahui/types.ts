@@ -75,6 +75,30 @@ export type YlpPagination = {
   has_prev?: boolean;
 };
 
+export type YlpOrderLog = {
+  id: number;
+  order_id: number;
+  item_id?: number | null;
+  target: string;
+  action: string;
+  field?: string | null;
+  old_value?: string | null;
+  new_value?: string | null;
+  summary?: string | null;
+  user_id?: number | null;
+  user_name?: string | null;
+  phone?: string | null;
+  /** 后端算好的「谁」：登录用户显示名，公开访客显示手机号 */
+  actor: string;
+  created_at?: string | null;
+};
+
+export type YlpOrderLogResponse = {
+  status?: string;
+  message?: string;
+  data?: YlpOrderLog[];
+};
+
 export type YlpPaiweiTablet = {
   order_id: number;
   item_id: number | null;

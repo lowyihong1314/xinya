@@ -7,6 +7,7 @@ import type {
   YlpOrderListResponse,
   YlpOrderSummary,
   YlpOrdersByPhoneResponse,
+  YlpOrderLogResponse,
   YlpPagination,
   YlpPaiweiPreviewResponse,
   YlpPaymentChannelListResponse,
@@ -562,6 +563,13 @@ export async function deleteYlpPaymentChannel(channelId: number) {
     credentials: "include",
   });
   return parseJson<{ status?: string; message?: string }>(response);
+}
+
+export async function fetchYlpOrderLogs(orderId: number) {
+  const response = await apiFetch(`/api/board_router/orders/${orderId}/logs`, {
+    credentials: "include",
+  });
+  return parseJson<YlpOrderLogResponse>(response);
 }
 
 export async function previewYlpPaiweiImages(orderIds: number[]) {

@@ -241,6 +241,23 @@ def update_order_customer_route(order_id):
     return jsonify(payload), status_code
 
 
+@board_router_bp.route("/orders/<int:order_id>/logs", methods=["GET"])
+def list_order_logs_route(order_id):
+    """订单改动记录。权限和看订单详情一致：后台有法会读权限，
+    公开访客只能看自己已验证手机号名下的订单。"""
+    from models.fahui import FahuiOrder
+    from .order_log import list_order_logs
+    from .services import user_can_view_order
+
+    order = FahuiOrder.query.get(order_id)
+    if order is None:
+        return jsonify({"status": "error", "message": "订单不存在"}), 404
+    if not user_can_view_order(order):
+        return jsonify({"status": "error", "message": "未登录或没有权限查看此订单"}), 403
+
+    return jsonify({"status": "success", "data": list_order_logs(order_id)}), 200
+
+
 @board_router_bp.route("/orders/<int:order_id>/status", methods=["POST"])
 @permission_required_any("account_edit")
 def update_order_status_route(order_id):

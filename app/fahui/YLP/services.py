@@ -504,6 +504,17 @@ def create_order_shell(data: dict) -> tuple[dict, int]:
         status=data.get("status"),
     )
     db.session.add(order)
+    db.session.flush()
+
+    from .order_log import log_order_change
+
+    log_order_change(
+        order.id,
+        target="order",
+        action="create",
+        summary=f"创建订单：功德主 {order.customer_name or order.name or '（空）'}，电话 {order.phone or '（空）'}，版本 {order.version}",
+        new=order.version,
+    )
     db.session.commit()
 
     try:

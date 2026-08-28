@@ -224,6 +224,20 @@ def _refresh_order_status(order: FahuiOrder | None) -> None:
     order.status = normalize_fahui_payment_status(latest.status)
 
 
+PAYMENT_STATUS_LABELS = {"approved": "已批准", "pending": "待审核", "rejected": "已拒绝/撤回"}
+
+
+def _payment_orders(payment: FahuiPayment):
+    """一条付款可能直接挂在订单上，也可能是合并付款（多张订单共用）。"""
+    orders = []
+    seen = set()
+    for order in [payment.order, *(getattr(payment, "grouped_orders", None) or [])]:
+        if order is not None and order.id not in seen:
+            seen.add(order.id)
+            orders.append(order)
+    return orders
+
+
 def set_payment_review_status(
     payment: FahuiPayment,
     *,
@@ -234,6 +248,26 @@ def set_payment_review_status(
     normalized_status = normalize_fahui_payment_status(status)
     if normalized_status not in {"approved", "pending", "rejected"}:
         raise ValueError("无效的状态")
+
+    # 法会订单的付款状态变化也写进订单日志（灯会没有这张日志表，跳过）
+    if payment.payment_type == PAYMENT_TYPE_YLP:
+        from app.fahui.YLP.order_log import log_order_change
+
+        previous = normalize_fahui_payment_status(payment.status)
+        for order in _payment_orders(payment):
+            log_order_change(
+                order.id,
+                target="payment",
+                action="update",
+                field="payment_status",
+                old=previous,
+                new=normalized_status,
+                summary=(
+                    f"付款 #{payment.id}（RM {_payment_amount(payment)}）"
+                    f"{PAYMENT_STATUS_LABELS.get(previous, previous)} → "
+                    f"{PAYMENT_STATUS_LABELS.get(normalized_status, normalized_status)}"
+                ),
+            )
 
     now = datetime.utcnow()
     payment.status = normalized_status

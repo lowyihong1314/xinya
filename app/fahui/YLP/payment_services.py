@@ -141,6 +141,16 @@ def create_payment_record(order_id: int):
         if upload:
             payment.document = save_payment_upload(order_id, upload)
 
+        from .order_log import log_order_change
+
+        log_order_change(
+            order_id,
+            target="payment",
+            action="create",
+            field="payment",
+            new=f"RM {total_price}",
+            summary=f"新增付款 #{payment.id}：RM {total_price}（{payment_mode or '未填方式'}），待审核",
+        )
         db.session.commit()
         return jsonify(
             {
@@ -242,6 +252,20 @@ def create_group_payment():
         if upload:
             payment.document = save_payment_upload(payment.id, upload)
 
+        from .order_log import log_order_change
+
+        for order in orders:
+            log_order_change(
+                order.id,
+                target="payment",
+                action="create",
+                field="payment",
+                new=f"RM {total}",
+                summary=(
+                    f"新增合并付款 #{payment.id}：RM {total}，"
+                    f"覆盖订单 {'、'.join('#' + str(o.id) for o in orders)}，待审核"
+                ),
+            )
         db.session.commit()
         return jsonify(
             {
