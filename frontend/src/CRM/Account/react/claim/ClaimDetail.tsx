@@ -551,7 +551,13 @@ export function ClaimDetail({
 
             <Field label="用途说明">
               {editingClaim ? (
-                <textarea rows={3} style={textareaStyle} value={editDraft.purpose} onChange={(e) => setEditDraft((p) => ({ ...p, purpose: e.target.value }))} />
+                <textarea
+                  rows={3}
+                  // 手机上字号低于 16px，iOS Safari 聚焦时会自动放大整页
+                  style={isMobile ? { ...textareaStyle, fontSize: "16px" } : textareaStyle}
+                  value={editDraft.purpose}
+                  onChange={(e) => setEditDraft((p) => ({ ...p, purpose: e.target.value }))}
+                />
               ) : (
                 <FieldValue value={displayPurpose(claim.purpose) || "-"} multiline />
               )}

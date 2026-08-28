@@ -221,7 +221,8 @@ export function ClaimFormSections({
               value={state.purpose}
               placeholder="例如：商家、收据号、AI 读单说明，或这笔支出的背景"
               onChange={(event) => patch({ purpose: event.target.value })}
-              style={textareaStyle}
+              // 手机上字号低于 16px，iOS Safari 聚焦时会自动放大整页
+              style={isMobile ? { ...textareaStyle, fontSize: "16px", minHeight: "96px" } : textareaStyle}
             />
           </label>
         </div>
