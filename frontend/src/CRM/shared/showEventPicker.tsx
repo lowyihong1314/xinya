@@ -218,9 +218,15 @@ function EventPickerModal({
             <div style={eyebrowStyle}>Event Picker</div>
             <h3 style={titleStyle}>选择活动</h3>
           </div>
-          <button type="button" style={secondaryButtonStyle} onClick={() => onClose(null)}>
-            关闭
-          </button>
+          {/* 列表长的时候选完不用再滚到底，顶部也放一个「确认选择」 */}
+          <div style={headerActionsStyle}>
+            <button type="button" style={primaryButtonStyle} disabled={!selected} onClick={() => onClose(selected)}>
+              确认选择
+            </button>
+            <button type="button" style={secondaryButtonStyle} onClick={() => onClose(null)}>
+              关闭
+            </button>
+          </div>
         </div>
 
         <input
@@ -362,6 +368,12 @@ const modalStyle = {
   boxShadow: "0 12px 28px rgba(15, 23, 42, 0.18)",
 };
 
+const headerActionsStyle = {
+  display: "flex",
+  alignItems: "center",
+  gap: "8px",
+  flexWrap: "wrap" as const,
+};
 const headerStyle = {
   display: "flex",
   justifyContent: "space-between",

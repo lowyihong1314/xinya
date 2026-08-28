@@ -513,7 +513,7 @@ export function ClaimBatchAiPage({ onBack, onSubmitted }: ClaimBatchAiPageProps)
               </span>
             </div>
 
-            {/* 和「新建申请」同一套输入布局：附件与签名 / 金额与关联 / 申请信息 / 用途与明细 / 商家信息 */}
+            {/* 和「新建申请」同一套输入布局：关联活动 / 附件与签名 / 申请信息 / 用途与明细 / 商家信息 / 金额 */}
             <ClaimFormSections
               isMobile={isMobile}
               state={infoItem.draft}

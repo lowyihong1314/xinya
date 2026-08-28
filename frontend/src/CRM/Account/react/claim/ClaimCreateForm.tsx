@@ -24,7 +24,8 @@ import { lineItemsTotal, type LineItemDraft } from "./lineItems";
 import type { AccountUser } from "./types";
 
 // 报销申请的唯一输入布局：新建申请、活动预算弹窗、批量申请「信息」弹窗全部用这一份。
-// 版块顺序：① 附件与签名 → ② 金额与关联 → ③ 申请信息 → ④ 用途说明 + 明细 → ⑤ 商家信息
+// 版块顺序：① 关联活动 → ② 附件与签名 → ③ 申请信息 → ④ 用途说明 + 明细 → ⑤ 商家信息 →（末尾）只读的申请金额
+// 金额由明细自动合计、不给填，所以不占编号，放最后收尾。
 export type CreateState = {
   applicant_name: string;
   request_date: string;
@@ -90,8 +91,34 @@ export function ClaimFormSections({
 
   return (
     <div style={{ display: "grid", gap: "12px" }}>
-      {/* ① 附件与签名 */}
-      <Section title="① 附件与签名">
+      {/* ① 关联活动：先选活动，后面的预算行才有着落 */}
+      <Section title="① 关联活动">
+        <div style={{ display: "grid", gap: "10px" }}>
+          <div className="claim-create-form__event-row" style={eventRowStyle}>
+            {lockedEvent || !onPickEvent ? null : (
+              <button type="button" style={buttonSecondaryStyle} onClick={onPickEvent}>
+                {state.selectedEvent ? "重新选择活动" : "选择活动"}
+              </button>
+            )}
+            <span style={chipStyle}>
+              {state.selectedEvent
+                ? `${state.selectedEvent.event_name || "未命名活动"} #${state.selectedEvent.id}`
+                : "未关联活动"}
+            </span>
+          </div>
+          {budgetLine ? (
+            <div style={fieldStyle}>
+              <span style={fieldLabelStyle}>关联预算行</span>
+              <span style={{ ...chipStyle, background: "var(--x-color-accent-tint)", color: "var(--x-color-accent-strong)" }}>
+                预算 · {budgetLine.category || `#${budgetLine.id}`}
+              </span>
+            </div>
+          ) : null}
+        </div>
+      </Section>
+
+      {/* ② 附件与签名 */}
+      <Section title="② 附件与签名">
         {attachmentSlot}
         {ai ? (
           <AiFillPanel
@@ -123,39 +150,6 @@ export function ClaimFormSections({
             </button>
           </div>
         ) : null}
-      </Section>
-
-      {/* ② 金额与关联 */}
-      <Section title="② 金额与关联">
-        <div style={formGridStyle(isMobile)}>
-          <Field label="金额 (RM)">
-            <div style={amountBoxStyle}>
-              <strong style={amountValueStyle}>RM {total.toFixed(2)}</strong>
-              <span style={amountHintStyle}>由 ④ 用途明细自动合计</span>
-            </div>
-          </Field>
-          <Field label="关联活动">
-            <div className="claim-create-form__event-row" style={{ display: "flex", gap: "8px", flexWrap: "wrap", alignItems: "center" }}>
-              {lockedEvent || !onPickEvent ? null : (
-                <button type="button" style={buttonSecondaryStyle} onClick={onPickEvent}>
-                  选择活动
-                </button>
-              )}
-              <span style={chipStyle}>
-                {state.selectedEvent
-                  ? `${state.selectedEvent.event_name || "未命名活动"} #${state.selectedEvent.id}`
-                  : "未关联活动"}
-              </span>
-            </div>
-          </Field>
-          {budgetLine ? (
-            <Field label="关联预算行" wide>
-              <span style={{ ...chipStyle, background: "var(--x-color-accent-tint)", color: "var(--x-color-accent-strong)" }}>
-                预算 · {budgetLine.category || `#${budgetLine.id}`}
-              </span>
-            </Field>
-          ) : null}
-        </div>
       </Section>
 
       {/* ③ 申请信息 */}
@@ -254,6 +248,17 @@ export function ClaimFormSections({
           </Field>
         </div>
       </Section>
+
+      {/* 金额：只读，由明细自动合计，所以不占编号，直接放最后收尾 */}
+      <section style={sectionCardStyle}>
+        <div style={totalBarStyle}>
+          <span style={totalBarLabelStyle}>
+            申请金额
+            <span style={amountHintStyle}>由 ④ 用途明细自动合计</span>
+          </span>
+          <strong style={totalBarValueStyle}>RM {total.toFixed(2)}</strong>
+        </div>
+      </section>
     </div>
   );
 }
@@ -311,6 +316,33 @@ export function ClaimCreateForm({
   );
 }
 
+const eventRowStyle: CSSProperties = {
+  display: "flex",
+  gap: "8px",
+  flexWrap: "wrap",
+  alignItems: "center",
+};
+const totalBarStyle: CSSProperties = {
+  display: "flex",
+  alignItems: "center",
+  justifyContent: "space-between",
+  gap: "12px",
+  flexWrap: "wrap",
+};
+const totalBarLabelStyle: CSSProperties = {
+  display: "flex",
+  flexDirection: "column",
+  gap: "2px",
+  fontSize: "13px",
+  fontWeight: 800,
+  color: "var(--x-color-ink)",
+};
+const totalBarValueStyle: CSSProperties = {
+  fontSize: "22px",
+  fontWeight: 900,
+  color: "var(--x-color-ink)",
+};
+
 function Section({ title, children }: { title: string; children: ReactNode }) {
   return (
     <section style={sectionCardStyle}>
@@ -340,14 +372,4 @@ function Field({ label, wide, children }: { label: string; wide?: boolean; child
   );
 }
 
-const amountBoxStyle: CSSProperties = {
-  display: "flex",
-  flexDirection: "column",
-  gap: "2px",
-  padding: "8px 12px",
-  borderRadius: "9px",
-  border: "1px solid var(--x-color-line)",
-  background: "var(--x-color-panel-alt)",
-};
-const amountValueStyle: CSSProperties = { fontSize: "18px", fontWeight: 800, color: "var(--x-color-ink)" };
 const amountHintStyle: CSSProperties = { fontSize: "11px", color: "var(--x-color-ink-muted)" };
