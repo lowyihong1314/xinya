@@ -374,6 +374,29 @@ export function EventDetailPage() {
           </div>
         </section>
 
+        {detail.fahui_registration ? (
+          <section id="event-detail-fahui-cta" style={fahuiCtaStyle(isMobile)}>
+            <div style={fahuiCtaTextStyle}>
+              <div style={fahuiCtaEyebrowStyle}>{detail.fahui_registration.label}</div>
+              <div style={fahuiCtaTitleStyle}>
+                {detail.fahui_registration.is_open ? "现在可以线上登记牌位" : "线上登记暂未开放"}
+              </div>
+              <div style={fahuiCtaHintStyle}>
+                {detail.fahui_registration.is_open
+                  ? "填写功德主与牌位资料，提交后可上传付款凭证、查看收据。"
+                  : "开放时间以佛学会公告为准；点进去可以看到今年的开放日期。"}
+              </div>
+            </div>
+            <button
+              type="button"
+              style={fahuiCtaButtonStyle(isMobile)}
+              onClick={() => navigate(detail.fahui_registration!.path)}
+            >
+              {detail.fahui_registration.is_open ? "前往登记牌位" : "查看登记页"}
+            </button>
+          </section>
+        ) : null}
+
         <section id="event-detail-toolbar" style={toolbarStyle(isMobile, isNarrowWidth)}>
           <div id="event-detail-toolbar-nav" style={toolbarGroupStyle(isMobile)}>
             <TabButton
@@ -1169,6 +1192,46 @@ const eventDetailToolbarInteractionStyle = `
   outline-offset: -2px;
 }
 `;
+
+function fahuiCtaStyle(isMobile: boolean): CSSProperties {
+  return {
+    display: "flex",
+    flexDirection: isMobile ? "column" : "row",
+    alignItems: isMobile ? "stretch" : "center",
+    justifyContent: "space-between",
+    gap: "14px",
+    margin: "14px 0 0",
+    padding: isMobile ? "16px" : "18px 22px",
+    borderRadius: "16px",
+    background: "var(--x-color-accent-soft)",
+    border: "1px solid var(--x-color-accent-border)",
+  };
+}
+
+const fahuiCtaTextStyle: CSSProperties = { display: "flex", flexDirection: "column", gap: "4px", minWidth: 0 };
+const fahuiCtaEyebrowStyle: CSSProperties = {
+  fontSize: "12px",
+  fontWeight: 800,
+  letterSpacing: "0.08em",
+  color: "var(--x-color-accent-strong)",
+};
+const fahuiCtaTitleStyle: CSSProperties = { fontSize: "17px", fontWeight: 900, color: "var(--x-color-ink)" };
+const fahuiCtaHintStyle: CSSProperties = { fontSize: "13px", color: "var(--x-color-ink-muted)" };
+
+function fahuiCtaButtonStyle(isMobile: boolean): CSSProperties {
+  return {
+    flexShrink: 0,
+    width: isMobile ? "100%" : "auto",
+    padding: "12px 24px",
+    borderRadius: "999px",
+    border: "none",
+    background: "var(--x-color-accent)",
+    color: "#fff",
+    fontSize: "14px",
+    fontWeight: 800,
+    cursor: "pointer",
+  };
+}
 
 function contentWrapStyle(_isMobile: boolean, _view: EventDetailView): CSSProperties {
   // 内容区铺满左右，无 padding / margin；书签 Tab 底部紧贴此面板

@@ -25,7 +25,57 @@ def get_event(event_id):
     if not current_user.is_authenticated:
         data["event_flows"] = [f for f in (data.get("event_flows") or []) if not f.get("login_only")]
     data["login"] = current_user.is_authenticated
+    data["fahui_registration"] = _fahui_registration_for(event)
     return jsonify({"status": "success", "data": data})
+
+
+# 法会工作区 → 公开登记页
+_FAHUI_REGISTRATION_ROUTES = {"ylp": "/ylp-registration", "lamp": "/lamp-registration"}
+_FAHUI_REGISTRATION_LABELS = {"ylp": "盂兰盆法会 · 牌位登记", "lamp": "点灯法会 · 供灯登记"}
+
+
+def _fahui_registration_for(event):
+    """活动绑定了某个法会版本时，给活动页一个「去登记」的入口。
+
+    绑定关系就是 CRM 法会工作区那条「绑定活动」（fahui_version_event），
+    收入也是靠它进活动预算的，这里顺带拿来在活动页挂报名入口。
+    """
+    from app.fahui.common import open_window
+    from models.fahui import FahuiVersionEvent
+
+    binding = (
+        FahuiVersionEvent.query.filter_by(event_id=event.id)
+        .order_by(FahuiVersionEvent.id.desc())
+        .first()
+    )
+    if not binding:
+        return None
+
+    workspace = str(binding.workspace or "").strip() or "ylp"
+    path = _FAHUI_REGISTRATION_ROUTES.get(workspace)
+    if not path:
+        return None
+
+    # 登记页永远只写当年，所以往年的活动（例：2025 那场绑的是 2025_YLP）不给入口，
+    # 免得访客从旧活动点进去、结果报了今年的名。
+    if workspace == "ylp":
+        from app.fahui.YLP.shared import active_order_version
+
+        if str(binding.version or "") != active_order_version():
+            return None
+
+    try:
+        is_open = open_window.is_open(workspace)
+    except Exception:  # noqa: BLE001
+        is_open = False
+
+    return {
+        "workspace": workspace,
+        "version": binding.version,
+        "path": path,
+        "label": _FAHUI_REGISTRATION_LABELS.get(workspace, "法会登记"),
+        "is_open": bool(is_open),
+    }
 
 
 @api_bp.get("/get_file_data/<int:file_id>")

@@ -79,7 +79,17 @@ export type AlbumFile = {
   is_public?: boolean;
 };
 
+/** 活动绑定了法会版本时，活动页顶部的登记入口 */
+export type EventFahuiRegistration = {
+  workspace: string;
+  version: string;
+  path: string;
+  label: string;
+  is_open: boolean;
+};
+
 export type EventDetailRecord = SharedEventRecord & {
+  fahui_registration?: EventFahuiRegistration | null;
   prev_event_id?: number | null;
   next_event_id?: number | null;
   login?: boolean;
