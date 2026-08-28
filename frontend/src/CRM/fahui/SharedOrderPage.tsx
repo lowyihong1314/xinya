@@ -5,7 +5,8 @@ import type { Socket } from "socket.io-client";
 
 import { downloadBlobOrShare } from "../../js/browserActions";
 import { useEnsureDesignTokens } from "../../theme/designTokens";
-import { downloadYlpReceiptImage, fetchYlpSharedOrder, previewYlpPaiwei } from "./api";
+import { downloadYlpReceiptImage, fetchYlpSharedOrder } from "./api";
+import { PaiweiPreviewGrid } from "./PaiweiPreview";
 import { getTemplate, summarizeItem, type PaiweiCode } from "./intake/paiwei";
 import { PAIWEI_TEMPLATES } from "./intake/paiwei";
 import { connectFahuiSocket, fahuiOrderRoom } from "./socket";
@@ -35,8 +36,7 @@ export function SharedOrderPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [refreshedAt, setRefreshedAt] = useState<string>("");
-  const [previewUrl, setPreviewUrl] = useState("");
-  const [previewLoading, setPreviewLoading] = useState(false);
+  const [previewOpen, setPreviewOpen] = useState(false);
   const [receiptLoading, setReceiptLoading] = useState(false);
   const socketRef = useRef<Socket | null>(null);
 
@@ -90,26 +90,6 @@ export function SharedOrderPage() {
     };
   }, [orderId, load]);
 
-  async function handlePreview() {
-    if (!orderId) {
-      return;
-    }
-    setPreviewLoading(true);
-    try {
-      const blob = await previewYlpPaiwei(orderId);
-      setPreviewUrl((current) => {
-        if (current) {
-          URL.revokeObjectURL(current);
-        }
-        return URL.createObjectURL(blob);
-      });
-    } catch (previewError) {
-      setError(previewError instanceof Error ? previewError.message : "预览牌位失败");
-    } finally {
-      setPreviewLoading(false);
-    }
-  }
-
   async function handleDownloadReceipt() {
     if (!orderId) {
       return;
@@ -125,14 +105,6 @@ export function SharedOrderPage() {
     }
   }
 
-  function closePreview() {
-    setPreviewUrl((current) => {
-      if (current) {
-        URL.revokeObjectURL(current);
-      }
-      return "";
-    });
-  }
 
   const status = statusLabel(order?.status);
   const items = order?.order_items || [];
@@ -192,13 +164,8 @@ export function SharedOrderPage() {
               )}
             </section>
 
-            <button
-              type="button"
-              style={{ ...styles.primaryButton, ...(previewLoading ? styles.buttonDisabled : {}) }}
-              disabled={previewLoading}
-              onClick={() => void handlePreview()}
-            >
-              {previewLoading ? "生成中…" : "预览牌位"}
+            <button type="button" style={styles.primaryButton} onClick={() => setPreviewOpen(true)}>
+              预览牌位
             </button>
             {status.tone === "ok" ? (
               <button
@@ -215,21 +182,20 @@ export function SharedOrderPage() {
         ) : null}
       </div>
 
-      {previewUrl ? (
-        <div style={styles.previewOverlay} onClick={closePreview}>
+      {previewOpen && orderId ? (
+        <div style={styles.previewOverlay} onClick={() => setPreviewOpen(false)}>
           <div style={styles.previewPanel} onClick={(event) => event.stopPropagation()}>
             <div style={styles.previewHead}>
               <span style={styles.cardTitle}>牌位预览</span>
               <div style={styles.previewActions}>
-                <a href={previewUrl} target="_blank" rel="noreferrer" style={styles.ghostButton}>
-                  新标签打开
-                </a>
-                <button type="button" style={styles.ghostButton} onClick={closePreview}>
+                <button type="button" style={styles.ghostButton} onClick={() => setPreviewOpen(false)}>
                   关闭
                 </button>
               </div>
             </div>
-            <iframe title="牌位预览" src={previewUrl} style={styles.previewFrame} />
+            <div style={styles.previewBody}>
+              <PaiweiPreviewGrid orderIds={[orderId]} showOrderId={false} />
+            </div>
           </div>
         </div>
       ) : null}
@@ -458,9 +424,8 @@ const styles: Record<string, CSSProperties> = {
     display: "flex",
     gap: "8px",
   },
-  previewFrame: {
-    flex: 1,
-    width: "100%",
-    border: "none",
+  previewBody: {
+    overflowY: "auto" as const,
+    padding: "4px",
   },
 };

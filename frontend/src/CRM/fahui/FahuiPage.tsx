@@ -37,7 +37,6 @@ import {
   getYlpPaiweiJobStatus,
   listYlpOrdersForExport,
   listYlpRelationOptions,
-  previewYlpPaiwei,
   startYlpPaiweiJob,
   withdrawPayment,
   removePayment,
@@ -48,6 +47,7 @@ import {
   updateYlpOrderStatus,
 } from "./api";
 import { showEventPicker } from "../shared/showEventPicker";
+import { PaiweiPreviewGrid } from "./PaiweiPreview";
 import { YlpDrawer } from "./YlpDrawer";
 import { YlpItemModal } from "./YlpItemModal";
 import { YlpPaymentModal } from "./YlpPaymentModal";
@@ -410,7 +410,7 @@ export function FahuiPage() {
   const [printPlusMenuOpen, setPrintPlusMenuOpen] = useState(false);
   const [ylpRowMenu, setYlpRowMenu] = useState<{ orderId: number; x: number; y: number } | null>(null);
   const [ylpRowBusy, setYlpRowBusy] = useState(false);
-  const [ylpRowPreview, setYlpRowPreview] = useState<{ orderId: number; url: string | null; error: string } | null>(null);
+  const [ylpRowPreview, setYlpRowPreview] = useState<{ orderId: number } | null>(null);
   // 列表点行弹出的摘要：只记订单号，内容与编辑能力全交给共享的 YlpOrderSummaryDrawer
   const [ylpRowDetailId, setYlpRowDetailId] = useState<number | null>(null);
   const [paiweiJob, setPaiweiJob] = useState<{ percent: number; status: "running" | "done" | "error"; message?: string } | null>(null);
@@ -422,8 +422,8 @@ export function FahuiPage() {
   const [statusSaving, setStatusSaving] = useState(false);
   const [itemModal, setItemModal] = useState<{ item: YlpOrderItem | null } | null>(null);
   const [paymentModalOpen, setPaymentModalOpen] = useState(false);
-  const [paiweiPreviewUrl, setPaiweiPreviewUrl] = useState<string | null>(null);
-  const [paiweiPreviewLoading, setPaiweiPreviewLoading] = useState(false);
+  // 预览牌位统一走 PaiweiPreviewGrid（后端裁好的单张图），这里只记要看哪张订单
+  const [paiweiPreviewOrderId, setPaiweiPreviewOrderId] = useState<number | null>(null);
   const [intakeDrawerOpen, setIntakeDrawerOpen] = useState(false);
   const [paymentConfigOpen, setPaymentConfigOpen] = useState(false);
   const [relationConfigOpen, setRelationConfigOpen] = useState(false);
@@ -652,12 +652,7 @@ export function FahuiPage() {
       email: order?.email || "",
     });
     setItemModal(null);
-    setPaiweiPreviewUrl((prev) => {
-      if (prev) {
-        URL.revokeObjectURL(prev);
-      }
-      return null;
-    });
+    setPaiweiPreviewOrderId(null);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [ylpDetail?.order?.id]);
 
@@ -902,33 +897,6 @@ export function FahuiPage() {
     }
   }
 
-  async function handlePreviewPaiwei(orderId: number) {
-    setPaiweiPreviewLoading(true);
-    try {
-      const blob = await previewYlpPaiwei(orderId);
-      const url = URL.createObjectURL(blob);
-      setPaiweiPreviewUrl((prev) => {
-        if (prev) {
-          URL.revokeObjectURL(prev);
-        }
-        return url;
-      });
-    } catch (previewError) {
-      show_alert("error", previewError instanceof Error ? previewError.message : "预览牌位失败");
-    } finally {
-      setPaiweiPreviewLoading(false);
-    }
-  }
-
-  function closePaiweiPreview() {
-    setPaiweiPreviewUrl((prev) => {
-      if (prev) {
-        URL.revokeObjectURL(prev);
-      }
-      return null;
-    });
-  }
-
   async function handleDownloadQuotation(orderId: number) {
     const filename = `ylp-order-${orderId}-quotation.pdf`;
     try {
@@ -1107,6 +1075,10 @@ export function FahuiPage() {
   }
 
   // 右侧那一栏同一时间只放一块内容：填写页 / 牌位预览 / 订单摘要。
+  function closePaiweiPreview() {
+    setPaiweiPreviewOrderId(null);
+  }
+
   function closeYlpRowPanels() {
     setIntakeDrawerOpen(false);
     setYlpRowDetailId(null);
@@ -1132,40 +1104,8 @@ export function FahuiPage() {
   }
 
   // 列表行的「预览」＝订单详情那颗「预览牌位」，只是渲染进右侧抽屉而不是弹窗。
-  async function handleRowPreviewPaiwei(orderId: number) {
-    closeYlpRowPanels();
-    setYlpRowPreview((prev) => {
-      if (prev?.url) {
-        URL.revokeObjectURL(prev.url);
-      }
-      return { orderId, url: null, error: "" };
-    });
-
-    try {
-      const blob = await previewYlpPaiwei(orderId);
-      const url = URL.createObjectURL(blob);
-      setYlpRowPreview((prev) => {
-        // 生成期间抽屉被关掉或换了订单，这份结果就直接丢弃。
-        if (!prev || prev.orderId !== orderId) {
-          URL.revokeObjectURL(url);
-          return prev;
-        }
-        return { orderId, url, error: "" };
-      });
-    } catch (previewError) {
-      const message = previewError instanceof Error ? previewError.message : "预览牌位失败";
-      show_alert("error", message);
-      setYlpRowPreview((prev) => (prev && prev.orderId === orderId ? { ...prev, error: message } : prev));
-    }
-  }
-
   function closeYlpRowPreview() {
-    setYlpRowPreview((prev) => {
-      if (prev?.url) {
-        URL.revokeObjectURL(prev.url);
-      }
-      return null;
-    });
+    setYlpRowPreview(null);
   }
 
   async function handleRowConfirmOrder(orderId: number) {
@@ -2111,11 +2051,10 @@ export function FahuiPage() {
 
                 <button
                   type="button"
-                  style={{ ...styles.primaryAction, ...(paiweiPreviewLoading ? styles.pageButtonDisabled : null) }}
-                  disabled={paiweiPreviewLoading}
-                  onClick={() => void handlePreviewPaiwei(ylpDetail.orderId)}
+                  style={styles.primaryAction}
+                  onClick={() => setPaiweiPreviewOrderId(ylpDetail.orderId)}
                 >
-                  {paiweiPreviewLoading ? "生成中…" : "预览牌位"}
+                  预览牌位
                 </button>
 
                 <button
@@ -2482,21 +2421,20 @@ export function FahuiPage() {
           />
         ) : null}
 
-        {paiweiPreviewUrl ? (
+        {paiweiPreviewOrderId ? (
           <div style={styles.itemModalOverlay} onClick={closePaiweiPreview}>
             <div style={styles.pdfModalContent} onClick={(event) => event.stopPropagation()}>
               <div style={styles.addItemHeader}>
                 <span style={styles.detailSectionTitle}>牌位预览</span>
                 <div style={styles.itemActionCell}>
-                  <a href={paiweiPreviewUrl} target="_blank" rel="noreferrer" style={styles.itemEditButton}>
-                    新标签打开
-                  </a>
                   <button type="button" style={styles.addItemCancel} onClick={closePaiweiPreview}>
                     关闭
                   </button>
                 </div>
               </div>
-              <iframe title="牌位预览" src={paiweiPreviewUrl} style={styles.pdfFrame} />
+              <div style={styles.paiweiPreviewBody}>
+                <PaiweiPreviewGrid orderIds={[paiweiPreviewOrderId]} showOrderId={false} />
+              </div>
             </div>
           </div>
         ) : null}
@@ -2599,28 +2537,12 @@ export function FahuiPage() {
             title={`订单 #${ylpRowPreview.orderId} · 牌位打印预览`}
             hint="与订单详情的「预览牌位」是同一份打印结果"
             actions={
-              <>
-                {ylpRowPreview.url ? (
-                  <a href={ylpRowPreview.url} target="_blank" rel="noreferrer" style={styles.itemEditButton}>
-                    新标签打开
-                  </a>
-                ) : null}
-                <button type="button" style={styles.addItemCancel} onClick={closeYlpRowPreview}>
-                  关闭
-                </button>
-              </>
+              <button type="button" style={styles.addItemCancel} onClick={closeYlpRowPreview}>
+                关闭
+              </button>
             }
           >
-            {ylpRowPreview.url ? (
-              <iframe
-                key={ylpRowPreview.url}
-                title={`订单 ${ylpRowPreview.orderId} 牌位预览`}
-                src={ylpRowPreview.url}
-                style={styles.previewFrame(navbarHeight)}
-              />
-            ) : (
-              <section style={styles.stateCard}>{ylpRowPreview.error || "正在生成牌位预览…"}</section>
-            )}
+            <PaiweiPreviewGrid orderIds={[ylpRowPreview.orderId]} minTileWidth={110} showOrderId={false} />
           </YlpDrawer>
         ) : null}
       </div>
@@ -2766,7 +2688,8 @@ export function FahuiPage() {
           style={styles.rowMenuItem}
           onClick={() => {
             closeMenu();
-            void handleRowPreviewPaiwei(order.id);
+            closeYlpRowPanels();
+            setYlpRowPreview({ orderId: order.id });
           }}
         >
           预览
@@ -3533,12 +3456,9 @@ const styles = {
     background: "var(--x-color-panel)",
     boxShadow: "0 24px 60px var(--x-color-shadow)",
   },
-  pdfFrame: {
-    width: "100%",
-    height: "100%",
-    border: "1px solid var(--x-color-line-soft)",
-    borderRadius: "8px",
-    background: "var(--x-color-panel-alt)",
+  paiweiPreviewBody: {
+    overflowY: "auto" as const,
+    padding: "4px",
   },
   workspaceBody: (isMobile: boolean) => ({
     display: "flex",
@@ -3856,13 +3776,6 @@ const styles = {
     cursor: "not-allowed",
   },
   // 抽屉容器的行高是 auto，height:100% 会塌成 0，所以按视窗高度减掉导航条和抽屉自身的边距给个实数。
-  previewFrame: (navbarHeight: number) => ({
-    width: "100%",
-    height: `calc(100vh - ${navbarHeight + 130}px)`,
-    border: "1px solid var(--x-color-line-soft)",
-    borderRadius: "10px",
-    background: "var(--x-color-panel-alt)",
-  }),
   printMenuWrap: { position: "relative" as const },
   printMenu: {
     position: "absolute" as const,

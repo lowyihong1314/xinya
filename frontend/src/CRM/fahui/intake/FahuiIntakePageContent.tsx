@@ -21,15 +21,14 @@ import {
   downloadYlpReceiptImage,
   listYlpPaymentChannels,
   listYlpRelationOptions,
-  previewYlpPaiweiImages,
   updateYlpOrderCustomer,
 } from "../api";
 import { FahuiOpenGate } from "../FahuiOpenGate";
+import { PaiweiPreviewGrid } from "../PaiweiPreview";
 import type {
   YlpOrderDetail,
   YlpOrderItem,
   YlpOrderSummary,
-  YlpPaiweiTablet,
   YlpPaymentChannel,
   YlpRelationOption,
 } from "../types";
@@ -43,7 +42,6 @@ import {
   getDraftQuantity,
   getDraftTotalPrice,
   getTemplate,
-  paiweiTitleForCode,
   normalizePhoneMY,
   validateDraft,
   type OrderFormState,
@@ -212,11 +210,6 @@ function FahuiIntakePageInner() {
   const [payChannelId, setPayChannelId] = useState<number | null>(null);
   const [payProof, setPayProof] = useState<File | null>(null);
   const [paySubmitting, setPaySubmitting] = useState(false);
-
-  // 预览牌位（全部订单都已付款 / 审核中时才开放）
-  const [previewTablets, setPreviewTablets] = useState<YlpPaiweiTablet[]>([]);
-  const [previewLoading, setPreviewLoading] = useState(false);
-  const [previewTruncated, setPreviewTruncated] = useState(false);
 
   const [receiptLoadingId, setReceiptLoadingId] = useState<number | null>(null);
 
@@ -523,24 +516,11 @@ function FahuiIntakePageInner() {
     }
   }
 
-  async function openPreviewStep() {
+  function openPreviewStep() {
     setError("");
     setMessage("");
-    setPreviewTablets([]);
-    setPreviewTruncated(false);
-    setPreviewLoading(true);
     setStep("preview");
     scrollPageTop();
-    try {
-      // 后端把牌位 PDF 逐页转成 JPEG 回来（一次请求拿全部页）。
-      const res = await previewYlpPaiweiImages(currentYearEntries.map((entry) => entry.summary.id));
-      setPreviewTablets(res.data?.tablets || []);
-      setPreviewTruncated(Boolean(res.data?.truncated));
-    } catch (nextError) {
-      setError(consumeAccessError(nextError));
-    } finally {
-      setPreviewLoading(false);
-    }
   }
 
   async function openPayStep() {
@@ -743,7 +723,7 @@ function FahuiIntakePageInner() {
                 + 全新填写一张今年订单
               </button>
               {canPreviewPaiwei ? (
-                <button type="button" style={styles.previewButton} onClick={() => void openPreviewStep()}>
+                <button type="button" style={styles.previewButton} onClick={openPreviewStep}>
                   预览牌位
                 </button>
               ) : null}
@@ -1051,37 +1031,7 @@ function FahuiIntakePageInner() {
               </p>
             </div>
 
-            {previewLoading ? (
-              <div style={styles.card}>
-                <p style={styles.emptyHint}>正在生成预览图…</p>
-              </div>
-            ) : previewTablets.length ? (
-              <div style={styles.stack}>
-                <div style={styles.previewGrid}>
-                  {previewTablets.map((tablet, index) => (
-                    <div key={`${tablet.order_id}-${tablet.item_id ?? index}`} style={styles.previewCard}>
-                      <img
-                        src={tablet.image}
-                        alt={`${paiweiTitleForCode(tablet.code)}（订单 ${tablet.order_id}）`}
-                        style={styles.previewImage}
-                      />
-                      <span style={styles.previewCaption}>
-                        {paiweiTitleForCode(tablet.code)} · #{tablet.order_id}
-                      </span>
-                    </div>
-                  ))}
-                </div>
-                {previewTruncated ? (
-                  <div style={styles.card}>
-                    <p style={styles.emptyHint}>牌位较多，这里只显示前 {previewTablets.length} 张。</p>
-                  </div>
-                ) : null}
-              </div>
-            ) : (
-              <div style={styles.card}>
-                <p style={styles.emptyHint}>没有可预览的牌位。</p>
-              </div>
-            )}
+            <PaiweiPreviewGrid orderIds={currentYearEntries.map((entry) => entry.summary.id)} />
 
             <button type="button" style={styles.ghostButton} onClick={() => setStep("history")}>
               ← 返回
@@ -1252,33 +1202,6 @@ const styles: Record<string, any> = {
     borderRadius: "var(--x-radius-sm)",
     cursor: "pointer",
     marginTop: "4px",
-  },
-  previewGrid: {
-    display: "grid",
-    gridTemplateColumns: "repeat(auto-fill, minmax(140px, 1fr))",
-    gap: "10px",
-  },
-  previewCard: {
-    display: "flex",
-    flexDirection: "column",
-    gap: "6px",
-    padding: "8px",
-    borderRadius: "var(--x-radius-md)",
-    background: "var(--x-color-panel)",
-    border: "1px solid var(--x-color-line)",
-  },
-  previewCaption: {
-    fontSize: "11px",
-    fontWeight: 600,
-    textAlign: "center",
-    color: "var(--x-color-ink-muted)",
-  },
-  previewImage: {
-    width: "100%",
-    height: "auto",
-    display: "block",
-    borderRadius: "var(--x-radius-sm)",
-    background: "#fff",
   },
   lockedChip: {
     padding: "8px 12px",

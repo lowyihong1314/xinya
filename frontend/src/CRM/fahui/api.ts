@@ -491,18 +491,8 @@ export async function fetchYlpPayments(orderId: number) {
   return payload.data || [];
 }
 
-export async function previewYlpPaiwei(orderId: number) {
-  const response = await apiFetch(`/api/print_paiwei/orders/${orderId}/preview`, {
-    credentials: "include",
-  });
-
-  if (!response.ok) {
-    const payload = (await response.json().catch(() => ({}))) as { message?: string; error?: string };
-    throw new Error(payload.error || payload.message || "预览牌位失败");
-  }
-
-  return response.blob();
-}
+// 注：整份 PDF 的单订单预览接口（GET /api/print_paiwei/orders/<id>/preview）后端仍在，
+// 但前端已全部改用 PaiweiPreviewGrid（逐张裁切图），这里不再保留封装。
 
 export async function downloadYlpPaiwei(orderId: number) {
   const response = await apiFetch("/api/print_paiwei/preview/by-orders", {
