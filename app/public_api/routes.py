@@ -16,6 +16,10 @@ def ping():
 @api_bp.get("/get_event/<int:event_id>")
 def get_event(event_id):
     event = EventData.query.get_or_404(event_id)
+    # 未公开的活动对访客等于不存在（回 404 而不是 403：别让链接本身泄露有这么个活动）
+    if not event.is_public and not current_user.is_authenticated:
+        return jsonify({"status": "error", "message": "活动不存在"}), 404
+
     data = event.to_dict_full()
     # 公开接口：非登陆用户隐藏「仅登陆可见」的环节。
     if not current_user.is_authenticated:

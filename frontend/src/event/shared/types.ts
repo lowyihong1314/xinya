@@ -75,6 +75,8 @@ export type AlbumFile = {
   created_at?: string;
   user_display_name?: string;
   [key: string]: unknown;
+  /** 是否对外公开：false 时未登录访客看不到这个活动 */
+  is_public?: boolean;
 };
 
 export type EventDetailRecord = SharedEventRecord & {

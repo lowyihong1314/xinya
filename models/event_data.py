@@ -75,6 +75,9 @@ class EventData(db.Model):
     type = db.Column(db.String(100), nullable=True)
     event_code = db.Column(db.String(100), nullable=True)
     album = db.Column(db.Boolean, nullable=True)
+    # 是否对外公开：未登录访客只看得到公开的活动。默认公开 —— 这套系统的活动本来就是
+    # 全部对外的，加这个开关是为了偶尔藏起内部筹备中的活动，而不是反过来。
+    is_public = db.Column(db.Boolean, nullable=False, default=True, server_default="1")
 
     event_image_id = db.Column(
         db.Integer,
@@ -140,6 +143,7 @@ class EventData(db.Model):
             "type": self.type,
             "event_code": self.event_code,
             "album": self.album,
+            "is_public": bool(self.is_public),
             "event_image": self.event_image.to_dict() if self.event_image else None,
             "event_files": [file.to_dict() for file in self.event_files[:12]],
 

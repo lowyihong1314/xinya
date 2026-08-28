@@ -393,6 +393,11 @@ export function EventTableView(props: {
                     <LocationFact event={event} editable={canEditEvent} onUpdate={props.onUpdateEvent} />
                     <EditableFact label="对象" value={event.target || ""} editable={canEditEvent} onSave={(v) => props.onUpdateEvent({ target: v })} />
                     <EditableFact label="活动说明" value={event.purpose || ""} kind="textarea" editable={canEditEvent} onSave={(v) => props.onUpdateEvent({ purpose: v })} />
+                    <PublicFact
+                      isPublic={event.is_public !== false}
+                      editable={canEditEvent}
+                      onSave={(next) => props.onUpdateEvent({ is_public: next })}
+                    />
                   </div>
                   <OrganizingUnitsSection
                     event={event}
@@ -1091,6 +1096,31 @@ function LocationFact({
   );
 }
 
+/** 是否公开：关掉之后未登录访客在首页 / 月历 / 活动详情都看不到这个活动。 */
+function PublicFact({
+  isPublic,
+  editable,
+  onSave,
+}: {
+  isPublic: boolean;
+  editable: boolean;
+  onSave: (next: boolean) => void;
+}) {
+  return (
+    <div style={factStyle}>
+      <span style={factLabelStyle}>是否公开</span>
+      {editable ? (
+        <label style={publicToggleStyle}>
+          <input type="checkbox" checked={isPublic} onChange={(event) => onSave(event.target.checked)} />
+          <span style={factValueStyle}>{isPublic ? "公开（访客可见）" : "不公开（仅登录可见）"}</span>
+        </label>
+      ) : (
+        <div style={factValueStyle}>{isPublic ? "公开（访客可见）" : "不公开（仅登录可见）"}</div>
+      )}
+    </div>
+  );
+}
+
 function EditableFact({
   label,
   value,
@@ -1288,6 +1318,12 @@ function detailGridStyle(isMobile: boolean): CSSProperties {
 }
 const factStyle: CSSProperties = { padding: "10px 12px", borderRadius: "8px", background: "var(--x-color-panel-alt)", border: "1px solid var(--x-color-line-soft)", display: "grid", gap: "3px" };
 const factHeadStyle: CSSProperties = { display: "flex", alignItems: "center", justifyContent: "space-between", gap: "8px" };
+const publicToggleStyle = {
+  display: "flex",
+  alignItems: "center",
+  gap: "8px",
+  cursor: "pointer",
+};
 const factLabelStyle: CSSProperties = { fontSize: "10.5px", letterSpacing: "0.06em", textTransform: "uppercase", color: "var(--x-color-ink-muted)" };
 const unitsSectionStyle: CSSProperties = { marginTop: "14px", display: "flex", flexDirection: "column", gap: "8px", padding: "12px", borderRadius: "10px", border: "1px solid var(--x-color-line-soft)", background: "var(--x-color-panel-alt)" };
 const unitsHeadStyle: CSSProperties = { display: "flex", alignItems: "center", justifyContent: "space-between", gap: "8px" };

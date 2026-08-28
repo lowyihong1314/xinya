@@ -136,6 +136,19 @@ def _upsert_event_check_in(event, user, check_in_date, check_in_time, valid_user
     return record
 
 
+def viewer_sees_hidden_events() -> bool:
+    """未登录访客只看得到公开活动；登录用户（工作人员）连未公开的一起看，
+    否则筹备中的活动在后台也会凭空消失。"""
+    return bool(current_user and current_user.is_authenticated)
+
+
+def visible_events_query(query=None):
+    query = query if query is not None else EventData.query
+    if viewer_sees_hidden_events():
+        return query
+    return query.filter(EventData.is_public.is_(True))
+
+
 def month_events_response(year, month):
     if not year or not month or month < 1 or month > 12:
         return jsonify({"status": "error", "message": "Invalid year or month"}), 400
@@ -147,7 +160,8 @@ def month_events_response(year, month):
         month_end = datetime(year, month + 1, 1) - timedelta(seconds=1)
 
     events = (
-        EventData.query.filter(
+        visible_events_query()
+        .filter(
             or_(
                 and_(
                     EventData.end_datetime.is_(None),
@@ -178,7 +192,7 @@ def month_events_response(year, month):
 
 
 def all_event_sort_response():
-    events = EventData.query.order_by(EventData.datetime.desc()).all()
+    events = visible_events_query().order_by(EventData.datetime.desc()).all()
     return jsonify(
         {
             "status": "success",
@@ -360,7 +374,7 @@ def delete_event_check_in(check_in_id):
 
 def all_event_response(page_num, per_page, search_value):
     per_page = min(per_page, 100)
-    query = EventData.query
+    query = visible_events_query()
 
     if search_value:
         like_value = f"%{search_value}%"
@@ -790,6 +804,10 @@ def save_event(data):
 
         if "album" in data:
             event.album = str(data.get("album")).lower() in ["1", "true", "yes", "on"]
+
+        if "is_public" in data:
+            raw = data.get("is_public")
+            event.is_public = raw if isinstance(raw, bool) else str(raw).strip().lower() in ["1", "true", "yes", "on"]
 
         if "organizers_ids" in data:
             ids = data.get("organizers_ids") or []

@@ -55,6 +55,8 @@ export type EventRecord = {
   organizers_ids?: number[];
   organizing_units?: EventOrganizingUnit[];
   event_image?: EventImageRef | null;
+  /** 是否对外公开：false 时未登录访客在首页 / 月历 / 详情都看不到 */
+  is_public?: boolean;
 };
 
 export type EventMutationPayload = Partial<EventRecord> & {
