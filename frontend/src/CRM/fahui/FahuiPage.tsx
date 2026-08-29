@@ -367,8 +367,8 @@ const YLP_ORDER_COLUMNS: { key: YlpSortKey; label: string }[] = [
   { key: "customer", label: "功德主" },
   { key: "phone", label: "电话" },
   { key: "total", label: "总额 (RM)" },
-  { key: "maintainer", label: "维护人" },
-  { key: "created_at", label: "创建时间" },
+  // 维护人 / 创建时间不在列表里显示了：横向太挤，右侧抽屉要位置。
+  // 两者仍在订单摘要抽屉、订单详情页和导出 xlsx 里，后端也照旧支持这两个 sort key。
 ];
 
 export function FahuiPage() {
@@ -1925,8 +1925,6 @@ export function FahuiPage() {
                       <td style={styles.cellStrong}>{order.customer_name || order.name || "-"}</td>
                       <td style={styles.cellMono}>{order.phone || "-"}</td>
                       <td style={styles.cellMono}>{order.total_amount != null ? `RM ${order.total_amount}` : "-"}</td>
-                      <td>{order.maintainer_name || "-"}</td>
-                      <td style={styles.cellMono}>{order.created_at || "-"}</td>
                     </tr>
                   ))}
                 </tbody>
@@ -2708,26 +2706,26 @@ function rowMenuHeight(withCopyToCurrent: boolean): number {
 }
 
 const YLP_ORDER_TABLE_CSS = `
-.ylp-order-table { width: 100%; border-collapse: collapse; font-size: 13px; min-width: 772px; }
+.ylp-order-table { width: 100%; border-collapse: collapse; font-size: 13px; min-width: 520px; table-layout: auto; }
 .ylp-order-table thead th {
   position: sticky; top: 0; z-index: 1;
-  text-align: left; padding: 9px 12px;
-  font-size: 11px; font-weight: 700; letter-spacing: 0.06em; text-transform: uppercase;
+  text-align: left; padding: 8px 6px;
+  font-size: 11px; font-weight: 700; letter-spacing: 0.02em; text-transform: uppercase;
   color: var(--x-color-ink-muted); background: var(--x-color-canvas-alt);
   border-bottom: 1px solid var(--x-color-line); white-space: nowrap;
 }
-.ylp-order-table tbody td { padding: 10px 12px; border-bottom: 1px solid var(--x-color-line-soft); vertical-align: middle; color: var(--x-color-ink); }
+.ylp-order-table tbody td { padding: 9px 6px; border-bottom: 1px solid var(--x-color-line-soft); vertical-align: middle; color: var(--x-color-ink); }
 .ylp-order-table tbody tr.ylp-order-row { cursor: pointer; }
 .ylp-order-table tbody tr.ylp-order-row:hover td { background: var(--x-color-accent-tint); }
 .ylp-order-table tbody tr.ylp-order-row-active td { background: var(--x-color-accent-tint); }
 .ylp-order-table thead th.ylp-sortable { cursor: pointer; user-select: none; }
 .ylp-order-table thead th.ylp-sortable:hover { color: var(--x-color-accent-strong); background: var(--x-color-accent-tint); }
 .ylp-order-table thead th .ylp-sort-arrow { color: var(--x-color-accent-strong); }
-.ylp-order-table .ylp-check-col { width: 40px; text-align: center; cursor: default; }
+.ylp-order-table .ylp-check-col { width: 30px; text-align: center; cursor: default; padding: 6px 0 6px 4px; }
 .ylp-order-table .ylp-check-col input { cursor: pointer; width: 16px; height: 16px; }
-.ylp-order-table .ylp-action-col { width: 52px; text-align: center; cursor: default; }
+.ylp-order-table .ylp-action-col { width: 36px; text-align: center; cursor: default; padding: 6px 2px 6px 0; }
 .ylp-order-table .ylp-row-menu-btn {
-  width: 28px; height: 28px; padding: 0; line-height: 1;
+  width: 26px; height: 26px; padding: 0; line-height: 1;
   display: inline-flex; align-items: center; justify-content: center;
   border-radius: 8px; border: 1px solid var(--x-color-line-soft);
   background: var(--x-color-panel); color: var(--x-color-ink-muted);
