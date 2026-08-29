@@ -55,6 +55,7 @@ import { YlpOrderSummaryDrawer } from "./YlpOrderSummaryDrawer";
 import { PaymentProofButton } from "./PaymentProof";
 import { PaiweiEditorModal } from "./intake/PaiweiEditorModal";
 import { paiweiFieldLabel } from "./intake/paiwei";
+import { buildYlpOrdersWorkbookBlob } from "./exportXlsx";
 import { orderStatusLabel, paymentStatusLabel } from "./orderStatus";
 import { connectFahuiSocket } from "./socket";
 import type {
@@ -1538,26 +1539,8 @@ export function FahuiPage() {
         show_alert("error", "没有可导出的订单");
         return;
       }
-      const XLSX = await import("xlsx");
-      const data = rows.map((order) => ({
-        单号: order.id,
-        订单状态: orderStatusLabel(order.order_status),
-        付款状态: paymentStatusLabel(order.status),
-        功德主: order.customer_name || order.name || "",
-        联络人: order.name || "",
-        电话: order.phone || "",
-        版本: order.version || "",
-        "总额 (RM)": order.total_amount ?? "",
-        维护人: order.maintainer_name || "",
-        创建时间: order.created_at || "",
-      }));
-      const workbook = XLSX.utils.book_new();
-      const sheet = XLSX.utils.json_to_sheet(data);
-      XLSX.utils.book_append_sheet(workbook, sheet, "YLP订单");
-      const workbookArray = XLSX.write(workbook, { bookType: "xlsx", type: "array" }) as ArrayBuffer;
-      const blob = new Blob([workbookArray], {
-        type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-      });
+      // 多张工作表：订单总览 / 牌位明细 / 每个牌位类型一张 / 分类汇总 / 付款记录
+      const blob = await buildYlpOrdersWorkbookBlob(rows);
       const url = URL.createObjectURL(blob);
       const anchor = document.createElement("a");
       anchor.href = url;

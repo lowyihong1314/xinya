@@ -185,6 +185,26 @@ export type YlpOrderItem = {
   item_location?: YlpOrderItemLocation[] | null;
 };
 
+/** 导出接口（/orders/export）比列表多回牌位明细与付款记录。 */
+export type YlpOrderExportPayment = {
+  id?: number | null;
+  /** 这笔付款覆盖的所有订单号；长度 > 1 表示合并付款，会挂在每张订单下 */
+  order_ids?: number[] | null;
+  amount?: number | null;
+  payment_mode?: string | null;
+  status?: string | null;
+  payer_name?: string | null;
+  paid_at?: string | null;
+  created_at?: string | null;
+  valid_by?: string | null;
+  note?: string | null;
+};
+
+export type YlpOrderExportRow = YlpOrderSummary & {
+  order_items?: YlpOrderItem[] | null;
+  payments?: YlpOrderExportPayment[] | null;
+};
+
 export type YlpOrderDetail = YlpOrderSummary & {
   prev_id?: number | null;
   next_id?: number | null;

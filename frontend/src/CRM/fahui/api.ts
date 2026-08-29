@@ -3,9 +3,9 @@ import type {
   PaymentListResponse,
   YlpOrderCreateResponse,
   YlpOrderDetailResponse,
+  YlpOrderExportRow,
   YlpOrderItemMutationResponse,
   YlpOrderListResponse,
-  YlpOrderSummary,
   YlpOrdersByPhoneResponse,
   YlpOrderLogResponse,
   YlpPagination,
@@ -625,7 +625,7 @@ export async function listYlpOrdersForExport(version: string, value = "") {
   const response = await apiFetch(`/api/fahui_router/orders/export?${search.toString()}`, {
     credentials: "include",
   });
-  return parseJson<{ status?: string; data?: { items: YlpOrderSummary[]; total: number } }>(response);
+  return parseJson<{ status?: string; data?: { items: YlpOrderExportRow[]; total: number } }>(response);
 }
 
 export async function printYlpPaiweiByTemplate(orderIds: number[], template: string) {

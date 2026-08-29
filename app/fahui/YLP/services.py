@@ -1,9 +1,12 @@
 from __future__ import annotations
 
+from datetime import datetime
+
 from flask_login import current_user
 from sqlalchemy import case, func, or_
 from sqlalchemy.orm import selectinload
 
+from app.fahui.common.payment import normalize_fahui_payment_status
 from app.fahui.common.session_state import current_session_phone, current_verified_phones
 from app.extensions import socket_broker
 from models import db
@@ -22,10 +25,12 @@ from .shared import (
     active_order_version,
     format_created_at,
     format_datetime,
+    item_price_decimal,
     item_price_int,
     latest_payment as shared_latest_payment,
     mask_phone,
     normalize_version,
+    order_all_payments,
     order_payment_state,
     order_payment_status,
     order_total_amount,
@@ -376,6 +381,62 @@ def search_orders(
     }
 
 
+def _export_order_item(item: FahuiOrderItem) -> dict:
+    """导出用的项目序列化：表单字段给全（和 full_items 同一套 {val, val_id} 结构），
+    但不去捞牌位板位置——那要连着 pdf_pages → print_pdf → board_entries 翻三层，
+    整版导出会被拖成 N+1。"""
+    form_data: dict[str, list[dict]] = {}
+    for field in item.form_data or []:
+        form_data.setdefault(field.field_name or "", []).append(
+            {"val": field.field_value, "val_id": field.id}
+        )
+    return {
+        "id": item.id,
+        "order_id": item.order_id,
+        "code": item.code,
+        "item_name": item.item_name,
+        # 列表用的是取整价（item_price_int），导出要能对账，所以给两位小数的真实金额。
+        "price": float(item_price_decimal(item)),
+        "item_form_data": form_data,
+    }
+
+
+def _export_order_payment(payment: FahuiPayment) -> dict:
+    # 合并付款（一笔覆盖多张订单）会挂在每张订单下，导出时容易被重复计算，
+    # 所以把它覆盖的订单号一起带出去，让报表能标出来。
+    covered: list[int] = []
+    if payment.order_id is not None:
+        covered.append(payment.order_id)
+    for grouped in payment.grouped_orders or []:
+        if grouped.id is not None and grouped.id not in covered:
+            covered.append(grouped.id)
+    return {
+        "id": payment.id,
+        "order_ids": covered,
+        "amount": float(payment.total_price or 0),
+        "payment_mode": payment.payment_mode,
+        "status": normalize_fahui_payment_status(payment.status),
+        "payer_name": payment.payer_name,
+        "paid_at": format_datetime(payment.paid_at),
+        "created_at": format_datetime(payment.created_at),
+        "valid_by": payment.valid_by,
+        "note": payment.note,
+    }
+
+
+def serialize_order_for_export(order: FahuiOrder) -> dict:
+    """导出用：订单表头 + 全部牌位明细 + 全部付款记录（含合并付款）。"""
+    data = serialize_order(order)
+    if not user_can_view_order(order):
+        return data
+    data["order_items"] = [_export_order_item(item) for item in (order.items or [])]
+    payments = sorted(
+        order_all_payments(order), key=lambda p: (p.created_at or datetime.min, p.id or 0)
+    )
+    data["payments"] = [_export_order_payment(payment) for payment in payments]
+    return data
+
+
 def list_orders_for_export(version: object, value: str = "") -> dict:
     """返回某版本 + 搜索条件下的「全部」订单（不分页），供全页全选导出/打印使用。"""
     normalized_version = normalize_version(version)
@@ -385,7 +446,11 @@ def list_orders_for_export(version: object, value: str = "") -> dict:
     value = (value or "").strip()
     query = (
         db.session.query(FahuiOrder)
-        .options(selectinload(FahuiOrder.payments))
+        .options(
+            selectinload(FahuiOrder.items).selectinload(FahuiOrderItem.form_data),
+            selectinload(FahuiOrder.payments),
+            selectinload(FahuiOrder.grouped_payments),
+        )
         # 删除只认一套约定：软删除 = 移到 "DELETE" 版本（见 delete_order_batch）。
         # 以前还有一套「status='delete'」的旧标记，两套并存会让订单在自己版本里被藏起来、
         # 在 DELETE 版本里又找不到，等于全版本隐身，所以这里不再看 status。
@@ -396,7 +461,10 @@ def list_orders_for_export(version: object, value: str = "") -> dict:
         query = query.filter(_order_search_filter(value))
 
     orders = query.order_by(FahuiOrder.created_at.desc(), FahuiOrder.id.desc()).all()
-    return {"items": [serialize_order(order) for order in orders], "total": len(orders)}
+    return {
+        "items": [serialize_order_for_export(order) for order in orders],
+        "total": len(orders),
+    }
 
 
 def get_order_detail(order_id: int) -> tuple[dict, int]:
