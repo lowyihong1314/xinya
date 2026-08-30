@@ -1108,6 +1108,7 @@ def generate_paiwei(paiwei_type, fahui_data, point_data, source_name, need_barco
     # 阳上名字长的时候（订单 832 的「妻 林金全」这种 5 个字），下面的名字要往下排，
     # 容易压到「拜荐」。把「阳上」标签和整块名字一起往上挪，把上面空着的地方用起来。
     owner_lift = {"value": 0.0}
+    label_lift = {"value": 0.0}
     owner_layout = {"points": None}
 
     def get_point(block_key, key):
@@ -1130,8 +1131,11 @@ def generate_paiwei(paiwei_type, fahui_data, point_data, source_name, need_barco
         dx, dy, size, spacing = point
         x_base = base_x + dx
         y_base = base_y + dy
-        if key in ("yangshang", "owner"):
+        if key == "owner":
             y_base += owner_lift["value"]
+        elif key == "yangshang":
+            # 标签单独抬：名字被顶上来之后才需要给它让路，抬的量和名字不一定一样
+            y_base += label_lift["value"]
         c.setFont(font_name, size)
 
         # 英文 / 地址：竖排会跑出纸外，改横排自动换行。整块横向以格子中线为准居中，
@@ -1428,12 +1432,37 @@ def generate_paiwei(paiwei_type, fahui_data, point_data, source_name, need_barco
             adjusted, changed = adjust_owner_points(owner_slots or [], owner_people)
             owner_layout["points"] = adjusted if changed else None
             owner_lift["value"] = 0.0
-            if changed:
+            label_lift["value"] = 0.0
+
+            effective = adjusted if changed else (owner_slots or [])
+            if owner_base and effective and owner_people and not any(
+                latin_heavy(one) for one in owner_people[: len(effective)]
+            ):
+                # 名字块实际写到哪：含冤亲债主那套「越长越往上提」的居中位移
+                tops, bottoms = [], []
+                for index, (ox, oy, osize, ospace) in enumerate(effective[: len(owner_people)]):
+                    name = str(owner_people[index])
+                    shift = (len(name) - 3) * ospace / 2.0 if source_name == "paiwei_10" and len(name) > 3 else 0.0
+                    start = owner_base[1] + oy + shift
+                    tops.append(start + osize)
+                    bottoms.append(start - (len(name) - 1) * ospace)
+                name_top, name_bottom = max(tops), min(bottoms)
+
+                # 下面压到「拜荐」了就把名字整块往上抬，抬到刚好让开
                 below = get_point(position, "baijian")
-                if below and owner_base:
-                    floor = below[1] + below[2] + below[3] * 0.6  # 拜荐 顶边再留点空
-                    bottom = owner_base[1] + owner_block_bottom(adjusted, owner_people)
-                    owner_lift["value"] = max(0.0, floor - bottom)
+                if below:
+                    floor = below[1] + below[2] + below[3] * 0.6
+                    owner_lift["value"] = max(0.0, floor - name_bottom)
+
+                # 抬完之后如果顶到「阳上」标签，就把标签也往上挪（订单 789 / 790 的
+                # 「林志昇合家」5 个字，名字两头都压着，标签不让位就一定糊）
+                label = get_point(position, "yangshang")
+                if label:
+                    label_bottom = label[1] - label[3]  # 「阳上」第二个字的基线
+                    need = (name_top + owner_lift["value"]) - (label_bottom - label[2] * 0.4)
+                    # 上限 4 个字距：再高就顶到格子上沿了，宁可让 7 个字以上的
+                    # 极端名字略挤一点，也不能把「阳上」推出格子。
+                    label_lift["value"] = min(max(0.0, need), label[3] * 4.0)
 
             draw_text_vertical(position, "folichaodu", folichaodu, base_x, base_y, info)
             draw_text_vertical(position, "baijian", "拜荐", base_x, base_y, info)
