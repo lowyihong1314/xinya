@@ -844,7 +844,7 @@ def generate_paiwei(paiwei_type, fahui_data, point_data, source_name, need_barco
             if len(relations) < len(people):
                 relations += [""] * (len(people) - len(relations))
 
-            # 超度亡灵刚好「一考一妣」时，左右是固定的：妣在右、考在左，不跟录入顺序走。
+            # 超度亡灵刚好「一考一妣」时，左右是固定的：妣在左、考在右，不跟录入顺序走。
             #
             # 以前这里是无脑 reversed()，等于假定录入一定是「考在前」；录成
             # ['显妣','显考'] 的（例如订单 674 / item 3915）就被翻反了。
