@@ -1,7 +1,8 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { CSSProperties, ReactNode } from "react";
 
 import { openOverlay } from "../../app/OverlayProvider";
+import { CodeScanner } from "./CodeScanner";
 import { ensureDesignTokens } from "../../theme/designTokens";
 import { fetchYlpPrintScope } from "./api";
 import type { YlpPrintScopeItem } from "./api";
@@ -156,6 +157,11 @@ function PrintPlusDialog({
   const [onlyUnregistered, setOnlyUnregistered] = useState(false);
   const [excluded, setExcluded] = useState<string[]>([]);
 
+  // 摄像头扫码往清单里加单号：要补印一叠牌位时，一张张手打太慢
+  const [scannerOn, setScannerOn] = useState(false);
+  const [justAdded, setJustAdded] = useState<number[]>([]);
+  const scanCooldownRef = useRef<Map<string, number>>(new Map());
+
   const [items, setItems] = useState<YlpPrintScopeItem[]>([]);
   const [emptyOrderIds, setEmptyOrderIds] = useState<number[]>([]);
   const [unknownPdfIds, setUnknownPdfIds] = useState<number[]>([]);
@@ -247,6 +253,34 @@ function PrintPlusDialog({
   const sheets = mode === "pdfs" ? items.length : picked.length;
   const disabled = loading || sheets === 0;
 
+  /** 扫到一个码：取数字当牌位单号，去重后追加到输入框。
+   *  同一个码 2 秒内不重复处理 —— 镜头不移开会一直扫到它。 */
+  const addScannedCode = useCallback((raw: string) => {
+    const digits = raw.match(/\d+/)?.[0];
+    if (!digits) {
+      return;
+    }
+    const now = Date.now();
+    if (now - (scanCooldownRef.current.get(digits) || 0) < 2000) {
+      return;
+    }
+    scanCooldownRef.current.set(digits, now);
+    const value = Number(digits);
+    setPdfInput((current) => {
+      const existing = new Set(parseIdInput(current).ids);
+      if (existing.has(value)) {
+        // 已经在清单里了，闪一下让人知道扫到的是重复的
+        setJustAdded((list) => [value, ...list.filter((one) => one !== value)].slice(0, 6));
+        return current;
+      }
+      setJustAdded((list) => [value, ...list.filter((one) => one !== value)].slice(0, 6));
+      if (navigator.vibrate) {
+        navigator.vibrate(50);
+      }
+      return current.trim() ? `${current.trim()}, ${value}` : String(value);
+    });
+  }, []);
+
   function toggleStatus(status: string) {
     setExcluded((current) =>
       current.includes(status) ? current.filter((entry) => entry !== status) : [...current, status],
@@ -324,10 +358,40 @@ function PrintPlusDialog({
               }
               placeholder={mode === "orders" ? "1023, 1044, 1100-1105" : "87, 88, 152"}
               style={styles.textarea}
-              autoFocus
+              autoFocus={!scannerOn}
               className="ylp-print-plus-input"
             />
-            <p style={styles.inputHint}>{inputHint}</p>
+            <div style={styles.inputFoot}>
+              <p style={styles.inputHint}>{inputHint}</p>
+              {mode === "pdfs" ? (
+                <button
+                  type="button"
+                  style={{ ...styles.scanToggle, ...(scannerOn ? styles.scanToggleOn : null) }}
+                  onClick={() => setScannerOn((current) => !current)}
+                >
+                  <i className="fa-solid fa-camera" style={{ marginRight: 6 }} />
+                  {scannerOn ? "关掉扫码" : "扫码添加"}
+                </button>
+              ) : null}
+            </div>
+
+            {/* 只在这个 tab 且开着的时候才挂摄像头，切走会自动关掉 */}
+            {mode === "pdfs" && scannerOn ? (
+              <div style={styles.scannerBox} className="ylp-print-plus-scanner">
+                <CodeScanner active onCode={addScannedCode} height="210px" />
+                <div style={styles.justAdded}>
+                  {justAdded.length ? (
+                    justAdded.map((one) => (
+                      <span key={one} style={styles.justAddedChip}>
+                        #{one}
+                      </span>
+                    ))
+                  ) : (
+                    <span style={styles.inputHint}>扫到的单号会自动加进上面的清单，重复的不会加两次</span>
+                  )}
+                </div>
+              </div>
+            ) : null}
           </div>
         )}
 
@@ -551,6 +615,30 @@ const styles: Record<string, CSSProperties> = {
     margin: 0,
     fontSize: "11px",
     color: "var(--x-color-ink-muted)",
+  },
+  inputFoot: { display: "flex", alignItems: "center", justifyContent: "space-between", gap: "8px" },
+  scanToggle: {
+    padding: "5px 12px",
+    borderRadius: "999px",
+    border: "1px solid var(--x-color-accent-border)",
+    background: "var(--x-color-panel)",
+    color: "var(--x-color-accent-strong)",
+    fontSize: "12.5px",
+    fontWeight: 700,
+    cursor: "pointer",
+    whiteSpace: "nowrap",
+  },
+  scanToggleOn: { background: "var(--x-color-accent)", color: "#fff", borderColor: "transparent" },
+  scannerBox: { display: "grid", gap: "6px" },
+  justAdded: { display: "flex", flexWrap: "wrap", gap: "5px", alignItems: "center", minHeight: "22px" },
+  justAddedChip: {
+    padding: "2px 9px",
+    borderRadius: "999px",
+    background: "var(--x-color-success-soft)",
+    color: "var(--x-color-success)",
+    fontSize: "12px",
+    fontWeight: 800,
+    fontFamily: "var(--x-font-mono)",
   },
   listHead: {
     display: "flex",

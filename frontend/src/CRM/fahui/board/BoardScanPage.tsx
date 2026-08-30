@@ -1,8 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import type { CSSProperties } from "react";
-import jsQR from "jsqr";
-
 import { useEnsureDesignTokens } from "../../../theme/designTokens";
+import { CodeScanner } from "../CodeScanner";
 import { show_alert } from "../../../js/show_alert";
 import { fetchYlpVersions } from "../api";
 import { createBoard, deleteBoardEntry, listBoards, scanAttachToBoard } from "./api";
@@ -18,10 +17,6 @@ import type { Board, BoardScanResult } from "./api";
 
 /** 同一个码多久之内不再发请求 */
 const CODE_COOLDOWN_MS = 3000;
-/** 每帧都解码太费电，隔几帧扫一次够用了 */
-const SCAN_INTERVAL_MS = 220;
-/** 自动对焦中心点的间隔。牌位贴在板上，手一直在动，不定时拉回来很容易糊 */
-const AUTOFOCUS_INTERVAL_MS = 1000;
 const TOAST_MS = 2600;
 
 type ScanLog = {
@@ -59,10 +54,6 @@ const TOAST_CSS = `
   from { transform: translateY(-10px); opacity: 0; }
   to { transform: translateY(0); opacity: 1; }
 }
-@keyframes boardScanFocus {
-  from { transform: translate(-50%, -50%) scale(1.5); opacity: 0.9; }
-  to { transform: translate(-50%, -50%) scale(1); opacity: 0; }
-}
 @keyframes boardScanCooldown {
   from { width: 100%; }
   to { width: 0%; }
@@ -83,30 +74,19 @@ export function BoardScanPage() {
   const [creating, setCreating] = useState(false);
 
   const [scanning, setScanning] = useState(false);
-  const trackRef = useRef<MediaStreamTrack | null>(null);
-  // 手动点过的时间戳：自动对焦循环要给手动操作让路
-  const manualFocusAtRef = useRef(0);
-  const [cameraError, setCameraError] = useState("");
   const [logs, setLogs] = useState<ScanLog[]>([]);
   const [toasts, setToasts] = useState<Toast[]>([]);
   const [lastCode, setLastCode] = useState("");
-  // 点哪对焦哪：点击处画一圈涟漪，同时把对焦点喂给摄像头
-  const [focusRing, setFocusRing] = useState<{ x: number; y: number; id: number } | null>(null);
-  const [focusSupported, setFocusSupported] = useState(false);
   // 冷却条：扫中一个码之后 3 秒内不再发请求，用一条走完 3 秒的进度条把这件事显出来，
   // 免得人以为「扫到了怎么没反应」而反复对着同一张牌位晃。
   const [cooldown, setCooldown] = useState<{ code: string; id: number } | null>(null);
   const [sending, setSending] = useState(false);
 
-  const videoRef = useRef<HTMLVideoElement | null>(null);
-  const canvasRef = useRef<HTMLCanvasElement | null>(null);
-  const streamRef = useRef<MediaStream | null>(null);
-  const rafRef = useRef<number | null>(null);
-  const timerRef = useRef<number | null>(null);
+  // 摄像头开着的那块板：handleCode 是 useCallback，用 ref 拿最新的板，避免重建回调
+  const boardRef = useRef<Board | null>(null);
   // 每个码上次发请求的时间：镜头一直对着同一张牌位，不冷却会疯狂打接口
   const cooldownRef = useRef<Map<string, number>>(new Map());
   const inflightRef = useRef(false);
-  const detectorRef = useRef<{ detect: (source: CanvasImageSource) => Promise<{ rawValue: string }[]> } | null>(null);
 
   const pushToast = useCallback((tone: ToastTone, text: string, sub?: string) => {
     const id = Date.now() + Math.random();
@@ -144,29 +124,15 @@ export function BoardScanPage() {
     void loadBoards(version);
   }, [version, loadBoards]);
 
-  // ---- 摄像头 ----
-  const stopCamera = useCallback(() => {
-    if (rafRef.current !== null) {
-      window.cancelAnimationFrame(rafRef.current);
-      rafRef.current = null;
-    }
-    if (timerRef.current !== null) {
-      window.clearTimeout(timerRef.current);
-      timerRef.current = null;
-    }
-    streamRef.current?.getTracks().forEach((track) => track.stop());
-    streamRef.current = null;
-    trackRef.current = null;
-    if (videoRef.current) {
-      videoRef.current.srcObject = null;
-    }
-    setScanning(false);
-  }, []);
-
-  useEffect(() => stopCamera, [stopCamera]);
+  // 摄像头、解码、对焦全在公用的 CodeScanner 里（打印弹窗那边也用同一只）。
+  // 这里只管拿到码之后干什么：查重、发请求、记流水。
 
   const handleCode = useCallback(
-    async (code: string, boardId: number) => {
+    async (code: string) => {
+      const boardId = boardRef.current?.board_id;
+      if (!boardId) {
+        return;
+      }
       const now = Date.now();
       const last = cooldownRef.current.get(code) || 0;
       // 3 秒冷却：镜头没移开时同一个码会被连续识别到，这里挡掉重复请求
@@ -214,150 +180,6 @@ export function BoardScanPage() {
     [pushToast],
   );
 
-  const startCamera = useCallback(
-    async (target: Board) => {
-      setCameraError("");
-      if (!navigator.mediaDevices?.getUserMedia) {
-        setCameraError("这个浏览器不支持摄像头，请用 Chrome / Safari 打开");
-        return;
-      }
-      try {
-        const stream = await navigator.mediaDevices.getUserMedia({
-          video: { facingMode: { ideal: "environment" }, width: { ideal: 1280 }, height: { ideal: 720 } },
-          audio: false,
-        });
-        streamRef.current = stream;
-        const track = stream.getVideoTracks()[0] || null;
-        trackRef.current = track;
-        // 能不能点击对焦，看这颗摄像头报不报 focusMode / pointsOfInterest
-        // （Android Chrome 多半有，iOS Safari 至今没有 —— 没有就只画个涟漪当反馈）
-        const caps = (track?.getCapabilities?.() || {}) as {
-          focusMode?: string[];
-          pointsOfInterest?: unknown;
-        };
-        setFocusSupported(Boolean(caps.focusMode?.length || caps.pointsOfInterest));
-        if (videoRef.current) {
-          videoRef.current.srcObject = stream;
-          await videoRef.current.play();
-        }
-      } catch (err) {
-        setCameraError(
-          err instanceof Error && err.name === "NotAllowedError"
-            ? "没给摄像头权限。到浏览器设置里允许后重进这一页。"
-            : "打不开摄像头，检查是不是被别的程序占用了",
-        );
-        return;
-      }
-
-      // 优先用浏览器原生的 BarcodeDetector：它认 Code128 条码，jsQR 只认 QR。
-      // 牌位上两种都印了，所以退回 jsQR 也能扫，只是要对准左边那个二维码。
-      const AnyWindow = window as unknown as { BarcodeDetector?: new (init?: unknown) => never };
-      if (AnyWindow.BarcodeDetector) {
-        try {
-          detectorRef.current = new (AnyWindow.BarcodeDetector as unknown as new (init: {
-            formats: string[];
-          }) => { detect: (source: CanvasImageSource) => Promise<{ rawValue: string }[]> })({
-            formats: ["qr_code", "code_128", "code_39", "ean_13"],
-          });
-        } catch {
-          detectorRef.current = null;
-        }
-      }
-
-      setScanning(true);
-
-      const tick = async () => {
-        const video = videoRef.current;
-        const canvas = canvasRef.current;
-        if (!video || !canvas || !streamRef.current) {
-          return;
-        }
-        const width = video.videoWidth;
-        const height = video.videoHeight;
-        if (width && height) {
-          canvas.width = width;
-          canvas.height = height;
-          const ctx = canvas.getContext("2d", { willReadFrequently: true });
-          if (ctx) {
-            ctx.drawImage(video, 0, 0, width, height);
-            let code = "";
-            if (detectorRef.current) {
-              try {
-                const found = await detectorRef.current.detect(canvas);
-                code = found[0]?.rawValue || "";
-              } catch {
-                detectorRef.current = null;
-              }
-            }
-            if (!code) {
-              const image = ctx.getImageData(0, 0, width, height);
-              code = jsQR(image.data, width, height)?.data || "";
-            }
-            if (code) {
-              void handleCode(code.trim(), target.board_id);
-            }
-          }
-        }
-        timerRef.current = window.setTimeout(() => {
-          rafRef.current = window.requestAnimationFrame(() => void tick());
-        }, SCAN_INTERVAL_MS);
-      };
-      rafRef.current = window.requestAnimationFrame(() => void tick());
-    },
-    [handleCode],
-  );
-
-  /** 把对焦点喂给摄像头。x/y 是 0~1 的归一化坐标。手动点和自动循环共用。 */
-  const applyFocus = useCallback(async (x: number, y: number) => {
-    const track = trackRef.current;
-    if (!track?.applyConstraints) {
-      return;
-    }
-    const caps = (track.getCapabilities?.() || {}) as { focusMode?: string[] };
-    const mode = caps.focusMode?.includes("single-shot")
-      ? "single-shot"
-      : caps.focusMode?.includes("manual")
-        ? "manual"
-        : caps.focusMode?.includes("continuous")
-          ? "continuous"
-          : null;
-    try {
-      await track.applyConstraints({
-        // 这两个键在 TS 的 MediaTrackConstraints 里没有定义，但浏览器认
-        advanced: [{ pointsOfInterest: [{ x, y }], ...(mode ? { focusMode: mode } : {}) }],
-      } as unknown as MediaTrackConstraints);
-    } catch {
-      /* 这颗摄像头不吃这套 */
-    }
-  }, []);
-
-  /** 点画面对焦。摄像头不支持就只有涟漪反馈 —— 起码让人知道点到了。 */
-  async function focusAt(event: React.PointerEvent<HTMLDivElement>) {
-    const rect = event.currentTarget.getBoundingClientRect();
-    const x = (event.clientX - rect.left) / rect.width;
-    const y = (event.clientY - rect.top) / rect.height;
-    manualFocusAtRef.current = Date.now();
-    setFocusRing({ x: event.clientX - rect.left, y: event.clientY - rect.top, id: Date.now() });
-    window.setTimeout(() => setFocusRing((current) => (current && Date.now() - current.id > 500 ? null : current)), 700);
-    await applyFocus(x, y);
-  }
-
-  // 每秒把焦点拉回画面正中。手举着对板一直在晃，不定时重对很容易糊掉；
-  // 正中就是取景框中心，也是人自然会把牌位放的位置。
-  // 手动点过之后让它歇 3 秒，不然刚点的地方一秒就被抢回中心。
-  useEffect(() => {
-    if (!scanning || !focusSupported) {
-      return;
-    }
-    const timer = window.setInterval(() => {
-      if (Date.now() - manualFocusAtRef.current < 3000) {
-        return;
-      }
-      void applyFocus(0.5, 0.5);
-    }, AUTOFOCUS_INTERVAL_MS);
-    return () => window.clearInterval(timer);
-  }, [scanning, focusSupported, applyFocus]);
-
   async function enterBoard(target: Board) {
     setBoard(target);
     setLogs([]);
@@ -369,14 +191,16 @@ export function BoardScanPage() {
     } catch {
       /* 不给就算了 */
     }
-    await startCamera(target);
+    boardRef.current = target;
+    setScanning(true);
   }
 
   function leaveBoard() {
     if (document.fullscreenElement) {
       void document.exitFullscreen?.().catch(() => {});
     }
-    stopCamera();
+    setScanning(false);
+    boardRef.current = null;
     setBoard(null);
     setLastCode("");
     void loadBoards(version);
@@ -511,17 +335,8 @@ export function BoardScanPage() {
 
       <style>{TOAST_CSS}</style>
 
-      <div style={styles.videoWrap} onPointerDown={(event) => void focusAt(event)}>
-        <video ref={videoRef} muted playsInline style={styles.video} />
-        <canvas ref={canvasRef} style={{ display: "none" }} />
-        <div style={styles.reticle} />
-        {/* 中心辅助线：十字 + 中心小方框。自动对焦每秒对的就是这个中心点，
-            把牌位的码摆在十字交点上最容易扫中。 */}
-        <div style={styles.guides}>
-          <span style={styles.guideH} />
-          <span style={styles.guideV} />
-          <span style={styles.guideBox} />
-        </div>
+      <div style={styles.videoWrap}>
+        <CodeScanner active={scanning} onCode={(code) => void handleCode(code)} height="100%" />
         {/* 通知压在画面顶部而不是页面顶部：页头高度会随刘海安全区变，固定 top 会盖到标题 */}
         <div style={styles.toasts} className="board-scan-toasts">
           {toasts.map((toast) => (
@@ -534,20 +349,6 @@ export function BoardScanPage() {
             </div>
           ))}
         </div>
-        {focusRing ? (
-          <span
-            key={focusRing.id}
-            style={{ ...styles.focusRing, left: `${focusRing.x}px`, top: `${focusRing.y}px` }}
-          />
-        ) : null}
-        {cameraError ? (
-          <div style={styles.cameraError}>
-            <p style={{ margin: 0 }}>{cameraError}</p>
-            <button type="button" style={styles.primary} onClick={() => void startCamera(board)}>
-              重试
-            </button>
-          </div>
-        ) : null}
       </div>
 
       <div style={styles.cooldownWrap}>
@@ -562,12 +363,7 @@ export function BoardScanPage() {
           </>
         ) : (
           <p style={styles.lastCode}>
-            {lastCode ? `刚扫到：${lastCode.slice(0, 40)}` : "把牌位上的二维码对准框内"}
-            {scanning
-              ? focusSupported
-                ? " · 每秒自动对焦中心，点画面可改对焦点"
-                : " · 这颗摄像头不支持对焦控制"
-              : ""}
+            {lastCode ? `刚扫到：${lastCode.slice(0, 40)}` : "把牌位上的二维码对准中心十字"}
           </p>
         )}
       </div>
@@ -751,69 +547,6 @@ const styles: Record<string, CSSProperties> = {
     borderRadius: "12px",
     overflow: "hidden",
     background: "#000",
-  },
-  video: { width: "100%", height: "100%", objectFit: "cover", display: "block" },
-  reticle: {
-    position: "absolute",
-    inset: "18% 12%",
-    border: "2px solid rgba(255,255,255,0.85)",
-    borderRadius: "12px",
-    boxShadow: "0 0 0 9999px rgba(0,0,0,0.28)",
-    pointerEvents: "none",
-  },
-  guides: { position: "absolute", inset: 0, pointerEvents: "none" },
-  // 十字只画中间一段，不横贯整屏 —— 贯穿的线会盖住牌位上的字
-  guideH: {
-    position: "absolute",
-    top: "50%",
-    left: "50%",
-    width: "26%",
-    height: "1px",
-    transform: "translate(-50%, -50%)",
-    background: "rgba(251,191,36,0.9)",
-  },
-  guideV: {
-    position: "absolute",
-    top: "50%",
-    left: "50%",
-    width: "1px",
-    height: "26%",
-    transform: "translate(-50%, -50%)",
-    background: "rgba(251,191,36,0.9)",
-  },
-  guideBox: {
-    position: "absolute",
-    top: "50%",
-    left: "50%",
-    width: "56px",
-    height: "56px",
-    marginLeft: "-28px",
-    marginTop: "-28px",
-    border: "1.5px solid rgba(251,191,36,0.75)",
-    borderRadius: "8px",
-  },
-  focusRing: {
-    position: "absolute",
-    width: "68px",
-    height: "68px",
-    marginLeft: 0,
-    borderRadius: "50%",
-    border: "2px solid #fbbf24",
-    transform: "translate(-50%, -50%)",
-    animation: "boardScanFocus 0.65s ease-out forwards",
-    pointerEvents: "none",
-  },
-  cameraError: {
-    position: "absolute",
-    inset: 0,
-    display: "grid",
-    gap: "10px",
-    placeContent: "center",
-    padding: "20px",
-    textAlign: "center",
-    background: "rgba(0,0,0,0.7)",
-    color: "#fff",
-    fontSize: "13.5px",
   },
   lastCode: {
     margin: 0,
