@@ -2885,7 +2885,14 @@ function boardStatusTitle(
 }
 
 const YLP_ORDER_TABLE_CSS = `
-.ylp-order-table { width: 100%; border-collapse: collapse; font-size: 13px; min-width: 520px; table-layout: auto; }
+/* separate 而不是 collapse：collapse 下 <tr> 的 box-shadow 不会被绘制，
+   整行的辉光只能拆到每个 <td> 上，看起来就是一格一格的。
+   border-spacing 归零后视觉和 collapse 一样（边框本来就只有 td 的下边线）。 */
+.ylp-order-table {
+  width: 100%; border-collapse: separate; border-spacing: 0;
+  font-size: 13px; min-width: 520px; table-layout: auto;
+  color: var(--x-color-ink);
+}
 .ylp-order-table thead th {
   position: sticky; top: 0; z-index: 1;
   text-align: left; padding: 8px 6px;
@@ -2893,38 +2900,34 @@ const YLP_ORDER_TABLE_CSS = `
   color: var(--x-color-ink-muted); background: var(--x-color-canvas-alt);
   border-bottom: 1px solid var(--x-color-line); white-space: nowrap;
 }
-.ylp-order-table tbody td { padding: 9px 6px; border-bottom: 1px solid var(--x-color-line-soft); vertical-align: middle; color: var(--x-color-ink); }
+.ylp-order-table tbody td { padding: 9px 6px; border-bottom: 1px solid var(--x-color-line-soft); vertical-align: middle; }
 .ylp-order-table tbody tr.ylp-order-row { cursor: pointer; }
 /* 打印 / 上板进度：未打印＝灰，打印了没上板＝暖黄，上了一部分＝浅蓝，全上了＝淡绿；
-   没有牌位可上的单不着色。hover 与选中都不再动底色，这层颜色任何时候都看得见。 */
-.ylp-order-table tbody tr.ylp-board-unprinted td { background: var(--x-color-canvas-alt, #f4f4f5); }
-.ylp-order-table tbody tr.ylp-board-none td { background: var(--x-color-warning-soft, #fff7ed); }
-.ylp-order-table tbody tr.ylp-board-partial td { background: var(--x-color-accent-soft, #eff6ff); }
-.ylp-order-table tbody tr.ylp-board-all td { background: var(--x-color-success-soft, #ecfdf5); }
+   没有牌位可上的单不着色。底色给 <tr>，不给 <td>，整行才是一整块。 */
+.ylp-order-table tbody tr.ylp-board-unprinted { background: var(--x-color-canvas-alt, #f4f4f5); }
+.ylp-order-table tbody tr.ylp-board-none { background: var(--x-color-warning-soft, #fff7ed); }
+.ylp-order-table tbody tr.ylp-board-partial { background: var(--x-color-accent-soft, #eff6ff); }
+.ylp-order-table tbody tr.ylp-board-all { background: var(--x-color-success-soft, #ecfdf5); }
 
-/* hover 不再换底色（会盖掉上板进度那层颜色），改成左侧一条淡淡的提示边。 */
-.ylp-order-table tbody tr.ylp-order-row:hover td:first-child {
+/* hover 不换底色（会盖掉上板进度），只在左边点一条提示线。 */
+.ylp-order-table tbody tr.ylp-order-row:hover {
   box-shadow: inset 3px 0 0 var(--x-color-accent-border);
 }
 
-/* 选中行：底色留给上板进度，选中感全部交给「点亮」——
-   整行从左边压扁弹开 + 一道白光横扫过去 + 蓝色辉光炸开后收成上下两条亮线，
-   左侧一条会呼吸的粗亮条常驻，文字转成强调色加粗。 */
-@keyframes ylpRowPop {
-  0%   { transform: scaleX(0.985) scaleY(0.86); }
-  45%  { transform: scaleX(1.004) scaleY(1.06); }
-  75%  { transform: scaleX(1) scaleY(0.985); }
-  100% { transform: scale(1); }
-}
-@keyframes ylpRowBloom {
-  0%   { box-shadow: inset 0 0 0 rgba(37, 99, 235, 0), 0 0 0 rgba(37, 99, 235, 0); }
-  22%  { box-shadow: inset 0 0 26px rgba(37, 99, 235, 0.38), 0 0 26px 5px rgba(37, 99, 235, 0.55); }
-  55%  { box-shadow: inset 0 0 10px rgba(37, 99, 235, 0.16), 0 0 14px 2px rgba(37, 99, 235, 0.32); }
+/* 选中行：所有样式都挂在 <tr> 上，整行是一整块。
+   放大靠 font-size（td 会继承），不用 transform —— 缩放会把边框和阴影一起拉糊。 */
+@keyframes ylpRowLight {
+  0% {
+    font-size: 13px;
+    box-shadow: inset 0 0 0 rgba(37, 99, 235, 0), 0 0 0 rgba(37, 99, 235, 0);
+  }
+  35% {
+    font-size: 15px;
+    box-shadow: inset 4px 0 0 var(--x-color-accent-strong), 0 0 24px 4px rgba(37, 99, 235, 0.5);
+  }
   100% {
-    box-shadow:
-      inset 0 1px 0 var(--x-color-accent-strong),
-      inset 0 -1px 0 var(--x-color-accent-strong),
-      0 0 10px 0 rgba(37, 99, 235, 0.26);
+    font-size: 14.5px;
+    box-shadow: inset 4px 0 0 var(--x-color-accent-strong), 0 0 12px 1px rgba(37, 99, 235, 0.3);
   }
 }
 @keyframes ylpRowSweep {
@@ -2932,17 +2935,16 @@ const YLP_ORDER_TABLE_CSS = `
   25%  { opacity: 1; }
   100% { transform: translateX(115%); opacity: 0; }
 }
-@keyframes ylpRowBarBreath {
-  0%, 100% { box-shadow: inset 4px 0 0 var(--x-color-accent-strong), -2px 0 10px -2px rgba(37, 99, 235, 0.75); }
-  50%      { box-shadow: inset 4px 0 0 var(--x-color-accent-strong), -2px 0 3px -2px rgba(37, 99, 235, 0.25); }
-}
 
 .ylp-order-table tbody tr.ylp-order-row-active {
   position: relative;
-  transform-origin: left center;
-  animation: ylpRowPop 340ms cubic-bezier(0.22, 1, 0.36, 1);
+  z-index: 1;
+  color: var(--x-color-accent-strong);
+  font-weight: 700;
+  /* forwards：停在最后一帧，放大与亮边常驻 */
+  animation: ylpRowLight 380ms cubic-bezier(0.22, 1, 0.36, 1) forwards;
 }
-/* 横扫的白光：铺在整行上，不吃鼠标事件 */
+/* 横扫的白光：铺满整行，不吃鼠标事件 */
 .ylp-order-table tbody tr.ylp-order-row-active::after {
   content: "";
   position: absolute;
@@ -2957,25 +2959,12 @@ const YLP_ORDER_TABLE_CSS = `
   );
   animation: ylpRowSweep 620ms cubic-bezier(0.25, 0.6, 0.3, 1) 1;
 }
-.ylp-order-table tbody tr.ylp-order-row-active td {
-  /* forwards：动画跑完停在最后一帧，两条亮线常驻 */
-  animation: ylpRowBloom 560ms ease-out forwards;
-  color: var(--x-color-accent-strong);
-  font-weight: 700;
-}
-.ylp-order-table tbody tr.ylp-order-row-active td:first-child {
-  animation: ylpRowBarBreath 2.4s ease-in-out infinite;
-}
 @media (prefers-reduced-motion: reduce) {
   .ylp-order-table tbody tr.ylp-order-row-active,
-  .ylp-order-table tbody tr.ylp-order-row-active::after,
-  .ylp-order-table tbody tr.ylp-order-row-active td,
-  .ylp-order-table tbody tr.ylp-order-row-active td:first-child { animation: none; }
-  .ylp-order-table tbody tr.ylp-order-row-active td {
-    box-shadow: inset 0 1px 0 var(--x-color-accent-strong), inset 0 -1px 0 var(--x-color-accent-strong);
-  }
-  .ylp-order-table tbody tr.ylp-order-row-active td:first-child {
-    box-shadow: inset 4px 0 0 var(--x-color-accent-strong);
+  .ylp-order-table tbody tr.ylp-order-row-active::after { animation: none; }
+  .ylp-order-table tbody tr.ylp-order-row-active {
+    font-size: 14.5px;
+    box-shadow: inset 4px 0 0 var(--x-color-accent-strong), 0 0 12px 1px rgba(37, 99, 235, 0.3);
   }
 }
 .ylp-order-table thead th.ylp-sortable { cursor: pointer; user-select: none; }
