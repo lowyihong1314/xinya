@@ -757,11 +757,35 @@ def generate_paiwei(paiwei_type, fahui_data, point_data, source_name, need_barco
             if len(relations) < len(people):
                 relations += [""] * (len(people) - len(relations))
 
-            for first, second in [("显考", "显妣"), ("祖考", "祖妣")]:
-                if first in relations and second in relations:
-                    people = list(reversed(people))
-                    relations = list(reversed(relations))
+            # 超度亡灵刚好「一考一妣」时，左右是固定的：妣在右、考在左，不跟录入顺序走。
+            #
+            # 以前这里是无脑 reversed()，等于假定录入一定是「考在前」；录成
+            # ['显妣','显考'] 的（例如订单 674 / item 3915）就被翻反了。
+            # 而且 points[0] 到底是左还是右，两套模板还相反：
+            #     大牌位 deceased '2' -> [[-30,..],[+30,..]]   points[0] 在左
+            #     小牌位 deceased '2' -> [[+10,..],[-10,..]]   points[0] 在右
+            # 所以不能按下标排，要按点位实际的 x 排。
+            forced = False
+            if len(people) == 2 and len(points) >= 2:
+                for male, female in (("显考", "显妣"), ("祖考", "祖妣")):
+                    pair = [str(rel).strip() for rel in relations[:2]]
+                    if male not in pair or female not in pair:
+                        continue
+                    right_slot = 0 if points[0][0] >= points[1][0] else 1
+                    slots: list = [None, None]
+                    slots[right_slot] = pair.index(female)
+                    slots[1 - right_slot] = pair.index(male)
+                    people = [people[i] for i in slots]
+                    relations = [relations[i] for i in slots]
+                    forced = True
                     break
+
+            if not forced:
+                for first, second in [("显考", "显妣"), ("祖考", "祖妣")]:
+                    if first in relations and second in relations:
+                        people = list(reversed(people))
+                        relations = list(reversed(relations))
+                        break
 
             # 同一个人挂多个关系（例如 曹振华 既是「亡夫」又是「亡父」）：
             # 关系还是排在原来那两栏的位置，名字只印一次、接在关系下面并左右居中。
