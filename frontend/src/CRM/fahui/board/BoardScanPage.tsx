@@ -57,6 +57,14 @@ const TOAST_CSS = `
   from { transform: translateY(-10px); opacity: 0; }
   to { transform: translateY(0); opacity: 1; }
 }
+@keyframes boardScanFocus {
+  from { transform: translate(-50%, -50%) scale(1.5); opacity: 0.9; }
+  to { transform: translate(-50%, -50%) scale(1); opacity: 0; }
+}
+@keyframes boardScanCooldown {
+  from { width: 100%; }
+  to { width: 0%; }
+}
 `;
 
 export function BoardScanPage() {
@@ -71,10 +79,18 @@ export function BoardScanPage() {
   const [creating, setCreating] = useState(false);
 
   const [scanning, setScanning] = useState(false);
+  const trackRef = useRef<MediaStreamTrack | null>(null);
   const [cameraError, setCameraError] = useState("");
   const [logs, setLogs] = useState<ScanLog[]>([]);
   const [toasts, setToasts] = useState<Toast[]>([]);
   const [lastCode, setLastCode] = useState("");
+  // 点哪对焦哪：点击处画一圈涟漪，同时把对焦点喂给摄像头
+  const [focusRing, setFocusRing] = useState<{ x: number; y: number; id: number } | null>(null);
+  const [focusSupported, setFocusSupported] = useState(false);
+  // 冷却条：扫中一个码之后 3 秒内不再发请求，用一条走完 3 秒的进度条把这件事显出来，
+  // 免得人以为「扫到了怎么没反应」而反复对着同一张牌位晃。
+  const [cooldown, setCooldown] = useState<{ code: string; id: number } | null>(null);
+  const [sending, setSending] = useState(false);
 
   const videoRef = useRef<HTMLVideoElement | null>(null);
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
@@ -134,6 +150,7 @@ export function BoardScanPage() {
     }
     streamRef.current?.getTracks().forEach((track) => track.stop());
     streamRef.current = null;
+    trackRef.current = null;
     if (videoRef.current) {
       videoRef.current.srcObject = null;
     }
@@ -153,6 +170,11 @@ export function BoardScanPage() {
       cooldownRef.current.set(code, now);
       inflightRef.current = true;
       setLastCode(code);
+      setSending(true);
+      setCooldown({ code, id: now });
+      window.setTimeout(() => {
+        setCooldown((current) => (current && current.id === now ? null : current));
+      }, CODE_COOLDOWN_MS);
       try {
         const result = await scanAttachToBoard({ board_id: boardId, code });
         if (result.status === "attached") {
@@ -180,6 +202,7 @@ export function BoardScanPage() {
         pushToast("bad", "网络不通", "等一下再扫这张");
       } finally {
         inflightRef.current = false;
+        setSending(false);
       }
     },
     [pushToast],
@@ -198,6 +221,15 @@ export function BoardScanPage() {
           audio: false,
         });
         streamRef.current = stream;
+        const track = stream.getVideoTracks()[0] || null;
+        trackRef.current = track;
+        // 能不能点击对焦，看这颗摄像头报不报 focusMode / pointsOfInterest
+        // （Android Chrome 多半有，iOS Safari 至今没有 —— 没有就只画个涟漪当反馈）
+        const caps = (track?.getCapabilities?.() || {}) as {
+          focusMode?: string[];
+          pointsOfInterest?: unknown;
+        };
+        setFocusSupported(Boolean(caps.focusMode?.length || caps.pointsOfInterest));
         if (videoRef.current) {
           videoRef.current.srcObject = stream;
           await videoRef.current.play();
@@ -269,14 +301,54 @@ export function BoardScanPage() {
     [handleCode],
   );
 
+  /** 点画面对焦。摄像头不支持就只有涟漪反馈 —— 起码让人知道点到了。 */
+  async function focusAt(event: React.PointerEvent<HTMLDivElement>) {
+    const rect = event.currentTarget.getBoundingClientRect();
+    const x = (event.clientX - rect.left) / rect.width;
+    const y = (event.clientY - rect.top) / rect.height;
+    setFocusRing({ x: event.clientX - rect.left, y: event.clientY - rect.top, id: Date.now() });
+    window.setTimeout(() => setFocusRing((current) => (current && Date.now() - current.id > 500 ? null : current)), 700);
+
+    const track = trackRef.current;
+    if (!track?.applyConstraints) {
+      return;
+    }
+    const caps = (track.getCapabilities?.() || {}) as { focusMode?: string[] };
+    const mode = caps.focusMode?.includes("single-shot")
+      ? "single-shot"
+      : caps.focusMode?.includes("manual")
+        ? "manual"
+        : caps.focusMode?.includes("continuous")
+          ? "continuous"
+          : null;
+    try {
+      await track.applyConstraints({
+        // 这两个键在 TS 的 MediaTrackConstraints 里没有定义，但浏览器认
+        advanced: [{ pointsOfInterest: [{ x, y }], ...(mode ? { focusMode: mode } : {}) }],
+      } as unknown as MediaTrackConstraints);
+    } catch {
+      /* 这颗摄像头不吃这套，涟漪已经给过反馈了 */
+    }
+  }
+
   async function enterBoard(target: Board) {
     setBoard(target);
     setLogs([]);
     cooldownRef.current.clear();
+    // 顺手要一次真全屏（Android Chrome 会把地址栏也收掉）。
+    // iOS Safari 不支持元素全屏，失败就算了 —— 页面本身已经是 fixed 铺满视口的。
+    try {
+      await document.documentElement.requestFullscreen?.();
+    } catch {
+      /* 不给就算了 */
+    }
     await startCamera(target);
   }
 
   function leaveBoard() {
+    if (document.fullscreenElement) {
+      void document.exitFullscreen?.().catch(() => {});
+    }
     stopCamera();
     setBoard(null);
     setLastCode("");
@@ -387,22 +459,29 @@ export function BoardScanPage() {
       </header>
 
       <style>{TOAST_CSS}</style>
-      <div style={styles.toasts} className="board-scan-toasts">
-        {toasts.map((toast) => (
-          <div key={toast.id} style={{ ...styles.toast, background: TOAST_STYLE[toast.tone].bg }}>
-            <i className={TOAST_STYLE[toast.tone].icon} style={styles.toastIcon} />
-            <div style={{ minWidth: 0 }}>
-              <p style={styles.toastText}>{toast.text}</p>
-              {toast.sub ? <p style={styles.toastSub}>{toast.sub}</p> : null}
-            </div>
-          </div>
-        ))}
-      </div>
 
-      <div style={styles.videoWrap}>
+      <div style={styles.videoWrap} onPointerDown={(event) => void focusAt(event)}>
         <video ref={videoRef} muted playsInline style={styles.video} />
         <canvas ref={canvasRef} style={{ display: "none" }} />
         <div style={styles.reticle} />
+        {/* 通知压在画面顶部而不是页面顶部：页头高度会随刘海安全区变，固定 top 会盖到标题 */}
+        <div style={styles.toasts} className="board-scan-toasts">
+          {toasts.map((toast) => (
+            <div key={toast.id} style={{ ...styles.toast, background: TOAST_STYLE[toast.tone].bg }}>
+              <i className={TOAST_STYLE[toast.tone].icon} style={styles.toastIcon} />
+              <div style={{ minWidth: 0 }}>
+                <p style={styles.toastText}>{toast.text}</p>
+                {toast.sub ? <p style={styles.toastSub}>{toast.sub}</p> : null}
+              </div>
+            </div>
+          ))}
+        </div>
+        {focusRing ? (
+          <span
+            key={focusRing.id}
+            style={{ ...styles.focusRing, left: `${focusRing.x}px`, top: `${focusRing.y}px` }}
+          />
+        ) : null}
         {cameraError ? (
           <div style={styles.cameraError}>
             <p style={{ margin: 0 }}>{cameraError}</p>
@@ -413,7 +492,23 @@ export function BoardScanPage() {
         ) : null}
       </div>
 
-      <p style={styles.lastCode}>{lastCode ? `刚扫到：${lastCode.slice(0, 40)}` : "把牌位上的二维码对准框内"}</p>
+      <div style={styles.cooldownWrap}>
+        {cooldown ? (
+          <>
+            <div style={styles.cooldownTrack}>
+              <span key={cooldown.id} style={styles.cooldownFill} />
+            </div>
+            <p style={styles.cooldownText}>
+              {sending ? `发送中… ${cooldown.code.slice(0, 24)}` : `${cooldown.code.slice(0, 24)} 冷却中，3 秒内不重复提交`}
+            </p>
+          </>
+        ) : (
+          <p style={styles.lastCode}>
+            {lastCode ? `刚扫到：${lastCode.slice(0, 40)}` : "把牌位上的二维码对准框内"}
+            {scanning ? (focusSupported ? " · 点画面对焦" : " · 这颗摄像头不支持点击对焦") : ""}
+          </p>
+        )}
+      </div>
 
       <div style={styles.logList} className="board-scan-log">
         {activeLogs.length ? null : <p style={styles.muted}>还没扫到，扫上去的会列在这里，可以一键退回。</p>}
@@ -511,17 +606,23 @@ const styles: Record<string, CSSProperties> = {
   boardName: { fontSize: "15px", fontWeight: 800, color: "var(--x-color-ink)" },
   boardMeta: { fontSize: "12px", color: "var(--x-color-ink-muted)" },
 
+  // 扫码时整屏都给相机：fixed 铺满视口，盖掉 CRM 的导航和侧栏。
+  // 手举着手机对板，任何多余的边框都是干扰。
   scanPage: {
-    position: "relative",
+    position: "fixed",
+    inset: 0,
+    zIndex: 9000,
     display: "grid",
     gap: "8px",
-    gridTemplateRows: "auto auto 1fr auto",
-    minHeight: "calc(100vh - 90px)",
+    gridTemplateRows: "auto 1fr auto auto",
     padding: "10px",
-    borderRadius: "10px",
-    background: "var(--x-color-panel)",
+    paddingBottom: "max(10px, env(safe-area-inset-bottom))",
+    paddingTop: "max(10px, env(safe-area-inset-top))",
+    background: "var(--x-color-canvas)",
     color: "var(--x-color-ink)",
     fontFamily: '"PingFang SC","Microsoft YaHei",var(--x-font-sans)',
+    overflow: "hidden",
+    boxSizing: "border-box",
   },
   scanBar: { display: "flex", alignItems: "center", gap: "10px" },
   scanTitleWrap: { display: "grid", minWidth: 0 },
@@ -530,7 +631,7 @@ const styles: Record<string, CSSProperties> = {
   // 通知从顶部压在画面上方，扫的时候不用低头找
   toasts: {
     position: "absolute",
-    top: "52px",
+    top: "10px",
     left: "10px",
     right: "10px",
     zIndex: 20,
@@ -558,11 +659,11 @@ const styles: Record<string, CSSProperties> = {
     textOverflow: "ellipsis",
     whiteSpace: "nowrap",
   },
+  // 剩下的空间全给画面（grid 的 1fr），minHeight 0 才会真的收缩
   videoWrap: {
     position: "relative",
     width: "100%",
-    aspectRatio: "3 / 4",
-    maxHeight: "56vh",
+    minHeight: 0,
     borderRadius: "12px",
     overflow: "hidden",
     background: "#000",
@@ -574,6 +675,17 @@ const styles: Record<string, CSSProperties> = {
     border: "2px solid rgba(255,255,255,0.85)",
     borderRadius: "12px",
     boxShadow: "0 0 0 9999px rgba(0,0,0,0.28)",
+    pointerEvents: "none",
+  },
+  focusRing: {
+    position: "absolute",
+    width: "68px",
+    height: "68px",
+    marginLeft: 0,
+    borderRadius: "50%",
+    border: "2px solid #fbbf24",
+    transform: "translate(-50%, -50%)",
+    animation: "boardScanFocus 0.65s ease-out forwards",
     pointerEvents: "none",
   },
   cameraError: {
@@ -595,7 +707,36 @@ const styles: Record<string, CSSProperties> = {
     fontFamily: "var(--x-font-mono)",
     textAlign: "center",
   },
-  logList: { display: "grid", gap: "6px", overflowY: "auto", alignContent: "start" },
+  // 流水固定占屏幕下方一小块，画面不会被挤扁
+  logList: {
+    display: "grid",
+    gap: "6px",
+    overflowY: "auto",
+    alignContent: "start",
+    maxHeight: "26vh",
+  },
+  cooldownWrap: { display: "grid", gap: "4px" },
+  cooldownTrack: {
+    height: "5px",
+    borderRadius: "999px",
+    background: "var(--x-color-canvas-alt)",
+    overflow: "hidden",
+  },
+  cooldownFill: {
+    display: "block",
+    height: "100%",
+    borderRadius: "999px",
+    background: "var(--x-color-accent)",
+    animation: `boardScanCooldown ${CODE_COOLDOWN_MS}ms linear forwards`,
+  },
+  cooldownText: {
+    margin: 0,
+    fontSize: "12px",
+    fontWeight: 700,
+    color: "var(--x-color-accent-strong)",
+    fontFamily: "var(--x-font-mono)",
+    textAlign: "center",
+  },
   logRow: {
     display: "grid",
     gridTemplateColumns: "1fr auto auto",
