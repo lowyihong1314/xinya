@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import re
 from datetime import datetime
 
 from flask_login import current_user
@@ -218,7 +219,15 @@ def serialize_order_detail(order: FahuiOrder) -> dict:
     return data
 
 
+# 4 位以内的纯数字直接当订单号查。单号就这个长度，走模糊匹配会把电话、牌位内容里
+# 含这几位数字的订单全捞出来（搜 "674" 能翻出一堆电话含 674 的），人要找的那张反而埋在里面。
+_SHORT_ORDER_ID = re.compile(r"^\d{1,4}$")
+
+
 def _order_search_filter(value: str):
+    if _SHORT_ORDER_ID.match(value):
+        return FahuiOrder.id == int(value)
+
     # 搜索范围：订单号 / 功德主 / 联络人 / 电话 / 牌位内容（所有表单值 + 项目名）/ 维护人。
     # 用 EXISTS 子查询代替 join+distinct，这样任意字段排序在 MySQL 下都合法。
     like_value = f"%{value}%"

@@ -1838,7 +1838,12 @@ export function FahuiPage() {
             </button>
           </nav>
 
-          <p style={styles.summary} className="ylp-summary">{`共 ${ylpPagination?.total || 0} 条 · ${ylpSafePage}/${ylpTotalPages} 页`}</p>
+          <p style={styles.summary} className="ylp-summary">
+            {`共 ${ylpPagination?.total || 0} 条 · ${ylpSafePage}/${ylpTotalPages} 页`}
+            {/* 4 位以内纯数字后端会当订单号精确查，这里说一声，
+                免得输了个短号码搜不到还以为是搜索坏了 */}
+            {/^\d{1,4}$/.test(ylpQuery) ? <span style={styles.summaryTag}>按单号精确匹配</span> : null}
+          </p>
         </section>
 
         {renderVersionEventBar()}
@@ -3216,6 +3221,16 @@ const styles = {
     overflowX: "auto" as const,
     borderRadius: "8px",
     border: "1px solid var(--x-color-line-soft)",
+  },
+  summaryTag: {
+    marginLeft: "6px",
+    padding: "1px 6px",
+    borderRadius: "999px",
+    background: "var(--x-color-accent-tint)",
+    color: "var(--x-color-accent-strong)",
+    fontSize: "11px",
+    fontWeight: 700,
+    whiteSpace: "nowrap" as const,
   },
   cellStrong: {
     fontWeight: 700,
