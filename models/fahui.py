@@ -548,10 +548,16 @@ class FahuiBoardHeader(db.Model):
     board_height = db.Column(db.Integer, nullable=True)
     version = db.Column(db.String(50), nullable=True, index=True)
 
+    # cascade 必须带上 delete：board_data.board_id 是 NOT NULL，而 selectin 在读板时
+    # 已经把 board_data 全拉进 session 了。少了 delete，删板时 ORM 按默认的「解除关联」
+    # 去发 UPDATE board_data SET board_id=NULL，撞 NOT NULL 直接 1048，整块板删不掉。
+    # 带上 delete 之后，已在 session 里的行发 DELETE、没加载的交给 FK 的
+    # ON DELETE CASCADE（passive_deletes 保证不会为了删而回头去 SELECT）。
     board_entries = db.relationship(
         "FahuiBoardData",
         back_populates="board",
         lazy="selectin",
+        cascade="all, delete",
         passive_deletes=True,
     )
 
