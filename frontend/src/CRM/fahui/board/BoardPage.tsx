@@ -22,6 +22,8 @@ import {
   getPrintPdf,
   listBoards,
   listUnattachedPdfs,
+  mergePrintPdfs,
+  previewMergePrintPdfs,
   quickSearchBoards,
   reorderBoardEntry,
   resetYearBarcodes,
@@ -31,6 +33,7 @@ import {
   type BoardHighlightHit,
   type BoardSearchItem,
   type BoardSearchOrder,
+  type MergePlan,
   type UnattachedPdf,
 } from "./api";
 
@@ -116,6 +119,16 @@ export function BoardPage() {
   const [newName, setNewName] = useState("");
   const [newRow, setNewRow] = useState("10"); // 每行张数
   const [newForm, setNewForm] = useState(false);
+
+  // 合并牌位单号：把几张没排满的同类型牌位并成一张。
+  // mergeIds 是人一个个加进来的单号，mergeTarget 是要保留的那个，
+  // mergePlan 由后端算（能不能合、合完几张），前端只负责画和禁用按钮。
+  const [mergeOpen, setMergeOpen] = useState(false);
+  const [mergeInput, setMergeInput] = useState("");
+  const [mergeIds, setMergeIds] = useState<number[]>([]);
+  const [mergeTarget, setMergeTarget] = useState<number | null>(null);
+  const [mergePlan, setMergePlan] = useState<MergePlan | null>(null);
+  const [mergeLoading, setMergeLoading] = useState(false);
 
   // 拖动来源：板上重排（slot）或从「未上板」面板拖入（pool）。
   type DragState = { kind: "slot"; boardId: number; pdfId: number } | { kind: "pool"; pdfId: number };
@@ -429,6 +442,8 @@ export function BoardPage() {
         setLiveHint(`牌位 ${payload.pdf_id} 刚上板${payload.board_name ? ` · ${payload.board_name}` : ""}`);
       } else if (payload?.action === "detached" && payload.pdf_id) {
         setLiveHint(`牌位 ${payload.pdf_id} 刚退板`);
+      } else if (payload?.action === "merged" && payload.pdf_id) {
+        setLiveHint(`牌位单号刚并进 ${payload.pdf_id}`);
       }
       if (timer !== null) {
         window.clearTimeout(timer);
@@ -457,6 +472,88 @@ export function BoardPage() {
     const timer = window.setTimeout(() => setLiveHint(""), 3000);
     return () => window.clearTimeout(timer);
   }, [liveHint]);
+
+  // 单号或保留目标一变就重算方案。判断全在后端，避免前端另写一套规则跟后端对不上。
+  useEffect(() => {
+    if (!mergeOpen || mergeIds.length === 0) {
+      setMergePlan(null);
+      return;
+    }
+    let alive = true;
+    setMergeLoading(true);
+    previewMergePrintPdfs(mergeIds, mergeTarget)
+      .then((res) => {
+        if (alive) setMergePlan(res.data);
+      })
+      .catch(() => {
+        if (alive) setMergePlan(null);
+      })
+      .finally(() => {
+        if (alive) setMergeLoading(false);
+      });
+    return () => {
+      alive = false;
+    };
+  }, [mergeOpen, mergeIds, mergeTarget]);
+
+  function addMergeIds() {
+    // 一次贴一串、扫码枪连着扫、手输都走这里：数字以外的一律当分隔符
+    const added = (mergeInput.match(/\d+/g) || []).map(Number).filter((one) => one > 0);
+    if (!added.length) return;
+    const next = [...mergeIds];
+    added.forEach((id) => {
+      if (!next.includes(id)) next.push(id);
+    });
+    setMergeIds(next);
+    // 先加进来的默认就是要保留的那个 —— 多数时候人是先扫「要留的」再扫「要并掉的」
+    if (!mergeTarget || !next.includes(mergeTarget)) setMergeTarget(next[0] ?? null);
+    setMergeInput("");
+  }
+
+  function dropMergeId(pdfId: number) {
+    const next = mergeIds.filter((id) => id !== pdfId);
+    setMergeIds(next);
+    if (mergeTarget === pdfId) setMergeTarget(next[0] ?? null);
+  }
+
+  function resetMerge() {
+    setMergeIds([]);
+    setMergeTarget(null);
+    setMergePlan(null);
+    setMergeInput("");
+  }
+
+  async function handleMerge() {
+    if (!mergePlan?.can_merge || !mergeTarget) return;
+    const target = mergeTarget;
+    const dropped = mergeIds.filter((id) => id !== target);
+    const ok = await showConfirmDialog({
+      message:
+        `把单号 ${dropped.join("、")} 并进 #${target}？\n` +
+        `牌位本身不动，全部挂到 #${target} 名下（合并后 ${mergePlan.total} 个）；` +
+        `${dropped.length} 个旧号会被删掉，号码空出来给下次复用。\n` +
+        `#${target} 这张纸的内容变了，记得重印一次。`,
+      tone: "danger",
+    });
+    if (!ok) return;
+
+    // 这里不走 run()：run 把失败也吞成提示，合失败时不该顺手清掉人刚输的一串单号
+    setBusy(true);
+    setError("");
+    try {
+      const res = await mergePrintPdfs(mergeIds, target);
+      await reload();
+      void loadPool();
+      // 目标那张的内容变了，预览图得重渲
+      setPreviewNonce((current) => ({ ...current, [target]: (current[target] || 0) + 1 }));
+      resetMerge();
+      show_alert("success", res.message || `已合并到 #${target}`);
+    } catch (e) {
+      show_alert("error", e instanceof Error ? e.message : "合并失败");
+    } finally {
+      setBusy(false);
+    }
+  }
 
   async function run(action: () => Promise<unknown>, okMsg?: string) {
     setBusy(true);
@@ -704,6 +801,16 @@ export function BoardPage() {
             </button>
           ) : null}
           {canEdit ? (
+            <button
+              type="button"
+              style={styles.ghost}
+              onClick={() => setMergeOpen((v) => !v)}
+              title="把几张没排满的同类型牌位并成一张，只留你选中的那个单号"
+            >
+              合并牌位号
+            </button>
+          ) : null}
+          {canEdit ? (
             <button type="button" style={styles.primary} onClick={() => setNewForm((v) => !v)}>+ 新建看板</button>
           ) : null}
         </div>
@@ -718,6 +825,97 @@ export function BoardPage() {
             <input style={styles.input} placeholder="看板名称，如 RM15 冤亲债主_A" value={newName} onChange={(e) => setNewName(e.target.value)} onKeyDown={(e) => { if (e.key === "Enter") void handleCreate(); }} />
             <input style={styles.numInput} type="number" min={1} placeholder="每行张数" value={newRow} onChange={(e) => setNewRow(e.target.value)} title="每行张数（一行贴几张）" />
             <button type="button" style={styles.primary} onClick={() => void handleCreate()} disabled={busy || !newName.trim()}>创建</button>
+          </div>
+        </div>
+      ) : null}
+
+      {mergeOpen && canEdit ? (
+        <div style={styles.card}>
+          <p style={styles.cardTitle}>合并牌位单号</p>
+          <p style={styles.muted}>
+            把几张没排满的<b>同类型</b>牌位并成一张：单号一个个加进来，选中要保留的那个，其余的号会被删掉、号码空出来给下次复用。
+            大牌位一张 1 个、小牌位 5 个、冤亲债主 10 个，超过就合不了。
+          </p>
+          <div style={styles.inlineRow}>
+            <input
+              style={styles.input}
+              placeholder="牌位单号，可一次贴多个（446 447 或 446,447），扫码枪扫进来也行"
+              value={mergeInput}
+              onChange={(e) => setMergeInput(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === "Enter") addMergeIds();
+              }}
+            />
+            <button type="button" style={styles.ghost} onClick={addMergeIds}>加入</button>
+            <button type="button" style={styles.ghost} onClick={resetMerge} disabled={!mergeIds.length}>
+              清空
+            </button>
+          </div>
+
+          {mergeIds.length ? (
+            <div style={styles.stack}>
+              {(mergePlan?.entries || []).map((entry) => (
+                <div
+                  key={entry.pdf_id}
+                  style={{ ...styles.mergeRow, ...(mergeTarget === entry.pdf_id ? styles.mergeRowActive : null) }}
+                  onClick={() => setMergeTarget(entry.pdf_id)}
+                >
+                  <input type="radio" checked={mergeTarget === entry.pdf_id} readOnly />
+                  <b style={styles.mergeNo}>#{entry.pdf_id}</b>
+                  <span style={styles.mergeType}>
+                    {entry.type_label || "?"}
+                    {entry.code ? ` ${entry.code}` : entry.codes.length ? ` ${entry.codes.join("/")}` : ""}
+                  </span>
+                  <span style={styles.mergeCount}>{entry.count} 个</span>
+                  <span style={styles.mergeWhere}>
+                    {entry.boards.length
+                      ? entry.boards.map((b) => `${b.board_name} #${b.location}`).join("、")
+                      : "未上板"}
+                  </span>
+                  <span style={styles.mergeNames} title={entry.orders.map((o) => o.owner_or_deceased || "").join("、")}>
+                    {entry.orders.map((o) => o.owner_or_deceased || `订单 ${o.order_id}`).join("、")}
+                  </span>
+                  <button
+                    type="button"
+                    style={styles.tinyBtn}
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      dropMergeId(entry.pdf_id);
+                    }}
+                  >
+                    移除
+                  </button>
+                </div>
+              ))}
+              {(mergePlan?.missing_ids || []).map((pdfId) => (
+                <div key={`merge-missing-${pdfId}`} style={styles.mergeMissing}>
+                  <b style={styles.mergeNo}>#{pdfId}</b>
+                  <span style={{ flex: 1 }}>查不到这个牌位单号</span>
+                  <button type="button" style={styles.tinyBtn} onClick={() => dropMergeId(pdfId)}>
+                    移除
+                  </button>
+                </div>
+              ))}
+            </div>
+          ) : null}
+
+          <div style={styles.mergeFoot}>
+            <span style={mergePlan?.can_merge ? styles.muted : styles.mergeWarn}>
+              {mergeLoading
+                ? "算一下…"
+                : mergePlan?.can_merge
+                  ? `合并后 ${mergePlan.total} / ${mergePlan.capacity} 个牌位，保留单号 #${mergeTarget}` +
+                    (mergePlan.duplicates ? `（去掉 ${mergePlan.duplicates} 个重复的）` : "")
+                  : mergePlan?.reason || "先加两个以上的单号"}
+            </span>
+            <button
+              type="button"
+              style={styles.primary}
+              disabled={!mergePlan?.can_merge || busy || mergeLoading}
+              onClick={() => void handleMerge()}
+            >
+              {mergeTarget ? `合并到 #${mergeTarget}` : "合并"}
+            </button>
           </div>
         </div>
       ) : null}
@@ -1523,4 +1721,14 @@ const styles: Record<string, CSSProperties> = {
   slotEmpty: { width: "100%", aspectRatio: "3 / 4", display: "flex", alignItems: "center", justifyContent: "center", borderRadius: "4px", background: "var(--x-color-panel)", color: "var(--x-color-ink-muted)", fontSize: "12px", border: "1px dashed var(--x-color-line)" },
   slotCap: { fontSize: "10.5px", color: "var(--x-color-ink-muted)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" },
   attachRow: { display: "flex", gap: "8px" },
+  mergeRow: { display: "flex", alignItems: "center", gap: "10px", padding: "8px 10px", borderRadius: "8px", background: "var(--x-color-panel-alt)", border: "1px solid transparent", fontSize: "12.5px", cursor: "pointer", minWidth: 0 },
+  mergeRowActive: { border: "1px solid var(--x-color-accent-border)", background: "var(--x-color-accent-soft)" },
+  mergeNo: { fontFamily: "var(--x-font-mono)", fontSize: "13px", fontWeight: 800, flexShrink: 0 },
+  mergeType: { fontWeight: 700, whiteSpace: "nowrap", flexShrink: 0 },
+  mergeCount: { color: "var(--x-color-ink-muted)", whiteSpace: "nowrap", flexShrink: 0 },
+  mergeWhere: { color: "var(--x-color-ink-muted)", whiteSpace: "nowrap", flexShrink: 0 },
+  mergeNames: { flex: 1, minWidth: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", color: "var(--x-color-ink-muted)" },
+  mergeMissing: { display: "flex", alignItems: "center", gap: "10px", padding: "8px 10px", borderRadius: "8px", background: "var(--x-color-danger-soft)", color: "var(--x-color-danger)", fontSize: "12.5px" },
+  mergeFoot: { display: "flex", alignItems: "center", justifyContent: "space-between", gap: "10px", flexWrap: "wrap" },
+  mergeWarn: { margin: 0, fontSize: "12.5px", fontWeight: 600, color: "var(--x-color-danger)" },
 };

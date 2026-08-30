@@ -47,6 +47,8 @@ from .board_services import (
     list_print_pdf_records,
     list_unattached_print_pdfs,
     list_versions,
+    merge_print_pdfs,
+    preview_merge_print_pdfs,
     quick_search_orders,
     reorder_board_entry,
     update_order_customer,
@@ -170,6 +172,20 @@ def update_board_route(board_id):
 @permission_required_any("account_edit")
 def delete_board_header_route(board_id):
     payload, status_code = delete_board_header(board_id)
+    return jsonify(payload), status_code
+
+
+@board_router_bp.route("/print-pdfs/merge/preview", methods=["POST"])
+@permission_required_any(*FAHUI_READ_PERMISSION_NAMES)
+def preview_merge_print_pdfs_route():
+    payload, status_code = preview_merge_print_pdfs(request.get_json(silent=True) or {})
+    return jsonify(payload), status_code
+
+
+@board_router_bp.route("/print-pdfs/merge", methods=["POST"])
+@permission_required_any("account_edit")
+def merge_print_pdfs_route():
+    payload, status_code = merge_print_pdfs(request.get_json(silent=True) or {})
     return jsonify(payload), status_code
 
 

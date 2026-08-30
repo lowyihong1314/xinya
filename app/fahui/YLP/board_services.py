@@ -14,6 +14,7 @@ from .services import (
     serialize_print_pdf,
     user_can_view_order,
 )
+from .print_points import SOURCE_NAME_BY_PAIWEI_TYPE, load_location_points
 from .shared import active_order_version, format_datetime, normalize_version
 from models import db
 from models.fahui import (
@@ -645,6 +646,239 @@ def clear_unattached_print_pdfs(version: str | None) -> tuple[dict, int]:
             db.session.rollback()
 
     return {"success": True, "message": f"已清空 {removed} 张未上板牌位单，号码可复用", "removed": removed}, 200
+
+
+# ---- 合并牌位单号 ----
+# 几张没排满的打印页并成一张：pdf_page_data 全部改挂到保留的那个单号下，
+# 其余单号连号一起删掉（号码空出来，下次生成时按最小空缺号复用）。
+#
+# 只允许「同一个 code」互相合并。生成器是按 code 分组、一个 code 一页的
+# （print_generator.generate_paiwei_using_order_item_ids），B2 和 C 塞进同一个
+# 单号，重印时会吐出两页，而条码只有一个 —— 板上那一格就对不上了。
+
+_SOURCE_LABEL = {"paiwei_1": "大牌位", "paiwei_5": "小牌位", "paiwei_10": "冤亲债主"}
+
+
+def _paiwei_capacity(source_name: str | None) -> int:
+    """这个模板一张纸最多印几个牌位 = 坐标表里的格子数（大 1 / 小 5 / 冤亲债主 10）。"""
+    if not source_name:
+        return 0
+    return len(load_location_points(source_name) or [])
+
+
+def _drop_paiwei_preview_cache(pdf_ids) -> None:
+    """预览图按单号缓存在磁盘（paiwei_result/paiweicache/<id>.png）。合并后目标那张
+    的内容变了，缓存不会自己失效，这里直接删掉，下次看板要图时重渲一张新的。"""
+    from ..common.ylp_storage import preferred_dir
+
+    try:
+        cache_dir = preferred_dir("paiwei_result", "paiweicache")
+    except Exception:  # noqa: BLE001
+        return
+    for pdf_id in pdf_ids:
+        try:
+            (cache_dir / f"{pdf_id}.png").unlink(missing_ok=True)
+        except OSError:
+            pass
+
+
+def _merge_entry(pdf: FahuiPrintPdf) -> dict:
+    """一个单号在合并弹窗里要显示的东西：什么类型、几个牌位、都是谁、贴在哪块板。"""
+    codes: list[str] = []
+    orders: list[dict] = []
+    versions: set[str] = set()
+    for page in sorted(pdf.pages or [], key=lambda one: one.order_item_id or 0):
+        item = page.order_item
+        if not item:
+            continue
+        codes.append(str(item.code or ""))
+        order = item.order
+        if order and order.version:
+            versions.add(str(order.version))
+        orders.append(
+            {
+                "order_item_id": item.id,
+                "order_id": item.order_id,
+                "customer_name": order.customer_name if order else None,
+                "owner_or_deceased": _board_owner_or_deceased(item),
+            }
+        )
+
+    unique_codes = sorted(set(codes))
+    code = unique_codes[0] if len(unique_codes) == 1 else None
+    source_name = SOURCE_NAME_BY_PAIWEI_TYPE.get(code or "")
+    return {
+        "pdf_id": pdf.id,
+        "code": code,
+        "codes": unique_codes,
+        "source_name": source_name,
+        "type_label": _SOURCE_LABEL.get(source_name or "", ""),
+        "count": len(orders),
+        "orders": orders,
+        "versions": sorted(versions),
+        "boards": [
+            {
+                "board_id": entry.board.id,
+                "board_name": entry.board.board_name,
+                "location": entry.location,
+                "board_data_id": entry.id,
+            }
+            for entry in (pdf.board_entries or [])
+            if entry.board
+        ],
+    }
+
+
+def _build_merge_plan(raw_ids, target_id: int | None) -> dict:
+    """把一批单号算成一份「能不能合、合完什么样」的方案。
+
+    预览和真正执行共用同一份 —— 前端拿它画表格和禁用按钮，后端拿它做准入，
+    两边的判断永远是同一段代码，不会出现「按钮能点但一提交就报错」。
+    """
+    ids: list[int] = []
+    for raw in raw_ids or []:
+        value = _coerce_int(raw)
+        if value and value not in ids:
+            ids.append(value)
+
+    found: dict[int, FahuiPrintPdf] = {}
+    if ids:
+        found = {pdf.id: pdf for pdf in FahuiPrintPdf.query.filter(FahuiPrintPdf.id.in_(ids)).all()}
+    entries = [_merge_entry(found[pdf_id]) for pdf_id in ids if pdf_id in found]
+    missing_ids = [pdf_id for pdf_id in ids if pdf_id not in found]
+
+    codes = {entry["code"] for entry in entries}
+    same_type = bool(entries) and len(codes) == 1 and None not in codes
+    source_name = entries[0]["source_name"] if same_type else None
+    capacity = _paiwei_capacity(source_name)
+    # 按「不重复的牌位」算张数：同一个牌位有可能挂在两个单号下 —— 先按 3 个一组印过，
+    # 后来又单独补印过一张，_get_or_create_print_pdf 是拿整页的 item 集合去匹配的，
+    # 对不上就另发一个号。这种重复合并时会去掉，不该占纸上的格子。
+    item_ids = [order["order_item_id"] for entry in entries for order in entry["orders"]]
+    total = len(set(item_ids))
+    duplicates = len(item_ids) - total
+
+    if missing_ids:
+        reason = "查不到牌位单号 " + "、".join(str(one) for one in missing_ids)
+    elif len(entries) < 2:
+        reason = "至少要两个牌位单号才谈得上合并"
+    elif None in codes:
+        mixed = next(entry for entry in entries if entry["code"] is None)
+        reason = f"单号 {mixed['pdf_id']} 里混了 {'/'.join(mixed['codes'])} 几种牌位，先处理掉再合"
+    elif not same_type:
+        reason = "牌位类型不一样，只能同类型合并：" + "、".join(
+            f"{entry['pdf_id']}={entry['type_label']}{entry['code']}" for entry in entries
+        )
+    elif not capacity:
+        reason = f"{entries[0]['code']} 没配版面坐标，算不出一张纸放得下几个"
+    elif total > capacity:
+        reason = f"合并后 {total} 个牌位，超过{entries[0]['type_label']}一张纸 {capacity} 个的上限"
+    elif len({version for entry in entries for version in entry["versions"]}) > 1:
+        reason = "这些单号跨了年份，不给合"
+    elif target_id is None:
+        reason = "请选一个要保留的单号"
+    elif target_id not in found:
+        reason = f"要保留的单号 {target_id} 不在这批里"
+    else:
+        reason = ""
+
+    return {
+        "entries": entries,
+        "missing_ids": missing_ids,
+        "code": entries[0]["code"] if same_type else None,
+        "source_name": source_name,
+        "type_label": entries[0]["type_label"] if same_type else "",
+        "capacity": capacity,
+        "total": total,
+        "duplicates": duplicates,
+        "target_id": target_id,
+        "can_merge": not reason,
+        "reason": reason,
+    }
+
+
+def preview_merge_print_pdfs(data: dict) -> tuple[dict, int]:
+    """合并前的核对：给一串单号，回每张是什么类型、几个牌位、贴在哪，以及能不能合。"""
+    plan = _build_merge_plan(data.get("pdf_ids"), _coerce_int(data.get("target_id")))
+    return {"status": "success", "data": plan}, 200
+
+
+def merge_print_pdfs(data: dict) -> tuple[dict, int]:
+    target_id = _coerce_int(data.get("target_id"))
+    plan = _build_merge_plan(data.get("pdf_ids"), target_id)
+    if not plan["can_merge"]:
+        return {"status": "error", "message": plan["reason"] or "不能合并"}, 400
+
+    source_ids = [entry["pdf_id"] for entry in plan["entries"] if entry["pdf_id"] != target_id]
+    if not source_ids:
+        return {"status": "error", "message": "没有要并进来的单号"}, 400
+
+    target_entries = FahuiBoardData.query.filter_by(print_pdf_id=target_id).all()
+    source_entries = (
+        FahuiBoardData.query.filter(FahuiBoardData.print_pdf_id.in_(source_ids))
+        .order_by(FahuiBoardData.location.asc(), FahuiBoardData.id.asc())
+        .all()
+    )
+    touched_boards = {entry.board_id for entry in source_entries}
+    touched_boards.update(entry.board_id for entry in target_entries)
+
+    # 保留的单号还没上板、被并掉的那张却贴在板上：让它顶替那一格。
+    # 不然合并完板面凭空少一格，还得人再去重贴一次。
+    keep_entry_id = None
+    if not target_entries and source_entries:
+        source_entries[0].print_pdf_id = target_id
+        keep_entry_id = source_entries[0].id
+    drop_ids = [entry.id for entry in source_entries if entry.id != keep_entry_id]
+
+    # 同一个牌位挂在两个单号下时（见 _build_merge_plan 的说明），重复的那几行不搬、
+    # 直接删掉 —— 照搬过去一张纸上同一个人会印两遍。
+    kept_item_ids = {
+        item_id
+        for (item_id,) in db.session.query(FahuiPdfPageData.order_item_id)
+        .filter(FahuiPdfPageData.print_pdf_id == target_id)
+        .all()
+    }
+    move_page_ids: list[int] = []
+    drop_page_ids: list[int] = []
+    for page in (
+        db.session.query(FahuiPdfPageData)
+        .filter(FahuiPdfPageData.print_pdf_id.in_(source_ids))
+        .order_by(FahuiPdfPageData.id.asc())
+        .all()
+    ):
+        if page.order_item_id in kept_item_ids:
+            drop_page_ids.append(page.id)
+        else:
+            kept_item_ids.add(page.order_item_id)
+            move_page_ids.append(page.id)
+
+    # 一律走批量 SQL：print_pdf.pages 是 selectin 预加载的，逐个改对象 FK 再删父行，
+    # flush 的顺序很容易变成「先把子行 FK 置空」，撞上 NOT NULL 就整个事务挂掉。
+    if move_page_ids:
+        FahuiPdfPageData.query.filter(FahuiPdfPageData.id.in_(move_page_ids)).update(
+            {"print_pdf_id": target_id}, synchronize_session=False
+        )
+    if drop_page_ids:
+        FahuiPdfPageData.query.filter(FahuiPdfPageData.id.in_(drop_page_ids)).delete(
+            synchronize_session=False
+        )
+    if drop_ids:
+        FahuiBoardData.query.filter(FahuiBoardData.id.in_(drop_ids)).delete(synchronize_session=False)
+    FahuiPrintPdf.query.filter(FahuiPrintPdf.id.in_(source_ids)).delete(synchronize_session=False)
+    db.session.commit()
+
+    _drop_paiwei_preview_cache([target_id, *source_ids])
+    for board_id in touched_boards:
+        _notify_board_changed(board_id, "merged", target_id)
+
+    merged_text = "、".join(str(one) for one in source_ids)
+    return {
+        "status": "success",
+        "message": f"已把 {merged_text} 并进单号 {target_id}，现在这张有 {plan['total']} 个牌位",
+        "target_id": target_id,
+        "merged_ids": source_ids,
+        "total": plan["total"],
+    }, 200
 
 
 def list_print_pdf_records() -> list[dict]:

@@ -136,6 +136,55 @@ export async function getPrintPdf(pdfId: number) {
   return readJson<{ status?: string; data?: { id: number; boards: BoardLocation[]; page_data?: unknown[] } }>(res);
 }
 
+/** 一个牌位单号在「合并」面板里的样子：什么类型、装了谁、贴在哪块板。 */
+export type MergePdfEntry = {
+  pdf_id: number;
+  code?: string | null;
+  codes: string[];
+  source_name?: string | null;
+  type_label?: string | null;
+  count: number;
+  orders: BoardSlotOrder[];
+  versions: string[];
+  boards: BoardLocation[];
+};
+
+/** 合并方案：能不能合、合完几张、为什么不能合。预览和真正提交用的是后端同一段判断。 */
+export type MergePlan = {
+  entries: MergePdfEntry[];
+  missing_ids: number[];
+  code?: string | null;
+  source_name?: string | null;
+  type_label?: string | null;
+  capacity: number;
+  total: number;
+  /** 同一个牌位挂在两个单号下的重复数，合并时会被去掉 */
+  duplicates: number;
+  target_id?: number | null;
+  can_merge: boolean;
+  reason: string;
+};
+
+export async function previewMergePrintPdfs(pdfIds: number[], targetId?: number | null) {
+  const res = await apiFetch("/api/board_router/print-pdfs/merge/preview", {
+    method: "POST",
+    credentials: "include",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ pdf_ids: pdfIds, target_id: targetId ?? null }),
+  });
+  return readJson<{ status?: string; data: MergePlan }>(res);
+}
+
+export async function mergePrintPdfs(pdfIds: number[], targetId: number) {
+  const res = await apiFetch("/api/board_router/print-pdfs/merge", {
+    method: "POST",
+    credentials: "include",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ pdf_ids: pdfIds, target_id: targetId }),
+  });
+  return readJson<{ status?: string; message?: string; target_id?: number; merged_ids?: number[]; total?: number }>(res);
+}
+
 export type UnattachedPdf = {
   id: number;
   orders: BoardSlotOrder[];
