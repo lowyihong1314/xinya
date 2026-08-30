@@ -674,3 +674,51 @@ class FahuiOpenWindow(db.Model):
             "end_md": self.end_md,
             "note": self.note,
         }
+
+
+class FahuiDiyPaiwei(db.Model):
+    """D.I.Y 牌位：法会当天临时加的、或格式特殊的牌位。
+
+    和正常牌位（order_items）完全不是一回事，所以不挂订单、不分版本、不进看板：
+    这里存的是「一张纸上哪里写什么字」，选一张模板底图，自己往上摆文字块，直接出单张 PDF。
+    """
+
+    __tablename__ = "fahui_diy_paiwei"
+
+    id = db.Column(db.Integer, primary_key=True, autoincrement=True)
+    # 给人看的标题，例如「陈氏 临时超度」
+    title = db.Column(db.String(255), nullable=False, default="")
+    # 底图模板：paiwei_1（大）/ paiwei_5（小）/ paiwei_10（冤亲债主）
+    source_name = db.Column(db.String(32), nullable=False, default="paiwei_1")
+    note = db.Column(db.String(500), nullable=True)
+    # 文字块数组，坐标一律是「PDF 点 + 左上角原点」，见 diy_paiwei.py 的说明
+    elements = db.Column(db.JSON, nullable=True)
+    created_by = db.Column(
+        db.Integer,
+        db.ForeignKey("user_data.id", name="fk_diy_paiwei_user", ondelete="SET NULL"),
+        nullable=True,
+    )
+    created_at = db.Column(
+        db.TIMESTAMP,
+        nullable=True,
+        server_default=db.text("current_timestamp()"),
+    )
+    updated_at = db.Column(
+        db.TIMESTAMP,
+        nullable=True,
+        server_default=db.text("current_timestamp() ON UPDATE current_timestamp()"),
+    )
+
+    def to_dict(self, with_elements: bool = True):
+        data = {
+            "id": self.id,
+            "title": self.title or "",
+            "source_name": self.source_name or "paiwei_1",
+            "note": self.note or "",
+            "created_at": self.created_at.strftime("%Y-%m-%d %H:%M") if self.created_at else None,
+            "updated_at": self.updated_at.strftime("%Y-%m-%d %H:%M") if self.updated_at else None,
+            "element_count": len(self.elements or []),
+        }
+        if with_elements:
+            data["elements"] = self.elements or []
+        return data

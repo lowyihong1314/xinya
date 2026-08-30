@@ -3,6 +3,7 @@ import { EventTablePage } from '../event/react/EventTablePage';
 import { FahuiPage } from '../fahui/FahuiPage';
 import { BoardPage } from '../fahui/board/BoardPage';
 import { FahuiRawDocsPage } from '../fahui/RawDocsPage';
+import { DiyPaiweiPage } from '../fahui/diy/DiyPaiweiPage';
 import { FormWorkspacePage } from '../form/react/FormWorkspacePage';
 import { LongOpenRegistrationFormPage } from '../long_open_registration_form/react/LongOpenRegistrationFormPage';
 import { UserControlPage } from '../user_control/react/UserControlPage';
@@ -29,6 +30,7 @@ export type CRMModuleKey =
   | 'permanent_registration'
   | 'ylp_board'
   | 'fahui_raw_docs'
+  | 'fahui_diy_paiwei'
   | 'manual';
 
 export type CRMModuleSpec = {
@@ -74,6 +76,13 @@ export const CRM_MODULES: CRMModuleSpec[] = [
     icon: 'fa-solid fa-images',
     description: '手写单据原图存档：左边清单，右边看大图。',
     Component: FahuiRawDocsPage,
+  },
+  {
+    key: 'fahui_diy_paiwei',
+    title: 'D.I.Y 牌位',
+    icon: 'fa-solid fa-pen-ruler',
+    description: '临时/特殊牌位：选模板底图自己排版，直接出单张 PDF。',
+    Component: DiyPaiweiPage,
   },
   {
     key: 'finance',

@@ -77,6 +77,11 @@ def save_point_json(data):
             _write_json_file(_location_file(source_name), point_data)
 
 
+def load_location_points(source_name: str):
+    """按模板名直接读坐标 json（get_point_data 是按牌位 code 找的，D.I.Y 那边只有模板名）。"""
+    return _load_json_file(_location_file(str(source_name or "")), None)
+
+
 def get_point_data(paiwei_type):
     source_name = SOURCE_NAME_BY_PAIWEI_TYPE.get(str(paiwei_type))
     if not source_name:

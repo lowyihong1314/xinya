@@ -18,6 +18,7 @@ BLUEPRINT_SPECS = [
     ("app.fahui.YLP.payment_routes", "payment_bp", "/payment", "api"),
     ("app.fahui.YLP.board_routes", "board_router_bp", "/board_router", "api"),
     ("app.fahui.YLP.print_routes", "print_paiwei_bp", "/print_paiwei", "api"),
+    ("app.fahui.YLP.diy_paiwei", "diy_paiwei_bp", "/diy_paiwei", "api"),
     ("app.event", "event_data_bp", "/event_data", "api"),
     ("app.filesystem", "files_bp", "/files", "api"),
     ("app.content", "info_bp", "/info", "api"),

@@ -65,6 +65,7 @@ export function CRMPage() {
               module.key === "register" ||
               module.key === "ylp_board" ||
               module.key === "fahui_raw_docs" ||
+              module.key === "fahui_diy_paiwei" ||
               module.key === "files_v2"
             ) {
               return null;
@@ -83,7 +84,8 @@ export function CRMPage() {
                   : isModulePathActive(location.pathname, module.key) ||
                     (module.key === "dharma_event" &&
                       (isModulePathActive(location.pathname, "ylp_board") ||
-                        isModulePathActive(location.pathname, "fahui_raw_docs"))) ||
+                        isModulePathActive(location.pathname, "fahui_raw_docs") ||
+                        isModulePathActive(location.pathname, "fahui_diy_paiwei"))) ||
                     (module.key === "files" && isModulePathActive(location.pathname, "files_v2"));
             const children = isSpecialEvent
               ? getSpecialEventChildren(location.pathname, isBuddhistEvents)
@@ -686,6 +688,7 @@ export function getSidebarChildren(
     const fahuiPath = buildCRMModulePath("dharma_event");
     const onBoard = isModulePathActive(pathname, "ylp_board");
     const onRawDocs = isModulePathActive(pathname, "fahui_raw_docs");
+    const onDiy = isModulePathActive(pathname, "fahui_diy_paiwei");
     return [
       {
         key: "ylp",
@@ -697,7 +700,7 @@ export function getSidebarChildren(
           fahui_workspace: "ylp",
           fahui_section: "orders",
         }),
-        active: moduleActive && !onBoard && !onRawDocs && (workspace !== "lamp" || view === "ylp_order"),
+        active: moduleActive && !onBoard && !onRawDocs && !onDiy && (workspace !== "lamp" || view === "ylp_order"),
       },
       {
         key: "lamp",
@@ -708,7 +711,7 @@ export function getSidebarChildren(
           fahui_view: "workspace",
           fahui_workspace: "lamp",
         }),
-        active: moduleActive && !onBoard && !onRawDocs && workspace === "lamp",
+        active: moduleActive && !onBoard && !onRawDocs && !onDiy && workspace === "lamp",
       },
       {
         key: "fahui_raw_docs",
@@ -717,6 +720,14 @@ export function getSidebarChildren(
         description: "手写单据原图：左边清单，右边看大图。",
         to: buildCRMModulePath("fahui_raw_docs"),
         active: onRawDocs,
+      },
+      {
+        key: "fahui_diy_paiwei",
+        title: "D.I.Y 牌位",
+        icon: "fa-solid fa-pen-ruler",
+        description: "临时/特殊牌位：自己排版，直接出单张 PDF。",
+        to: buildCRMModulePath("fahui_diy_paiwei"),
+        active: onDiy,
       },
       {
         key: "ylp_board",
