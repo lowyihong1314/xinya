@@ -105,6 +105,32 @@ export async function deleteBoardEntry(boardDataId: number) {
   return readJson<{ status?: string; all_board: Board[] }>(res);
 }
 
+export type BoardScanResult = {
+  status: "attached" | "duplicate" | "unknown" | "error";
+  pdf_id?: number;
+  side_id?: number;
+  board_id?: number;
+  board_name?: string;
+  same_board?: boolean;
+  location?: number;
+  orders?: BoardSlotOrder[];
+  message?: string;
+  code?: string;
+};
+
+/** 扫码上板。回包很轻（不带整棵看板树）—— 手机一秒可能扫好几次。 */
+export async function scanAttachToBoard(payload: { board_id: number; code: string }) {
+  const res = await apiFetch("/api/board_router/boards/scan", {
+    method: "POST",
+    credentials: "include",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(payload),
+  });
+  const data = (await res.json().catch(() => ({}))) as BoardScanResult;
+  // 409/404 是正常业务结果（已上板 / 认不出），不当异常抛，交给调用方提示
+  return data.status ? data : ({ status: "error", message: "请求失败" } as BoardScanResult);
+}
+
 export async function getPrintPdf(pdfId: number) {
   const res = await apiFetch(`/api/board_router/print-pdfs/${pdfId}`, { credentials: "include" });
   return readJson<{ status?: string; data?: { id: number; boards: BoardLocation[]; page_data?: unknown[] } }>(res);

@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import re
 from datetime import datetime
 
 from flask_login import current_user
@@ -422,6 +423,85 @@ def attach_pdf_to_board(data: dict) -> tuple[dict, int]:
         "pdf_id": pdf_id,
         "pdf_data": [],
         "all_board": _get_all_boards_with_orders(),
+    }, 200
+
+
+# 扫码上板：手机对着板上的牌位扫 QR / 条码，扫到就直接贴。
+# 独立于 attach_pdf_to_board 是因为这条路一秒可能触发好几次 ——
+# attach 那边每次都回整棵看板树（几十上百块板的全部内容），手机流量顶不住。
+# 这里只回一句「贴上了 / 已经在某某板上了」。
+_CODE_DIGITS = re.compile(r"\d+")
+
+
+def scan_attach_to_board(data: dict) -> tuple[dict, int]:
+    board_id = _coerce_int(data.get("board_id"))
+    raw_code = str(data.get("code") or "").strip()
+    if not board_id:
+        return {"status": "error", "message": "board_id 不能为空"}, 400
+
+    # 牌位上印的 QR 和条码内容就是牌位单号本身；扫出来带前缀/空白也认。
+    digits = _CODE_DIGITS.search(raw_code)
+    if not digits:
+        return {"status": "unknown", "code": raw_code, "message": f"认不出这个码：{raw_code[:32]}"}, 404
+    pdf_id = int(digits.group())
+
+    header = FahuiBoardHeader.query.get(board_id)
+    if not header:
+        return {"status": "error", "message": f"看板 {board_id} 不存在"}, 404
+
+    pdf = FahuiPrintPdf.query.get(pdf_id)
+    if not pdf:
+        return {"status": "unknown", "code": raw_code, "pdf_id": pdf_id,
+                "message": f"没有单号 #{pdf_id} 的牌位"}, 404
+
+    orders = []
+    seen = set()
+    for page in pdf.pages or []:
+        item = page.order_item
+        order = item.order if item else None
+        if not order or order.id in seen:
+            continue
+        seen.add(order.id)
+        orders.append({
+            "order_id": order.id,
+            "customer_name": order.customer_name,
+            "owner_or_deceased": _board_owner_or_deceased(item),
+        })
+
+    existing = FahuiBoardData.query.filter_by(print_pdf_id=pdf_id).first()
+    if existing:
+        # 已经贴过了 —— 前端会一直扫到同一张，所以这里必须是幂等的「拒绝」，不是报错崩掉
+        other = FahuiBoardHeader.query.get(existing.board_id)
+        return {
+            "status": "duplicate",
+            "pdf_id": pdf_id,
+            "board_id": existing.board_id,
+            "board_name": other.board_name if other else f"board_{existing.board_id}",
+            "same_board": existing.board_id == header.id,
+            "location": existing.location,
+            "orders": orders,
+        }, 409
+
+    # 优先填这块板上的空位，没空位就接在最后（和拖拽上板同一套规则）
+    entry = FahuiBoardData.query.filter_by(board_id=header.id, print_pdf_id=None).first()
+    if entry:
+        entry.print_pdf_id = pdf_id
+    else:
+        last_location = (
+            db.session.query(func.max(FahuiBoardData.location)).filter_by(board_id=header.id).scalar() or 0
+        )
+        entry = FahuiBoardData(board_id=header.id, print_pdf_id=pdf_id, location=last_location + 1)
+        db.session.add(entry)
+    db.session.commit()
+
+    return {
+        "status": "attached",
+        "pdf_id": pdf_id,
+        "side_id": entry.id,
+        "board_id": header.id,
+        "board_name": header.board_name,
+        "location": entry.location,
+        "orders": orders,
     }, 200
 
 

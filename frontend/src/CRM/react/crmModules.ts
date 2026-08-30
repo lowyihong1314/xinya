@@ -2,6 +2,7 @@ import { CCTVPage } from '../CCTV/CCTVPage';
 import { EventTablePage } from '../event/react/EventTablePage';
 import { FahuiPage } from '../fahui/FahuiPage';
 import { BoardPage } from '../fahui/board/BoardPage';
+import { BoardScanPage } from '../fahui/board/BoardScanPage';
 import { FahuiRawDocsPage } from '../fahui/RawDocsPage';
 import { DiyPaiweiPage } from '../fahui/diy/DiyPaiweiPage';
 import { FormWorkspacePage } from '../form/react/FormWorkspacePage';
@@ -29,6 +30,7 @@ export type CRMModuleKey =
   | 'songbook'
   | 'permanent_registration'
   | 'ylp_board'
+  | 'ylp_board_scan'
   | 'fahui_raw_docs'
   | 'fahui_diy_paiwei'
   | 'manual';
@@ -69,6 +71,13 @@ export const CRM_MODULES: CRMModuleSpec[] = [
     icon: 'fas fa-border-all',
     description: '维护牌位贴在哪块大板的哪个位置，支持输单号查板。',
     Component: BoardPage,
+  },
+  {
+    key: 'ylp_board_scan',
+    title: '看板手机端',
+    icon: 'fa-solid fa-qrcode',
+    description: '手机对着牌位扫二维码/条码直接上板，扫错能一键退回。',
+    Component: BoardScanPage,
   },
   {
     key: 'fahui_raw_docs',

@@ -609,6 +609,16 @@ export function BoardPage() {
               </option>
             ))}
           </select>
+          {/* 手机端扫码上板：拿手机对着板上的牌位扫，扫到直接贴 */}
+          <button
+            type="button"
+            style={styles.primary}
+            onClick={() => navigate("/crm/ylp_board_scan")}
+            title="手机对着牌位扫二维码/条码直接上板"
+          >
+            <i className="fa-solid fa-qrcode" style={{ marginRight: 6 }} />
+            注册看板手机端
+          </button>
           <button type="button" style={styles.ghost} onClick={() => void reload()} disabled={busy}>刷新</button>
           <button type="button" style={styles.ghost} onClick={() => void handleCopyTerminalLink()} title="第二显示器打开，查板点亮联动">
             复制终端链接

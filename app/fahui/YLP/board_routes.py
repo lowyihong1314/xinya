@@ -25,6 +25,7 @@ from .relation_option_services import (
 )
 from .board_services import (
     attach_pdf_to_board,
+    scan_attach_to_board,
     check_duplicate_owner_fields,
     clear_print_pdf_records,
     clear_unattached_print_pdfs,
@@ -192,6 +193,13 @@ def reorder_board_entry_route():
 @permission_required_any("account_edit")
 def attach_pdf_to_board_route():
     payload, status_code = attach_pdf_to_board(request.get_json(silent=True) or {})
+    return jsonify(payload), status_code
+
+
+@board_router_bp.route("/boards/scan", methods=["POST"])
+@permission_required_any("account_edit")
+def scan_attach_to_board_route():
+    payload, status_code = scan_attach_to_board(request.get_json(silent=True) or {})
     return jsonify(payload), status_code
 
 
