@@ -732,6 +732,12 @@ def generate_paiwei(paiwei_type, fahui_data, point_data, source_name, need_barco
                 ox, oy, osize, ospace = points[index]
                 x = x_base + ox
                 y_start = y_base + oy
+                # 冤亲债主：阳上是从固定的顶点往下写的，名字越长整列越往下坠
+                # （5 个字的末字比 3 个字低两个字距）。超过 3 个字就每多一个字往上提半个字，
+                # 让这一列看着还是居中的。3 个字及以内保持原位 —— 那是最常见的情况，
+                # 动了等于把现有牌位的版式全改了。
+                if source_name == "paiwei_10" and len(name) > 3:
+                    y_start += (len(name) - 3) * ospace / 2.0
                 c.setFillColor(colors.black)
                 c.setFont(font_name, osize)
                 for char_index, char in enumerate(name):
