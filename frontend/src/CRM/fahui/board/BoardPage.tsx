@@ -393,6 +393,9 @@ export function BoardPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [version]);
 
+  // 现在在不在某个全屏里（抽屉据此决定顶到多高）
+  const inFullscreen = poolFullscreen || fullBoardId != null;
+
   // Esc 逐层退出：先关放大，再关全屏
   useEffect(() => {
     if (zoomPdfId == null && fullBoardId == null && !poolFullscreen) {
@@ -1139,6 +1142,40 @@ export function BoardPage() {
         );
       })() : null}
 
+      {/* 订单摘要抽屉：和法会订单页、原始文档页共用同一只。
+          单独一个 fixed 层、z-index 压在全屏和右键菜单之上 —— 原来它挂在未上板全屏
+          容器里，结果看板全屏和常规视图右键出来的「查看明细」根本渲染不到。
+          全屏时顶到最上（没有导航条），常规视图给导航条让位。 */}
+      {summaryOrderId != null ? (
+        <div
+          style={{
+            ...styles.drawerLayer,
+            top: `${inFullscreen ? 8 : navbarHeight + 8}px`,
+            ...(isMobile ? { left: "8px" } : null),
+          }}
+          className="ylp-board-drawer-layer"
+        >
+          <YlpOrderSummaryDrawer
+            orderId={summaryOrderId}
+            isMobile={isMobile}
+            navbarHeight={0}
+            onClose={() => setSummaryOrderId(null)}
+            onOpenDetail={(id) => {
+              setSummaryOrderId(null);
+              setPoolFullscreen(false);
+              setFullBoardId(null);
+              navigate(`/crm/dharma_event?fahui_view=ylp_order&fahui_workspace=ylp&fahui_order_id=${id}`);
+            }}
+            onChanged={() => {
+              // 改完订单，牌位图就旧了：破掉这几张的缓存并重新拉列表
+              bumpPreviewsForOrder(summaryOrderId);
+              void loadPool();
+              void reload();
+            }}
+          />
+        </div>
+      ) : null}
+
       {/* 放大看单张牌位的原图 */}
       {zoomPdfId != null ? (
         <div style={styles.zoomOverlay} className="ylp-board-zoom" onClick={() => setZoomPdfId(null)}>
@@ -1212,28 +1249,6 @@ export function BoardPage() {
               ) : null}
             </div>
 
-            {/* 订单摘要抽屉：和法会订单页、原始文档页共用同一只。
-                贴在全屏容器里而不是页面上 —— 全屏层是 fixed 的，抽屉挂外面会被它盖掉。
-                navbarHeight 传 0：全屏里没有导航条，不用给它让位置。 */}
-            {summaryOrderId != null ? (
-              <YlpOrderSummaryDrawer
-                orderId={summaryOrderId}
-                isMobile={isMobile}
-                navbarHeight={0}
-                onClose={() => setSummaryOrderId(null)}
-                onOpenDetail={(id) => {
-                  setSummaryOrderId(null);
-                  setPoolFullscreen(false);
-                  navigate(`/crm/dharma_event?fahui_view=ylp_order&fahui_workspace=ylp&fahui_order_id=${id}`);
-                }}
-                onChanged={() => {
-                  // 改完订单，牌位图就旧了：破掉这几张的缓存并重新拉列表
-                  bumpPreviewsForOrder(summaryOrderId);
-                  void loadPool();
-                  void reload();
-                }}
-              />
-            ) : null}
           </div>
         </div>
       ) : null}
@@ -1429,6 +1444,17 @@ const styles: Record<string, CSSProperties> = {
   } as CSSProperties,
   poolMenuItemDisabled: { opacity: 0.45, cursor: "not-allowed" } as CSSProperties,
   poolMenuHint: { padding: "0 10px 6px", fontSize: "11px", color: "var(--x-color-ink-muted)" } as CSSProperties,
+  // 抽屉浮层：压在全屏(9000)、右键菜单(9500)、放大(9600) 之上
+  drawerLayer: {
+    position: "fixed",
+    right: "8px",
+    bottom: "8px",
+    zIndex: 9700,
+    display: "flex",
+    alignItems: "flex-start",
+    justifyContent: "flex-end",
+    pointerEvents: "auto",
+  } as CSSProperties,
   // 放大看原图：整屏压黑，图按可视区等比铺满
   zoomOverlay: {
     position: "fixed",
