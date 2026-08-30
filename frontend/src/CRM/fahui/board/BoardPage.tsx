@@ -1,7 +1,10 @@
 import { useEffect, useLayoutEffect, useMemo, useRef, useState, type CSSProperties, type DragEvent } from "react";
+import { useNavigate } from "react-router-dom";
 
 import { API_BASE } from "../../../js/apiBase";
 import { useUserState } from "../../../app/UserState";
+import { useOptionalAppChrome } from "../../../router/AppChromeContext";
+import { YlpOrderSummaryDrawer } from "../YlpOrderSummaryDrawer";
 import { getUserPermissionNames } from "../../../app/permissions";
 import { copyTextToClipboard } from "../../../js/browserActions";
 import { showConfirmDialog } from "../../../js/dialogs";
@@ -94,7 +97,10 @@ function ownerText(item: BoardSearchItem): string {
 
 export function BoardPage() {
   useEnsureDesignTokens();
-  const { user } = useUserState();
+  const { user, isMobile } = useUserState();
+  const navigate = useNavigate();
+  // 抽屉是 sticky 贴顶的，要把导航条让出来（和法会订单页那边一致）
+  const navbarHeight = useOptionalAppChrome()?.navbarHeight ?? 60;
   const canEdit = useMemo(() => getUserPermissionNames(user).has("account_edit"), [user]);
 
   const CURRENT_VERSION = `${new Date().getFullYear()}_YLP`;
@@ -154,6 +160,13 @@ export function BoardPage() {
   // ---- 未上板牌位（拖入看板即可上板） ----
   const POOL_PER_PAGE = 12;
   const [poolOpen, setPoolOpen] = useState(true);
+  const [poolFullscreen, setPoolFullscreen] = useState(false);
+  // 右键菜单（暂时只有「查看明细」）和它拉起的订单摘要抽屉
+  const [poolMenu, setPoolMenu] = useState<{ pdfId: number; orderId: number | null; x: number; y: number } | null>(null);
+  const [summaryOrderId, setSummaryOrderId] = useState<number | null>(null);
+  // 牌位预览图后端存了磁盘缓存、浏览器又压了 30 天，订单改完必须两头一起破：
+  // 这里按牌位单号记一个自增号，带进 URL（换 URL 破浏览器缓存）并带 refresh=1（破磁盘缓存）。
+  const [previewNonce, setPreviewNonce] = useState<Record<number, number>>({});
   const [poolItems, setPoolItems] = useState<UnattachedPdf[]>([]);
   const [poolPage, setPoolPage] = useState(1);
   const [poolTotal, setPoolTotal] = useState(0);
@@ -180,6 +193,78 @@ export function BoardPage() {
     void loadPool(1);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [version]);
+
+  useEffect(() => {
+    if (!poolMenu) return;
+    const close = () => setPoolMenu(null);
+    const onKey = (event: KeyboardEvent) => {
+      if (event.key === "Escape") close();
+    };
+    window.addEventListener("click", close);
+    window.addEventListener("contextmenu", close);
+    window.addEventListener("resize", close);
+    window.addEventListener("scroll", close, true);
+    window.addEventListener("keydown", onKey);
+    return () => {
+      window.removeEventListener("click", close);
+      window.removeEventListener("contextmenu", close);
+      window.removeEventListener("resize", close);
+      window.removeEventListener("scroll", close, true);
+      window.removeEventListener("keydown", onKey);
+    };
+  }, [poolMenu]);
+
+  /** 未上板的一张牌位。全屏和常规面板共用：
+   *  常规面板管拖（拖到右边看板即上板），全屏管看（右键出菜单）。 */
+  function renderPoolTile(pdf: UnattachedPdf, opts: { draggable: boolean; contextMenu: boolean; large?: boolean }) {
+    const caption = pdf.orders.length
+      ? pdf.orders
+          .map((o) => (o.customer_name || `#${o.order_id}`) + (o.owner_or_deceased ? ` · ${o.owner_or_deceased}` : ""))
+          .join("；")
+      : `单号 #${pdf.id}`;
+    const isDragged = dragging?.kind === "pool" && dragging.pdfId === pdf.id;
+    return (
+      <div
+        key={pdf.id}
+        className="ylp-pool-slot"
+        style={{
+          ...styles.slot,
+          ...(isDragged ? styles.slotDragging : {}),
+          ...(opts.large ? styles.poolSlotLarge : {}),
+        }}
+        draggable={opts.draggable && canEdit}
+        onDragStart={opts.draggable ? () => onPoolDragStart(pdf.id) : undefined}
+        onDragEnd={opts.draggable ? clearDrag : undefined}
+        onContextMenu={
+          opts.contextMenu
+            ? (event) => {
+                // 右键＝菜单，在光标处弹出，顺手压掉浏览器自带菜单
+                event.preventDefault();
+                // 关菜单的 window 监听已经挂上了，别让这次事件冒上去把刚开的菜单关掉
+                event.stopPropagation();
+                setPoolMenu({
+                  pdfId: pdf.id,
+                  orderId: pdf.orders[0]?.order_id ?? null,
+                  x: event.clientX,
+                  y: event.clientY,
+                });
+              }
+            : undefined
+        }
+        title={caption}
+      >
+        <span style={styles.slotNo}>#{pdf.id}</span>
+        <img
+          src={previewUrl(pdf.id)}
+          alt={`单号 ${pdf.id}`}
+          style={styles.slotImg}
+          loading="lazy"
+          draggable={false}
+        />
+        <span style={styles.slotCap}>{caption}</span>
+      </div>
+    );
+  }
 
   async function handleClearPool() {
     if (!poolTotal) return;
@@ -357,8 +442,34 @@ export function BoardPage() {
   }
 
   function previewUrl(pdfId: number): string {
-    const path = `/api/print_paiwei/print-pdfs/${pdfId}/preview-image`;
+    const nonce = previewNonce[pdfId];
+    const query = nonce ? `?refresh=1&v=${nonce}` : "";
+    const path = `/api/print_paiwei/print-pdfs/${pdfId}/preview-image${query}`;
     return API_BASE ? `${API_BASE}${path}` : path;
+  }
+
+  /** 某个订单改过之后，把它涉及的牌位预览全部标记为要重渲。
+   *  只挑受影响的单号 —— 全量 refresh 等于让后端把满屏牌位重新渲一遍。 */
+  function bumpPreviewsForOrder(orderId: number) {
+    const affected = new Set<number>();
+    poolItems.forEach((pdf) => {
+      if ((pdf.orders || []).some((o) => o.order_id === orderId)) affected.add(pdf.id);
+    });
+    boards.forEach((board) => {
+      (board.board_data || []).forEach((slot) => {
+        if (slot.print_pdf_id && (slot.orders || []).some((o) => o.order_id === orderId)) {
+          affected.add(slot.print_pdf_id);
+        }
+      });
+    });
+    if (!affected.size) return;
+    setPreviewNonce((current) => {
+      const next = { ...current };
+      affected.forEach((id) => {
+        next[id] = (next[id] || 0) + 1;
+      });
+      return next;
+    });
   }
 
   function clearDrag() {
@@ -595,13 +706,21 @@ export function BoardPage() {
         }}
       >
         {poolOpen ? (
-          <div style={styles.poolCard}>
-            <div style={styles.boardHead}>
+          <div style={styles.poolCard} className="ylp-pool-card">
+            <div style={styles.boardHead} className="ylp-pool-head">
               <div>
                 <span style={styles.boardName}>未上板</span>
                 <span style={styles.boardMeta}>{poolTotal} 张待贴 · 拖到右侧看板即可上板</span>
               </div>
-              <div style={styles.boardActions}>
+              <div style={styles.boardActions} className="ylp-pool-actions">
+                <button
+                  type="button"
+                  style={styles.tinyBtn}
+                  onClick={() => setPoolFullscreen(true)}
+                  title="全屏查看未上板预览"
+                >
+                  全屏
+                </button>
                 {canEdit && poolTotal > 0 ? (
                   <button type="button" style={styles.tinyDanger} onClick={() => void handleClearPool()} disabled={poolLoading}>
                     清空
@@ -610,34 +729,13 @@ export function BoardPage() {
                 <button type="button" style={styles.tinyBtn} onClick={() => setPoolOpen(false)}>收起</button>
               </div>
             </div>
-            <div style={styles.poolGrid}>
-              {poolItems.map((pdf) => {
-                const caption = pdf.orders.length
-                  ? pdf.orders
-                      .map((o) => (o.customer_name || `#${o.order_id}`) + (o.owner_or_deceased ? ` · ${o.owner_or_deceased}` : ""))
-                      .join("；")
-                  : `单号 #${pdf.id}`;
-                const isDragged = dragging?.kind === "pool" && dragging.pdfId === pdf.id;
-                return (
-                  <div
-                    key={pdf.id}
-                    style={{ ...styles.slot, ...(isDragged ? styles.slotDragging : {}) }}
-                    draggable={canEdit}
-                    onDragStart={() => onPoolDragStart(pdf.id)}
-                    onDragEnd={clearDrag}
-                    title={caption}
-                  >
-                    <span style={styles.slotNo}>#{pdf.id}</span>
-                    <img src={previewUrl(pdf.id)} alt={`单号 ${pdf.id}`} style={styles.slotImg} loading="lazy" draggable={false} />
-                    <span style={styles.slotCap}>{caption}</span>
-                  </div>
-                );
-              })}
+            <div style={styles.poolGrid} className="ylp-pool-grid">
+              {poolItems.map((pdf) => renderPoolTile(pdf, { draggable: true, contextMenu: false }))}
               {!poolLoading && !poolItems.length ? (
                 <p style={{ ...styles.muted, gridColumn: "1 / -1" }}>本年牌位都已上板 🎉</p>
               ) : null}
             </div>
-            <div style={styles.poolPager}>
+            <div style={styles.poolPager} className="ylp-pool-pager">
               <button
                 type="button"
                 style={styles.tinyBtn}
@@ -658,7 +756,13 @@ export function BoardPage() {
             </div>
           </div>
         ) : (
-          <button type="button" style={styles.poolCollapsed} onClick={() => setPoolOpen(true)} title="展开未上板牌位">
+          <button
+            type="button"
+            style={styles.poolCollapsed}
+            className="ylp-pool-collapsed"
+            onClick={() => setPoolOpen(true)}
+            title="展开未上板牌位"
+          >
             <span style={styles.poolCollapsedText}>未上板 {poolTotal}</span>
           </button>
         )}
@@ -836,6 +940,106 @@ export function BoardPage() {
           </div>
         </>
       ) : null}
+
+      {/* 未上板牌位的右键菜单：fixed 定位在光标处，暂时只有「查看明细」 */}
+      {poolMenu ? (
+        <div
+          style={{ ...styles.poolMenu, left: `${poolMenu.x}px`, top: `${poolMenu.y}px` }}
+          className="ylp-pool-menu"
+          onClick={(event) => event.stopPropagation()}
+        >
+          <button
+            type="button"
+            style={{ ...styles.poolMenuItem, ...(poolMenu.orderId ? null : styles.poolMenuItemDisabled) }}
+            disabled={!poolMenu.orderId}
+            onClick={() => {
+              if (poolMenu.orderId) setSummaryOrderId(poolMenu.orderId);
+              setPoolMenu(null);
+            }}
+          >
+            查看明细
+          </button>
+          {!poolMenu.orderId ? <span style={styles.poolMenuHint}>这张牌位没有关联订单</span> : null}
+        </div>
+      ) : null}
+
+      {/* 全屏看未上板：只看不拖（板都被盖住了），右键菜单照常 */}
+      {poolFullscreen ? (
+        <div style={styles.poolFullscreen} className="ylp-pool-fullscreen">
+          <div style={styles.poolFullscreenBar}>
+            <div>
+              <span style={styles.boardName}>未上板</span>
+              <span style={styles.boardMeta}>{`${poolTotal} 张待贴 · 第 ${poolPage} / ${poolPages} 页 · 右键牌位看明细`}</span>
+            </div>
+            <div style={styles.boardActions}>
+              <button
+                type="button"
+                style={styles.tinyBtn}
+                disabled={poolLoading || poolPage <= 1}
+                onClick={() => void loadPool(poolPage - 1)}
+              >
+                ‹ 上一页
+              </button>
+              <button
+                type="button"
+                style={styles.tinyBtn}
+                disabled={poolLoading || poolPage >= poolPages}
+                onClick={() => void loadPool(poolPage + 1)}
+              >
+                下一页 ›
+              </button>
+              <button
+                type="button"
+                style={styles.tinyBtn}
+                onClick={() => {
+                  setPoolFullscreen(false);
+                  setSummaryOrderId(null);
+                  setPoolMenu(null);
+                }}
+              >
+                退出全屏
+              </button>
+            </div>
+          </div>
+          <div
+            style={{
+              ...styles.poolFullscreenBody,
+              flexDirection: isMobile ? "column" : "row",
+              overflowY: isMobile ? "auto" : "hidden",
+            }}
+          >
+            <div style={styles.poolFullscreenGrid} className="ylp-pool-fullscreen-grid">
+              {poolItems.map((pdf) => renderPoolTile(pdf, { draggable: false, contextMenu: true, large: true }))}
+              {!poolLoading && !poolItems.length ? (
+                <p style={{ ...styles.muted, gridColumn: "1 / -1" }}>本年牌位都已上板 🎉</p>
+              ) : null}
+            </div>
+
+            {/* 订单摘要抽屉：和法会订单页、原始文档页共用同一只。
+                贴在全屏容器里而不是页面上 —— 全屏层是 fixed 的，抽屉挂外面会被它盖掉。
+                navbarHeight 传 0：全屏里没有导航条，不用给它让位置。 */}
+            {summaryOrderId != null ? (
+              <YlpOrderSummaryDrawer
+                orderId={summaryOrderId}
+                isMobile={isMobile}
+                navbarHeight={0}
+                onClose={() => setSummaryOrderId(null)}
+                onOpenDetail={(id) => {
+                  setSummaryOrderId(null);
+                  setPoolFullscreen(false);
+                  navigate(`/crm/dharma_event?fahui_view=ylp_order&fahui_workspace=ylp&fahui_order_id=${id}`);
+                }}
+                onChanged={() => {
+                  // 改完订单，牌位图就旧了：破掉这几张的缓存并重新拉列表
+                  bumpPreviewsForOrder(summaryOrderId);
+                  void loadPool();
+                  void reload();
+                }}
+              />
+            ) : null}
+          </div>
+        </div>
+      ) : null}
     </section>
   );
 }
@@ -962,6 +1166,71 @@ const styles: Record<string, CSSProperties> = {
     alignItems: "center",
     justifyContent: "center",
   },
+  // 未上板：全屏预览、右键菜单
+  poolSlotLarge: { padding: "8px" } as CSSProperties,
+  poolFullscreen: {
+    position: "fixed",
+    inset: 0,
+    zIndex: 9000,
+    display: "flex",
+    flexDirection: "column" as const,
+    background: "var(--x-color-canvas)",
+  } as CSSProperties,
+  poolFullscreenBar: {
+    display: "flex",
+    alignItems: "center",
+    justifyContent: "space-between",
+    gap: "12px",
+    flexWrap: "wrap" as const,
+    padding: "10px 14px",
+    borderBottom: "1px solid var(--x-color-line)",
+    background: "var(--x-color-panel)",
+  } as CSSProperties,
+  // 全屏里网格和抽屉并排；手机上竖着叠（见 JSX），不然抽屉一占 100% 宽网格就被挤没了
+  poolFullscreenBody: {
+    flex: 1,
+    minHeight: 0,
+    display: "flex",
+    alignItems: "flex-start",
+    gap: "12px",
+    padding: "12px",
+  } as CSSProperties,
+  poolFullscreenGrid: {
+    flex: 1,
+    minWidth: 0,
+    maxHeight: "100%",
+    overflowY: "auto" as const,
+    display: "grid",
+    gridTemplateColumns: "repeat(auto-fill, minmax(220px, 1fr))",
+    gap: "12px",
+    alignContent: "start",
+  } as CSSProperties,
+  poolMenu: {
+    position: "fixed",
+    zIndex: 9500,
+    minWidth: "140px",
+    padding: "4px",
+    borderRadius: "8px",
+    border: "1px solid var(--x-color-line)",
+    background: "var(--x-color-panel)",
+    boxShadow: "0 12px 32px var(--x-color-shadow)",
+    display: "grid",
+    gap: "2px",
+  } as CSSProperties,
+  poolMenuItem: {
+    textAlign: "left" as const,
+    padding: "7px 10px",
+    borderRadius: "6px",
+    border: "none",
+    background: "transparent",
+    color: "var(--x-color-ink)",
+    fontSize: "13px",
+    fontWeight: 700,
+    cursor: "pointer",
+    whiteSpace: "nowrap" as const,
+  } as CSSProperties,
+  poolMenuItemDisabled: { opacity: 0.45, cursor: "not-allowed" } as CSSProperties,
+  poolMenuHint: { padding: "0 10px 6px", fontSize: "11px", color: "var(--x-color-ink-muted)" } as CSSProperties,
   poolCollapsedText: {
     writingMode: "vertical-rl",
     fontSize: "13px",

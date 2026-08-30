@@ -161,6 +161,16 @@ def preview_print_pdf_image_route(print_pdf_id):
     cache_dir = preferred_dir("paiwei_result", "paiweicache")
     cache_file = cache_dir / f"{print_pdf_id}.png"
 
+    # 订单改过之后这张图就过期了，但磁盘缓存不会自己失效（浏览器那头还压着 30 天）。
+    # 带 refresh=1 就强制重渲一次，并且这次的响应不许缓存，
+    # 否则「刷新用的那个 URL」又被浏览器存下来，下次还是旧图。
+    force_refresh = str(request.args.get("refresh") or "").strip() in {"1", "true", "yes"}
+    if force_refresh and cache_file.exists():
+        try:
+            cache_file.unlink()
+        except OSError:
+            pass
+
     # 命中缓存：直接返回，不再重新生成 PDF / 渲染（浏览器也缓存 30 天）。
     if cache_file.exists():
         return send_file(cache_file, mimetype="image/png", max_age=2592000)
@@ -190,7 +200,7 @@ def preview_print_pdf_image_route(print_pdf_id):
     except Exception as exc:
         return jsonify({"status": "error", "message": str(exc)}), 500
 
-    return send_file(cache_file, mimetype="image/png", max_age=2592000)
+    return send_file(cache_file, mimetype="image/png", max_age=0 if force_refresh else 2592000)
 
 
 @print_paiwei_bp.route("/preview/test", methods=["POST"])
