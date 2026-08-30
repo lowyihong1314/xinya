@@ -10,6 +10,7 @@ export const INTAKE_DRAWER_CSS = `
 export function YlpDrawer({
   isMobile,
   navbarHeight,
+  className,
   title,
   hint,
   actions,
@@ -17,20 +18,26 @@ export function YlpDrawer({
 }: {
   isMobile: boolean;
   navbarHeight: number;
+  // 每个调用方再挂一个自己的名字，方便按抽屉单独写样式 / 指位置：
+  // ylp-intake-preview-drawer、ylp-print-preview-drawer、ylp-order-summary-drawer
+  className?: string;
   title: ReactNode;
   hint?: ReactNode;
   actions?: ReactNode;
   children: ReactNode;
 }) {
   return (
-    <aside style={drawerStyles.panel(isMobile, navbarHeight)} className="ylp-intake-drawer">
+    <aside
+      style={drawerStyles.panel(isMobile, navbarHeight)}
+      className={className ? `ylp-intake-drawer ${className}` : "ylp-intake-drawer"}
+    >
       <style>{INTAKE_DRAWER_CSS}</style>
-      <header style={drawerStyles.header}>
-        <div>
+      <header style={drawerStyles.header} className="ylp-drawer-header">
+        <div className="ylp-drawer-heading">
           <p style={drawerStyles.eyebrow}>{title}</p>
           {hint ? <p style={drawerStyles.hint}>{hint}</p> : null}
         </div>
-        {actions ? <div style={drawerStyles.actions}>{actions}</div> : null}
+        {actions ? <div style={drawerStyles.actions} className="ylp-drawer-actions">{actions}</div> : null}
       </header>
       {children}
     </aside>

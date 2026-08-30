@@ -10,6 +10,7 @@ from werkzeug.utils import secure_filename
 from app.form.permissions import permission_required_any
 from .services import user_can_view_order
 from app.paths import TEMPLATE_ROOT
+from models import db
 from models.fahui import FahuiOrder, FahuiOrderItem, FahuiPdfPageData, FahuiPrintPdf
 
 from ..common.access import FAHUI_READ_PERMISSION_NAMES
@@ -21,7 +22,8 @@ from .print_generator import (
     generate_paiwei_using_order_ids,
     generate_paiwei_using_order_item_ids,
 )
-from .print_points import PAIWEI_PDF_DIR, load_point_json, save_point_json
+from .print_points import PAIWEI_PDF_DIR, SOURCE_NAME_BY_PAIWEI_TYPE, load_point_json, save_point_json
+from .shared import normalize_version
 
 
 print_paiwei_bp = Blueprint("print_paiwei", __name__)
@@ -381,18 +383,130 @@ def generate_preview_by_template_route():
     )
 
 
+def _int_list(raw) -> list[int]:
+    values = []
+    for entry in raw or []:
+        try:
+            values.append(int(entry))
+        except (TypeError, ValueError):
+            continue
+    return list(dict.fromkeys(values))  # 去重且保持顺序
+
+
+@print_paiwei_bp.route("/scope", methods=["POST"])
+@permission_required_any(*FAHUI_READ_PERMISSION_NAMES)
+def paiwei_print_scope_route():
+    """打印弹窗的取数接口：给一批订单号或牌位单号，回「这个模板下到底有哪些牌位」。
+
+    每条牌位带上订单号、订单状态和已注册的牌位单号（没注册就是 null），
+    弹窗据此按状态分组、算张数、筛「只印未注册的」，最后把 item_ids 原样提交回来打印。
+    """
+    data = request.get_json(silent=True) or {}
+    source_name = resolve_template(data.get("template"))
+    if not source_name:
+        return jsonify({"status": "error", "message": "无效的牌位类型"}), 400
+
+    order_ids = _int_list(data.get("order_ids"))
+    pdf_ids = _int_list(data.get("pdf_ids"))
+    version = normalize_version(data.get("version"))
+    if not order_ids and not pdf_ids and not version:
+        return jsonify({"status": "error", "message": "请给版本、订单号或牌位单号"}), 400
+
+    unknown_pdf_ids: list[int] = []
+    if pdf_ids:
+        found_pdf_ids = {
+            row[0]
+            for row in db.session.query(FahuiPdfPageData.print_pdf_id)
+            .filter(FahuiPdfPageData.print_pdf_id.in_(pdf_ids))
+            .distinct()
+            .all()
+        }
+        unknown_pdf_ids = [pdf_id for pdf_id in pdf_ids if pdf_id not in found_pdf_ids]
+        item_id_rows = (
+            db.session.query(FahuiPdfPageData.order_item_id)
+            .filter(FahuiPdfPageData.print_pdf_id.in_(pdf_ids))
+            .all()
+        )
+        query = FahuiOrderItem.query.join(FahuiOrder).filter(
+            FahuiOrderItem.id.in_([row[0] for row in item_id_rows])
+        )
+    elif order_ids:
+        query = FahuiOrderItem.query.join(FahuiOrder).filter(FahuiOrder.id.in_(order_ids))
+    else:
+        # 整个版本：状态一概不筛，草稿 / 已取消都算进来，要不要印交给弹窗上的勾选。
+        # 软删除的订单是被移去 DELETE 版本的，按版本取自然就不在里面。
+        query = FahuiOrderItem.query.join(FahuiOrder).filter(FahuiOrder.version == version)
+
+    items = query.all()
+    # 只留属于这个模板的牌位（D / D1 这类没有模板的自然被排除）。
+    items = [item for item in items if SOURCE_NAME_BY_PAIWEI_TYPE.get(str(item.code or "")) == source_name]
+
+    pdf_id_by_item: dict[int, int] = {}
+    if items:
+        for page in (
+            db.session.query(FahuiPdfPageData)
+            .filter(FahuiPdfPageData.order_item_id.in_([item.id for item in items]))
+            .all()
+        ):
+            # 同一个 item 理论上只会在一页里；真有重复就取最小的单号，显示稳定。
+            current = pdf_id_by_item.get(page.order_item_id)
+            if current is None or page.print_pdf_id < current:
+                pdf_id_by_item[page.order_item_id] = page.print_pdf_id
+
+    orders = {}
+    if items:
+        for order in FahuiOrder.query.filter(
+            FahuiOrder.id.in_({item.order_id for item in items})
+        ).all():
+            orders[order.id] = order
+
+    rows = []
+    for item in sorted(items, key=lambda entry: entry.id or 0):
+        order = orders.get(item.order_id)
+        rows.append(
+            {
+                "item_id": item.id,
+                "order_id": item.order_id,
+                "order_status": (order.status if order else None) or "Draft",
+                "code": item.code,
+                "pdf_id": pdf_id_by_item.get(item.id),
+            }
+        )
+
+    covered_order_ids = {row["order_id"] for row in rows}
+    return jsonify(
+        {
+            "status": "success",
+            "data": {
+                "items": rows,
+                # 给了单号但一张该模板的牌位都没有（订单不存在、或只有别的类型）
+                "empty_order_ids": [order_id for order_id in order_ids if order_id not in covered_order_ids],
+                "unknown_pdf_ids": unknown_pdf_ids,
+            },
+        }
+    )
+
+
 @print_paiwei_bp.route("/jobs/by-template", methods=["POST"])
 @permission_required_any(*FAHUI_READ_PERMISSION_NAMES)
 def start_paiwei_job_route():
     data = request.get_json(silent=True) or {}
-    order_ids = data.get("order_ids", []) or []
+    order_ids = _int_list(data.get("order_ids"))
+    item_ids = _int_list(data.get("item_ids"))
+    pdf_ids = _int_list(data.get("pdf_ids"))
     source_name = resolve_template(data.get("template"))
     if not source_name:
         return jsonify({"status": "error", "message": "无效的牌位类型"}), 400
-    if not order_ids:
+    if not order_ids and not item_ids and not pdf_ids:
         return jsonify({"status": "error", "message": "请选择订单"}), 400
 
-    job_id = start_paiwei_job(order_ids, source_name, need_barcode=bool(data.get("need_barcode")))
+    job_id = start_paiwei_job(
+        order_ids,
+        source_name,
+        need_barcode=bool(data.get("need_barcode")),
+        item_ids=item_ids or None,
+        pdf_ids=pdf_ids or None,
+    )
     return jsonify({"status": "success", "job_id": job_id, "room": f"paiwei_job:{job_id}"})
 
 

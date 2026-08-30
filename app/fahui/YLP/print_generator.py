@@ -615,13 +615,22 @@ def _compress_pdf(pdf_bytes: bytes) -> bytes:
         return pdf_bytes
 
 
-def group_source_items(order_ids, source_name):
-    """挑出属于某牌位模板的 items，按 code 分组。返回 (grouped_dict, total_item_count)。"""
+def group_source_items(order_ids, source_name, item_ids=None):
+    """挑出属于某牌位模板的 items，按 code 分组。返回 (grouped_dict, total_item_count)。
+
+    item_ids 给了就按 item 精确取（打印弹窗算完张数后提交的就是这份 id 列表，
+    保证「弹窗上看到几张」和「实际印出几张」永远一致）；否则按整张订单取。
+    """
     source_name = str(source_name or "").strip()
     if source_name not in {"paiwei_1", "paiwei_5", "paiwei_10"}:
         return {}, 0
 
-    items = FahuiOrderItem.query.join(FahuiOrder).filter(FahuiOrder.id.in_(order_ids)).all()
+    query = FahuiOrderItem.query.join(FahuiOrder)
+    if item_ids is not None:
+        query = query.filter(FahuiOrderItem.id.in_([int(value) for value in item_ids]))
+    else:
+        query = query.filter(FahuiOrder.id.in_(order_ids))
+    items = query.all()
     if not items:
         return {}, 0
 
@@ -636,13 +645,13 @@ def group_source_items(order_ids, source_name):
     return grouped_data, total
 
 
-def generate_paiwei_pdf_by_source(order_ids, source_name, need_barcode=False, progress_cb=None):
+def generate_paiwei_pdf_by_source(order_ids, source_name, need_barcode=False, progress_cb=None, item_ids=None):
     """按牌位模板分组（paiwei_1 大 / paiwei_5 小 / paiwei_10 冤亲债主）生成单个合并 PDF。
 
     复用既有的定位配置（location_json / point.json），只挑出属于该模板的 code。
     progress_cb(n) 会在渲染过程中被调用（n=本次新增的已处理项数），用于进度上报。
     """
-    grouped_data, _total = group_source_items(order_ids, source_name)
+    grouped_data, _total = group_source_items(order_ids, source_name, item_ids=item_ids)
     if not grouped_data:
         return None
 
@@ -667,6 +676,71 @@ def generate_paiwei_pdf_by_source(order_ids, source_name, need_barcode=False, pr
                 progress_cb(len(grouped_items))
         buffer.seek(0)
         merger.append(buffer)
+
+    output = io.BytesIO()
+    merger.write(output)
+    merger.close()
+    return io.BytesIO(_compress_pdf(output.getvalue()))
+
+
+def pdf_pages_for_reprint(pdf_ids, source_name):
+    """按牌位单号（print_pdf.id）取每一页的 item 列表，只保留属于该模板的页。
+
+    返回 [(pdf_id, [order_item_id, ...]), ...]，顺序照调用方给的单号。
+    重印必须一页一页单独渲染：`_get_or_create_print_pdf` 是拿「这一页的 item 集合」
+    去匹配已有记录的，混在一起重新分页会凑出别的组合，于是又发一个新单号出来。
+    """
+    source_name = str(source_name or "").strip()
+    wanted = [int(value) for value in (pdf_ids or [])]
+    if source_name not in {"paiwei_1", "paiwei_5", "paiwei_10"} or not wanted:
+        return []
+
+    pages = (
+        db.session.query(FahuiPdfPageData)
+        .join(FahuiOrderItem, FahuiPdfPageData.order_item_id == FahuiOrderItem.id)
+        .filter(FahuiPdfPageData.print_pdf_id.in_(wanted))
+        .all()
+    )
+    by_pdf = defaultdict(list)
+    for page in pages:
+        item = page.order_item
+        if not item:
+            continue
+        if SOURCE_NAME_BY_PAIWEI_TYPE.get(str(item.code or "")) != source_name:
+            continue
+        by_pdf[page.print_pdf_id].append(item.id)
+
+    result = []
+    for pdf_id in dict.fromkeys(wanted):  # 去重且保持调用方给的顺序
+        item_ids = sorted(by_pdf.get(pdf_id, []))
+        if item_ids:
+            result.append((pdf_id, item_ids))
+    return result
+
+
+def generate_paiwei_pdf_by_pdf_ids(pdf_ids, source_name, need_barcode=True, progress_cb=None):
+    """按牌位单号重印：逐页渲染再合并，单号原样复用，不会重新发号。"""
+    groups = pdf_pages_for_reprint(pdf_ids, source_name)
+    if not groups:
+        return None
+
+    try:
+        from pypdf import PdfWriter as _PdfMerger
+    except ImportError:
+        try:
+            from pypdf import PdfMerger as _PdfMerger
+        except ImportError:
+            from PyPDF2 import PdfMerger as _PdfMerger
+
+    merger = _PdfMerger()
+    for _pdf_id, item_ids in groups:
+        buffer = generate_paiwei_using_order_item_ids(item_ids, need_barcode=need_barcode)
+        if buffer is None:
+            continue
+        buffer.seek(0)
+        merger.append(buffer)
+        if progress_cb:
+            progress_cb(1)
 
     output = io.BytesIO()
     merger.write(output)

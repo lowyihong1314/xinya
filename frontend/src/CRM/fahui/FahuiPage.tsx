@@ -6,7 +6,7 @@ import { useEnsureDesignTokens } from "../../theme/designTokens";
 import { useUserState } from "../../app/UserState";
 import { getUserPermissionNames } from "../../app/permissions";
 import { CachedImage } from "../../components/CachedMedia";
-import { showChoiceDialog, showConfirmDialog } from "../../js/dialogs";
+import { showConfirmDialog } from "../../js/dialogs";
 import { copyTextToClipboard, downloadBlobOrShare, downloadUrlOrShare } from "../../js/browserActions";
 import { correctPhoneInputMY } from "../../js/phone";
 import { show_alert } from "../../js/show_alert";
@@ -52,6 +52,8 @@ import { YlpDrawer } from "./YlpDrawer";
 import { YlpItemModal } from "./YlpItemModal";
 import { YlpPaymentModal } from "./YlpPaymentModal";
 import { YlpOrderSummaryDrawer } from "./YlpOrderSummaryDrawer";
+import { YlpAnalyticsPanel } from "./YlpAnalyticsPanel";
+import { showPrintPlusDialog } from "./PrintPlusDialog";
 import { PaymentProofButton } from "./PaymentProof";
 import { PaiweiEditorModal } from "./intake/PaiweiEditorModal";
 import { paiweiFieldLabel } from "./intake/paiwei";
@@ -80,7 +82,7 @@ function isCurrentYlpVersion(version?: string | null): boolean {
 }
 
 type WorkspaceTab = "lamp" | "ylp";
-type WorkspaceSection = "payments" | "orders";
+type WorkspaceSection = "payments" | "orders" | "analysis";
 type WorkspaceStateValue<T> = Record<WorkspaceTab, T>;
 
 type ScreenState =
@@ -214,6 +216,9 @@ function getWorkspaceEyebrow(workspace: WorkspaceTab) {
 }
 
 function getSectionTitle(workspace: WorkspaceTab, section: WorkspaceSection) {
+  if (workspace === "ylp" && section === "analysis") {
+    return "数据统计";
+  }
   if (workspace === "ylp" && section === "orders") {
     return "订单查询";
   }
@@ -221,6 +226,9 @@ function getSectionTitle(workspace: WorkspaceTab, section: WorkspaceSection) {
 }
 
 function getSectionDescription(workspace: WorkspaceTab, section: WorkspaceSection) {
+  if (workspace === "ylp" && section === "analysis") {
+    return "整个版本的订单、牌位和收款汇总，口径与导出 xlsx 一致。";
+  }
   if (workspace === "ylp" && section === "orders") {
     return "按版本和关键字查订单，点进去直接看详情。";
   }
@@ -245,7 +253,7 @@ function isWorkspaceTab(value: string | null): value is WorkspaceTab {
 }
 
 function isWorkspaceSection(value: string | null): value is WorkspaceSection {
-  return value === "payments" || value === "orders";
+  return value === "payments" || value === "orders" || value === "analysis";
 }
 
 function parsePositiveInt(value: string | null, fallback: number) {
@@ -289,7 +297,8 @@ function parseFahuiRouteState(search: string): FahuiRouteState {
   if (view === "ylp_order" && orderId > 0) {
     screen = { kind: "ylp-order-detail", orderId };
   } else if (view === "workspace" && isWorkspaceTab(workspace)) {
-    screen = { kind: "workspace", workspace, section: "orders" };
+    // 付款审核搬走了，剩下的两个 section：订单列表 orders / 数据统计 analysis
+    screen = { kind: "workspace", workspace, section: section === "analysis" ? "analysis" : "orders" };
   }
 
   return {
@@ -358,6 +367,12 @@ function buildFahuiSearchParams(
 }
 
 type YlpSortKey = "status" | "order_status" | "id" | "customer" | "phone" | "total" | "maintainer" | "created_at";
+
+// 工作区标题栏右边那组 tab：订单列表 ↔ 数据统计（对应 URL 的 fahui_section）
+const YLP_SECTION_TABS: { key: Extract<WorkspaceSection, "orders" | "analysis">; label: string }[] = [
+  { key: "orders", label: "订单列表" },
+  { key: "analysis", label: "数据统计" },
+];
 
 const YLP_ORDER_COLUMNS: { key: YlpSortKey; label: string }[] = [
   // 两个状态分开列：订单流程 vs 付款汇总，之前只显示后者、表头却写「状态」，很容易误读
@@ -1262,14 +1277,14 @@ export function FahuiPage() {
     // 详情页保留返回按钮 + 标题，列表页压缩成紧凑的一排。
     if (isDetail) {
       return (
-        <section style={styles.workspaceCard}>
-          <header style={styles.workspaceHeader(isMobile, true)}>
+        <section style={styles.workspaceCard} className="fahui-workspace-headcard">
+          <header style={styles.workspaceHeader(isMobile, true)} className="fahui-workspace-header">
             <button type="button" style={styles.backButton} onClick={goBack}>
               <i className="fas fa-arrow-left" />
               <span>返回列表</span>
             </button>
 
-            <section style={styles.workspaceCopy}>
+            <section style={styles.workspaceCopy} className="fahui-workspace-copy">
               <p style={styles.workspaceEyebrow}>{getWorkspaceEyebrow(currentWorkspace)}</p>
               <h2 style={styles.workspaceTitle}>{title}</h2>
               <p style={styles.workspaceDescription}>{description}</p>
@@ -1280,17 +1295,36 @@ export function FahuiPage() {
     }
 
     return (
-      <section style={styles.workspaceBar}>
-        <section style={styles.workspaceCopy}>
+      <section style={styles.workspaceBar} className="fahui-workspace-bar">
+        <section style={styles.workspaceCopy} className="fahui-workspace-copy">
           <p style={styles.workspaceEyebrow}>{getWorkspaceEyebrow(currentWorkspace)}</p>
-          <h2 style={styles.workspaceTitle}>{currentWorkspace === "ylp" ? "订单查询" : "法会"}</h2>
+          <h2 style={styles.workspaceTitle}>
+            {currentWorkspace === "ylp" ? getSectionTitle("ylp", currentSection) : "法会"}
+          </h2>
           {currentWorkspace === "ylp" ? null : (
             <p style={styles.workspaceHint}>法会付款审核已移至「财政 · 收款审核」统一管理。</p>
           )}
         </section>
 
         {currentWorkspace === "ylp" ? (
-          <div style={styles.workspaceBarActions}>
+          <div style={styles.workspaceBarActions} className="fahui-workspace-bar-actions">
+            <div style={styles.sectionTabs} className="fahui-workspace-tabs" role="tablist">
+              {YLP_SECTION_TABS.map((tab) => {
+                const active = currentSection === tab.key;
+                return (
+                  <button
+                    key={tab.key}
+                    type="button"
+                    role="tab"
+                    aria-selected={active}
+                    style={{ ...styles.sectionTab, ...(active ? styles.sectionTabActive : null) }}
+                    onClick={() => setScreen({ kind: "workspace", workspace: "ylp", section: tab.key })}
+                  >
+                    {tab.label}
+                  </button>
+                );
+              })}
+            </div>
             <button type="button" style={styles.secondaryActionCompact} onClick={() => setPaymentConfigOpen(true)}>
               配置支付路径
             </button>
@@ -1405,7 +1439,7 @@ export function FahuiPage() {
       <>
         {paymentError ? <section style={styles.stateCard}>{paymentError}</section> : null}
 
-        <section style={styles.detailCard}>
+        <section style={styles.detailCard} className="fahui-payment-detail">
           <header style={styles.detailHero(isMobile)}>
             <section>
               <p style={styles.detailEyebrow}>{getPaymentTypeLabel(payment)}</p>
@@ -1448,7 +1482,7 @@ export function FahuiPage() {
           </section>
 
           {payment.order ? (
-            <section style={styles.detailSection}>
+            <section style={styles.detailSection} className="fahui-detail-section">
               <header style={styles.detailSectionHeader}>
                 <h4 style={styles.detailSectionTitle}>订单信息</h4>
               </header>
@@ -1462,7 +1496,7 @@ export function FahuiPage() {
           ) : null}
 
           {(payment.registrations || []).length ? (
-            <section style={styles.detailSection}>
+            <section style={styles.detailSection} className="fahui-detail-section">
               <header style={styles.detailSectionHeader}>
                 <h4 style={styles.detailSectionTitle}>报名资料</h4>
               </header>
@@ -1585,34 +1619,31 @@ export function FahuiPage() {
 
   async function handleYlpPrintPlus(template: string) {
     setPrintPlusMenuOpen(false);
-    let ids: number[];
+    let selectedIds: number[] = [];
+    setYlpBulkBusy(true);
     try {
-      ids = await resolveYlpSelectedIds();
+      selectedIds = await resolveYlpSelectedIds();
     } catch {
       show_alert("error", "获取订单失败");
       return;
+    } finally {
+      setYlpBulkBusy(false);
     }
-    if (!ids.length) {
-      show_alert("error", "请选择订单");
-      return;
-    }
-    // 询问是否注册条码/二维码（贴板需要）。点遮罩 / Esc / 取消都当作放弃打印。
-    const choice = await showChoiceDialog({
-      title: "打印牌位",
-      message: "打印时是否注册条码 / 二维码？注册后每张牌位会盖上单号，可在「看板」贴板追踪；不注册则只出图。",
-      choices: [
-        { value: "register", label: "注册条码", primary: true },
-        { value: "plain", label: "不注册" },
-      ],
-    });
+    // 弹窗里挑范围（勾选 / 订单单号 / 牌位单号）+ 状态过滤 + 要不要跳过已注册的，
+    // 张数由后端 /scope 算好，确认后原样提交回去。点遮罩 / 取消都返回 null，当作放弃打印。
+    const choice = await showPrintPlusDialog(selectedIds, template, ylpVersion);
     if (!choice) {
       return;
     }
-    const needBarcode = choice === "register";
+    const ids = choice.orderIds;
+    const needBarcode = choice.needBarcode;
     stopPaiweiPoll();
     setPaiweiJob({ percent: 0, status: "running" });
     try {
-      const res = await startYlpPaiweiJob(ids, template, needBarcode);
+      const res = await startYlpPaiweiJob(ids, template, needBarcode, {
+        itemIds: choice.itemIds,
+        pdfIds: choice.pdfIds,
+      });
       if (res.status !== "success" || !res.job_id) {
         setPaiweiJob({ percent: 0, status: "error", message: res.message || "启动任务失败" });
         return;
@@ -1714,7 +1745,7 @@ export function FahuiPage() {
 
   function renderVersionEventBar() {
     return (
-      <section style={styles.bindBar}>
+      <section style={styles.bindBar} className="ylp-bind-bar">
         <span style={styles.bindLabel}>
           <i className="fa-solid fa-link" aria-hidden="true" style={{ marginRight: 6 }} />
           绑定活动
@@ -1754,7 +1785,7 @@ export function FahuiPage() {
   function renderYlpOrderList() {
     return (
       <>
-        <section style={styles.orderToolbar(isMobile)}>
+        <section style={styles.orderToolbar(isMobile)} className="ylp-order-toolbar">
           <select
             value={ylpVersion}
             onChange={(event) => {
@@ -1762,6 +1793,7 @@ export function FahuiPage() {
               setYlpPage(1);
             }}
             style={styles.selectInput}
+            className="ylp-version-select"
           >
             {(ylpVersions.length ? ylpVersions : [ylpVersion || CURRENT_YLP_VERSION]).map((version) => (
               <option key={version} value={version}>
@@ -1775,9 +1807,10 @@ export function FahuiPage() {
             onChange={(event) => setYlpQueryInput(event.target.value)}
             placeholder="搜索订单号 / 功德主 / 电话 / 牌位内容 / 维护人"
             style={{ ...styles.searchInput, flex: "1 1 200px", width: "auto", minWidth: 0 }}
+            className="ylp-search-input"
           />
 
-          <nav style={styles.pagination}>
+          <nav style={styles.pagination} className="ylp-pagination">
             <button
               type="button"
               onClick={() => setYlpPage(Math.max(1, ylpSafePage - 1))}
@@ -1805,18 +1838,18 @@ export function FahuiPage() {
             </button>
           </nav>
 
-          <p style={styles.summary}>{`共 ${ylpPagination?.total || 0} 条 · ${ylpSafePage}/${ylpTotalPages} 页`}</p>
+          <p style={styles.summary} className="ylp-summary">{`共 ${ylpPagination?.total || 0} 条 · ${ylpSafePage}/${ylpTotalPages} 页`}</p>
         </section>
 
         {renderVersionEventBar()}
 
-        {ylpLoading ? <section style={styles.stateCard}>加载中…</section> : null}
-        {!ylpLoading && ylpError ? <section style={styles.stateCard}>{ylpError}</section> : null}
+        {ylpLoading ? <section style={styles.stateCard} className="ylp-state-card">加载中…</section> : null}
+        {!ylpLoading && ylpError ? <section style={styles.stateCard} className="ylp-state-card">{ylpError}</section> : null}
 
         {!ylpLoading && !ylpError ? (
           <>
             {ylpCanSelectAllPages || ylpSelectAllPages ? (
-              <div style={styles.selectAllBanner}>
+              <div style={styles.selectAllBanner} className="ylp-select-all-banner">
                 {ylpSelectAllPages ? (
                   <>
                     <span>已选择全部 {ylpTotal} 条记录</span>
@@ -1838,7 +1871,7 @@ export function FahuiPage() {
                 )}
               </div>
             ) : null}
-            <div style={styles.tableWrap}>
+            <div style={styles.tableWrap} className="ylp-order-table-wrap">
               <style>{YLP_ORDER_TABLE_CSS}</style>
               <table className="ylp-order-table">
                 <thead>
@@ -1934,7 +1967,7 @@ export function FahuiPage() {
         ) : null}
 
         {ylpSelectionActive ? (
-          <div style={styles.bulkBar}>
+          <div style={styles.bulkBar} className="ylp-bulk-bar">
             <span style={styles.bulkCount}>已选 {ylpSelectionCount} 条</span>
             <div style={styles.bulkActions}>
               <button
@@ -2005,13 +2038,13 @@ export function FahuiPage() {
     const editable = versionEditable && orderStatus === "Draft";
     const canDelete = versionEditable && orderStatus === "cancel";
     return (
-      <section style={styles.detailCard}>
+      <section style={styles.detailCard} className="ylp-order-detail">
         {ylpDetail?.loading ? <section style={styles.stateCard}>加载中…</section> : null}
         {!ylpDetail?.loading && ylpDetail?.error ? <section style={styles.stateCard}>{ylpDetail.error}</section> : null}
 
         {!ylpDetail?.loading && !ylpDetail?.error && ylpDetail?.order ? (
           <>
-            <header style={styles.detailHero(isMobile)}>
+            <header style={styles.detailHero(isMobile)} className="ylp-order-detail-hero">
               <section>
                 <p style={styles.detailEyebrow}>YLP Order</p>
                 <h3 style={styles.detailTitle}>{ylpDetail.order.customer_name || ylpDetail.order.name || "-"}</h3>
@@ -2148,7 +2181,7 @@ export function FahuiPage() {
               ) : null}
             </section>
 
-            <section style={styles.detailSection}>
+            <section style={styles.detailSection} className="fahui-detail-section">
               <header style={styles.detailSectionHeader}>
                 <h4 style={styles.detailSectionTitle}>
                   订单资料{editable ? "" : versionEditable ? "（已确认，只读）" : "（历史版本，只读）"}
@@ -2236,7 +2269,7 @@ export function FahuiPage() {
               </div>
             </section>
 
-            <section style={styles.detailSection}>
+            <section style={styles.detailSection} className="fahui-detail-section">
               <header style={styles.detailSectionHeader}>
                 <h4 style={styles.detailSectionTitle}>
                   付款记录（共 {(ylpDetail.payments || []).length} 条）
@@ -2309,7 +2342,7 @@ export function FahuiPage() {
               )}
             </section>
 
-            <section style={styles.detailSection}>
+            <section style={styles.detailSection} className="fahui-detail-section">
               <header style={styles.detailSectionHeader}>
                 <h4 style={styles.detailSectionTitle}>
                   项目内容（共 {(ylpDetail.order.order_items || []).length} 条）
@@ -2453,16 +2486,26 @@ export function FahuiPage() {
   }
 
   return (
-    <section style={styles.page}>
-      {actionMessage ? <section style={styles.toast}>{actionMessage}</section> : null}
+    <section style={styles.page} className="fahui-page">
+      {actionMessage ? <section style={styles.toast} className="fahui-toast">{actionMessage}</section> : null}
 
       {renderWorkspaceHeader()}
 
-      <div style={styles.workspaceBody(isMobile)}>
-        <div style={styles.workspaceMain}>
+      <div style={styles.workspaceBody(isMobile)} className="fahui-workspace-body">
+        <div style={styles.workspaceMain} className="fahui-workspace-main">
           {screen.kind === "workspace" && screen.workspace === "ylp" && screen.section === "orders"
             ? renderYlpOrderList()
             : null}
+          {screen.kind === "workspace" && screen.workspace === "ylp" && screen.section === "analysis" ? (
+            <YlpAnalyticsPanel
+              version={ylpVersion}
+              versions={ylpVersions}
+              onVersionChange={(next) => {
+                setYlpVersion(next);
+                setYlpPage(1);
+              }}
+            />
+          ) : null}
           {screen.kind === "ylp-order-detail" ? renderYlpOrderDetailView() : null}
         </div>
 
@@ -2470,6 +2513,7 @@ export function FahuiPage() {
           <YlpDrawer
             isMobile={isMobile}
             navbarHeight={navbarHeight}
+            className="ylp-intake-preview-drawer"
             title="牌位填写页 · 手机预览"
             hint="在此模拟手机端直接测试填写流程"
             actions={
@@ -2515,6 +2559,7 @@ export function FahuiPage() {
           <YlpDrawer
             isMobile={isMobile}
             navbarHeight={navbarHeight}
+            className="ylp-print-preview-drawer"
             title={`订单 #${ylpRowPreview.orderId} · 牌位打印预览`}
             hint="与订单详情的「预览牌位」是同一份打印结果"
             actions={
@@ -2987,6 +3032,7 @@ const styles = {
     fontSize: "13px",
     color: "var(--x-color-ink-muted)",
   },
+  // 订单列表 ↔ 数据统计的分段按钮（早先 section 还是 tab 时留下的样式，正好接上）
   sectionTabs: {
     display: "flex",
     flexWrap: "wrap" as const,
@@ -3543,6 +3589,7 @@ const styles = {
     display: "flex",
     gap: "8px",
     flexWrap: "wrap" as const,
+    alignItems: "center" as const,
   },
   selectAllBanner: {
     display: "flex",

@@ -642,12 +642,63 @@ export async function printYlpPaiweiByTemplate(orderIds: number[], template: str
   return response.blob();
 }
 
-export async function startYlpPaiweiJob(orderIds: number[], template: string, needBarcode = false) {
+export type YlpPrintScopeItem = {
+  item_id: number;
+  order_id: number;
+  order_status: string;
+  code: string | null;
+  /** 已注册条码的牌位单号；null = 还没注册过 */
+  pdf_id: number | null;
+};
+
+export type YlpPrintScope = {
+  items: YlpPrintScopeItem[];
+  /** 给了订单号但这个模板下一张牌位都没有（订单不存在，或只有别的类型） */
+  empty_order_ids: number[];
+  /** 查无此牌位单号 */
+  unknown_pdf_ids: number[];
+};
+
+/** 打印弹窗的取数：某模板下这个版本 / 这批订单 / 这批牌位单号里有哪些牌位、各自注册了没有。
+ *  三选一，优先级 pdfIds > orderIds > version；按版本取时状态一概不筛（含已取消）。 */
+export async function fetchYlpPrintScope(params: {
+  template: string;
+  version?: string;
+  orderIds?: number[];
+  pdfIds?: number[];
+}) {
+  const response = await apiFetch("/api/print_paiwei/scope", {
+    method: "POST",
+    credentials: "include",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      template: params.template,
+      version: params.version || "",
+      order_ids: params.orderIds || [],
+      pdf_ids: params.pdfIds || [],
+    }),
+  });
+  return parseJson<{ status?: string; message?: string; data?: YlpPrintScope }>(response);
+}
+
+/** 打印任务。三选一：pdfIds（按牌位单号重印）> itemIds（弹窗算好的精确清单）> orderIds。 */
+export async function startYlpPaiweiJob(
+  orderIds: number[],
+  template: string,
+  needBarcode = false,
+  extra?: { itemIds?: number[]; pdfIds?: number[] },
+) {
   const response = await apiFetch("/api/print_paiwei/jobs/by-template", {
     method: "POST",
     credentials: "include",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ order_ids: orderIds, template, need_barcode: needBarcode }),
+    body: JSON.stringify({
+      order_ids: orderIds,
+      item_ids: extra?.itemIds || [],
+      pdf_ids: extra?.pdfIds || [],
+      template,
+      need_barcode: needBarcode,
+    }),
   });
   return parseJson<{ status?: string; job_id?: string; room?: string; message?: string }>(response);
 }

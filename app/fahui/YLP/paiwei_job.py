@@ -9,7 +9,12 @@ from app.extensions import socket_broker, socketio
 from app.redis_client import redis_client
 
 from ..common.ylp_storage import preferred_dir
-from .print_generator import generate_paiwei_pdf_by_source, group_source_items
+from .print_generator import (
+    generate_paiwei_pdf_by_pdf_ids,
+    generate_paiwei_pdf_by_source,
+    group_source_items,
+    pdf_pages_for_reprint,
+)
 
 JOB_TTL_SECONDS = 3600
 _PAIWEI_TEMPLATE_ALIASES = {
@@ -56,7 +61,13 @@ def get_job_state(job_id: str) -> dict:
     return redis_client.hgetall(_job_key(job_id)) or {}
 
 
-def start_paiwei_job(order_ids, source_name, need_barcode=False) -> str:
+def start_paiwei_job(order_ids, source_name, need_barcode=False, item_ids=None, pdf_ids=None) -> str:
+    """三种取件方式，优先级 pdf_ids > item_ids > order_ids：
+
+    - pdf_ids：按牌位单号重印，逐页渲染、单号复用
+    - item_ids：打印弹窗算完张数后提交的精确清单（例如「只印未注册的」）
+    - order_ids：整张订单里属于该模板的牌位，老行为
+    """
     job_id = uuid.uuid4().hex
     _set_state(job_id, status="pending", progress=0, done=0, total=0, message="")
     app = current_app._get_current_object()
@@ -65,19 +76,30 @@ def start_paiwei_job(order_ids, source_name, need_barcode=False) -> str:
     thread = threading.Thread(
         target=_run_job,
         args=(app, job_id, list(order_ids or []), source_name, bool(need_barcode)),
+        kwargs={
+            "item_ids": None if item_ids is None else list(item_ids),
+            "pdf_ids": None if pdf_ids is None else list(pdf_ids),
+        },
         daemon=True,
     )
     thread.start()
     return job_id
 
 
-def _run_job(app, job_id: str, order_ids, source_name, need_barcode=False):
+def _run_job(app, job_id: str, order_ids, source_name, need_barcode=False, item_ids=None, pdf_ids=None):
     with app.app_context():
         try:
-            _, total = group_source_items(order_ids, source_name)
+            reprint = bool(pdf_ids)
+            if reprint:
+                # 重印按「页」计进度：一个牌位单号 = 一页。
+                total = len(pdf_pages_for_reprint(pdf_ids, source_name))
+                empty_message = "这些牌位单号里没有该类型的牌位"
+            else:
+                _, total = group_source_items(order_ids, source_name, item_ids=item_ids)
+                empty_message = "所选订单没有该类型的牌位"
             if not total:
-                _set_state(job_id, status="error", message="所选订单没有该类型的牌位")
-                _emit("paiwei:error", {"job_id": job_id, "message": "所选订单没有该类型的牌位"})
+                _set_state(job_id, status="error", message=empty_message)
+                _emit("paiwei:error", {"job_id": job_id, "message": empty_message})
                 return
 
             _set_state(job_id, status="processing", total=total, done=0, progress=0)
@@ -98,9 +120,14 @@ def _run_job(app, job_id: str, order_ids, source_name, need_barcode=False):
                     if getattr(socketio, "server", None) is not None:
                         socketio.sleep(0)  # 让出协程，保证进度事件及时下发
 
-            output = generate_paiwei_pdf_by_source(
-                order_ids, source_name, need_barcode=need_barcode, progress_cb=progress_cb
-            )
+            if reprint:
+                output = generate_paiwei_pdf_by_pdf_ids(
+                    pdf_ids, source_name, need_barcode=need_barcode, progress_cb=progress_cb
+                )
+            else:
+                output = generate_paiwei_pdf_by_source(
+                    order_ids, source_name, need_barcode=need_barcode, progress_cb=progress_cb, item_ids=item_ids
+                )
             if output is None:
                 _set_state(job_id, status="error", message="生成失败")
                 _emit("paiwei:error", {"job_id": job_id, "message": "生成失败"})

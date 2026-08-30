@@ -285,6 +285,7 @@ export function YlpOrderSummaryDrawer({
       <YlpDrawer
         isMobile={isMobile}
         navbarHeight={navbarHeight}
+        className="ylp-order-summary-drawer"
         title={`订单 #${orderId} · ${previewOpen ? "预览牌位" : logsOpen ? "改动记录" : "摘要"}`}
         hint={
           previewOpen
@@ -329,11 +330,11 @@ export function YlpOrderSummaryDrawer({
         }
       >
         {logsOpen ? (
-          <div style={styles.body}>
+          <div style={styles.body} className="ylp-summary-body">
             {logsLoading ? <p style={styles.state}>读取中…</p> : null}
             {logsError ? <p style={styles.state}>{logsError}</p> : null}
             {logs.length ? (
-              <div style={styles.logList}>
+              <div style={styles.logList} className="ylp-summary-log-list">
                 {logs.map((entry) => (
                   <div key={entry.id} style={styles.logRow}>
                     <div style={styles.logTop}>
@@ -359,7 +360,7 @@ export function YlpOrderSummaryDrawer({
         ) : null}
 
         {previewOpen ? (
-          <div style={styles.body}>
+          <div style={styles.body} className="ylp-summary-body">
             <PaiweiPreviewGrid orderIds={[orderId]} minTileWidth={110} showOrderId={false} />
             <button type="button" style={styles.backButton} onClick={() => setPreviewOpen(false)}>
               ← 返回摘要
@@ -371,9 +372,9 @@ export function YlpOrderSummaryDrawer({
         {!previewOpen && !logsOpen && error ? <section style={styles.error}>{error}</section> : null}
 
         {order && !previewOpen && !logsOpen ? (
-          <div style={styles.body}>
+          <div style={styles.body} className="ylp-summary-body">
             {/* 状态 + 金额：一行搞定 */}
-            <div style={styles.row}>
+            <div style={styles.row} className="ylp-summary-status-row">
               <select
                 value={order.order_status || "Draft"}
                 disabled={busy}
@@ -391,7 +392,7 @@ export function YlpOrderSummaryDrawer({
             </div>
 
             {/* 功德主 / 电话 / Email：就地编辑 */}
-            <div style={styles.fieldGrid}>
+            <div style={styles.fieldGrid} className="ylp-summary-field-grid">
               <input
                 value={form.customer_name}
                 placeholder="功德主"
@@ -423,7 +424,7 @@ export function YlpOrderSummaryDrawer({
             </div>
 
             {/* 工具条 */}
-            <div style={styles.toolRow}>
+            <div style={styles.toolRow} className="ylp-summary-tools">
               <button type="button" style={styles.tool} disabled={busy} onClick={() => setPreviewOpen(true)}>
                 <i className="fa-regular fa-image" aria-hidden="true" /> 预览
               </button>
@@ -447,7 +448,7 @@ export function YlpOrderSummaryDrawer({
               </button>
             </div>
 
-            <div style={styles.sectionHead}>
+            <div style={styles.sectionHead} className="ylp-summary-section-head">
               <span style={styles.sectionTitle}>{`付款记录（${payments.length}）`}</span>
               <button
                 type="button"
@@ -461,7 +462,7 @@ export function YlpOrderSummaryDrawer({
 
             {paymentsError ? <p style={styles.state}>{paymentsError}</p> : null}
 
-            <div style={styles.itemList}>
+            <div style={styles.itemList} className="ylp-summary-item-list">
               {payments.map((payment) => {
                 const status = payment.is_approved ? "approved" : String(payment.status || "pending");
                 const pending = !payment.is_approved && status.toLowerCase() === "pending";
@@ -513,14 +514,14 @@ export function YlpOrderSummaryDrawer({
               {!payments.length && !paymentsError ? <p style={styles.state}>暂无付款记录</p> : null}
             </div>
 
-            <div style={styles.sectionHead}>
+            <div style={styles.sectionHead} className="ylp-summary-section-head">
               <span style={styles.sectionTitle}>{`牌位项目（${items.length}）`}</span>
               <button type="button" style={styles.addItem} disabled={busy} onClick={() => setItemModal({ item: null })}>
                 + 添加
               </button>
             </div>
 
-            <div style={styles.itemList}>
+            <div style={styles.itemList} className="ylp-summary-item-list">
               {items.map((item) => {
                 const grouped = item.item_form_data || {};
                 const keys = [
