@@ -1010,6 +1010,66 @@ def generate_paiwei_pdf_all_sources(order_ids, need_barcode=False, progress_cb=N
     return _merge_buffers(buffers)
 
 
+def adjust_owner_points(points, people):
+    """多列阳上的排版修正。返回 (新的点位, 是否动过)。
+
+    owner_point 有几档的字距比字还小（paiwei_5 三人档 size 10 / spacing 8，
+    每个字互相压 2pt），列距也常常等于字宽、横向零间隙。名字一长就叠成一团
+    （订单 832 的「妻 林金全」和「媳 陈淑芬」）。单列的一律不碰 ——
+    冤亲债主那套按字数居中的逻辑还指着原始点位。
+    """
+    usable = points[: len(people)]
+    if len(people) < 2 or not usable or not any(len(str(name)) > 3 for name in people[: len(usable)]):
+        return points, False
+    # 英文名会被空格拆成好几个「人」（PANG MIAO TING），但它走的是转 90 度那条路、
+    # 自带一套列排布，这里再挪一次就把它推出纸外了。
+    if any(latin_heavy(name) for name in people[: len(usable)]):
+        return points, False
+
+    # 字距至少等于字高，先消掉字与字的重叠
+    spread = [(ox, oy, osize, max(ospace, osize)) for ox, oy, osize, ospace in usable]
+
+    # 同一排里相邻两列拉开 1.15 个字宽，从原来那排的中心往两边摊
+    rows: dict = {}
+    for index, point in enumerate(spread):
+        rows.setdefault(round(point[1], 1), []).append(index)
+    for idxs in rows.values():
+        if len(idxs) < 2:
+            continue
+        idxs.sort(key=lambda i: spread[i][0])
+        size0 = max(spread[i][2] for i in idxs)
+        xs = [spread[i][0] for i in idxs]
+        pitch = max(size0 * 1.15, (max(xs) - min(xs)) / max(1, len(idxs) - 1))
+        start = (min(xs) + max(xs)) / 2.0 - pitch * (len(idxs) - 1) / 2.0
+        for slot, i in enumerate(idxs):
+            ox, oy, osize, ospace = spread[i]
+            spread[i] = (start + slot * pitch, oy, osize, ospace)
+
+    # 上下两排叠在同一个 x 上时（2+1、2+2 布局），按上排实际占的高度把下排推开。
+    # drawString 的 y 是基线、字身往上长，所以下排基线要落在
+    # 「上排最后一个字的基线 − 一个字高」再往下留点空。
+    pushed = []
+    for index, (ox, oy, osize, ospace) in enumerate(spread):
+        drop = 0.0
+        for above in range(index):
+            aox, aoy, asize, aspace = spread[above]
+            if abs(aox - ox) > max(osize, asize) * 0.6:
+                continue
+            bottom = aoy - (len(str(people[above])) - 1) * aspace - asize - aspace * 0.6
+            drop = min(drop, bottom - oy)
+        pushed.append((ox, oy + drop, osize, ospace))
+    return pushed, True
+
+
+def owner_block_bottom(points, people) -> float:
+    """这块阳上最低写到哪（相对格心的 dy）。"""
+    lows = [
+        oy - (len(str(people[index])) - 1) * ospace
+        for index, (ox, oy, osize, ospace) in enumerate(points[: len(people)])
+    ]
+    return min(lows) if lows else 0.0
+
+
 def generate_paiwei(paiwei_type, fahui_data, point_data, source_name, need_barcode=False, progress_cb=None):
     from reportlab.lib import colors
     from reportlab.lib.pagesizes import A4, landscape
@@ -1045,6 +1105,11 @@ def generate_paiwei(paiwei_type, fahui_data, point_data, source_name, need_barco
     # 横排换行要知道一格有多宽
     cell_pitch = _cell_pitch(point_dict, positions, width)
 
+    # 阳上名字长的时候（订单 832 的「妻 林金全」这种 5 个字），下面的名字要往下排，
+    # 容易压到「拜荐」。把「阳上」标签和整块名字一起往上挪，把上面空着的地方用起来。
+    owner_lift = {"value": 0.0}
+    owner_layout = {"points": None}
+
     def get_point(block_key, key):
         for point in point_dict.get(block_key, []):
             if f"{key}_point" in point:
@@ -1065,6 +1130,8 @@ def generate_paiwei(paiwei_type, fahui_data, point_data, source_name, need_barco
         dx, dy, size, spacing = point
         x_base = base_x + dx
         y_base = base_y + dy
+        if key in ("yangshang", "owner"):
+            y_base += owner_lift["value"]
         c.setFont(font_name, size)
 
         # 英文 / 地址：竖排会跑出纸外，改横排自动换行。整块横向以格子中线为准居中，
@@ -1091,6 +1158,10 @@ def generate_paiwei(paiwei_type, fahui_data, point_data, source_name, need_barco
             if not points:
                 return
             block = block_points(block_key)
+            # 布局在画「阳上」标签之前就算好了（要用它决定标签抬多高），这里直接用
+            if owner_layout["points"]:
+                points = owner_layout["points"]
+
             _, owner_run = latin_box(block, info, "owner_point", cell_pitch)
             # 转 90 度的名字可以从「阳上」标签正下方就开始写 —— 竖排时那段是留给
             # 第一个字的字身的，横躺之后用不上，白白空着。多出来的这几 pt 决定了
@@ -1337,8 +1408,32 @@ def generate_paiwei(paiwei_type, fahui_data, point_data, source_name, need_barco
                     deceased = ""
                 # 「佛力超度」和「婴灵」之间空一格半：婴灵只有两个字，
                 # 贴着上面四个字排会看成一整行，拉开半格才断得开。
-                # 名字和「婴灵」之间空一格，和「佛力超度 婴灵」的间隔一致。
-                folichaodu = f"佛力超度 {HALF_GAP}婴{HALF_GAP}灵 {deceased}".rstrip()
+                # 「婴」「灵」中间也空一格，两个字才撑得住这一列。
+                folichaodu = f"佛力超度 {HALF_GAP}婴 灵 {deceased}".rstrip()
+
+            # 阳上排版要在画「阳上」标签之前算好：撞了就撑开，撑开之后如果压到
+            # 下面的「拜荐」，就把标签和名字整块往上抬，抬到刚好让开。
+            owner_names_raw = info.get("owner", "")
+            owner_people = [
+                one
+                for one in (
+                    owner_names_raw
+                    if isinstance(owner_names_raw, list)
+                    else re.split(r"[,\s]+", str(owner_names_raw or "").strip())
+                )
+                if str(one).strip()
+            ]
+            owner_base = get_point(position, "owner")
+            owner_slots = owner_point.get(str(len(owner_people))) if owner_base else None
+            adjusted, changed = adjust_owner_points(owner_slots or [], owner_people)
+            owner_layout["points"] = adjusted if changed else None
+            owner_lift["value"] = 0.0
+            if changed:
+                below = get_point(position, "baijian")
+                if below and owner_base:
+                    floor = below[1] + below[2] + below[3] * 0.6  # 拜荐 顶边再留点空
+                    bottom = owner_base[1] + owner_block_bottom(adjusted, owner_people)
+                    owner_lift["value"] = max(0.0, floor - bottom)
 
             draw_text_vertical(position, "folichaodu", folichaodu, base_x, base_y, info)
             draw_text_vertical(position, "baijian", "拜荐", base_x, base_y, info)
