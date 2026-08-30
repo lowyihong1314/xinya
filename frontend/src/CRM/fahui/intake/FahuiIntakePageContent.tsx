@@ -410,7 +410,9 @@ function FahuiIntakePageInner() {
       return;
     }
     for (const draft of drafts) {
-      const validationError = validateDraft(draft);
+      // 上限要和弹窗里给的一致，否则登录的工作人员在弹窗里加了第 2 位阳上，
+      // 到这一步会被按访客规则打回去。
+      const validationError = validateDraft(draft, { maxCreditorOwners: isAuthenticated ? 2 : 1 });
       if (validationError) {
         setError(validationError);
         return;

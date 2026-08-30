@@ -105,7 +105,7 @@ export const PAIWEI_TEMPLATES: PaiweiTemplate[] = [
     title: "超度冤亲债主",
     price: 15,
     // 与打印模板一致：牌位中央固定印「冤亲债主」，只需要阳上姓名。
-    hint: "填写一位阳上姓名即可，牌位内容固定为「冤亲债主」。",
+    hint: "牌位内容固定为「冤亲债主」，填写阳上姓名即可。",
     fields: { owner: true },
   },
   {
@@ -296,7 +296,10 @@ export function buildItemPayload(draft: PaiweiDraft) {
   return payload;
 }
 
-export function validateDraft(draft: PaiweiDraft) {
+/** 冤亲债主的阳上上限：公开端 1 位，登录的工作人员 2 位（见 PaiweiEditorModal）。
+ *  默认 1 —— 调用方不传就是公开端那套规则，不会因为漏传而放宽。 */
+export function validateDraft(draft: PaiweiDraft, options?: { maxCreditorOwners?: number }) {
+  const maxCreditorOwners = Math.max(1, options?.maxCreditorOwners ?? 1);
   const template = getTemplate(draft.code);
   const ownerValues = splitLines(draft.owner);
   const deceasedValues = splitLines(draft.deceased);
@@ -335,8 +338,8 @@ export function validateDraft(draft: PaiweiDraft) {
     if (!ownerValues.length) {
       return `${template.title} 需要填写阳上姓名`;
     }
-    if (ownerValues.length > 1) {
-      return `${template.title} 只能填写一位阳上姓名`;
+    if (ownerValues.length > maxCreditorOwners) {
+      return `${template.title} 最多填写 ${maxCreditorOwners} 位阳上姓名`;
     }
   } else if (isWuyuanCode(draft.code)) {
     // 无缘子女的阳上（含父 / 母）最多两位，公开端与 CRM 同一条规则

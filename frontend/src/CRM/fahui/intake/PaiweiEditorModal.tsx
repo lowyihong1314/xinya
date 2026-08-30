@@ -25,6 +25,9 @@ function initRows(value: string): string[] {
 const MAX_OWNERS = 8;
 // 无缘子女（A3/B3）的阳上最多 2 位（父 + 母）—— 不看登录状态，公开端与 CRM 一样
 const MAX_WUYUAN_OWNER_ROWS = 2;
+// 冤亲债主（C）：公开端仍是 1 位；登录的工作人员可以加到 2 位。
+// 打印模板那边 paiwei_10.owner.json 的 "2" 已经配成左右两列（原来两个名字是叠着印的）。
+const MAX_CREDITOR_OWNERS = 2;
 const MAX_DECEASED = 6;
 
 function deceasedLabel(code: PaiweiCode): string {
@@ -63,6 +66,9 @@ export function PaiweiEditorModal({
   const [error, setError] = useState("");
 
   const template = getTemplate(draft.code);
+  // 冤亲债主的阳上上限：登录 2 位、访客 1 位。其余牌位沿用原来的 8 / 1。
+  const maxCreditorOwners = allowAddRows ? MAX_CREDITOR_OWNERS : 1;
+  const maxOwnerRows = draft.code === "C" ? maxCreditorOwners : allowAddRows ? MAX_OWNERS : 1;
 
   function patch(next: Partial<PaiweiDraft>) {
     setDraft((current) => ({ ...current, ...next }));
@@ -75,7 +81,7 @@ export function PaiweiEditorModal({
     const nextTemplate = getTemplate(code);
     // 冤亲债主只允许一位阳上：切换过来时把多余的行裁掉。
     if (code === "C") {
-      setOwners((current) => current.slice(0, 1));
+      setOwners((current) => current.slice(0, maxCreditorOwners));
     }
     setDraft((current) => ({
       ...current,
@@ -126,7 +132,7 @@ export function PaiweiEditorModal({
       }
     }
     const finalDraft = buildFinalDraft();
-    const validationError = validateDraft(finalDraft);
+    const validationError = validateDraft(finalDraft, { maxCreditorOwners });
     if (validationError) {
       setError(validationError);
       return;
@@ -207,7 +213,7 @@ export function PaiweiEditorModal({
               addLabel="添加阳上姓名"
               placeholder="阳上"
               values={owners}
-              max={allowAddRows ? (draft.code === "C" ? 1 : MAX_OWNERS) : 1}
+              max={maxOwnerRows}
               onChange={setOwners}
             />
           ) : null}
