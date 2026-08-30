@@ -76,6 +76,8 @@ export function BoardScanPage() {
   const [boardsLoading, setBoardsLoading] = useState(true);
   const [board, setBoard] = useState<Board | null>(null);
   const [newName, setNewName] = useState("");
+  // 每行张数 = board_width，看板页据它把板排成网格、并把线性位置换算成「第 x 排 第 y 位」
+  const [newPerRow, setNewPerRow] = useState("10");
   const [creating, setCreating] = useState(false);
 
   const [scanning, setScanning] = useState(false);
@@ -361,9 +363,18 @@ export function BoardScanPage() {
       show_alert("error", "先给看板起个名");
       return;
     }
+    const perRow = Number.parseInt(newPerRow, 10);
+    if (!Number.isFinite(perRow) || perRow <= 0) {
+      show_alert("error", "每行张数要填个大于 0 的数");
+      return;
+    }
     setCreating(true);
     try {
-      const res = await createBoard({ board_name: name, version: version || undefined });
+      const res = await createBoard({
+        board_name: name,
+        board_width: perRow,
+        version: version || undefined,
+      });
       const list = res.all_board || [];
       setBoards(list);
       setNewName("");
@@ -416,6 +427,19 @@ export function BoardScanPage() {
             placeholder="新建看板，例如「RM15 冤亲债主_C」"
             style={styles.input}
           />
+          <label style={styles.perRowWrap}>
+            <span style={styles.perRowLabel}>每行</span>
+            <input
+              value={newPerRow}
+              onChange={(event) => setNewPerRow(event.target.value)}
+              type="number"
+              min={1}
+              inputMode="numeric"
+              style={styles.perRowInput}
+              title="一行贴几张牌位"
+            />
+            <span style={styles.perRowLabel}>张</span>
+          </label>
           <button
             type="button"
             style={{ ...styles.primary, ...(creating ? styles.disabled : null) }}
@@ -435,7 +459,9 @@ export function BoardScanPage() {
             return (
               <button key={one.board_id} type="button" style={styles.boardCard} onClick={() => void enterBoard(one)}>
                 <span style={styles.boardName}>{one.board_name}</span>
-                <span style={styles.boardMeta}>{`已贴 ${filled} 张`}</span>
+                <span style={styles.boardMeta}>
+                  {`已贴 ${filled} 张 · 每行 ${one.board_width || "—"} 张`}
+                </span>
               </button>
             );
           })}
@@ -568,6 +594,28 @@ const styles: Record<string, CSSProperties> = {
     background: "var(--x-color-panel)",
     color: "var(--x-color-ink)",
     fontSize: "14px",
+  },
+  perRowWrap: {
+    display: "inline-flex",
+    alignItems: "center",
+    gap: "6px",
+    padding: "0 10px",
+    borderRadius: "8px",
+    border: "1px solid var(--x-color-line)",
+    background: "var(--x-color-panel)",
+    whiteSpace: "nowrap",
+  },
+  perRowLabel: { fontSize: "13px", color: "var(--x-color-ink-muted)", fontWeight: 700 },
+  perRowInput: {
+    width: "56px",
+    padding: "9px 0",
+    border: "none",
+    outline: "none",
+    background: "transparent",
+    color: "var(--x-color-ink)",
+    fontSize: "15px",
+    fontWeight: 700,
+    textAlign: "center",
   },
   primary: {
     padding: "9px 16px",
