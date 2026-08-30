@@ -2896,7 +2896,7 @@ const YLP_ORDER_TABLE_CSS = `
 .ylp-order-table tbody td { padding: 9px 6px; border-bottom: 1px solid var(--x-color-line-soft); vertical-align: middle; color: var(--x-color-ink); }
 .ylp-order-table tbody tr.ylp-order-row { cursor: pointer; }
 /* 打印 / 上板进度：未打印＝灰，打印了没上板＝暖黄，上了一部分＝浅蓝，全上了＝淡绿；
-   没有牌位可上的单不着色。hover 放在后面，优先级更高，压得住这层底色。 */
+   没有牌位可上的单不着色。hover 与选中都不再动底色，这层颜色任何时候都看得见。 */
 .ylp-order-table tbody tr.ylp-board-unprinted td { background: var(--x-color-canvas-alt, #f4f4f5); }
 .ylp-order-table tbody tr.ylp-board-none td { background: var(--x-color-warning-soft, #fff7ed); }
 .ylp-order-table tbody tr.ylp-board-partial td { background: var(--x-color-accent-soft, #eff6ff); }
