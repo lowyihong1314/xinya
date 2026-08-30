@@ -69,6 +69,10 @@ def _serialize_print_item(item: FahuiOrderItem) -> dict:
     return data
 
 
+# 认得的底图模板；paiwei_2 在 SOURCE_ORDER 里是历史占位，没有实际数据。
+VALID_SOURCE_NAMES = {"paiwei_SS", "paiwei_1", "paiwei_5", "paiwei_10"}
+
+
 def filter_fahui_data(items):
     items_sorted = sorted(items, key=lambda item: item.id or 0)
     fahui_data = [_serialize_print_item(item) for item in items_sorted]
@@ -635,7 +639,7 @@ def group_source_items(order_ids, source_name, item_ids=None):
     保证「弹窗上看到几张」和「实际印出几张」永远一致）；否则按整张订单取。
     """
     source_name = str(source_name or "").strip()
-    if source_name not in {"paiwei_1", "paiwei_5", "paiwei_10"}:
+    if source_name not in VALID_SOURCE_NAMES:
         return {}, 0
 
     query = FahuiOrderItem.query.join(FahuiOrder)
@@ -705,7 +709,7 @@ def pdf_pages_for_reprint(pdf_ids, source_name):
     """
     source_name = str(source_name or "").strip()
     wanted = [int(value) for value in (pdf_ids or [])]
-    if source_name not in {"paiwei_1", "paiwei_5", "paiwei_10"} or not wanted:
+    if source_name not in VALID_SOURCE_NAMES or not wanted:
         return []
 
     pages = (
@@ -951,8 +955,8 @@ def _cell_pitch(point_dict, positions, page_width: float) -> float:
     return min(diffs) if diffs else page_width
 
 
-# 「不选类型」时按这个顺序把三种牌位依次生成再合成一份 PDF。
-ALL_SOURCE_NAMES = ("paiwei_1", "paiwei_5", "paiwei_10")
+# 「不选类型」时按这个顺序把各种牌位依次生成再合成一份 PDF。
+ALL_SOURCE_NAMES = ("paiwei_SS", "paiwei_1", "paiwei_5", "paiwei_10")
 
 
 def _merge_buffers(buffers):
@@ -1385,7 +1389,7 @@ def generate_paiwei(paiwei_type, fahui_data, point_data, source_name, need_barco
             if paiwei_type == "C":
                 xiankao = xianbi = " "
                 center_text = "冤亲债主"
-            elif paiwei_type in ["A1", "B1"]:
+            elif paiwei_type in ["SS", "A1", "B1"]:
                 xiankao, xianbi = "显考 ", "显妣 "
                 center_text = f"{info.get('surname', '')}{info.get('suffix', '门堂上历代祖先')}"
             elif paiwei_type in ["A2", "B2"]:

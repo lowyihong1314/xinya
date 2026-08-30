@@ -56,7 +56,7 @@ type OrderHistoryEntry = {
   detail: YlpOrderDetail | null;
 };
 
-const PAIWEI_CODES: PaiweiCode[] = ["A1", "A2", "A3", "B1", "B2", "B3", "C", "D1"];
+const PAIWEI_CODES: PaiweiCode[] = ["SS", "A1", "A2", "A3", "B1", "B2", "B3", "C", "D1"];
 const STEP_LABELS = ["验证手机", "填写牌位", "确认提交"];
 
 function stepperIndex(step: IntakeStep): number {

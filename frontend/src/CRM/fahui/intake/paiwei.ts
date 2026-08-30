@@ -8,7 +8,7 @@ export function currentYlpVersion() {
 
 export const DEFAULT_VERSION = currentYlpVersion();
 
-export type PaiweiCode = "A1" | "A2" | "A3" | "B1" | "B2" | "B3" | "C" | "D" | "D1";
+export type PaiweiCode = "SS" | "A1" | "A2" | "A3" | "B1" | "B2" | "B3" | "C" | "D" | "D1";
 
 export type PaiweiTemplate = {
   code: PaiweiCode;
@@ -55,6 +55,15 @@ export type PaiweiDraft = {
 };
 
 export const PAIWEI_TEMPLATES: PaiweiTemplate[] = [
+  {
+    code: "SS",
+    title: "超大牌位_超度历代祖先",
+    price: 500,
+    // 内容与 A1 完全相同，只是尺寸更大、价格不同；打印走自己的 paiwei_SS 模板。
+    hint: "超度历代祖先：填写姓氏、堂号、显考（先父）、显妣（先母）与阳上姓名。",
+    defaultSuffix: "门堂上历代祖先",
+    fields: { owner: true, surname: true, suffix: true, father: true, mother: true },
+  },
   {
     code: "A1",
     title: "大牌位_超度历代祖先",

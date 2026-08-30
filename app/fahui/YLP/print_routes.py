@@ -355,6 +355,8 @@ def generate_preview_by_orders_route():
 
 # 牌位类型 → 模板文件名
 _PAIWEI_TEMPLATE_ALIASES = {
+    "super": "paiwei_SS",
+    "paiwei_SS": "paiwei_SS",
     "large": "paiwei_1",
     "big": "paiwei_1",
     "paiwei_1": "paiwei_1",

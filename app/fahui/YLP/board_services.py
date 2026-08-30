@@ -31,6 +31,7 @@ from models.fahui import (
 # 随缘供斋（D）金额自订，默认 0，实际以提交时传来的 price 为准
 PRICE_MAP = {
     "D": 0,
+    "SS": 500,
     "A1": 100,
     "A2": 100,
     "A3": 100,

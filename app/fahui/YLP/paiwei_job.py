@@ -22,6 +22,8 @@ JOB_TTL_SECONDS = 3600
 _PAIWEI_TEMPLATE_ALIASES = {
     "large": "paiwei_1",
     "big": "paiwei_1",
+    "super": "paiwei_SS",
+    "paiwei_SS": "paiwei_SS",
     "paiwei_1": "paiwei_1",
     "small": "paiwei_5",
     "paiwei_5": "paiwei_5",

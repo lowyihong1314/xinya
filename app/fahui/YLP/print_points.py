@@ -18,6 +18,8 @@ PAIWEI_PDF_DIR = PAIWEI_TEMPLATE_ROOT / "pdf"
 PAIWEI_LOCATION_DIR = PAIWEI_TEMPLATE_ROOT / "location_json"
 
 SOURCE_NAME_BY_PAIWEI_TYPE = {
+    # SS 超大牌位：版式暂时照抄 paiwei_1，只是自己一套模板/坐标，方便日后单独调
+    "SS": "paiwei_SS",
     "A1": "paiwei_1",
     "A2": "paiwei_1",
     "A3": "paiwei_1",
@@ -27,7 +29,7 @@ SOURCE_NAME_BY_PAIWEI_TYPE = {
     "C": "paiwei_10",
 }
 
-SOURCE_ORDER = ("paiwei_1", "paiwei_2", "paiwei_5", "paiwei_10")
+SOURCE_ORDER = ("paiwei_SS", "paiwei_1", "paiwei_2", "paiwei_5", "paiwei_10")
 
 
 def _load_json_file(path, default):

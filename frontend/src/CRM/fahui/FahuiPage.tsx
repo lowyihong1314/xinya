@@ -2102,6 +2102,9 @@ export function FahuiPage() {
                 </button>
                 {printPlusMenuOpen ? (
                   <div style={styles.printMenu}>
+                    <button type="button" style={styles.printMenuItem} onClick={() => void handleYlpPrintPlus("paiwei_SS")}>
+                      超大牌位
+                    </button>
                     <button type="button" style={styles.printMenuItem} onClick={() => void handleYlpPrintPlus("paiwei_1")}>
                       大牌位
                     </button>

@@ -10,6 +10,7 @@ PRINTER_IP = os.getenv("XINYA_RECEIPT_PRINTER_IP", "192.168.68.43")
 PRINTER_PORT = int(os.getenv("XINYA_RECEIPT_PRINTER_PORT", "9100"))
 
 FAHUI_TYPE = {
+    "SS": "超大牌位_超度历代祖先",
     "A1": "大牌位_超度历代祖先",
     "A2": "大牌位_超度亡灵",
     "A3": "大牌位_无缘子女",

@@ -35,6 +35,7 @@ diy_paiwei_bp = Blueprint("diy_paiwei", __name__)
 # 模板底图的页面尺寸（PDF 点）。和 database/paiwei_template/pdf/*.pdf 对应，
 # 前端画布按这个比例铺背景图，所见即所得。
 TEMPLATES = [
+    {"source_name": "paiwei_SS", "label": "超大牌位", "width": 595.5, "height": 842.2},
     {"source_name": "paiwei_1", "label": "大牌位", "width": 595.5, "height": 842.2},
     {"source_name": "paiwei_5", "label": "小牌位", "width": 842.2, "height": 595.5},
     {"source_name": "paiwei_10", "label": "冤亲债主", "width": 595.5, "height": 842.2},
