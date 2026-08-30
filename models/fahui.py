@@ -722,3 +722,46 @@ class FahuiDiyPaiwei(db.Model):
         if with_elements:
             data["elements"] = self.elements or []
         return data
+
+
+class FahuiPaiweiPoint(db.Model):
+    """牌位模板的坐标配置。原本是 DATA_ROOT/paiwei_template/location_json/*.json。
+
+    挪进 DB 是因为那几个 json 不在仓库里：每次改坐标线上都要手动同步一份，
+    环境之间很容易漂（改完这边忘了那边，印出来就不一样）。进了库就跟着
+    数据库走，后台配置页改完立刻生效，也有备份。
+
+    三种 json 用同一张表装，靠 kind 区分：
+        kind='layout'    block_key='A'..'J'   field='center'/'folichaodu'/...
+        kind='owner'     block_key='1'..'6'   field='0','1',...（第几位阳上）
+        kind='deceased'  同上
+    值一律是 (dx, dy, size, spacing) 四元组，含义和原来的 json 完全一样。
+    """
+
+    __tablename__ = "fahui_paiwei_point"
+    __table_args__ = (
+        db.UniqueConstraint("source_name", "kind", "block_key", "field", name="uq_paiwei_point"),
+        db.Index("ix_paiwei_point_lookup", "source_name", "kind"),
+    )
+
+    id = db.Column(db.Integer, primary_key=True, autoincrement=True)
+    # paiwei_1 / paiwei_5 / paiwei_10
+    source_name = db.Column(db.String(32), nullable=False)
+    # layout / owner / deceased
+    kind = db.Column(db.String(16), nullable=False)
+    block_key = db.Column(db.String(16), nullable=False)
+    field = db.Column(db.String(32), nullable=False)
+    dx = db.Column(db.Float, nullable=False, default=0)
+    dy = db.Column(db.Float, nullable=False, default=0)
+    size = db.Column(db.Float, nullable=False, default=0)
+    spacing = db.Column(db.Float, nullable=False, default=0)
+    # 同一个 block 里字段的原始顺序，重建 json 时照它排
+    sort_order = db.Column(db.Integer, nullable=False, default=0)
+    updated_at = db.Column(
+        db.TIMESTAMP,
+        nullable=True,
+        server_default=db.text("current_timestamp() ON UPDATE current_timestamp()"),
+    )
+
+    def values(self):
+        return [self.dx, self.dy, self.size, self.spacing]
