@@ -166,6 +166,10 @@ export function BoardPage() {
   const [liveHint, setLiveHint] = useState("");
   // 右键菜单（暂时只有「查看明细」）和它拉起的订单摘要抽屉
   const [poolMenu, setPoolMenu] = useState<{ pdfId: number; orderId: number | null; x: number; y: number } | null>(null);
+  // 整块板全屏铺开看
+  const [fullBoardId, setFullBoardId] = useState<number | null>(null);
+  // 放大看单张牌位的原图
+  const [zoomPdfId, setZoomPdfId] = useState<number | null>(null);
   const [summaryOrderId, setSummaryOrderId] = useState<number | null>(null);
   // 牌位预览图后端存了磁盘缓存、浏览器又压了 30 天，订单改完必须两头一起破：
   // 这里按牌位单号记一个自增号，带进 URL（换 URL 破浏览器缓存）并带 refresh=1（破磁盘缓存）。
@@ -217,8 +221,17 @@ export function BoardPage() {
     };
   }, [poolMenu]);
 
+  /** 在光标处打开牌位菜单。全屏里左键右键都走它。 */
+  function openTileMenu(event: { preventDefault: () => void; stopPropagation: () => void; clientX: number; clientY: number },
+                        pdfId: number, orderId: number | null) {
+    event.preventDefault();
+    // 关菜单的 window 监听已经挂上了，别让这次事件冒上去把刚开的菜单关掉
+    event.stopPropagation();
+    setPoolMenu({ pdfId, orderId, x: event.clientX, y: event.clientY });
+  }
+
   /** 未上板的一张牌位。全屏和常规面板共用：
-   *  常规面板管拖（拖到右边看板即上板），全屏管看（右键出菜单）。 */
+   *  常规面板管拖（拖到右边看板即上板），全屏只管看 —— 不能拖，左右键都出菜单。 */
   function renderPoolTile(pdf: UnattachedPdf, opts: { draggable: boolean; contextMenu: boolean; large?: boolean }) {
     const caption = pdf.orders.length
       ? pdf.orders
@@ -239,21 +252,9 @@ export function BoardPage() {
         onDragStart={opts.draggable ? () => onPoolDragStart(pdf.id) : undefined}
         onDragEnd={opts.draggable ? clearDrag : undefined}
         onContextMenu={
-          opts.contextMenu
-            ? (event) => {
-                // 右键＝菜单，在光标处弹出，顺手压掉浏览器自带菜单
-                event.preventDefault();
-                // 关菜单的 window 监听已经挂上了，别让这次事件冒上去把刚开的菜单关掉
-                event.stopPropagation();
-                setPoolMenu({
-                  pdfId: pdf.id,
-                  orderId: pdf.orders[0]?.order_id ?? null,
-                  x: event.clientX,
-                  y: event.clientY,
-                });
-              }
-            : undefined
+          opts.contextMenu ? (event) => openTileMenu(event, pdf.id, pdf.orders[0]?.order_id ?? null) : undefined
         }
+        onClick={opts.contextMenu ? (event) => openTileMenu(event, pdf.id, pdf.orders[0]?.order_id ?? null) : undefined}
         title={caption}
       >
         <span style={styles.slotNo}>#{pdf.id}</span>
@@ -391,6 +392,28 @@ export function BoardPage() {
     void reload();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [version]);
+
+  // Esc 逐层退出：先关放大，再关全屏
+  useEffect(() => {
+    if (zoomPdfId == null && fullBoardId == null && !poolFullscreen) {
+      return;
+    }
+    const onKey = (event: KeyboardEvent) => {
+      if (event.key !== "Escape") {
+        return;
+      }
+      if (zoomPdfId != null) {
+        setZoomPdfId(null);
+      } else if (fullBoardId != null) {
+        setFullBoardId(null);
+      } else {
+        setPoolFullscreen(false);
+      }
+      setPoolMenu(null);
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [zoomPdfId, fullBoardId, poolFullscreen]);
 
   // 手机端扫码上板 / 别人在另一台电脑上拖动，这边实时跟着变。
   // 广播里只有 board_id + 动作，内容自己拉 —— 扫码一秒可能好几次，
@@ -834,13 +857,23 @@ export function BoardPage() {
                   #{board.board_id} · {board.board_data.length} 位 · 每行 {board.board_width || "—"} 张
                 </span>
               </div>
-              {canEdit ? (
-                <div style={styles.boardActions}>
-                  <button type="button" style={styles.tinyBtn} onClick={() => void handleRename(board)}>改名</button>
-                  <button type="button" style={styles.tinyBtn} onClick={() => void handleSetPerRow(board)}>每行</button>
-                  <button type="button" style={styles.tinyDanger} onClick={() => void handleDeleteBoard(board)}>删板</button>
-                </div>
-              ) : null}
+              <div style={styles.boardActions}>
+                <button
+                  type="button"
+                  style={styles.tinyBtn}
+                  onClick={() => setFullBoardId(board.board_id)}
+                  title="全屏铺开看这块板"
+                >
+                  全屏
+                </button>
+                {canEdit ? (
+                  <>
+                    <button type="button" style={styles.tinyBtn} onClick={() => void handleRename(board)}>改名</button>
+                    <button type="button" style={styles.tinyBtn} onClick={() => void handleSetPerRow(board)}>每行</button>
+                    <button type="button" style={styles.tinyDanger} onClick={() => void handleDeleteBoard(board)}>删板</button>
+                  </>
+                ) : null}
+              </div>
             </div>
 
             <div
@@ -923,6 +956,11 @@ export function BoardPage() {
                         void onSlotDrop(board, posLocation);
                       }}
                       title={caption}
+                      onContextMenu={
+                        slot.print_pdf_id
+                          ? (event) => openTileMenu(event, slot.print_pdf_id as number, slot.orders?.[0]?.order_id ?? null)
+                          : undefined
+                      }
                     >
                       <span style={styles.slotNo}>{posLocation ?? "-"}</span>
                       {canEdit ? (
@@ -1009,6 +1047,16 @@ export function BoardPage() {
         >
           <button
             type="button"
+            style={styles.poolMenuItem}
+            onClick={() => {
+              setZoomPdfId(poolMenu.pdfId);
+              setPoolMenu(null);
+            }}
+          >
+            放大
+          </button>
+          <button
+            type="button"
             style={{ ...styles.poolMenuItem, ...(poolMenu.orderId ? null : styles.poolMenuItemDisabled) }}
             disabled={!poolMenu.orderId}
             onClick={() => {
@@ -1022,7 +1070,97 @@ export function BoardPage() {
         </div>
       ) : null}
 
-      {/* 全屏看未上板：只看不拖（板都被盖住了），右键菜单照常 */}
+      {/* 整块板全屏铺开：只看不拖，左右键都出菜单 */}
+      {fullBoardId != null ? (() => {
+        const target = boards.find((one) => one.board_id === fullBoardId);
+        if (!target) {
+          return null;
+        }
+        const slots = (target.board_data || []).filter((slot) => slot.print_pdf_id);
+        return (
+          <div style={styles.poolFullscreen} className="ylp-board-fullscreen">
+            <div style={styles.poolFullscreenBar}>
+              <div>
+                <span style={styles.boardName}>{target.board_name}</span>
+                <span style={styles.boardMeta}>
+                  {`${slots.length} 张 · 每行 ${target.board_width || "—"} 张 · 点牌位看菜单`}
+                </span>
+              </div>
+              <div style={styles.boardActions}>
+                <button
+                  type="button"
+                  style={styles.tinyBtn}
+                  onClick={() => {
+                    setFullBoardId(null);
+                    setPoolMenu(null);
+                  }}
+                >
+                  退出全屏
+                </button>
+              </div>
+            </div>
+            <div
+              style={{
+                ...styles.poolFullscreenGrid,
+                ...(target.board_width && target.board_width > 0
+                  ? { gridTemplateColumns: `repeat(${target.board_width}, minmax(0, 1fr))` }
+                  : null),
+              }}
+              className="ylp-board-fullscreen-grid"
+            >
+              {slots.map((slot) => {
+                const caption = (slot.orders || [])
+                  .map((o) => (o.customer_name || `#${o.order_id}`) + (o.owner_or_deceased ? ` · ${o.owner_or_deceased}` : ""))
+                  .join("；") || `单号 #${slot.print_pdf_id}`;
+                return (
+                  <div
+                    key={slot.side_id}
+                    className="ylp-pool-slot"
+                    style={{ ...styles.slot, ...styles.poolSlotLarge }}
+                    title={caption}
+                    onClick={(event) => openTileMenu(event, slot.print_pdf_id as number, slot.orders?.[0]?.order_id ?? null)}
+                    onContextMenu={(event) => openTileMenu(event, slot.print_pdf_id as number, slot.orders?.[0]?.order_id ?? null)}
+                  >
+                    <span style={styles.slotNo}>{formatBoardLocation(boards, target.board_id, slot.location) || "-"}</span>
+                    <img
+                      src={previewUrl(slot.print_pdf_id as number)}
+                      alt={`单号 ${slot.print_pdf_id}`}
+                      style={styles.slotImg}
+                      loading="lazy"
+                      draggable={false}
+                    />
+                    <span style={styles.slotCap}>{caption}</span>
+                  </div>
+                );
+              })}
+              {slots.length ? null : <p style={{ ...styles.muted, gridColumn: "1 / -1" }}>这块板还没有贴牌位。</p>}
+            </div>
+          </div>
+        );
+      })() : null}
+
+      {/* 放大看单张牌位的原图 */}
+      {zoomPdfId != null ? (
+        <div style={styles.zoomOverlay} className="ylp-board-zoom" onClick={() => setZoomPdfId(null)}>
+          <img
+            src={previewUrl(zoomPdfId)}
+            alt={`单号 ${zoomPdfId}`}
+            style={styles.zoomImg}
+            onClick={(event) => event.stopPropagation()}
+          />
+          <div style={styles.zoomBar} onClick={(event) => event.stopPropagation()}>
+            <span style={styles.zoomNo}>单号 #{zoomPdfId}</span>
+            <a href={previewUrl(zoomPdfId)} target="_blank" rel="noreferrer" style={styles.tinyBtn}>
+              新标签打开
+            </a>
+            <button type="button" style={styles.tinyBtn} onClick={() => setZoomPdfId(null)}>
+              关闭
+            </button>
+          </div>
+        </div>
+      ) : null}
+
+      {/* 全屏看未上板：只看不拖（板都被盖住了），左右键都出菜单 */}
       {poolFullscreen ? (
         <div style={styles.poolFullscreen} className="ylp-pool-fullscreen">
           <div style={styles.poolFullscreenBar}>
@@ -1226,7 +1364,8 @@ const styles: Record<string, CSSProperties> = {
     justifyContent: "center",
   },
   // 未上板：全屏预览、右键菜单
-  poolSlotLarge: { padding: "8px" } as CSSProperties,
+  // 全屏里只看不拖，光标别再是抓手（styles.slot 默认 grab）
+  poolSlotLarge: { padding: "8px", cursor: "pointer" } as CSSProperties,
   poolFullscreen: {
     position: "fixed",
     inset: 0,
@@ -1290,6 +1429,38 @@ const styles: Record<string, CSSProperties> = {
   } as CSSProperties,
   poolMenuItemDisabled: { opacity: 0.45, cursor: "not-allowed" } as CSSProperties,
   poolMenuHint: { padding: "0 10px 6px", fontSize: "11px", color: "var(--x-color-ink-muted)" } as CSSProperties,
+  // 放大看原图：整屏压黑，图按可视区等比铺满
+  zoomOverlay: {
+    position: "fixed",
+    inset: 0,
+    zIndex: 9600,
+    display: "grid",
+    placeItems: "center",
+    padding: "16px",
+    background: "rgba(15,23,42,0.88)",
+  } as CSSProperties,
+  zoomImg: {
+    maxWidth: "100%",
+    maxHeight: "calc(100vh - 90px)",
+    objectFit: "contain",
+    borderRadius: "8px",
+    background: "#fff",
+    boxShadow: "0 24px 60px rgba(0,0,0,0.5)",
+  } as CSSProperties,
+  zoomBar: {
+    position: "fixed",
+    left: "50%",
+    bottom: "16px",
+    transform: "translateX(-50%)",
+    display: "flex",
+    alignItems: "center",
+    gap: "8px",
+    padding: "8px 12px",
+    borderRadius: "999px",
+    background: "var(--x-color-panel)",
+    boxShadow: "0 8px 24px rgba(0,0,0,0.4)",
+  } as CSSProperties,
+  zoomNo: { fontSize: "13px", fontWeight: 800, fontFamily: "var(--x-font-mono)" } as CSSProperties,
   liveHint: {
     display: "inline-flex",
     alignItems: "center",
