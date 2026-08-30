@@ -124,13 +124,16 @@ export function YlpOrderSummaryDrawer({
     void load();
   }, [load]);
 
-  // 抽屉是复用的（换订单不会重新挂载），切订单时把预览收回去
+  // 抽屉是复用的（换订单不会重新挂载）。**故意不重置 previewOpen / logsOpen**：
+  // 在预览界面点列表里的另一张订单，应该原地换成那张的牌位图，
+  // 而不是弹回摘要让人再点一次预览。改动记录同理，跟着换订单重拉。
   useEffect(() => {
-    setPreviewOpen(false);
-    setLogsOpen(false);
-    setLogs([]);
-    setLogsError("");
-  }, [orderId]);
+    if (!logsOpen) {
+      return;
+    }
+    void loadLogs();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [orderId, logsOpen]);
 
   useEffect(() => {
     let cancelled = false;
@@ -241,9 +244,8 @@ export function YlpOrderSummaryDrawer({
       });
     });
 
-  async function openLogs() {
-    setLogsOpen(true);
-    setPreviewOpen(false);
+  /** 只拉数据，不改视图 —— 换订单时原地热更新也走它。 */
+  const loadLogs = useCallback(async () => {
     setLogsError("");
     setLogsLoading(true);
     try {
@@ -253,10 +255,17 @@ export function YlpOrderSummaryDrawer({
         setLogsError("这张订单还没有改动记录（旧数据不会有）");
       }
     } catch (nextError) {
+      setLogs([]);
       setLogsError(nextError instanceof Error ? nextError.message : "读取改动记录失败");
     } finally {
       setLogsLoading(false);
     }
+  }, [orderId]);
+
+  async function openLogs() {
+    setLogsOpen(true);
+    setPreviewOpen(false);
+    await loadLogs();
   }
 
   const downloadReceipt = () =>

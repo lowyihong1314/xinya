@@ -428,6 +428,10 @@ export function FahuiPage() {
   const [ylpRowBusy, setYlpRowBusy] = useState(false);
   const [ylpRowPreview, setYlpRowPreview] = useState<{ orderId: number } | null>(null);
   // 列表点行弹出的摘要：只记订单号，内容与编辑能力全交给共享的 YlpOrderSummaryDrawer
+  // 记住「上一次自动打开抽屉用的是哪一组查询条件」，见 loadYlpOrders
+  const ylpAutoOpenRef = useRef<string>("");
+  // 键盘上下键翻页时，新一页要选头还是选尾（往下翻选头、往上翻选尾）
+  const ylpPendingSelectRef = useRef<"first" | "last" | null>(null);
   const [ylpRowDetailId, setYlpRowDetailId] = useState<number | null>(null);
   const [paiweiJob, setPaiweiJob] = useState<{ percent: number; status: "running" | "done" | "error"; message?: string } | null>(null);
   const paiweiPollRef = useRef<number | null>(null);
@@ -493,6 +497,56 @@ export function FahuiPage() {
       return nextRouteState.ylpVersion;
     });
   }, [location.search]);
+
+  // 选中订单后，上下键直接换上一张 / 下一张；走到头就自动翻页。
+  // 只在订单列表页 + 抽屉开着的时候生效，输入框里打字不抢键。
+  useEffect(() => {
+    if (screen.kind !== "workspace" || screen.section !== "orders" || ylpRowDetailId == null) {
+      return;
+    }
+    function onKeyDown(event: KeyboardEvent) {
+      if (event.key !== "ArrowUp" && event.key !== "ArrowDown") {
+        return;
+      }
+      const target = event.target as HTMLElement | null;
+      const tag = (target?.tagName || "").toLowerCase();
+      if (tag === "input" || tag === "textarea" || tag === "select" || target?.isContentEditable) {
+        return;
+      }
+      const ids = ylpOrders.map((order) => order.id);
+      const index = ids.indexOf(ylpRowDetailId as number);
+      if (index === -1) {
+        return;
+      }
+      event.preventDefault();
+      const step = event.key === "ArrowDown" ? 1 : -1;
+      const next = index + step;
+      if (next >= 0 && next < ids.length) {
+        openYlpRowDetail(ids[next]);
+        return;
+      }
+      // 到底 / 到顶：翻页，新一页由 loadYlpOrders 按 pending 选头或选尾
+      if (step > 0 && ylpSafePage < ylpTotalPages) {
+        ylpPendingSelectRef.current = "first";
+        setYlpPage(ylpSafePage + 1);
+      } else if (step < 0 && ylpSafePage > 1) {
+        ylpPendingSelectRef.current = "last";
+        setYlpPage(ylpSafePage - 1);
+      }
+    }
+    window.addEventListener("keydown", onKeyDown);
+    return () => window.removeEventListener("keydown", onKeyDown);
+  }, [screen, ylpRowDetailId, ylpOrders, ylpSafePage, ylpTotalPages]);
+
+  // 键盘换订单时把选中行滚进视野（鼠标点的那次滚动是多余的，但无害）
+  useEffect(() => {
+    if (ylpRowDetailId == null) {
+      return;
+    }
+    document
+      .querySelector(`[data-ylp-order-row="${ylpRowDetailId}"]`)
+      ?.scrollIntoView({ block: "nearest" });
+  }, [ylpRowDetailId]);
 
   // 行操作菜单是 fixed 定位的，页面一动（滚动/缩放）或点到别处就关掉。
   useEffect(() => {
@@ -713,8 +767,26 @@ export function FahuiPage() {
         sort: ylpSort?.key,
         dir: ylpSort?.dir,
       });
-      setYlpOrders(response.data?.items || []);
+      const items = response.data?.items || [];
+      setYlpOrders(items);
       setYlpPagination(response.data?.pagination || null);
+
+      // 进来先把第一条订单的摘要抽屉带出来，省得为了看一张订单还要再点一下。
+      // 用 版本|搜索词|页码|排序 做键：换了任意一个才重新自动选，
+      // 所以手动关掉抽屉之后不会被下一次刷新（例如 socket 推的新订单）又顶开。
+      const autoKey = `${ylpVersion}|${ylpQuery}|${ylpPage}|${ylpSort?.key || ""}${ylpSort?.dir || ""}`;
+      const pending = ylpPendingSelectRef.current;
+      ylpPendingSelectRef.current = null;
+      if (items.length) {
+        if (pending) {
+          // 键盘翻过来的：往下翻落在第一条，往上翻落在最后一条，接着按方向键能继续走
+          ylpAutoOpenRef.current = autoKey;
+          openYlpRowDetail(pending === "last" ? items[items.length - 1].id : items[0].id);
+        } else if (ylpAutoOpenRef.current !== autoKey) {
+          ylpAutoOpenRef.current = autoKey;
+          openYlpRowDetail(items[0].id);
+        }
+      }
     } catch (loadError) {
       setYlpError(loadError instanceof Error ? loadError.message : "订单加载失败");
     } finally {
@@ -1911,6 +1983,7 @@ export function FahuiPage() {
                   {sortedYlpOrders.map((order) => (
                     <tr
                       key={order.id}
+                      data-ylp-order-row={order.id}
                       className={
                         ylpRowDetailId === order.id ? "ylp-order-row ylp-order-row-active" : "ylp-order-row"
                       }

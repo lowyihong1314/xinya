@@ -67,10 +67,12 @@ export function PaiweiPreviewGrid({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [key, emptyText]);
 
-  if (loading) {
+  // 只有第一次（还没有图）才整块换成「生成中」。换订单时留着旧图淡显，
+  // 新图回来直接顶掉 —— 抽屉里连着看好几张订单时不会一闪一闪的。
+  if (loading && !tablets.length) {
     return <p style={stateStyle}>正在生成预览图…</p>;
   }
-  if (error) {
+  if (error && !tablets.length) {
     return <p style={stateStyle}>{error}</p>;
   }
   if (!tablets.length) {
@@ -80,7 +82,14 @@ export function PaiweiPreviewGrid({
   const withOrderId = showOrderId ?? new Set(tablets.map((tablet) => tablet.order_id)).size > 1;
 
   return (
-    <div style={{ ...gridStyle, gridTemplateColumns: `repeat(auto-fill, minmax(${minTileWidth}px, 1fr))` }}>
+    <div
+      style={{
+        ...gridStyle,
+        gridTemplateColumns: `repeat(auto-fill, minmax(${minTileWidth}px, 1fr))`,
+        opacity: loading ? 0.4 : 1,
+        transition: "opacity 0.15s ease",
+      }}
+    >
       {tablets.map((tablet, index) => (
         <div key={`${tablet.order_id}-${tablet.item_id ?? index}`} style={cardStyle}>
           <img
