@@ -761,6 +761,192 @@ def generate_paiwei_pdf_by_pdf_ids(pdf_ids, source_name, need_barcode=True, prog
     return io.BytesIO(_compress_pdf(output.getvalue()))
 
 
+# ---- 英文 / 地址横排 ----
+# 竖排是一个字一行往下排，遇到英文地址直接爆掉：库里最长那条 68 个字符，
+# 竖着只印得下 10 个字，剩下的全跑出纸外（订单 508 item 3031 就是这样）。
+# 所以 a-z 占比过半的内容改成横排 + 自动换行 + 居中收齐。
+
+_LATIN = re.compile(r"[A-Za-z]")
+# 触发阈值：非空白字符里 a-z 占一半以上
+_LATIN_HEAVY_RATIO = 0.5
+
+
+def _flatten_text(text) -> str:
+    if isinstance(text, (list, tuple)):
+        return " ".join(str(one).strip() for one in text if str(one).strip())
+    return str(text or "").strip()
+
+
+def latin_heavy(text) -> bool:
+    compact = "".join(_flatten_text(text).split())
+    if not compact:
+        return False
+    return len(_LATIN.findall(compact)) / len(compact) >= _LATIN_HEAVY_RATIO
+
+
+# 地基主牌位：关系写「地基主」、名字写那间屋的地址，天生就是横排内容。
+# 就算地址那栏碰巧是中文（占比不到一半），也照样走横排。
+_ADDRESS_KEYWORDS = ("地基主",)
+
+
+def address_mode(text) -> bool:
+    flat = _flatten_text(text)
+    return latin_heavy(flat) or any(word in flat for word in _ADDRESS_KEYWORDS)
+
+
+def _wrap_latin(canvas, font_name: str, text: str, size: float, max_width: float) -> list[str]:
+    """按词换行；单个词比一行还长（超长路名）就按字符硬断，不让它戳出格子。"""
+    lines: list[str] = []
+    for paragraph in text.split("\n"):
+        current = ""
+        for word in paragraph.split():
+            candidate = f"{current} {word}".strip()
+            if canvas.stringWidth(candidate, font_name, size) <= max_width or not current:
+                if canvas.stringWidth(candidate, font_name, size) <= max_width:
+                    current = candidate
+                    continue
+                # 单词本身就超宽：逐字符切
+                chunk = ""
+                for char in word:
+                    if canvas.stringWidth(chunk + char, font_name, size) <= max_width or not chunk:
+                        chunk += char
+                    else:
+                        lines.append(chunk)
+                        chunk = char
+                current = chunk
+            else:
+                lines.append(current)
+                current = word
+        if current:
+            lines.append(current)
+    return lines or [""]
+
+
+def _fit_latin(canvas, font_name: str, text: str, base_size: float, max_width: float, max_height: float):
+    """字号从 base_size 往下试，直到整块塞进给定的框。行距固定 1.25 倍字号。"""
+    size = max(4.0, base_size)
+    while size >= 4.0:
+        lines = _wrap_latin(canvas, font_name, text, size, max_width)
+        if len(lines) * size * 1.25 <= max_height:
+            return lines, size
+        size -= 0.5
+    return _wrap_latin(canvas, font_name, text, 4.0, max_width), 4.0
+
+
+def draw_latin_block(canvas, font_name: str, text, center_x: float, top_y: float,
+                     base_size: float, max_width: float, max_height: float):
+    """横排画一块英文：逐行居中对齐（「收齐」靠这个），整块从 top_y 往下排。"""
+    from reportlab.lib import colors
+
+    content = _flatten_text(text)
+    if not content:
+        return
+    lines, size = _fit_latin(canvas, font_name, content, base_size, max_width, max_height)
+    leading = size * 1.25
+    canvas.setFillColor(colors.black)
+    canvas.setFont(font_name, size)
+    for index, line in enumerate(lines):
+        # drawCentredString 的 y 是基线，第一行的基线要从块顶往下让出一个字高
+        canvas.drawCentredString(center_x, top_y - size - index * leading, line)
+
+
+# 这些字段永远会画（固定字样），算避让时一律算进去；其余按 info 里有没有值判断。
+_ALWAYS_DRAWN = {"folichaodu", "baijian", "lianwei", "yangshang", "order_id", "center"}
+
+
+def latin_box(points: dict, info: dict, self_key: str, pitch: float):
+    """英文横排能占多大一块：横向别压到隔壁列，纵向别压到下面的莲位／显考显妣。
+
+    points 是这一格的 {字段名: [dx, dy, size, spacing]}，坐标都相对格心。
+    横向取「半格宽」和「4 个主文字宽」里较小的那个；纵向从自己的锚点往下，
+    到「x 区间和自己重叠、且在自己下方」的最高那个元素为止。
+    """
+    self_dx, self_dy, self_size, _ = points[self_key]
+    max_width = max(24.0, min(pitch * 0.5, self_size * 4))
+    half = max_width / 2.0
+    left, right = self_dx - half, self_dx + half
+
+    floor = None
+    for name, point in points.items():
+        if name == self_key or not point or len(point) < 4:
+            continue
+        base = name[:-6] if name.endswith("_point") else name
+        if base not in _ALWAYS_DRAWN and not str(info.get(base, "") or "").strip():
+            continue  # 这个字段这次不画，不用给它让位置
+        dx, dy, size, _sp = point
+        if dy >= self_dy:
+            continue  # 在自己上方或同高，不影响往下排
+        if dx + size <= left or dx >= right:
+            continue  # 和自己不在同一竖列上，压不着
+        top = dy + size
+        floor = top if floor is None else max(floor, top)
+
+    max_height = (self_dy - floor - 6) if floor is not None else (self_dy + 60)
+    return max_width, max(self_size * 1.5, max_height)
+
+
+_MIN_ROTATED_SIZE = 6.0
+
+
+# 多列之间留的空隙
+_ROTATED_COLUMN_GAP = 2.0
+
+
+def draw_rotated_name(canvas, font_name: str, text: str, x: float, y_top: float,
+                      base_size: float, max_length: float, max_width: float):
+    """英文名字转 90° 竖着走；**空格当换行**，每个词自成一列。
+
+    阳上那一列只有十几 pt 宽，横排放不下（订单 787 的 SANTI NOPITAMALA 被挤成两行，
+    第二行直接顶到纸边）；一个字母一行又会拖得老长。转 90° 是这种窄列的通行做法：
+    字顺时针躺倒，从上往下读。
+
+    按空格拆列是为了把字放大：SANTI NOPITAMALA 挤成一列要缩到 6pt，
+    拆成两列之后最长的词只有 10 个字母，同样的高度能用上将近 10pt。
+    列的排法跟着这套模板一贯的做法：第一个词在左。
+    """
+    from reportlab.lib import colors
+
+    content = _flatten_text(text)
+    if not content:
+        return
+
+    words = content.split() or [content]
+    # 字号同时受两头限制：竖着不能超过 max_length，横着几列加起来不能超过 max_width
+    size = max(_MIN_ROTATED_SIZE, base_size)
+    while size > _MIN_ROTATED_SIZE:
+        longest = max(canvas.stringWidth(word, font_name, size) for word in words)
+        total = len(words) * size + (len(words) - 1) * _ROTATED_COLUMN_GAP
+        if longest <= max_length and total <= max_width:
+            break
+        size -= 0.5
+
+    canvas.saveState()
+    canvas.setFillColor(colors.black)
+    canvas.setFont(font_name, size)
+    for index, word in enumerate(words):
+        # rotate(-90) 之后局部 +x 指向页面下方，所以 drawString 就是往下走；
+        # 字身朝右展开，基线落在列的左边缘。
+        canvas.saveState()
+        canvas.translate(x + index * (size + _ROTATED_COLUMN_GAP), y_top)
+        canvas.rotate(-90)
+        canvas.setFont(font_name, size)
+        canvas.drawString(0, 0, word)
+        canvas.restoreState()
+    canvas.restoreState()
+
+
+def _cell_pitch(point_dict, positions, page_width: float) -> float:
+    """相邻两格中心的水平间距 = 一格的可用宽度。只有一格时退回整页宽。"""
+    centers = []
+    for key in positions:
+        for point in point_dict.get(key, []):
+            if "center_point" in point:
+                centers.append(float(point["center_point"][0]))
+    centers = sorted(set(centers))
+    diffs = [b - a for a, b in zip(centers, centers[1:]) if b - a > 1]
+    return min(diffs) if diffs else page_width
+
+
 def generate_paiwei(paiwei_type, fahui_data, point_data, source_name, need_barcode=False, progress_cb=None):
     from reportlab.lib import colors
     from reportlab.lib.pagesizes import A4, landscape
@@ -793,11 +979,20 @@ def generate_paiwei(paiwei_type, fahui_data, point_data, source_name, need_barco
     if not positions:
         return _generate_simple_paiwei_pdf(paiwei_type, fahui_data, need_barcode=need_barcode)
 
+    # 横排换行要知道一格有多宽
+    cell_pitch = _cell_pitch(point_dict, positions, width)
+
     def get_point(block_key, key):
         for point in point_dict.get(block_key, []):
             if f"{key}_point" in point:
                 return point[f"{key}_point"]
         return None
+
+    def block_points(block_key) -> dict:
+        merged = {}
+        for point in point_dict.get(block_key, []):
+            merged.update(point)
+        return merged
 
     def draw_text_vertical(block_key, key, text, base_x, base_y, info):
         point = get_point(block_key, key)
@@ -809,16 +1004,58 @@ def generate_paiwei(paiwei_type, fahui_data, point_data, source_name, need_barco
         y_base = base_y + dy
         c.setFont(font_name, size)
 
+        # 英文 / 地址：竖排会跑出纸外，改横排自动换行。整块横向以格子中线为准居中，
+        # 纵向从原来竖排的起点往下排，向下留到离纸底 30pt 为止。
+        # 阳上走「转 90 度」那条路（见下面的 owner 分支），这里只处理亡者/地址那一块
+        if key == "deceased":
+            content = _flatten_text(text)
+            # 关系和名字是一起印的（竖排那边是 "关系 名字"）。横排也要带上，
+            # 否则地基主牌位只剩一串地址，看不出供的是谁 —— 关系单独占一行。
+            relation = _flatten_text(info.get("relation", ""))
+            if relation:
+                content = f"{relation}\n{content}".strip()
+            if address_mode(content):
+                points = block_points(block_key)
+                box_width, box_height = latin_box(points, info, f"{key}_point", cell_pitch)
+                draw_latin_block(c, font_name, content, x_base + size / 2.0, y_base + size,
+                                 size, box_width, box_height)
+                return
+
         if key == "owner":
             people = text if isinstance(text, list) else re.split(r"[,\\s]+", str(text).strip())
             people = [name for name in people if name]
             points = owner_point.get(str(len(people)))
             if not points:
                 return
+            block = block_points(block_key)
+            _, owner_run = latin_box(block, info, "owner_point", cell_pitch)
+            # 转 90 度的名字可以从「阳上」标签正下方就开始写 —— 竖排时那段是留给
+            # 第一个字的字身的，横躺之后用不上，白白空着。多出来的这几 pt 决定了
+            # 16 个字母的名字压不压到下面的「拜荐」。
+            own_point = block.get("owner_point") or [0, 0, 12, 12]
+            label = block.get("yangshang_point")
+            rotated_top = own_point[1] + own_point[2]
+            if label and len(label) >= 4:
+                rotated_top = max(rotated_top, label[1] - label[3] - 2)
+            # rotated_top 是相对格心的，owner_run 是从 owner 基线往下算的，两者对齐一下
+            rotated_run = owner_run + (rotated_top - own_point[1])
+            # 横向能铺多宽：到右边最近那个字段为止。
+            # 只算「明显在右边」的 —— 阳上标签和拜荐跟名字同在一列（dx 差不多），
+            # 它们是上下关系不是左右关系，算进来会把可用宽度算成负数。
+            own_right = own_point[0] + own_point[2]
+            rights = [pt[0] for name, pt in block.items()
+                      if pt and len(pt) >= 4 and name != "owner_point" and pt[0] > own_right]
+            rotated_width = (min(rights) - own_point[0] - 4) if rights else own_point[2] * 3
+
             for index, name in enumerate(people[: len(points)]):
                 ox, oy, osize, ospace = points[index]
                 x = x_base + ox
                 y_start = y_base + oy
+                if latin_heavy(name):
+                    # 用 base_y（格心）而不是 y_base —— 后者已经含了 owner 的偏移，会重复计算
+                    draw_rotated_name(c, font_name, name, x, base_y + rotated_top, osize,
+                                      rotated_run, max(osize, rotated_width))
+                    continue
                 # 冤亲债主：阳上是从固定的顶点往下写的，名字越长整列越往下坠
                 # （5 个字的末字比 3 个字低两个字距）。超过 3 个字就每多一个字往上提半个字，
                 # 让这一列看着还是居中的。3 个字及以内保持原位 —— 那是最常见的情况，
@@ -858,10 +1095,10 @@ def generate_paiwei(paiwei_type, fahui_data, point_data, source_name, need_barco
                     pair = [str(rel).strip() for rel in relations[:2]]
                     if male not in pair or female not in pair:
                         continue
-                    right_slot = 0 if points[0][0] >= points[1][0] else 1
+                    left_slot = 0 if points[0][0] <= points[1][0] else 1
                     slots: list = [None, None]
-                    slots[right_slot] = pair.index(female)
-                    slots[1 - right_slot] = pair.index(male)
+                    slots[left_slot] = pair.index(female)
+                    slots[1 - left_slot] = pair.index(male)
                     people = [people[i] for i in slots]
                     relations = [relations[i] for i in slots]
                     forced = True
