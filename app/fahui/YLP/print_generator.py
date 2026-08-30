@@ -1285,7 +1285,8 @@ def generate_paiwei(paiwei_type, fahui_data, point_data, source_name, need_barco
                 # 抬头统一印「婴灵」，填了名字就接在后面，没填就只有「婴灵」两个字。
                 if str(deceased).strip() in ("无缘子女", "婴灵"):
                     deceased = ""
-                folichaodu = f"佛力超度 婴灵{deceased}"
+                # 名字和「婴灵」之间空一格，和「佛力超度 婴灵」的间隔一致
+                folichaodu = f"佛力超度 婴灵 {deceased}".rstrip()
 
             draw_text_vertical(position, "folichaodu", folichaodu, base_x, base_y, info)
             draw_text_vertical(position, "baijian", "拜荐", base_x, base_y, info)

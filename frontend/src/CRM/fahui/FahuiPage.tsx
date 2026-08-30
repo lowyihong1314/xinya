@@ -1721,10 +1721,13 @@ export function FahuiPage() {
     }
     const ids = choice.orderIds;
     const needBarcode = choice.needBarcode;
+    // 用弹窗回传的类型，不是传进去的那个 —— 工具栏入口传的是 null，
+    // 直接发给后端会被判「无效的牌位类型」
+    const jobTemplate = choice.template;
     stopPaiweiPoll();
     setPaiweiJob({ percent: 0, status: "running" });
     try {
-      const res = await startYlpPaiweiJob(ids, template, needBarcode, {
+      const res = await startYlpPaiweiJob(ids, jobTemplate, needBarcode, {
         itemIds: choice.itemIds,
         pdfIds: choice.pdfIds,
       });
@@ -1742,7 +1745,7 @@ export function FahuiPage() {
           const percent = Number(data.progress || 0);
           if (jobStatus === "done") {
             setPaiweiJob({ percent: 100, status: "done" });
-            void downloadPaiweiJobResult(jobId, template);
+            void downloadPaiweiJobResult(jobId, jobTemplate);
             return;
           }
           if (jobStatus === "error") {

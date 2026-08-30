@@ -412,9 +412,10 @@ def paiwei_print_scope_route():
     弹窗据此按状态分组、算张数、筛「只印未注册的」，最后把 item_ids 原样提交回来打印。
     """
     data = request.get_json(silent=True) or {}
-    source_name = resolve_template(data.get("template"))
+    raw_template = data.get("template") or "all"
+    source_name = resolve_template(raw_template)
     if not source_name:
-        return jsonify({"status": "error", "message": "无效的牌位类型"}), 400
+        return jsonify({"status": "error", "message": f"无效的牌位类型：{raw_template}"}), 400
 
     order_ids = _int_list(data.get("order_ids"))
     pdf_ids = _int_list(data.get("pdf_ids"))
@@ -508,9 +509,12 @@ def start_paiwei_job_route():
     order_ids = _int_list(data.get("order_ids"))
     item_ids = _int_list(data.get("item_ids"))
     pdf_ids = _int_list(data.get("pdf_ids"))
-    source_name = resolve_template(data.get("template"))
+    # 没给类型 = 不挑类型，三种一起印。指名道姓给了 item_ids / pdf_ids 的时候，
+    # 「印哪些」已经说死了，再因为少了 template 就报「无效的牌位类型」是死路。
+    raw_template = data.get("template") or "all"
+    source_name = resolve_template(raw_template)
     if not source_name:
-        return jsonify({"status": "error", "message": "无效的牌位类型"}), 400
+        return jsonify({"status": "error", "message": f"无效的牌位类型：{raw_template}"}), 400
     if not order_ids and not item_ids and not pdf_ids:
         return jsonify({"status": "error", "message": "请选择订单"}), 400
 

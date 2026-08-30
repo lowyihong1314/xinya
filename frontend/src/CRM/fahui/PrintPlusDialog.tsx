@@ -22,6 +22,9 @@ import { orderStatusLabel } from "./orderStatus";
 // 拿到的 item 清单原样提交回去打印，弹窗上看到几张就印几张。
 
 export type PrintPlusResult = {
+  /** 实际要打印的牌位类型。没指定类型时是 "all"（三种一起印）——
+   *  必须由弹窗回传，调用方那边的 template 可能是 null，直接发给后端会被判「无效的牌位类型」。 */
+  template: string;
   orderIds: number[];
   itemIds: number[];
   pdfIds: number[];
@@ -289,10 +292,11 @@ function PrintPlusDialog({
 
   function finish(needBarcode: boolean) {
     if (mode === "pdfs") {
-      onResolve({ orderIds: [], itemIds: [], pdfIds: reprintPdfIds, needBarcode });
+      onResolve({ template: effectiveTemplate, orderIds: [], itemIds: [], pdfIds: reprintPdfIds, needBarcode });
       return;
     }
     onResolve({
+      template: effectiveTemplate,
       orderIds: pickedOrderIds,
       itemIds: picked.map((item) => item.item_id),
       pdfIds: [],
