@@ -20,6 +20,8 @@ import type { Board, BoardScanResult } from "./api";
 const CODE_COOLDOWN_MS = 3000;
 /** 每帧都解码太费电，隔几帧扫一次够用了 */
 const SCAN_INTERVAL_MS = 220;
+/** 自动对焦中心点的间隔。牌位贴在板上，手一直在动，不定时拉回来很容易糊 */
+const AUTOFOCUS_INTERVAL_MS = 1000;
 const TOAST_MS = 2600;
 
 type ScanLog = {
@@ -82,6 +84,8 @@ export function BoardScanPage() {
 
   const [scanning, setScanning] = useState(false);
   const trackRef = useRef<MediaStreamTrack | null>(null);
+  // 手动点过的时间戳：自动对焦循环要给手动操作让路
+  const manualFocusAtRef = useRef(0);
   const [cameraError, setCameraError] = useState("");
   const [logs, setLogs] = useState<ScanLog[]>([]);
   const [toasts, setToasts] = useState<Toast[]>([]);
@@ -303,14 +307,8 @@ export function BoardScanPage() {
     [handleCode],
   );
 
-  /** 点画面对焦。摄像头不支持就只有涟漪反馈 —— 起码让人知道点到了。 */
-  async function focusAt(event: React.PointerEvent<HTMLDivElement>) {
-    const rect = event.currentTarget.getBoundingClientRect();
-    const x = (event.clientX - rect.left) / rect.width;
-    const y = (event.clientY - rect.top) / rect.height;
-    setFocusRing({ x: event.clientX - rect.left, y: event.clientY - rect.top, id: Date.now() });
-    window.setTimeout(() => setFocusRing((current) => (current && Date.now() - current.id > 500 ? null : current)), 700);
-
+  /** 把对焦点喂给摄像头。x/y 是 0~1 的归一化坐标。手动点和自动循环共用。 */
+  const applyFocus = useCallback(async (x: number, y: number) => {
     const track = trackRef.current;
     if (!track?.applyConstraints) {
       return;
@@ -329,9 +327,36 @@ export function BoardScanPage() {
         advanced: [{ pointsOfInterest: [{ x, y }], ...(mode ? { focusMode: mode } : {}) }],
       } as unknown as MediaTrackConstraints);
     } catch {
-      /* 这颗摄像头不吃这套，涟漪已经给过反馈了 */
+      /* 这颗摄像头不吃这套 */
     }
+  }, []);
+
+  /** 点画面对焦。摄像头不支持就只有涟漪反馈 —— 起码让人知道点到了。 */
+  async function focusAt(event: React.PointerEvent<HTMLDivElement>) {
+    const rect = event.currentTarget.getBoundingClientRect();
+    const x = (event.clientX - rect.left) / rect.width;
+    const y = (event.clientY - rect.top) / rect.height;
+    manualFocusAtRef.current = Date.now();
+    setFocusRing({ x: event.clientX - rect.left, y: event.clientY - rect.top, id: Date.now() });
+    window.setTimeout(() => setFocusRing((current) => (current && Date.now() - current.id > 500 ? null : current)), 700);
+    await applyFocus(x, y);
   }
+
+  // 每秒把焦点拉回画面正中。手举着对板一直在晃，不定时重对很容易糊掉；
+  // 正中就是取景框中心，也是人自然会把牌位放的位置。
+  // 手动点过之后让它歇 3 秒，不然刚点的地方一秒就被抢回中心。
+  useEffect(() => {
+    if (!scanning || !focusSupported) {
+      return;
+    }
+    const timer = window.setInterval(() => {
+      if (Date.now() - manualFocusAtRef.current < 3000) {
+        return;
+      }
+      void applyFocus(0.5, 0.5);
+    }, AUTOFOCUS_INTERVAL_MS);
+    return () => window.clearInterval(timer);
+  }, [scanning, focusSupported, applyFocus]);
 
   async function enterBoard(target: Board) {
     setBoard(target);
@@ -490,6 +515,13 @@ export function BoardScanPage() {
         <video ref={videoRef} muted playsInline style={styles.video} />
         <canvas ref={canvasRef} style={{ display: "none" }} />
         <div style={styles.reticle} />
+        {/* 中心辅助线：十字 + 中心小方框。自动对焦每秒对的就是这个中心点，
+            把牌位的码摆在十字交点上最容易扫中。 */}
+        <div style={styles.guides}>
+          <span style={styles.guideH} />
+          <span style={styles.guideV} />
+          <span style={styles.guideBox} />
+        </div>
         {/* 通知压在画面顶部而不是页面顶部：页头高度会随刘海安全区变，固定 top 会盖到标题 */}
         <div style={styles.toasts} className="board-scan-toasts">
           {toasts.map((toast) => (
@@ -531,7 +563,11 @@ export function BoardScanPage() {
         ) : (
           <p style={styles.lastCode}>
             {lastCode ? `刚扫到：${lastCode.slice(0, 40)}` : "把牌位上的二维码对准框内"}
-            {scanning ? (focusSupported ? " · 点画面对焦" : " · 这颗摄像头不支持点击对焦") : ""}
+            {scanning
+              ? focusSupported
+                ? " · 每秒自动对焦中心，点画面可改对焦点"
+                : " · 这颗摄像头不支持对焦控制"
+              : ""}
           </p>
         )}
       </div>
@@ -724,6 +760,37 @@ const styles: Record<string, CSSProperties> = {
     borderRadius: "12px",
     boxShadow: "0 0 0 9999px rgba(0,0,0,0.28)",
     pointerEvents: "none",
+  },
+  guides: { position: "absolute", inset: 0, pointerEvents: "none" },
+  // 十字只画中间一段，不横贯整屏 —— 贯穿的线会盖住牌位上的字
+  guideH: {
+    position: "absolute",
+    top: "50%",
+    left: "50%",
+    width: "26%",
+    height: "1px",
+    transform: "translate(-50%, -50%)",
+    background: "rgba(251,191,36,0.9)",
+  },
+  guideV: {
+    position: "absolute",
+    top: "50%",
+    left: "50%",
+    width: "1px",
+    height: "26%",
+    transform: "translate(-50%, -50%)",
+    background: "rgba(251,191,36,0.9)",
+  },
+  guideBox: {
+    position: "absolute",
+    top: "50%",
+    left: "50%",
+    width: "56px",
+    height: "56px",
+    marginLeft: "-28px",
+    marginTop: "-28px",
+    border: "1.5px solid rgba(251,191,36,0.75)",
+    borderRadius: "8px",
   },
   focusRing: {
     position: "absolute",
