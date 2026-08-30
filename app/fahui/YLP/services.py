@@ -12,6 +12,7 @@ from app.fahui.common.session_state import current_session_phone, current_verifi
 from app.extensions import socket_broker
 from models import db
 from models.fahui import (
+    FahuiBoardData,
     FahuiItemFormData,
     FahuiOrder,
     FahuiVersionEvent,
@@ -95,6 +96,67 @@ def serialize_print_pdf(pdf: FahuiPrintPdf, include_pages: bool = True) -> dict:
     return data
 
 
+def board_position(board_width, location) -> dict:
+    """线性位号 → 第几排第几个。板没设每行张数时只给位号。
+
+    和查板页 formatBoardLocation 同一套换算（位号从 1 起）。
+    """
+    if location is None:
+        return {"row": None, "col": None, "position_label": None}
+
+    width = int(board_width or 0)
+    if width > 0:
+        row = (int(location) - 1) // width + 1
+        col = (int(location) - 1) % width + 1
+        return {"row": row, "col": col, "position_label": f"第 {row} 排 第 {col} 位"}
+    return {"row": None, "col": None, "position_label": f"第 {location} 位"}
+
+
+def board_placement_map(order_ids) -> dict:
+    """一次查出这批订单的上板进度：{order_id: {status, placed, total}}。
+
+    status：none 一张都没上 / partial 上了一部分 / all 全上了 / empty 没有牌位可上
+    （随缘供斋、普度贡品这类 D 开头的项目不出牌位，不算进分母，
+    否则只要单里有一笔乐捐就永远凑不满「全部已上板」）。
+
+    走一条聚合 SQL，不是逐单翻 items → pdf_pages → board_entries，
+    列表一页 20 单那样翻会是标准的 N+1。
+    """
+    ids = [int(oid) for oid in (order_ids or []) if oid]
+    if not ids:
+        return {}
+
+    placed = db.func.count(db.distinct(db.case((FahuiBoardData.id.isnot(None), FahuiOrderItem.id))))
+    rows = (
+        db.session.query(
+            FahuiOrderItem.order_id,
+            db.func.count(db.distinct(FahuiOrderItem.id)).label("total"),
+            placed.label("placed"),
+        )
+        .outerjoin(FahuiPdfPageData, FahuiPdfPageData.order_item_id == FahuiOrderItem.id)
+        .outerjoin(FahuiBoardData, FahuiBoardData.print_pdf_id == FahuiPdfPageData.print_pdf_id)
+        .filter(FahuiOrderItem.order_id.in_(ids))
+        .filter(db.not_(FahuiOrderItem.code.like("D%")))
+        .group_by(FahuiOrderItem.order_id)
+        .all()
+    )
+
+    result = {oid: {"status": "empty", "placed": 0, "total": 0} for oid in ids}
+    for order_id, total, placed_count in rows:
+        total = int(total or 0)
+        placed_count = int(placed_count or 0)
+        if total <= 0:
+            status = "empty"
+        elif placed_count <= 0:
+            status = "none"
+        elif placed_count >= total:
+            status = "all"
+        else:
+            status = "partial"
+        result[order_id] = {"status": status, "placed": placed_count, "total": total}
+    return result
+
+
 def serialize_order_item(item: FahuiOrderItem, full: bool = False) -> dict:
     data = {
         "id": item.id,
@@ -135,6 +197,8 @@ def serialize_order_item(item: FahuiOrderItem, full: bool = False) -> dict:
                     "board_name": board.board_name,
                     "location": board_entry.location,
                     "board_data_id": board_entry.id,
+                    # 位号换算成「第几排第几个」，前端不用再自己拿板宽去算
+                    **board_position(board.board_width, board_entry.location),
                 }
             )
 
@@ -377,8 +441,13 @@ def search_orders(
         .all()
     )
 
+    rows = [serialize_order(order) for order in items]
+    placement = board_placement_map([row["id"] for row in rows])
+    for row in rows:
+        row["board_status"] = placement.get(row["id"], {"status": "empty", "placed": 0, "total": 0})
+
     return {
-        "items": [serialize_order(order) for order in items],
+        "items": rows,
         "pagination": {
             "page": page_num,
             "per_page": per_page,

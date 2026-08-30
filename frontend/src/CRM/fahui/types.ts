@@ -118,8 +118,16 @@ export type YlpPaiweiPreviewResponse = {
   };
 };
 
+/** 这张订单的牌位上板进度（none 全没上 / partial 上了一部分 / all 全上了 / empty 没有可上板的牌位） */
+export type YlpBoardStatus = {
+  status: "none" | "partial" | "all" | "empty";
+  placed: number;
+  total: number;
+};
+
 export type YlpOrderSummary = {
   id: number;
+  board_status?: YlpBoardStatus | null;
   status?: string | null;
   payment_state?: string | null;
   order_status?: string | null;
@@ -157,6 +165,10 @@ export type YlpOrderBoardLocation = {
   board_name?: string | null;
   location?: number | null;
   board_data_id?: number | null;
+  /** 后端按板宽把位号换算好的排/位，前端直接显示 */
+  row?: number | null;
+  col?: number | null;
+  position_label?: string | null;
 };
 
 export type YlpOrderItemLocation = {

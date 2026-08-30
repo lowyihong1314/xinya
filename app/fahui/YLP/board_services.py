@@ -988,7 +988,13 @@ def list_orders_by_version(version: str) -> list[dict]:
         .order_by(FahuiOrder.created_at.desc(), FahuiOrder.id.desc())
         .all()
     )
-    return [serialize_order(order) for order in orders]
+    from .services import board_placement_map
+
+    rows = [serialize_order(order) for order in orders]
+    placement = board_placement_map([row["id"] for row in rows])
+    for row in rows:
+        row["board_status"] = placement.get(row["id"], {"status": "empty", "placed": 0, "total": 0})
+    return rows
 
 
 def update_order_customer(order_id: int, data: dict) -> tuple[dict, int]:

@@ -1999,9 +1999,14 @@ export function FahuiPage() {
                     <tr
                       key={order.id}
                       data-ylp-order-row={order.id}
-                      className={
-                        ylpRowDetailId === order.id ? "ylp-order-row ylp-order-row-active" : "ylp-order-row"
-                      }
+                      className={[
+                        "ylp-order-row",
+                        boardStatusClass(order.board_status?.status),
+                        ylpRowDetailId === order.id ? "ylp-order-row-active" : "",
+                      ]
+                        .filter(Boolean)
+                        .join(" ")}
+                      title={boardStatusTitle(order.board_status)}
                       onClick={() => void openYlpRowDetail(order.id)}
                       onContextMenu={(event) => {
                         // 右键＝三点菜单，在光标处弹出，顺手压掉浏览器自带菜单。
@@ -2846,6 +2851,26 @@ function rowMenuHeight(withCopyToCurrent: boolean): number {
   return (withCopyToCurrent ? 5 : 4) * ROW_MENU_ITEM_HEIGHT + ROW_MENU_PADDING;
 }
 
+// 上板进度 → 行样式 / 悬停提示。empty＝这单没有会上板的牌位（只有随缘供斋之类），不着色。
+const BOARD_STATUS_CLASS: Record<string, string> = {
+  none: "ylp-board-none",
+  partial: "ylp-board-partial",
+  all: "ylp-board-all",
+};
+
+function boardStatusClass(status?: string | null): string {
+  return BOARD_STATUS_CLASS[String(status || "")] || "";
+}
+
+function boardStatusTitle(status?: { status?: string; placed?: number; total?: number } | null): string {
+  if (!status || !status.total) {
+    return "";
+  }
+  const text =
+    status.status === "all" ? "全部牌位已上板" : status.status === "none" ? "全部牌位未上板" : "部分牌位未上板";
+  return `${text}（${status.placed ?? 0}/${status.total}）`;
+}
+
 const YLP_ORDER_TABLE_CSS = `
 .ylp-order-table { width: 100%; border-collapse: collapse; font-size: 13px; min-width: 520px; table-layout: auto; }
 .ylp-order-table thead th {
@@ -2857,6 +2882,11 @@ const YLP_ORDER_TABLE_CSS = `
 }
 .ylp-order-table tbody td { padding: 9px 6px; border-bottom: 1px solid var(--x-color-line-soft); vertical-align: middle; color: var(--x-color-ink); }
 .ylp-order-table tbody tr.ylp-order-row { cursor: pointer; }
+/* 上板进度：全部没上＝暖黄，部分上了＝浅蓝，全部上了＝淡绿；没有牌位可上的单不着色。
+   hover 与选中放在后面，优先级更高，压得住这层底色。 */
+.ylp-order-table tbody tr.ylp-board-none td { background: var(--x-color-warning-soft, #fff7ed); }
+.ylp-order-table tbody tr.ylp-board-partial td { background: var(--x-color-accent-soft, #eff6ff); }
+.ylp-order-table tbody tr.ylp-board-all td { background: var(--x-color-success-soft, #ecfdf5); }
 .ylp-order-table tbody tr.ylp-order-row:hover td { background: var(--x-color-accent-tint); }
 .ylp-order-table tbody tr.ylp-order-row-active td { background: var(--x-color-accent-tint); }
 .ylp-order-table thead th.ylp-sortable { cursor: pointer; user-select: none; }

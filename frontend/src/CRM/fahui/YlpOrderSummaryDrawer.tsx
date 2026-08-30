@@ -59,6 +59,29 @@ function logChipTone(action: string): CSSProperties {
   return { color: "var(--x-color-accent-strong)", borderColor: "var(--x-color-accent-border)" };
 }
 
+type ItemPlacement = {
+  board_id?: number | null;
+  board_name?: string | null;
+  location?: number | null;
+  position_label?: string | null;
+};
+
+/** 一个牌位项目的上板位置；同一张牌位单落在多块板时全部列出，按「板+位号」去重。 */
+function itemPlacements(item: YlpOrderItem): ItemPlacement[] {
+  const out: ItemPlacement[] = [];
+  const seen = new Set<string>();
+  for (const loc of item.item_location || []) {
+    for (const board of loc.boards || []) {
+      if (!board || board.board_id == null) continue;
+      const key = `${board.board_id}:${board.location ?? "x"}`;
+      if (seen.has(key)) continue;
+      seen.add(key);
+      out.push(board);
+    }
+  }
+  return out;
+}
+
 export function YlpOrderSummaryDrawer({
   orderId,
   isMobile,
@@ -542,8 +565,9 @@ export function YlpOrderSummaryDrawer({
                       (grouped[key] || []).length,
                   ),
                 ];
+                const placements = itemPlacements(item);
                 return (
-                  <div key={item.id} style={styles.item}>
+                  <div key={item.id} style={placements.length ? { ...styles.item, ...styles.itemOnBoard } : styles.item}>
                     <div style={styles.itemHead}>
                       <span style={styles.itemCode}>{item.code || "-"}</span>
                       <span style={styles.itemName}>{item.item_name || "未命名项目"}</span>
@@ -586,6 +610,19 @@ export function YlpOrderSummaryDrawer({
                         </div>
                       );
                     })}
+                    {placements.length ? (
+                      <div style={styles.boardRow}>
+                        <i className="fa-solid fa-thumbtack" aria-hidden="true" />
+                        {placements.map((place, index) => (
+                          <span key={`${place.board_id}-${place.location}-${index}`} style={styles.boardChip}>
+                            {place.board_name || `板 #${place.board_id}`}
+                            {place.position_label ? ` · ${place.position_label}` : ""}
+                          </span>
+                        ))}
+                      </div>
+                    ) : (
+                      <div style={styles.boardRowEmpty}>未上板</div>
+                    )}
                   </div>
                 );
               })}
@@ -764,6 +801,28 @@ const styles: Record<string, CSSProperties> = {
     border: "1px solid var(--x-color-line-soft)",
     background: "var(--x-color-panel-alt)",
   },
+  // 已上板的项目整块换成淡绿，一眼分得出哪几张还没贴上去
+  itemOnBoard: {
+    background: "var(--x-color-success-soft)",
+    border: "1px solid rgba(21,128,61,0.28)",
+  },
+  boardRow: {
+    display: "flex",
+    alignItems: "center",
+    gap: "5px",
+    flexWrap: "wrap",
+    marginTop: "2px",
+    fontSize: "10.5px",
+    color: "var(--x-color-success)",
+  },
+  boardChip: {
+    padding: "1px 7px",
+    borderRadius: "999px",
+    background: "var(--x-color-panel)",
+    border: "1px solid rgba(21,128,61,0.28)",
+    fontWeight: 700,
+  },
+  boardRowEmpty: { marginTop: "2px", fontSize: "10.5px", color: "var(--x-color-ink-muted)" },
   itemHead: { display: "flex", gap: "5px", alignItems: "center" },
   itemCode: {
     padding: "1px 6px",
