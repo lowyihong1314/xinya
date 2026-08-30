@@ -766,6 +766,10 @@ def generate_paiwei_pdf_by_pdf_ids(pdf_ids, source_name, need_barcode=True, prog
 # 竖着只印得下 10 个字，剩下的全跑出纸外（订单 508 item 3031 就是这样）。
 # 所以 a-z 占比过半的内容改成横排 + 自动换行 + 居中收齐。
 
+# 竖排里表示「半个字距」的标记：婴灵就两个字，按原字距排显得挤，
+# 中间松开半格才和上面「佛力超度」的分量相称。只在渲染时用，不入库。
+HALF_GAP = "\u2006"
+
 _LATIN = re.compile(r"[A-Za-z]")
 # 触发阈值：非空白字符里 a-z 占一半以上
 _LATIN_HEAVY_RATIO = 0.5
@@ -1271,8 +1275,15 @@ def generate_paiwei(paiwei_type, fahui_data, point_data, source_name, need_barco
             return
 
         c.setFillColor(colors.black)
-        for index, char in enumerate(str(text or "")):
-            c.drawString(x_base, y_base - index * spacing, char)
+        # 逐字往下排。碰到半格标记就只让位不画字 —— 普通空格仍然占满一格，
+        # 老的「关系 名字」间距一点没变。
+        offset = 0.0
+        for char in str(text or ""):
+            if char == HALF_GAP:
+                offset += spacing * 0.5
+                continue
+            c.drawString(x_base, y_base - offset, char)
+            offset += spacing
 
     items_per_page = len(positions)
     total_items = len(fahui_data)
@@ -1324,8 +1335,10 @@ def generate_paiwei(paiwei_type, fahui_data, point_data, source_name, need_barco
                 # 抬头统一印「婴灵」，填了名字就接在后面，没填就只有「婴灵」两个字。
                 if str(deceased).strip() in ("无缘子女", "婴灵"):
                     deceased = ""
-                # 名字和「婴灵」之间空一格，和「佛力超度 婴灵」的间隔一致
-                folichaodu = f"佛力超度 婴灵 {deceased}".rstrip()
+                # 「佛力超度」和「婴灵」之间空一格半：婴灵只有两个字，
+                # 贴着上面四个字排会看成一整行，拉开半格才断得开。
+                # 名字和「婴灵」之间空一格，和「佛力超度 婴灵」的间隔一致。
+                folichaodu = f"佛力超度 {HALF_GAP}婴{HALF_GAP}灵 {deceased}".rstrip()
 
             draw_text_vertical(position, "folichaodu", folichaodu, base_x, base_y, info)
             draw_text_vertical(position, "baijian", "拜荐", base_x, base_y, info)
