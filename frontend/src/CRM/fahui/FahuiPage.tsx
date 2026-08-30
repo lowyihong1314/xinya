@@ -1409,6 +1409,15 @@ export function FahuiPage() {
             <button type="button" style={styles.secondaryActionCompact} onClick={() => setPrintRecordsOpen(true)}>
               查看打印记录
             </button>
+            {/* 常驻入口：按订单号 / 牌位单号直接打印，不用先在列表里勾、也不用先挑类型。
+                底部批量条那个「打印牌位 PLUS ▾」只在勾了订单之后才出现。 */}
+            <button
+              type="button"
+              style={styles.secondaryActionCompact}
+              onClick={() => void handleYlpPrintPlus(null)}
+            >
+              打印牌位 PLUS
+            </button>
             <button type="button" style={styles.secondaryActionCompact} onClick={openYlpIntakePage}>
               打开牌位填写页
             </button>
@@ -1689,17 +1698,20 @@ export function FahuiPage() {
     }
   }
 
-  async function handleYlpPrintPlus(template: string) {
+  /** template 传 null = 工具栏那个常驻入口：不挑类型、也不看列表勾选，只按单号打印。 */
+  async function handleYlpPrintPlus(template: string | null) {
     setPrintPlusMenuOpen(false);
     let selectedIds: number[] = [];
-    setYlpBulkBusy(true);
-    try {
-      selectedIds = await resolveYlpSelectedIds();
-    } catch {
-      show_alert("error", "获取订单失败");
-      return;
-    } finally {
-      setYlpBulkBusy(false);
+    if (template) {
+      setYlpBulkBusy(true);
+      try {
+        selectedIds = await resolveYlpSelectedIds();
+      } catch {
+        show_alert("error", "获取订单失败");
+        return;
+      } finally {
+        setYlpBulkBusy(false);
+      }
     }
     // 弹窗里挑范围（勾选 / 订单单号 / 牌位单号）+ 状态过滤 + 要不要跳过已注册的，
     // 张数由后端 /scope 算好，确认后原样提交回去。点遮罩 / 取消都返回 null，当作放弃打印。

@@ -31,6 +31,8 @@ export const PRINT_TEMPLATE_LABELS: Record<string, string> = {
   paiwei_1: "大牌位",
   paiwei_5: "小牌位",
   paiwei_10: "冤亲债主",
+  // 不选类型：后端把三种牌位一次印完合成一份 PDF
+  all: "牌位",
 };
 
 type Mode = "version" | "selection" | "orders" | "pdfs";
@@ -41,6 +43,10 @@ const MODE_TABS: { key: Mode; label: string }[] = [
   { key: "orders", label: "按订单单号" },
   { key: "pdfs", label: "按牌位单号" },
 ];
+
+// 直接输单号的两种方式：不依赖列表勾选，也不用先挑牌位类型。
+// 工具栏那个常驻按钮进来就只有这两个。
+const ID_ONLY_MODES: Mode[] = ["orders", "pdfs"];
 
 /** 支持逗号 / 空格 / 换行 / 顿号分隔，以及 1100-1105 这种区间；#123 的井号自动去掉。 */
 export function parseIdInput(raw: string): { ids: number[]; invalid: string[] } {
@@ -130,13 +136,21 @@ function PrintPlusDialog({
   selectedOrderIds,
   onResolve,
 }: {
-  template: string;
+  /** 传了就只印这一种；不传（工具栏常驻入口）= 三种一起印，也不给「整个版本 / 按勾选」 */
+  template: string | null;
   version: string;
   selectedOrderIds: number[];
   onResolve: (result: PrintPlusResult | null) => void;
 }) {
+  // 没指定类型时只能按单号来 —— 没有列表上下文，「整个版本 / 按勾选」无从谈起
+  const idOnly = !template;
+  const effectiveTemplate = template || "all";
+  const tabs = useMemo(
+    () => (idOnly ? MODE_TABS.filter((tab) => ID_ONLY_MODES.includes(tab.key)) : MODE_TABS),
+    [idOnly],
+  );
   // 默认整个版本：法会要印的本来就是一整年的牌位，勾选只是偶尔的补印场景。
-  const [mode, setMode] = useState<Mode>("version");
+  const [mode, setMode] = useState<Mode>(idOnly ? "orders" : "version");
   const [orderInput, setOrderInput] = useState("");
   const [pdfInput, setPdfInput] = useState("");
   const [onlyUnregistered, setOnlyUnregistered] = useState(false);
@@ -148,7 +162,7 @@ function PrintPlusDialog({
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
 
-  const templateLabel = PRINT_TEMPLATE_LABELS[template] || template;
+  const templateLabel = PRINT_TEMPLATE_LABELS[effectiveTemplate] || effectiveTemplate;
 
   const parsedOrders = useMemo(() => parseIdInput(orderInput), [orderInput]);
   const parsedPdfs = useMemo(() => parseIdInput(pdfInput), [pdfInput]);
@@ -171,7 +185,7 @@ function PrintPlusDialog({
     setError("");
     try {
       const res = await fetchYlpPrintScope({
-        template,
+        template: effectiveTemplate,
         version: queryVersion,
         orderIds: queryOrderIds,
         pdfIds: queryPdfIds,
@@ -186,7 +200,7 @@ function PrintPlusDialog({
       setLoading(false);
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [queryKey, template]);
+  }, [queryKey, effectiveTemplate]);
 
   useEffect(() => {
     // 手打单号时防抖，别每敲一个数字就发一次请求。
@@ -271,12 +285,14 @@ function PrintPlusDialog({
           <p style={styles.message}>
             {mode === "pdfs"
               ? "按牌位上的条码号重印，沿用原来的单号，不会重新发号。"
-              : "默认全部状态都印。不想印的（例如已取消）在下面取消勾选，张数会跟着变。"}
+              : idOnly
+                ? "贴订单号就能印，不用先在列表里勾。大／小牌位和冤亲债主会一起印成一份。"
+                : "默认全部状态都印。不想印的（例如已取消）在下面取消勾选，张数会跟着变。"}
           </p>
         </header>
 
         <div style={styles.tabs} role="tablist" className="ylp-print-plus-tabs">
-          {MODE_TABS.map((tab) => {
+          {tabs.map((tab) => {
             const active = mode === tab.key;
             return (
               <button
@@ -428,7 +444,7 @@ function PrintPlusDialog({
 }
 
 /** 点遮罩 / 取消都返回 null，调用方据此中止打印。 */
-export function showPrintPlusDialog(selectedOrderIds: number[], template: string, version: string) {
+export function showPrintPlusDialog(selectedOrderIds: number[], template: string | null, version: string) {
   ensureDesignTokens();
 
   return new Promise<PrintPlusResult | null>((resolve) => {

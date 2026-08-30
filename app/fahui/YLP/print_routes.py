@@ -449,7 +449,11 @@ def paiwei_print_scope_route():
 
     items = query.all()
     # 只留属于这个模板的牌位（D / D1 这类没有模板的自然被排除）。
-    items = [item for item in items if SOURCE_NAME_BY_PAIWEI_TYPE.get(str(item.code or "")) == source_name]
+    # template=all（不选类型，按单号打印时用）就留下所有认得的类型。
+    if source_name == "all":
+        items = [item for item in items if SOURCE_NAME_BY_PAIWEI_TYPE.get(str(item.code or ""))]
+    else:
+        items = [item for item in items if SOURCE_NAME_BY_PAIWEI_TYPE.get(str(item.code or "")) == source_name]
 
     pdf_id_by_item: dict[int, int] = {}
     if items:

@@ -10,6 +10,8 @@ from app.redis_client import redis_client
 
 from ..common.ylp_storage import preferred_dir
 from .print_generator import (
+    count_all_sources,
+    generate_paiwei_pdf_all_sources,
     generate_paiwei_pdf_by_pdf_ids,
     generate_paiwei_pdf_by_source,
     group_source_items,
@@ -26,6 +28,8 @@ _PAIWEI_TEMPLATE_ALIASES = {
     "creditor": "paiwei_10",
     "yuanqin": "paiwei_10",
     "paiwei_10": "paiwei_10",
+    # 「不选类型」：三种牌位一次印完，合成一份 PDF
+    "all": "all",
 }
 
 
@@ -90,7 +94,11 @@ def _run_job(app, job_id: str, order_ids, source_name, need_barcode=False, item_
     with app.app_context():
         try:
             reprint = bool(pdf_ids)
-            if reprint:
+            every = source_name == "all"
+            if every:
+                total = count_all_sources(order_ids, item_ids=item_ids, pdf_ids=pdf_ids)
+                empty_message = "这些单号下没有可打印的牌位"
+            elif reprint:
                 # 重印按「页」计进度：一个牌位单号 = 一页。
                 total = len(pdf_pages_for_reprint(pdf_ids, source_name))
                 empty_message = "这些牌位单号里没有该类型的牌位"
@@ -120,7 +128,12 @@ def _run_job(app, job_id: str, order_ids, source_name, need_barcode=False, item_
                     if getattr(socketio, "server", None) is not None:
                         socketio.sleep(0)  # 让出协程，保证进度事件及时下发
 
-            if reprint:
+            if every:
+                output = generate_paiwei_pdf_all_sources(
+                    order_ids, need_barcode=need_barcode, progress_cb=progress_cb,
+                    item_ids=item_ids, pdf_ids=pdf_ids,
+                )
+            elif reprint:
                 output = generate_paiwei_pdf_by_pdf_ids(
                     pdf_ids, source_name, need_barcode=need_barcode, progress_cb=progress_cb
                 )

@@ -947,6 +947,65 @@ def _cell_pitch(point_dict, positions, page_width: float) -> float:
     return min(diffs) if diffs else page_width
 
 
+# 「不选类型」时按这个顺序把三种牌位依次生成再合成一份 PDF。
+ALL_SOURCE_NAMES = ("paiwei_1", "paiwei_5", "paiwei_10")
+
+
+def _merge_buffers(buffers):
+    if not buffers:
+        return None
+    try:
+        from pypdf import PdfWriter as _PdfMerger
+    except ImportError:
+        try:
+            from pypdf import PdfMerger as _PdfMerger
+        except ImportError:
+            from PyPDF2 import PdfMerger as _PdfMerger
+
+    merger = _PdfMerger()
+    for buffer in buffers:
+        buffer.seek(0)
+        merger.append(buffer)
+    output = io.BytesIO()
+    merger.write(output)
+    merger.close()
+    return io.BytesIO(_compress_pdf(output.getvalue()))
+
+
+def count_all_sources(order_ids, item_ids=None, pdf_ids=None) -> int:
+    """三种模板加起来一共要印几张（进度条的分母）。"""
+    total = 0
+    for source_name in ALL_SOURCE_NAMES:
+        if pdf_ids:
+            total += len(pdf_pages_for_reprint(pdf_ids, source_name))
+        else:
+            total += group_source_items(order_ids, source_name, item_ids=item_ids)[1]
+    return total
+
+
+def generate_paiwei_pdf_all_sources(order_ids, need_barcode=False, progress_cb=None,
+                                    item_ids=None, pdf_ids=None):
+    """三种牌位一次印完，合成一份 PDF。
+
+    按订单号 / 牌位单号打印时用得上：人要的是「这几张订单的牌位」，
+    至于里面是大牌位还是冤亲债主，不该反过来让人先选。
+    """
+    buffers = []
+    for source_name in ALL_SOURCE_NAMES:
+        if pdf_ids:
+            output = generate_paiwei_pdf_by_pdf_ids(
+                pdf_ids, source_name, need_barcode=need_barcode, progress_cb=progress_cb
+            )
+        else:
+            output = generate_paiwei_pdf_by_source(
+                order_ids, source_name, need_barcode=need_barcode,
+                progress_cb=progress_cb, item_ids=item_ids,
+            )
+        if output is not None:
+            buffers.append(output)
+    return _merge_buffers(buffers)
+
+
 def generate_paiwei(paiwei_type, fahui_data, point_data, source_name, need_barcode=False, progress_cb=None):
     from reportlab.lib import colors
     from reportlab.lib.pagesizes import A4, landscape
