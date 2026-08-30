@@ -1281,9 +1281,11 @@ def generate_paiwei(paiwei_type, fahui_data, point_data, source_name, need_barco
             folichaodu = "佛力超度"
             if paiwei_type in ["A3", "B3"]:
                 deceased = info.get("deceased", "")
-                if deceased == "无缘子女":
+                # 「无缘子女」和「婴灵」都是这类牌位的统称，写进名字栏就是重复；
+                # 抬头统一印「婴灵」，填了名字就接在后面，没填就只有「婴灵」两个字。
+                if str(deceased).strip() in ("无缘子女", "婴灵"):
                     deceased = ""
-                folichaodu = f"佛力超度 无缘子女{deceased}"
+                folichaodu = f"佛力超度 婴灵{deceased}"
 
             draw_text_vertical(position, "folichaodu", folichaodu, base_x, base_y, info)
             draw_text_vertical(position, "baijian", "拜荐", base_x, base_y, info)
