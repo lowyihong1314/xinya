@@ -10,6 +10,7 @@ import { copyTextToClipboard } from "../../../js/browserActions";
 import { showConfirmDialog } from "../../../js/dialogs";
 import { show_alert } from "../../../js/show_alert";
 import { useEnsureDesignTokens } from "../../../theme/designTokens";
+import { connectFahuiSocket } from "../socket";
 import { fetchYlpVersions } from "../api";
 import {
   attachPdfToBoard,
@@ -161,6 +162,8 @@ export function BoardPage() {
   const POOL_PER_PAGE = 12;
   const [poolOpen, setPoolOpen] = useState(true);
   const [poolFullscreen, setPoolFullscreen] = useState(false);
+  // 收到广播时在标题旁边闪一下「谁刚上板」
+  const [liveHint, setLiveHint] = useState("");
   // 右键菜单（暂时只有「查看明细」）和它拉起的订单摘要抽屉
   const [poolMenu, setPoolMenu] = useState<{ pdfId: number; orderId: number | null; x: number; y: number } | null>(null);
   const [summaryOrderId, setSummaryOrderId] = useState<number | null>(null);
@@ -389,6 +392,46 @@ export function BoardPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [version]);
 
+  // 手机端扫码上板 / 别人在另一台电脑上拖动，这边实时跟着变。
+  // 广播里只有 board_id + 动作，内容自己拉 —— 扫码一秒可能好几次，
+  // 所以合并成 400ms 一次刷新，别把接口打爆。
+  useEffect(() => {
+    const socket = connectFahuiSocket();
+    let timer: number | null = null;
+    const refresh = (payload: { board_name?: string | null; action?: string; pdf_id?: number | null }) => {
+      if (payload?.action === "attached" && payload.pdf_id) {
+        setLiveHint(`牌位 ${payload.pdf_id} 刚上板${payload.board_name ? ` · ${payload.board_name}` : ""}`);
+      } else if (payload?.action === "detached" && payload.pdf_id) {
+        setLiveHint(`牌位 ${payload.pdf_id} 刚退板`);
+      }
+      if (timer !== null) {
+        window.clearTimeout(timer);
+      }
+      timer = window.setTimeout(() => {
+        void reload();
+        void loadPool();
+      }, 400);
+    };
+    socket.on("fahui:board_changed", refresh);
+    return () => {
+      if (timer !== null) {
+        window.clearTimeout(timer);
+      }
+      socket.off("fahui:board_changed", refresh);
+      socket.disconnect();
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [version]);
+
+  // 实时提示自己淡出
+  useEffect(() => {
+    if (!liveHint) {
+      return;
+    }
+    const timer = window.setTimeout(() => setLiveHint(""), 3000);
+    return () => window.clearTimeout(timer);
+  }, [liveHint]);
+
   async function run(action: () => Promise<unknown>, okMsg?: string) {
     setBusy(true);
     setError("");
@@ -600,6 +643,12 @@ export function BoardPage() {
         <div>
           <p style={styles.eyebrow}>盂兰盆法会</p>
           <h2 style={styles.title}>看板 · 牌位位置维护</h2>
+          {liveHint ? (
+            <span style={styles.liveHint} className="ylp-board-live-hint">
+              <i className="fa-solid fa-bolt" style={{ marginRight: 5 }} />
+              {liveHint}
+            </span>
+          ) : null}
         </div>
         <div style={styles.headActions}>
           <select style={styles.versionSelect} value={version} onChange={(e) => setVersion(e.target.value)} title="版本（年份）">
@@ -1241,6 +1290,17 @@ const styles: Record<string, CSSProperties> = {
   } as CSSProperties,
   poolMenuItemDisabled: { opacity: 0.45, cursor: "not-allowed" } as CSSProperties,
   poolMenuHint: { padding: "0 10px 6px", fontSize: "11px", color: "var(--x-color-ink-muted)" } as CSSProperties,
+  liveHint: {
+    display: "inline-flex",
+    alignItems: "center",
+    marginTop: "4px",
+    padding: "3px 10px",
+    borderRadius: "999px",
+    background: "var(--x-color-success-soft)",
+    color: "var(--x-color-success)",
+    fontSize: "12px",
+    fontWeight: 700,
+  } as CSSProperties,
   poolCollapsedText: {
     writingMode: "vertical-rl",
     fontSize: "13px",

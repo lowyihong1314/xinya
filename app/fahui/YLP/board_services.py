@@ -186,6 +186,26 @@ def _notify_order_updated(order_id: int | None) -> None:
         pass
 
 
+def _notify_board_changed(board_id: int | None, action: str, pdf_id: int | None = None,
+                          board_name: str | None = None) -> None:
+    """看板有变动就广播一声，CRM 看板页收到自己去刷。
+
+    只发「哪块板、什么动作、哪张牌位」，不塞看板内容 —— 手机扫码时一秒可能好几次，
+    payload 越小越好；收到的人自己拉一次最新的就行。
+    """
+    if not board_id:
+        return
+    try:
+        from app.extensions import socket_broker
+
+        socket_broker.emit(
+            "fahui:board_changed",
+            {"board_id": board_id, "board_name": board_name, "action": action, "pdf_id": pdf_id},
+        )
+    except Exception:  # noqa: BLE001
+        pass
+
+
 def default_item_price(code: str | None) -> int:
     return PRICE_MAP.get(code or "", 0)
 
@@ -202,8 +222,11 @@ def delete_board_entry(board_data_id: int) -> tuple[dict, int]:
     if not board_entry:
         return {"status": "error", "message": f"BoardData {board_data_id} not found"}, 404
 
+    board_id = board_entry.board_id
+    pdf_id = board_entry.print_pdf_id
     db.session.delete(board_entry)
     db.session.commit()
+    _notify_board_changed(board_id, "detached", pdf_id)
     return {
         "status": "success",
         "message": f"BoardData {board_data_id} deleted successfully",
@@ -346,6 +369,7 @@ def reorder_board_entry(data: dict) -> tuple[dict, int]:
         entry.location = location
 
     db.session.commit()
+    _notify_board_changed(board_id, "reordered", pdf_id)
     return {
         "success": True,
         "board_id": board_id,
@@ -418,6 +442,7 @@ def attach_pdf_to_board(data: dict) -> tuple[dict, int]:
             db.session.add(board_entry)
 
     db.session.commit()
+    _notify_board_changed(header.id, "attached", pdf_id, header.board_name)
     return {
         "side_id": board_entry.id if board_entry else None,
         "pdf_id": pdf_id,
@@ -493,6 +518,7 @@ def scan_attach_to_board(data: dict) -> tuple[dict, int]:
         entry = FahuiBoardData(board_id=header.id, print_pdf_id=pdf_id, location=last_location + 1)
         db.session.add(entry)
     db.session.commit()
+    _notify_board_changed(header.id, "attached", pdf_id, header.board_name)
 
     return {
         "status": "attached",
