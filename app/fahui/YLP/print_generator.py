@@ -33,6 +33,19 @@ BARCODE_BAR_WIDTH = 0.9
 BARCODE_FONT_SIZE = 8
 
 
+# 有人拿「-」当「这里留空」填。原样印出来就是牌位上多一个横杠 ——
+# 订单 781 就印成了「佛力超度 无缘子女-」和「显考 -」「显妣 -」。
+# 全角／各种破折号都算，只由这类符号和空白组成的值一律当空。
+_DASH_ONLY = re.compile(r"^[\s\-\u2010-\u2015\uFF0D\u30FC]*$")
+
+
+def _clean_print_value(value):
+    """打印用的值清洗：占位横杠当空值。空值在下游要么被 if 挡掉、要么被 filter 掉。"""
+    if value is None:
+        return value
+    return "" if _DASH_ONLY.match(str(value)) else value
+
+
 def _serialize_print_item(item: FahuiOrderItem) -> dict:
     data = {
         "id": item.id,
@@ -44,7 +57,7 @@ def _serialize_print_item(item: FahuiOrderItem) -> dict:
     }
     for field in item.form_data or []:
         key = field.field_name or ""
-        value = field.field_value
+        value = _clean_print_value(field.field_value)
         if key in data["item_form_data"]:
             existing = data["item_form_data"][key]
             if isinstance(existing, list):
