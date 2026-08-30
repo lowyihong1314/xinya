@@ -2901,36 +2901,81 @@ const YLP_ORDER_TABLE_CSS = `
 .ylp-order-table tbody tr.ylp-board-none td { background: var(--x-color-warning-soft, #fff7ed); }
 .ylp-order-table tbody tr.ylp-board-partial td { background: var(--x-color-accent-soft, #eff6ff); }
 .ylp-order-table tbody tr.ylp-board-all td { background: var(--x-color-success-soft, #ecfdf5); }
-.ylp-order-table tbody tr.ylp-order-row:hover td { background: var(--x-color-accent-tint); }
 
-/* 选中行不再换底色 —— 那会把上板进度那层颜色整个盖掉。
-   改成：一次 scale 弹入 + 上下两条点亮的辉光线，颜色照样看得见。 */
+/* hover 不再换底色（会盖掉上板进度那层颜色），改成左侧一条淡淡的提示边。 */
+.ylp-order-table tbody tr.ylp-order-row:hover td:first-child {
+  box-shadow: inset 3px 0 0 var(--x-color-accent-border);
+}
+
+/* 选中行：底色留给上板进度，选中感全部交给「点亮」——
+   整行从左边压扁弹开 + 一道白光横扫过去 + 蓝色辉光炸开后收成上下两条亮线，
+   左侧一条会呼吸的粗亮条常驻，文字转成强调色加粗。 */
 @keyframes ylpRowPop {
-  0%   { transform: scale(0.8); }
-  55%  { transform: scale(1.015); }
+  0%   { transform: scaleX(0.985) scaleY(0.86); }
+  45%  { transform: scaleX(1.004) scaleY(1.06); }
+  75%  { transform: scaleX(1) scaleY(0.985); }
   100% { transform: scale(1); }
 }
-@keyframes ylpRowGlowIn {
-  0%   { box-shadow: inset 0 1px 0 transparent, inset 0 -1px 0 transparent, 0 0 0 rgba(37, 99, 235, 0); }
-  60%  { box-shadow: inset 0 1px 0 var(--x-color-accent-strong), inset 0 -1px 0 var(--x-color-accent-strong), 0 0 16px 2px rgba(37, 99, 235, 0.45); }
-  100% { box-shadow: inset 0 1px 0 var(--x-color-accent-strong), inset 0 -1px 0 var(--x-color-accent-strong), 0 0 7px 0 rgba(37, 99, 235, 0.28); }
+@keyframes ylpRowBloom {
+  0%   { box-shadow: inset 0 0 0 rgba(37, 99, 235, 0), 0 0 0 rgba(37, 99, 235, 0); }
+  22%  { box-shadow: inset 0 0 26px rgba(37, 99, 235, 0.38), 0 0 26px 5px rgba(37, 99, 235, 0.55); }
+  55%  { box-shadow: inset 0 0 10px rgba(37, 99, 235, 0.16), 0 0 14px 2px rgba(37, 99, 235, 0.32); }
+  100% {
+    box-shadow:
+      inset 0 1px 0 var(--x-color-accent-strong),
+      inset 0 -1px 0 var(--x-color-accent-strong),
+      0 0 10px 0 rgba(37, 99, 235, 0.26);
+  }
 }
+@keyframes ylpRowSweep {
+  0%   { transform: translateX(-60%); opacity: 0; }
+  25%  { opacity: 1; }
+  100% { transform: translateX(115%); opacity: 0; }
+}
+@keyframes ylpRowBarBreath {
+  0%, 100% { box-shadow: inset 4px 0 0 var(--x-color-accent-strong), -2px 0 10px -2px rgba(37, 99, 235, 0.75); }
+  50%      { box-shadow: inset 4px 0 0 var(--x-color-accent-strong), -2px 0 3px -2px rgba(37, 99, 235, 0.25); }
+}
+
 .ylp-order-table tbody tr.ylp-order-row-active {
+  position: relative;
   transform-origin: left center;
-  animation: ylpRowPop 280ms cubic-bezier(0.22, 1, 0.36, 1);
+  animation: ylpRowPop 340ms cubic-bezier(0.22, 1, 0.36, 1);
+}
+/* 横扫的白光：铺在整行上，不吃鼠标事件 */
+.ylp-order-table tbody tr.ylp-order-row-active::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  background: linear-gradient(
+    100deg,
+    rgba(255, 255, 255, 0) 0%,
+    rgba(255, 255, 255, 0.75) 45%,
+    rgba(191, 219, 254, 0.55) 60%,
+    rgba(255, 255, 255, 0) 85%
+  );
+  animation: ylpRowSweep 620ms cubic-bezier(0.25, 0.6, 0.3, 1) 1;
 }
 .ylp-order-table tbody tr.ylp-order-row-active td {
-  /* 动画结束后停在最后一帧，线条保持点亮 */
-  animation: ylpRowGlowIn 420ms ease-out forwards;
+  /* forwards：动画跑完停在最后一帧，两条亮线常驻 */
+  animation: ylpRowBloom 560ms ease-out forwards;
+  color: var(--x-color-accent-strong);
+  font-weight: 700;
 }
 .ylp-order-table tbody tr.ylp-order-row-active td:first-child {
-  box-shadow: inset 3px 0 0 var(--x-color-accent-strong);
+  animation: ylpRowBarBreath 2.4s ease-in-out infinite;
 }
 @media (prefers-reduced-motion: reduce) {
   .ylp-order-table tbody tr.ylp-order-row-active,
-  .ylp-order-table tbody tr.ylp-order-row-active td { animation: none; }
+  .ylp-order-table tbody tr.ylp-order-row-active::after,
+  .ylp-order-table tbody tr.ylp-order-row-active td,
+  .ylp-order-table tbody tr.ylp-order-row-active td:first-child { animation: none; }
   .ylp-order-table tbody tr.ylp-order-row-active td {
     box-shadow: inset 0 1px 0 var(--x-color-accent-strong), inset 0 -1px 0 var(--x-color-accent-strong);
+  }
+  .ylp-order-table tbody tr.ylp-order-row-active td:first-child {
+    box-shadow: inset 4px 0 0 var(--x-color-accent-strong);
   }
 }
 .ylp-order-table thead th.ylp-sortable { cursor: pointer; user-select: none; }
