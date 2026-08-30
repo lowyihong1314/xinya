@@ -81,6 +81,8 @@ export function BoardScanPage() {
   // 免得人以为「扫到了怎么没反应」而反复对着同一张牌位晃。
   const [cooldown, setCooldown] = useState<{ code: string; id: number } | null>(null);
   const [sending, setSending] = useState(false);
+  // 扫不到时手打单号
+  const [manualCode, setManualCode] = useState("");
 
   // 摄像头开着的那块板：handleCode 是 useCallback，用 ref 拿最新的板，避免重建回调
   const boardRef = useRef<Board | null>(null);
@@ -128,7 +130,8 @@ export function BoardScanPage() {
   // 这里只管拿到码之后干什么：查重、发请求、记流水。
 
   const handleCode = useCallback(
-    async (code: string) => {
+    /** force = 手动输入的，不受冷却限制（人自己按的按钮，就是要它现在发） */
+    async (code: string, force = false) => {
       const boardId = boardRef.current?.board_id;
       if (!boardId) {
         return;
@@ -136,7 +139,10 @@ export function BoardScanPage() {
       const now = Date.now();
       const last = cooldownRef.current.get(code) || 0;
       // 3 秒冷却：镜头没移开时同一个码会被连续识别到，这里挡掉重复请求
-      if (now - last < CODE_COOLDOWN_MS || inflightRef.current) {
+      if (!force && (now - last < CODE_COOLDOWN_MS || inflightRef.current)) {
+        return;
+      }
+      if (force && inflightRef.current) {
         return;
       }
       cooldownRef.current.set(code, now);
@@ -236,6 +242,17 @@ export function BoardScanPage() {
     } finally {
       setCreating(false);
     }
+  }
+
+  /** 手打单号直接上板：光线差、条码磨花、牌位贴太高扫不到的时候用 */
+  async function submitManual() {
+    const code = manualCode.replace(/[^0-9]/g, "");
+    if (!code) {
+      pushToast("bad", "请输入牌位单号", "只认数字");
+      return;
+    }
+    setManualCode("");
+    await handleCode(code, true);
   }
 
   async function rollback(log: ScanLog) {
@@ -368,9 +385,29 @@ export function BoardScanPage() {
         )}
       </div>
 
+      <div style={styles.manualRow} className="board-scan-manual">
+        <input
+          value={manualCode}
+          onChange={(event) => setManualCode(event.target.value)}
+          onKeyDown={(event) => {
+            if (event.key === "Enter") {
+              void submitManual();
+            }
+          }}
+          type="number"
+          inputMode="numeric"
+          placeholder="扫不到？直接输单号"
+          style={styles.manualInput}
+        />
+        <button type="button" style={styles.manualBtn} onClick={() => void submitManual()}>
+          添加
+        </button>
+      </div>
+
       <div style={styles.logList} className="board-scan-log">
         {activeLogs.length ? null : <p style={styles.muted}>还没扫到，扫上去的会列在这里，可以一键退回。</p>}
-        {logs.map((log) => (
+        {/* 只留最新 2 条：屏幕要留给相机，历史看电脑上的看板 */}
+        {logs.slice(0, 2).map((log) => (
           <div key={log.key} style={{ ...styles.logRow, ...(log.rolledBack ? styles.logRowDone : null) }}>
             <div style={{ minWidth: 0 }}>
               <span style={styles.logPdf}>#{log.pdfId}</span>
@@ -494,7 +531,7 @@ const styles: Record<string, CSSProperties> = {
     zIndex: 9000,
     display: "grid",
     gap: "8px",
-    gridTemplateRows: "auto 1fr auto auto",
+    gridTemplateRows: "auto 1fr auto auto auto",
     padding: "10px",
     paddingBottom: "max(10px, env(safe-area-inset-bottom))",
     paddingTop: "max(10px, env(safe-area-inset-top))",
@@ -555,13 +592,31 @@ const styles: Record<string, CSSProperties> = {
     fontFamily: "var(--x-font-mono)",
     textAlign: "center",
   },
-  // 流水固定占屏幕下方一小块，画面不会被挤扁
-  logList: {
-    display: "grid",
-    gap: "6px",
-    overflowY: "auto",
-    alignContent: "start",
-    maxHeight: "26vh",
+  // 只显示最新 2 条，固定占屏幕下方一小块，画面不会被挤扁
+  logList: { display: "grid", gap: "6px", alignContent: "start" },
+  manualRow: { display: "flex", gap: "8px" },
+  manualInput: {
+    flex: 1,
+    minWidth: 0,
+    padding: "10px 12px",
+    borderRadius: "8px",
+    border: "1px solid var(--x-color-line)",
+    background: "var(--x-color-panel)",
+    color: "var(--x-color-ink)",
+    fontSize: "16px",
+    fontWeight: 700,
+    fontFamily: "var(--x-font-mono)",
+  },
+  manualBtn: {
+    padding: "10px 20px",
+    borderRadius: "8px",
+    border: "none",
+    background: "var(--x-color-accent)",
+    color: "#fff",
+    fontSize: "15px",
+    fontWeight: 800,
+    cursor: "pointer",
+    whiteSpace: "nowrap",
   },
   cooldownWrap: { display: "grid", gap: "4px" },
   cooldownTrack: {
