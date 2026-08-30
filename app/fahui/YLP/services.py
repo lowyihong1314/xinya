@@ -113,11 +113,16 @@ def board_position(board_width, location) -> dict:
 
 
 def board_placement_map(order_ids) -> dict:
-    """一次查出这批订单的上板进度：{order_id: {status, placed, total}}。
+    """一次查出这批订单的打印 / 上板进度：{order_id: {status, printed, placed, total}}。
 
-    status：none 一张都没上 / partial 上了一部分 / all 全上了 / empty 没有牌位可上
-    （随缘供斋、普度贡品这类 D 开头的项目不出牌位，不算进分母，
-    否则只要单里有一笔乐捐就永远凑不满「全部已上板」）。
+    status：
+        empty      没有会上板的牌位（只有随缘供斋这类 D 开头的项目）
+        unprinted  连牌位单号都还没生成 —— 一张都没打印
+        none       打印了但一张都没上板
+        partial    上了一部分
+        all        全上了
+
+    D 开头的项目不出牌位，不算进分母，否则只要单里有一笔乐捐就永远凑不满「全部已上板」。
 
     走一条聚合 SQL，不是逐单翻 items → pdf_pages → board_entries，
     列表一页 20 单那样翻会是标准的 N+1。
@@ -126,11 +131,13 @@ def board_placement_map(order_ids) -> dict:
     if not ids:
         return {}
 
+    printed = db.func.count(db.distinct(db.case((FahuiPdfPageData.id.isnot(None), FahuiOrderItem.id))))
     placed = db.func.count(db.distinct(db.case((FahuiBoardData.id.isnot(None), FahuiOrderItem.id))))
     rows = (
         db.session.query(
             FahuiOrderItem.order_id,
             db.func.count(db.distinct(FahuiOrderItem.id)).label("total"),
+            printed.label("printed"),
             placed.label("placed"),
         )
         .outerjoin(FahuiPdfPageData, FahuiPdfPageData.order_item_id == FahuiOrderItem.id)
@@ -141,19 +148,27 @@ def board_placement_map(order_ids) -> dict:
         .all()
     )
 
-    result = {oid: {"status": "empty", "placed": 0, "total": 0} for oid in ids}
-    for order_id, total, placed_count in rows:
+    result = {oid: {"status": "empty", "printed": 0, "placed": 0, "total": 0} for oid in ids}
+    for order_id, total, printed_count, placed_count in rows:
         total = int(total or 0)
+        printed_count = int(printed_count or 0)
         placed_count = int(placed_count or 0)
         if total <= 0:
             status = "empty"
-        elif placed_count <= 0:
-            status = "none"
         elif placed_count >= total:
             status = "all"
-        else:
+        elif placed_count > 0:
             status = "partial"
-        result[order_id] = {"status": status, "placed": placed_count, "total": total}
+        elif printed_count <= 0:
+            status = "unprinted"
+        else:
+            status = "none"
+        result[order_id] = {
+            "status": status,
+            "printed": printed_count,
+            "placed": placed_count,
+            "total": total,
+        }
     return result
 
 
@@ -444,7 +459,9 @@ def search_orders(
     rows = [serialize_order(order) for order in items]
     placement = board_placement_map([row["id"] for row in rows])
     for row in rows:
-        row["board_status"] = placement.get(row["id"], {"status": "empty", "placed": 0, "total": 0})
+        row["board_status"] = placement.get(
+            row["id"], {"status": "empty", "printed": 0, "placed": 0, "total": 0}
+        )
 
     return {
         "items": rows,

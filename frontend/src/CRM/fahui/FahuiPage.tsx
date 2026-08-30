@@ -2853,22 +2853,35 @@ function rowMenuHeight(withCopyToCurrent: boolean): number {
 
 // 上板进度 → 行样式 / 悬停提示。empty＝这单没有会上板的牌位（只有随缘供斋之类），不着色。
 const BOARD_STATUS_CLASS: Record<string, string> = {
+  unprinted: "ylp-board-unprinted",
   none: "ylp-board-none",
   partial: "ylp-board-partial",
   all: "ylp-board-all",
+};
+
+const BOARD_STATUS_TEXT: Record<string, string> = {
+  unprinted: "牌位还没打印",
+  none: "已打印，全部未上板",
+  partial: "部分牌位未上板",
+  all: "全部牌位已上板",
 };
 
 function boardStatusClass(status?: string | null): string {
   return BOARD_STATUS_CLASS[String(status || "")] || "";
 }
 
-function boardStatusTitle(status?: { status?: string; placed?: number; total?: number } | null): string {
+function boardStatusTitle(
+  status?: { status?: string; printed?: number; placed?: number; total?: number } | null,
+): string {
   if (!status || !status.total) {
     return "";
   }
-  const text =
-    status.status === "all" ? "全部牌位已上板" : status.status === "none" ? "全部牌位未上板" : "部分牌位未上板";
-  return `${text}（${status.placed ?? 0}/${status.total}）`;
+  const text = BOARD_STATUS_TEXT[String(status.status || "")] || "";
+  const counts =
+    status.status === "unprinted"
+      ? `已打印 ${status.printed ?? 0}/${status.total}`
+      : `已上板 ${status.placed ?? 0}/${status.total}`;
+  return `${text}（${counts}）`;
 }
 
 const YLP_ORDER_TABLE_CSS = `
@@ -2882,13 +2895,44 @@ const YLP_ORDER_TABLE_CSS = `
 }
 .ylp-order-table tbody td { padding: 9px 6px; border-bottom: 1px solid var(--x-color-line-soft); vertical-align: middle; color: var(--x-color-ink); }
 .ylp-order-table tbody tr.ylp-order-row { cursor: pointer; }
-/* 上板进度：全部没上＝暖黄，部分上了＝浅蓝，全部上了＝淡绿；没有牌位可上的单不着色。
-   hover 与选中放在后面，优先级更高，压得住这层底色。 */
+/* 打印 / 上板进度：未打印＝灰，打印了没上板＝暖黄，上了一部分＝浅蓝，全上了＝淡绿；
+   没有牌位可上的单不着色。hover 放在后面，优先级更高，压得住这层底色。 */
+.ylp-order-table tbody tr.ylp-board-unprinted td { background: var(--x-color-canvas-alt, #f4f4f5); }
 .ylp-order-table tbody tr.ylp-board-none td { background: var(--x-color-warning-soft, #fff7ed); }
 .ylp-order-table tbody tr.ylp-board-partial td { background: var(--x-color-accent-soft, #eff6ff); }
 .ylp-order-table tbody tr.ylp-board-all td { background: var(--x-color-success-soft, #ecfdf5); }
 .ylp-order-table tbody tr.ylp-order-row:hover td { background: var(--x-color-accent-tint); }
-.ylp-order-table tbody tr.ylp-order-row-active td { background: var(--x-color-accent-tint); }
+
+/* 选中行不再换底色 —— 那会把上板进度那层颜色整个盖掉。
+   改成：一次 scale 弹入 + 上下两条点亮的辉光线，颜色照样看得见。 */
+@keyframes ylpRowPop {
+  0%   { transform: scale(0.8); }
+  55%  { transform: scale(1.015); }
+  100% { transform: scale(1); }
+}
+@keyframes ylpRowGlowIn {
+  0%   { box-shadow: inset 0 1px 0 transparent, inset 0 -1px 0 transparent, 0 0 0 rgba(37, 99, 235, 0); }
+  60%  { box-shadow: inset 0 1px 0 var(--x-color-accent-strong), inset 0 -1px 0 var(--x-color-accent-strong), 0 0 16px 2px rgba(37, 99, 235, 0.45); }
+  100% { box-shadow: inset 0 1px 0 var(--x-color-accent-strong), inset 0 -1px 0 var(--x-color-accent-strong), 0 0 7px 0 rgba(37, 99, 235, 0.28); }
+}
+.ylp-order-table tbody tr.ylp-order-row-active {
+  transform-origin: left center;
+  animation: ylpRowPop 280ms cubic-bezier(0.22, 1, 0.36, 1);
+}
+.ylp-order-table tbody tr.ylp-order-row-active td {
+  /* 动画结束后停在最后一帧，线条保持点亮 */
+  animation: ylpRowGlowIn 420ms ease-out forwards;
+}
+.ylp-order-table tbody tr.ylp-order-row-active td:first-child {
+  box-shadow: inset 3px 0 0 var(--x-color-accent-strong);
+}
+@media (prefers-reduced-motion: reduce) {
+  .ylp-order-table tbody tr.ylp-order-row-active,
+  .ylp-order-table tbody tr.ylp-order-row-active td { animation: none; }
+  .ylp-order-table tbody tr.ylp-order-row-active td {
+    box-shadow: inset 0 1px 0 var(--x-color-accent-strong), inset 0 -1px 0 var(--x-color-accent-strong);
+  }
+}
 .ylp-order-table thead th.ylp-sortable { cursor: pointer; user-select: none; }
 .ylp-order-table thead th.ylp-sortable:hover { color: var(--x-color-accent-strong); background: var(--x-color-accent-tint); }
 .ylp-order-table thead th .ylp-sort-arrow { color: var(--x-color-accent-strong); }

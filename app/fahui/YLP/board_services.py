@@ -993,7 +993,9 @@ def list_orders_by_version(version: str) -> list[dict]:
     rows = [serialize_order(order) for order in orders]
     placement = board_placement_map([row["id"] for row in rows])
     for row in rows:
-        row["board_status"] = placement.get(row["id"], {"status": "empty", "placed": 0, "total": 0})
+        row["board_status"] = placement.get(
+            row["id"], {"status": "empty", "printed": 0, "placed": 0, "total": 0}
+        )
     return rows
 
 

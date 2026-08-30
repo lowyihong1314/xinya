@@ -120,7 +120,9 @@ export type YlpPaiweiPreviewResponse = {
 
 /** 这张订单的牌位上板进度（none 全没上 / partial 上了一部分 / all 全上了 / empty 没有可上板的牌位） */
 export type YlpBoardStatus = {
-  status: "none" | "partial" | "all" | "empty";
+  status: "unprinted" | "none" | "partial" | "all" | "empty";
+  /** 已生成牌位单号的项目数 */
+  printed: number;
   placed: number;
   total: number;
 };

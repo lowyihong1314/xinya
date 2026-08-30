@@ -59,25 +59,26 @@ function logChipTone(action: string): CSSProperties {
   return { color: "var(--x-color-accent-strong)", borderColor: "var(--x-color-accent-border)" };
 }
 
-type ItemPlacement = {
-  board_id?: number | null;
-  board_name?: string | null;
-  location?: number | null;
-  position_label?: string | null;
+type ItemPrint = {
+  /** 牌位单号 = print_pdf.id，条码印在牌位上，查板时靠它找位置 */
+  pdfId: number | null;
+  boards: { board_id?: number | null; board_name?: string | null; position_label?: string | null }[];
 };
 
-/** 一个牌位项目的上板位置；同一张牌位单落在多块板时全部列出，按「板+位号」去重。 */
-function itemPlacements(item: YlpOrderItem): ItemPlacement[] {
-  const out: ItemPlacement[] = [];
-  const seen = new Set<string>();
+/** 一个牌位项目打印出来的牌位单；同一张单落在多块板时全部列出，按「板+位号」去重。 */
+function itemPrints(item: YlpOrderItem): ItemPrint[] {
+  const out: ItemPrint[] = [];
   for (const loc of item.item_location || []) {
+    const seen = new Set<string>();
+    const boards = [];
     for (const board of loc.boards || []) {
       if (!board || board.board_id == null) continue;
       const key = `${board.board_id}:${board.location ?? "x"}`;
       if (seen.has(key)) continue;
       seen.add(key);
-      out.push(board);
+      boards.push(board);
     }
+    out.push({ pdfId: loc.print_pdf?.id ?? null, boards });
   }
   return out;
 }
@@ -565,9 +566,10 @@ export function YlpOrderSummaryDrawer({
                       (grouped[key] || []).length,
                   ),
                 ];
-                const placements = itemPlacements(item);
+                const prints = itemPrints(item);
+                const onBoard = prints.some((print) => print.boards.length);
                 return (
-                  <div key={item.id} style={placements.length ? { ...styles.item, ...styles.itemOnBoard } : styles.item}>
+                  <div key={item.id} style={onBoard ? { ...styles.item, ...styles.itemOnBoard } : styles.item}>
                     <div style={styles.itemHead}>
                       <span style={styles.itemCode}>{item.code || "-"}</span>
                       <span style={styles.itemName}>{item.item_name || "未命名项目"}</span>
@@ -610,18 +612,30 @@ export function YlpOrderSummaryDrawer({
                         </div>
                       );
                     })}
-                    {placements.length ? (
-                      <div style={styles.boardRow}>
-                        <i className="fa-solid fa-thumbtack" aria-hidden="true" />
-                        {placements.map((place, index) => (
-                          <span key={`${place.board_id}-${place.location}-${index}`} style={styles.boardChip}>
-                            {place.board_name || `板 #${place.board_id}`}
-                            {place.position_label ? ` · ${place.position_label}` : ""}
+                    {prints.length ? (
+                      prints.map((print, printIndex) => (
+                        <div
+                          key={`${print.pdfId ?? "x"}-${printIndex}`}
+                          style={print.boards.length ? styles.boardRow : styles.boardRowPending}
+                        >
+                          <span style={styles.paiweiNoChip}>
+                            <i className="fa-solid fa-barcode" aria-hidden="true" /> 牌位号 #{print.pdfId ?? "?"}
                           </span>
-                        ))}
-                      </div>
+                          {print.boards.length ? (
+                            print.boards.map((board, index) => (
+                              <span key={`${board.board_id}-${index}`} style={styles.boardChip}>
+                                <i className="fa-solid fa-thumbtack" aria-hidden="true" />{" "}
+                                {board.board_name || `板 #${board.board_id}`}
+                                {board.position_label ? ` · ${board.position_label}` : ""}
+                              </span>
+                            ))
+                          ) : (
+                            <span style={styles.boardPendingText}>已打印 · 未上板</span>
+                          )}
+                        </div>
+                      ))
                     ) : (
-                      <div style={styles.boardRowEmpty}>未上板</div>
+                      <div style={styles.boardRowEmpty}>未打印</div>
                     )}
                   </div>
                 );
@@ -822,6 +836,25 @@ const styles: Record<string, CSSProperties> = {
     border: "1px solid rgba(21,128,61,0.28)",
     fontWeight: 700,
   },
+  boardRowPending: {
+    display: "flex",
+    alignItems: "center",
+    gap: "5px",
+    flexWrap: "wrap",
+    marginTop: "2px",
+    fontSize: "10.5px",
+    color: "var(--x-color-ink-muted)",
+  },
+  paiweiNoChip: {
+    padding: "1px 7px",
+    borderRadius: "999px",
+    background: "var(--x-color-panel)",
+    border: "1px solid var(--x-color-line)",
+    fontWeight: 800,
+    color: "var(--x-color-ink)",
+    letterSpacing: "0.02em",
+  },
+  boardPendingText: { fontWeight: 600 },
   boardRowEmpty: { marginTop: "2px", fontSize: "10.5px", color: "var(--x-color-ink-muted)" },
   itemHead: { display: "flex", gap: "5px", alignItems: "center" },
   itemCode: {
