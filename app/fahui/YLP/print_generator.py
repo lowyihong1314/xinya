@@ -1214,6 +1214,45 @@ def generate_paiwei(paiwei_type, fahui_data, point_data, source_name, need_barco
                     c.drawString(x_base + name_x, y_base + name_y - char_index * name_space, char)
                 return
 
+            # 几个人挂同一个关系（订单 576 的两位「亡大舅」）：关系只印一次，
+            # 横向居中在几栏名字上方，下面各自一栏写名字。
+            # 这是上面那个「同一个人挂多个关系」的镜像情况。
+            if (
+                len(people) > 1
+                and len(named_relations) == len(people)
+                and len(set(named_relations)) == 1
+            ):
+                relation = named_relations[0]
+                name_points = points[: len(people)]
+                # point.json 里 3 人以上的位置常常是同一个 x（等于没排版），
+                # 撞上就按字号自己均分成几栏，免得名字叠在一起。
+                if len({round(point[0], 3) for point in name_points}) < len(name_points):
+                    _ox, oy0, osize0, ospace0 = name_points[0]
+                    step = osize0 + max(2.0, osize0 * 0.2)
+                    first = -step * (len(name_points) - 1) / 2.0 - osize0 / 2.0
+                    name_points = [
+                        (first + index * step, oy0, osize0, ospace0) for index in range(len(name_points))
+                    ]
+
+                _rx, r_oy, r_size, r_space = name_points[0]
+                left = min(point[0] for point in name_points)
+                right = max(point[0] + point[2] for point in name_points)
+
+                c.setFillColor(colors.black)
+                c.setFont(font_name, r_size)
+                relation_x = x_base + (left + right - r_size) / 2.0
+                for char_index, char in enumerate(relation):
+                    c.drawString(relation_x, y_base + r_oy - char_index * r_space, char)
+
+                # 名字接在关系下面，中间空开一格 —— 和「关系 名字」原本那个空格一致
+                name_top = r_oy - (len(relation) + 1) * r_space
+                for index, name in enumerate(people[: len(name_points)]):
+                    ox, _oy, osize, ospace = name_points[index]
+                    c.setFont(font_name, osize)
+                    for char_index, char in enumerate(str(name)):
+                        c.drawString(x_base + ox, y_base + name_top - char_index * ospace, char)
+                return
+
             for index, name in enumerate(people[: len(points)]):
                 relation = relations[index] if index < len(relations) else ""
                 ox, oy, osize, ospace = points[index]
