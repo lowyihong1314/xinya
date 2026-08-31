@@ -12,6 +12,27 @@ import { PAIWEI_TEMPLATES } from "./intake/paiwei";
 import { connectFahuiSocket, fahuiOrderRoom } from "./socket";
 import type { YlpOrderDetail, YlpOrderItem } from "./types";
 
+type ItemBoard = { board_id?: number | null; board_name?: string | null; position_label?: string | null };
+
+/** 这个牌位项目现在贴在哪几块板的哪个位置。
+ *
+ *  一个项目可能印成多张牌位单，同一张单也可能在多块板上出现，所以全部摊平后
+ *  按「板 + 位号」去重。公开页只给板名和位号，打印号那类内部编号不露出去。 */
+function itemBoards(item: YlpOrderItem): ItemBoard[] {
+  const seen = new Set<string>();
+  const out: ItemBoard[] = [];
+  for (const location of item.item_location || []) {
+    for (const board of location.boards || []) {
+      if (!board || board.board_id == null) continue;
+      const key = `${board.board_id}:${board.position_label ?? "x"}`;
+      if (seen.has(key)) continue;
+      seen.add(key);
+      out.push(board);
+    }
+  }
+  return out;
+}
+
 function itemTitle(item: YlpOrderItem): string {
   if (item.item_name) {
     return item.item_name;
@@ -149,15 +170,33 @@ export function SharedOrderPage() {
               </div>
               {items.length ? (
                 <div style={styles.itemList}>
-                  {items.map((item) => (
-                    <div key={item.id} style={styles.itemCard}>
-                      <div style={styles.rowBetween}>
-                        <span style={styles.itemName}>{itemTitle(item)}</span>
-                        <span style={styles.itemPrice}>RM {item.price ?? 0}</span>
+                  {items.map((item) => {
+                    const boards = itemBoards(item);
+                    return (
+                      <div key={item.id} style={styles.itemCard}>
+                        <div style={styles.rowBetween}>
+                          <span style={styles.itemName}>{itemTitle(item)}</span>
+                          <span style={styles.itemPrice}>RM {item.price ?? 0}</span>
+                        </div>
+                        <p style={styles.itemSummary}>{summarizeItem(item) || "—"}</p>
+                        {/* 板位：功德主到了现场靠这行去板上找自己那张牌位。
+                            还没贴上去的说清楚是「还没安排」，别让人白找一趟。 */}
+                        {boards.length ? (
+                          <div style={styles.boardRow}>
+                            {boards.map((board, index) => (
+                              <span key={`${board.board_id}-${index}`} style={styles.boardChip}>
+                                <i className="fa-solid fa-thumbtack" aria-hidden="true" />{" "}
+                                {board.board_name || `板 #${board.board_id}`}
+                                {board.position_label ? ` · ${board.position_label}` : ""}
+                              </span>
+                            ))}
+                          </div>
+                        ) : (
+                          <p style={styles.boardPending}>板位尚未安排</p>
+                        )}
                       </div>
-                      <p style={styles.itemSummary}>{summarizeItem(item) || "—"}</p>
-                    </div>
-                  ))}
+                    );
+                  })}
                 </div>
               ) : (
                 <p style={styles.emptyHint}>暂无牌位内容</p>
@@ -344,6 +383,26 @@ const styles: Record<string, CSSProperties> = {
     lineHeight: 1.6,
     color: "var(--x-color-ink-muted)",
     whiteSpace: "pre-wrap",
+  },
+  boardRow: {
+    marginTop: "8px",
+    display: "flex",
+    flexWrap: "wrap" as const,
+    gap: "6px",
+  },
+  boardChip: {
+    padding: "2px 9px",
+    borderRadius: "999px",
+    background: "var(--x-color-panel)",
+    border: "1px solid rgba(21, 128, 61, 0.28)",
+    color: "var(--x-color-success)",
+    fontSize: "12px",
+    fontWeight: 700,
+  },
+  boardPending: {
+    margin: "8px 0 0",
+    fontSize: "12px",
+    color: "var(--x-color-ink-muted)",
   },
   emptyHint: {
     margin: "12px 0 0",
