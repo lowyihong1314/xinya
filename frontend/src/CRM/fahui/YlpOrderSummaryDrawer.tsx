@@ -328,17 +328,21 @@ export function YlpOrderSummaryDrawer({
               : "可直接改资料与项目，复杂操作请进订单详情"
         }
         actions={
+          // 手机上标题栏很窄，按钮一律只留 icon（文字进 aria-label / title，
+          // 读屏和长按提示都还在）；桌面维持文字，一眼看得懂。
           <>
             {previewOpen || logsOpen ? (
               <button
                 type="button"
-                style={drawerStyles.button}
+                style={isMobile ? iconOnlyButtonStyle : drawerStyles.button}
+                title="返回摘要"
+                aria-label="返回摘要"
                 onClick={() => {
                   setPreviewOpen(false);
                   setLogsOpen(false);
                 }}
               >
-                ← 返回
+                {isMobile ? <i className="fa-solid fa-arrow-left" aria-hidden="true" /> : "← 返回"}
               </button>
             ) : (
               <>
@@ -351,13 +355,27 @@ export function YlpOrderSummaryDrawer({
                 >
                   <i className="fa-solid fa-clock-rotate-left" aria-hidden="true" />
                 </button>
-                <button type="button" style={drawerStyles.button} onClick={() => onOpenDetail(orderId)}>
-                  订单详情
+                <button
+                  type="button"
+                  style={isMobile ? iconOnlyButtonStyle : drawerStyles.button}
+                  title="订单详情"
+                  aria-label="订单详情"
+                  onClick={() => onOpenDetail(orderId)}
+                >
+                  {isMobile ? <i className="fa-solid fa-pen-to-square" aria-hidden="true" /> : "订单详情"}
                 </button>
               </>
             )}
-            <button type="button" style={drawerStyles.buttonMuted} onClick={onClose}>
-              关闭
+            {/* 关掉抽屉 = 回到订单列表，所以叫「返回」不叫「关闭」。
+                手机上和上面那颗「返回摘要」同时在，用 ✕ 区分「退出整只抽屉」。 */}
+            <button
+              type="button"
+              style={isMobile ? iconOnlyButtonStyle : drawerStyles.buttonMuted}
+              title="返回"
+              aria-label="返回"
+              onClick={onClose}
+            >
+              {isMobile ? <i className="fa-solid fa-xmark" aria-hidden="true" /> : "返回"}
             </button>
           </>
         }

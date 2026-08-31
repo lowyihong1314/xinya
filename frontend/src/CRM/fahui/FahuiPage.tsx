@@ -771,9 +771,12 @@ export function FahuiPage() {
       setYlpOrders(items);
       setYlpPagination(response.data?.pagination || null);
 
-      // 进来先把第一条订单的摘要抽屉带出来，省得为了看一张订单还要再点一下。
+      // 桌面端进来先把第一条订单的摘要抽屉带出来，省得为了看一张订单还要再点一下。
       // 用 版本|搜索词|页码|排序 做键：换了任意一个才重新自动选，
       // 所以手动关掉抽屉之后不会被下一次刷新（例如 socket 推的新订单）又顶开。
+      //
+      // 手机上不自动开：抽屉在手机是整幅宽、直接排在列表下面的，自动开等于
+      // 一进页面就被顶进某张订单，还得先退出来才看得到列表。要看哪张自己点。
       const autoKey = `${ylpVersion}|${ylpQuery}|${ylpPage}|${ylpSort?.key || ""}${ylpSort?.dir || ""}`;
       const pending = ylpPendingSelectRef.current;
       ylpPendingSelectRef.current = null;
@@ -782,7 +785,7 @@ export function FahuiPage() {
           // 键盘翻过来的：往下翻落在第一条，往上翻落在最后一条，接着按方向键能继续走
           ylpAutoOpenRef.current = autoKey;
           openYlpRowDetail(pending === "last" ? items[items.length - 1].id : items[0].id);
-        } else if (ylpAutoOpenRef.current !== autoKey) {
+        } else if (!isMobile && ylpAutoOpenRef.current !== autoKey) {
           ylpAutoOpenRef.current = autoKey;
           openYlpRowDetail(items[0].id);
         }
@@ -2679,11 +2682,24 @@ export function FahuiPage() {
             hint="在此模拟手机端直接测试填写流程"
             actions={
               <>
-                <a href="/#/ylp-registration" target="_blank" rel="noreferrer" style={styles.itemEditButton}>
-                  新标签打开
+                <a
+                  href="/#/ylp-registration"
+                  target="_blank"
+                  rel="noreferrer"
+                  style={styles.itemEditButton}
+                  title="新标签打开"
+                  aria-label="新标签打开"
+                >
+                  {isMobile ? <i className="fa-solid fa-arrow-up-right-from-square" aria-hidden="true" /> : "新标签打开"}
                 </a>
-                <button type="button" style={styles.addItemCancel} onClick={() => setIntakeDrawerOpen(false)}>
-                  关闭
+                <button
+                  type="button"
+                  style={styles.addItemCancel}
+                  title="返回"
+                  aria-label="返回"
+                  onClick={() => setIntakeDrawerOpen(false)}
+                >
+                  {isMobile ? <i className="fa-solid fa-xmark" aria-hidden="true" /> : "返回"}
                 </button>
               </>
             }
@@ -2724,8 +2740,14 @@ export function FahuiPage() {
             title={`订单 #${ylpRowPreview.orderId} · 牌位打印预览`}
             hint="与订单详情的「预览牌位」是同一份打印结果"
             actions={
-              <button type="button" style={styles.addItemCancel} onClick={closeYlpRowPreview}>
-                关闭
+              <button
+                type="button"
+                style={styles.addItemCancel}
+                title="返回"
+                aria-label="返回"
+                onClick={closeYlpRowPreview}
+              >
+                {isMobile ? <i className="fa-solid fa-xmark" aria-hidden="true" /> : "返回"}
               </button>
             }
           >
