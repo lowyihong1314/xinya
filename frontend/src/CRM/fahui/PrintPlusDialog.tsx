@@ -10,6 +10,9 @@ import { orderStatusLabel } from "./orderStatus";
 
 // 「打印牌位 PLUS」的弹窗。四种取件方式 + 两道过滤：
 //
+// 不分牌位类型：超大／大／小／冤亲债主永远一次印完合成一份 PDF（后端 template="all"）。
+// 以前顶部有个类型下拉，实际用法从来都是全部一起印，挑类型只会漏印。
+//
 //   整个版本   —— 默认：这个版本下全部订单，状态一概不筛（草稿 / 已取消都在里面）
 //   按勾选     —— 列表里勾中的订单（老行为）
 //   按订单单号 —— 直接贴一串订单号，跳过勾选
@@ -22,22 +25,16 @@ import { orderStatusLabel } from "./orderStatus";
 // 拿到的 item 清单原样提交回去打印，弹窗上看到几张就印几张。
 
 export type PrintPlusResult = {
-  /** 实际要打印的牌位类型。没指定类型时是 "all"（三种一起印）——
-   *  必须由弹窗回传，调用方那边的 template 可能是 null，直接发给后端会被判「无效的牌位类型」。 */
-  template: string;
   orderIds: number[];
   itemIds: number[];
   pdfIds: number[];
   needBarcode: boolean;
 };
 
-export const PRINT_TEMPLATE_LABELS: Record<string, string> = {
-  paiwei_1: "大牌位",
-  paiwei_5: "小牌位",
-  paiwei_10: "冤亲债主",
-  // 不选类型：后端把三种牌位一次印完合成一份 PDF
-  all: "牌位",
-};
+/** 后端约定的「不分类型，全部一起印」。 */
+export const PRINT_ALL_TEMPLATE = "all";
+
+const TEMPLATE_LABEL = "牌位";
 
 type Mode = "version" | "selection" | "orders" | "pdfs";
 
@@ -48,8 +45,7 @@ const MODE_TABS: { key: Mode; label: string }[] = [
   { key: "pdfs", label: "按牌位单号" },
 ];
 
-// 直接输单号的两种方式：不依赖列表勾选，也不用先挑牌位类型。
-// 工具栏那个常驻按钮进来就只有这两个。
+// 直接输单号的两种方式：不依赖列表勾选。工具栏那个常驻按钮进来就只有这两个。
 const ID_ONLY_MODES: Mode[] = ["orders", "pdfs"];
 
 /** 支持逗号 / 空格 / 换行 / 顿号分隔，以及 1100-1105 这种区间；#123 的井号自动去掉。 */
@@ -135,20 +131,17 @@ function statusTone(status: string): CSSProperties {
 }
 
 function PrintPlusDialog({
-  template,
+  idOnly,
   version,
   selectedOrderIds,
   onResolve,
 }: {
-  /** 传了就只印这一种；不传（工具栏常驻入口）= 三种一起印，也不给「整个版本 / 按勾选」 */
-  template: string | null;
+  /** 工具栏常驻入口没有列表上下文，「整个版本 / 按勾选」无从谈起，只能按单号来 */
+  idOnly: boolean;
   version: string;
   selectedOrderIds: number[];
   onResolve: (result: PrintPlusResult | null) => void;
 }) {
-  // 没指定类型时只能按单号来 —— 没有列表上下文，「整个版本 / 按勾选」无从谈起
-  const idOnly = !template;
-  const effectiveTemplate = template || "all";
   const tabs = useMemo(
     () => (idOnly ? MODE_TABS.filter((tab) => ID_ONLY_MODES.includes(tab.key)) : MODE_TABS),
     [idOnly],
@@ -171,8 +164,6 @@ function PrintPlusDialog({
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
 
-  const templateLabel = PRINT_TEMPLATE_LABELS[effectiveTemplate] || effectiveTemplate;
-
   const parsedOrders = useMemo(() => parseIdInput(orderInput), [orderInput]);
   const parsedPdfs = useMemo(() => parseIdInput(pdfInput), [pdfInput]);
 
@@ -194,7 +185,7 @@ function PrintPlusDialog({
     setError("");
     try {
       const res = await fetchYlpPrintScope({
-        template: effectiveTemplate,
+        template: PRINT_ALL_TEMPLATE,
         version: queryVersion,
         orderIds: queryOrderIds,
         pdfIds: queryPdfIds,
@@ -209,7 +200,7 @@ function PrintPlusDialog({
       setLoading(false);
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [queryKey, effectiveTemplate]);
+  }, [queryKey]);
 
   useEffect(() => {
     // 手打单号时防抖，别每敲一个数字就发一次请求。
@@ -292,11 +283,10 @@ function PrintPlusDialog({
 
   function finish(needBarcode: boolean) {
     if (mode === "pdfs") {
-      onResolve({ template: effectiveTemplate, orderIds: [], itemIds: [], pdfIds: reprintPdfIds, needBarcode });
+      onResolve({ orderIds: [], itemIds: [], pdfIds: reprintPdfIds, needBarcode });
       return;
     }
     onResolve({
-      template: effectiveTemplate,
       orderIds: pickedOrderIds,
       itemIds: picked.map((item) => item.item_id),
       pdfIds: [],
@@ -319,13 +309,13 @@ function PrintPlusDialog({
         onClick={(event) => event.stopPropagation()}
       >
         <header style={styles.header}>
-          <h3 style={styles.title}>{`打印${templateLabel}`}</h3>
+          <h3 style={styles.title}>打印牌位</h3>
           <p style={styles.message}>
             {mode === "pdfs"
               ? "按牌位上的条码号重印，沿用原来的单号，不会重新发号。"
               : idOnly
-                ? "贴订单号就能印，不用先在列表里勾。大／小牌位和冤亲债主会一起印成一份。"
-                : "默认全部状态都印。不想印的（例如已取消）在下面取消勾选，张数会跟着变。"}
+                ? "贴订单号就能印，不用先在列表里勾。各类牌位会一起印成一份。"
+                : "各类牌位一起印。默认全部状态都印，不想印的（例如已取消）在下面取消勾选，张数会跟着变。"}
           </p>
         </header>
 
@@ -382,7 +372,7 @@ function PrintPlusDialog({
             {/* 只在这个 tab 且开着的时候才挂摄像头，切走会自动关掉 */}
             {mode === "pdfs" && scannerOn ? (
               <div style={styles.scannerBox} className="ylp-print-plus-scanner">
-                <CodeScanner active onCode={addScannedCode} height="210px" />
+                <CodeScanner active onCode={addScannedCode} height="260px" />
                 <div style={styles.justAdded}>
                   {justAdded.length ? (
                     justAdded.map((one) => (
@@ -460,7 +450,7 @@ function PrintPlusDialog({
         ) : null}
 
         {emptyOrderIds.length ? (
-          <p style={styles.warn}>{`这些订单号没有${templateLabel}（或不存在）：${emptyOrderIds.join(", ")}`}</p>
+          <p style={styles.warn}>{`这些订单号没有${TEMPLATE_LABEL}（或不存在）：${emptyOrderIds.join(", ")}`}</p>
         ) : null}
         {unknownPdfIds.length ? (
           <p style={styles.warn}>{`查无这些牌位单号：${unknownPdfIds.join(", ")}`}</p>
@@ -476,8 +466,8 @@ function PrintPlusDialog({
             ? "统计中…"
             : sheets
               ? mode === "pdfs"
-                ? `将重印 ${reprintPdfIds.length} 个单号 · 共 ${sheets} 张${templateLabel}`
-                : `将打印 ${pickedOrderIds.length} 张订单里的 ${sheets} 张${templateLabel}`
+                ? `将重印 ${reprintPdfIds.length} 个单号 · 共 ${sheets} 张${TEMPLATE_LABEL}`
+                : `将打印 ${pickedOrderIds.length} 张订单里的 ${sheets} 张${TEMPLATE_LABEL}`
               : "当前范围没有可打印的牌位"}
         </p>
 
@@ -512,13 +502,13 @@ function PrintPlusDialog({
 }
 
 /** 点遮罩 / 取消都返回 null，调用方据此中止打印。 */
-export function showPrintPlusDialog(selectedOrderIds: number[], template: string | null, version: string) {
+export function showPrintPlusDialog(selectedOrderIds: number[], version: string, idOnly: boolean) {
   ensureDesignTokens();
 
   return new Promise<PrintPlusResult | null>((resolve) => {
     openOverlay((close) => (
       <PrintPlusDialog
-        template={template}
+        idOnly={idOnly}
         version={version}
         selectedOrderIds={selectedOrderIds}
         onResolve={(result) => {

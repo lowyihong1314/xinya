@@ -628,6 +628,21 @@ export async function listYlpOrdersForExport(version: string, value = "") {
   return parseJson<{ status?: string; data?: { items: YlpOrderExportRow[]; total: number } }>(response);
 }
 
+/** 牌位清单 PDF（按类型分段的核对表）。orderIds 为空 = 整个版本。 */
+export async function exportYlpOrdersPdf(version: string, value = "", orderIds: number[] = []) {
+  const response = await apiFetch("/api/fahui_router/orders/export-pdf", {
+    method: "POST",
+    credentials: "include",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ version, value, order_ids: orderIds }),
+  });
+  if (!response.ok) {
+    const payload = (await response.json().catch(() => ({}))) as { message?: string; error?: string };
+    throw new Error(payload.error || payload.message || "导出 PDF 失败");
+  }
+  return response.blob();
+}
+
 export async function printYlpPaiweiByTemplate(orderIds: number[], template: string) {
   const response = await apiFetch("/api/print_paiwei/preview/by-template", {
     method: "POST",

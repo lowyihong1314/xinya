@@ -1,6 +1,6 @@
 from datetime import datetime
 
-from flask import Blueprint, jsonify, request
+from flask import Blueprint, jsonify, request, send_file
 from flask_login import current_user, login_required
 
 from app.form.permissions import permission_required_any
@@ -23,6 +23,7 @@ from .services import (
     list_orders_for_export,
     search_orders,
 )
+from .export_pdf import build_orders_pdf
 from .raw_docs import (
     link_raw_docs_to_orders,
     list_raw_docs,
@@ -83,6 +84,39 @@ def export_orders_route():
     except ValueError as exc:
         return jsonify({"status": "error", "message": str(exc)}), 400
     return jsonify({"status": "success", "data": result})
+
+
+@fahui_bp.route("/orders/export-pdf", methods=["POST"])
+@permission_required_any(*FAHUI_READ_PERMISSION_NAMES)
+def export_orders_pdf_route():
+    """牌位清单 PDF：和 /orders/export 同一份数据，只是排成按类型分段的表格。
+
+    order_ids 为空 = 整个版本（配合搜索条件），传了就只印这几张单，
+    对上列表页「勾选几条 / 全选所有页」两种选法。
+    """
+    payload = _json_payload()
+    version = payload.get("version")
+    if version is None:
+        return jsonify({"status": "error", "message": "version is required"}), 400
+
+    try:
+        result = list_orders_for_export(version=version, value=str(payload.get("value") or ""))
+    except ValueError as exc:
+        return jsonify({"status": "error", "message": str(exc)}), 400
+
+    orders = result.get("items") or []
+    wanted = {int(oid) for oid in (payload.get("order_ids") or []) if str(oid).isdigit()}
+    if wanted:
+        orders = [order for order in orders if order.get("id") in wanted]
+
+    version_label = str(version)
+    output = build_orders_pdf(orders, version=version_label)
+    return send_file(
+        output,
+        mimetype="application/pdf",
+        as_attachment=True,
+        download_name=f"牌位清单_{version_label}.pdf",
+    )
 
 
 @fahui_bp.route("/orders/<int:order_id>/share-link", methods=["POST"])

@@ -36,6 +36,7 @@ import {
   downloadYlpPaiweiJob,
   getYlpPaiweiJobStatus,
   listYlpOrdersForExport,
+  exportYlpOrdersPdf,
   listYlpRelationOptions,
   startYlpPaiweiJob,
   withdrawPayment,
@@ -53,7 +54,7 @@ import { YlpItemModal } from "./YlpItemModal";
 import { YlpPaymentModal } from "./YlpPaymentModal";
 import { YlpOrderSummaryDrawer } from "./YlpOrderSummaryDrawer";
 import { YlpAnalyticsPanel } from "./YlpAnalyticsPanel";
-import { showPrintPlusDialog } from "./PrintPlusDialog";
+import { PRINT_ALL_TEMPLATE, showPrintPlusDialog } from "./PrintPlusDialog";
 import { PaymentProofButton } from "./PaymentProof";
 import { PaiweiEditorModal } from "./intake/PaiweiEditorModal";
 import { paiweiFieldLabel } from "./intake/paiwei";
@@ -423,7 +424,6 @@ export function FahuiPage() {
   const [ylpSelected, setYlpSelected] = useState<number[]>([]);
   const [ylpSelectAllPages, setYlpSelectAllPages] = useState(false);
   const [ylpBulkBusy, setYlpBulkBusy] = useState(false);
-  const [printPlusMenuOpen, setPrintPlusMenuOpen] = useState(false);
   const [ylpRowMenu, setYlpRowMenu] = useState<{ orderId: number; x: number; y: number } | null>(null);
   const [ylpRowBusy, setYlpRowBusy] = useState(false);
   const [ylpRowPreview, setYlpRowPreview] = useState<{ orderId: number } | null>(null);
@@ -1414,7 +1414,7 @@ export function FahuiPage() {
             <button
               type="button"
               style={styles.secondaryActionCompact}
-              onClick={() => void handleYlpPrintPlus(null)}
+              onClick={() => void handleYlpPrintPlus(true)}
             >
               打印牌位 PLUS
             </button>
@@ -1671,6 +1671,25 @@ export function FahuiPage() {
     }
   }
 
+  /** 牌位清单 PDF：后端排版，按「历代祖先 / 亡灵 / 冤亲债主」三段列表，给法师核对念诵用。 */
+  async function handleYlpExportPdf() {
+    setYlpBulkBusy(true);
+    try {
+      // 全选所有页时不传单号，交给后端按版本 + 搜索条件自己捞，省一趟整版 JSON。
+      const orderIds = ylpSelectAllPages ? [] : ylpSelected;
+      if (!ylpSelectAllPages && !orderIds.length) {
+        show_alert("error", "没有可导出的订单");
+        return;
+      }
+      const blob = await exportYlpOrdersPdf(ylpVersion, ylpQuery, orderIds);
+      await downloadBlobOrShare(blob, `牌位清单_${ylpVersion}.pdf`, { isMobile });
+    } catch (exportError) {
+      show_alert("error", exportError instanceof Error ? exportError.message : "导出 PDF 失败");
+    } finally {
+      setYlpBulkBusy(false);
+    }
+  }
+
   function stopPaiweiPoll() {
     if (paiweiPollRef.current !== null) {
       window.clearTimeout(paiweiPollRef.current);
@@ -1680,13 +1699,13 @@ export function FahuiPage() {
 
   useEffect(() => stopPaiweiPoll, []);
 
-  async function downloadPaiweiJobResult(jobId: string, template: string) {
+  async function downloadPaiweiJobResult(jobId: string) {
     try {
       const blob = await downloadYlpPaiweiJob(jobId);
       const url = URL.createObjectURL(blob);
       const anchor = document.createElement("a");
       anchor.href = url;
-      anchor.download = `牌位_${template}_${jobId.slice(0, 8)}.pdf`;
+      anchor.download = `牌位_${jobId.slice(0, 8)}.pdf`;
       document.body.appendChild(anchor);
       anchor.click();
       anchor.remove();
@@ -1698,11 +1717,11 @@ export function FahuiPage() {
     }
   }
 
-  /** template 传 null = 工具栏那个常驻入口：不挑类型、也不看列表勾选，只按单号打印。 */
-  async function handleYlpPrintPlus(template: string | null) {
-    setPrintPlusMenuOpen(false);
+  /** idOnly = 工具栏那个常驻入口：不看列表勾选，只按单号打印。
+   *  牌位类型不再挑，永远各类一起印（PRINT_ALL_TEMPLATE）。 */
+  async function handleYlpPrintPlus(idOnly: boolean) {
     let selectedIds: number[] = [];
-    if (template) {
+    if (!idOnly) {
       setYlpBulkBusy(true);
       try {
         selectedIds = await resolveYlpSelectedIds();
@@ -1715,15 +1734,13 @@ export function FahuiPage() {
     }
     // 弹窗里挑范围（勾选 / 订单单号 / 牌位单号）+ 状态过滤 + 要不要跳过已注册的，
     // 张数由后端 /scope 算好，确认后原样提交回去。点遮罩 / 取消都返回 null，当作放弃打印。
-    const choice = await showPrintPlusDialog(selectedIds, template, ylpVersion);
+    const choice = await showPrintPlusDialog(selectedIds, ylpVersion, idOnly);
     if (!choice) {
       return;
     }
     const ids = choice.orderIds;
     const needBarcode = choice.needBarcode;
-    // 用弹窗回传的类型，不是传进去的那个 —— 工具栏入口传的是 null，
-    // 直接发给后端会被判「无效的牌位类型」
-    const jobTemplate = choice.template;
+    const jobTemplate = PRINT_ALL_TEMPLATE;
     stopPaiweiPoll();
     setPaiweiJob({ percent: 0, status: "running" });
     try {
@@ -1745,7 +1762,7 @@ export function FahuiPage() {
           const percent = Number(data.progress || 0);
           if (jobStatus === "done") {
             setPaiweiJob({ percent: 100, status: "done" });
-            void downloadPaiweiJobResult(jobId, jobTemplate);
+            void downloadPaiweiJobResult(jobId);
             return;
           }
           if (jobStatus === "error") {
@@ -2076,6 +2093,14 @@ export function FahuiPage() {
               >
                 导出 xlsx
               </button>
+              <button
+                type="button"
+                style={{ ...styles.bulkButton, ...(ylpBulkBusy ? styles.pageButtonDisabled : null) }}
+                disabled={ylpBulkBusy}
+                onClick={() => void handleYlpExportPdf()}
+              >
+                导出 PDF
+              </button>
               {!isCurrentYlpVersion(ylpVersion) ? (
                 <button
                   type="button"
@@ -2096,32 +2121,14 @@ export function FahuiPage() {
                   {ylpVersion === "DELETE" ? "彻底删除" : "批量移除"}
                 </button>
               ) : null}
-              <div style={styles.printMenuWrap}>
-                <button
-                  type="button"
-                  style={{ ...styles.bulkButtonPrimary, ...(ylpBulkBusy ? styles.pageButtonDisabled : null) }}
-                  disabled={ylpBulkBusy}
-                  onClick={() => setPrintPlusMenuOpen((open) => !open)}
-                >
-                  打印牌位 PLUS ▾
-                </button>
-                {printPlusMenuOpen ? (
-                  <div style={styles.printMenu}>
-                    <button type="button" style={styles.printMenuItem} onClick={() => void handleYlpPrintPlus("paiwei_SS")}>
-                      超大牌位
-                    </button>
-                    <button type="button" style={styles.printMenuItem} onClick={() => void handleYlpPrintPlus("paiwei_1")}>
-                      大牌位
-                    </button>
-                    <button type="button" style={styles.printMenuItem} onClick={() => void handleYlpPrintPlus("paiwei_5")}>
-                      小牌位
-                    </button>
-                    <button type="button" style={styles.printMenuItem} onClick={() => void handleYlpPrintPlus("paiwei_10")}>
-                      冤亲债主
-                    </button>
-                  </div>
-                ) : null}
-              </div>
+              <button
+                type="button"
+                style={{ ...styles.bulkButtonPrimary, ...(ylpBulkBusy ? styles.pageButtonDisabled : null) }}
+                disabled={ylpBulkBusy}
+                onClick={() => void handleYlpPrintPlus(false)}
+              >
+                打印牌位 PLUS
+              </button>
               <button type="button" style={styles.bulkCancel} onClick={clearYlpSelection}>
                 取消
               </button>
@@ -4018,32 +4025,6 @@ const styles = {
     cursor: "not-allowed",
   },
   // 抽屉容器的行高是 auto，height:100% 会塌成 0，所以按视窗高度减掉导航条和抽屉自身的边距给个实数。
-  printMenuWrap: { position: "relative" as const },
-  printMenu: {
-    position: "absolute" as const,
-    bottom: "calc(100% + 8px)",
-    left: "50%",
-    transform: "translateX(-50%)",
-    display: "flex",
-    flexDirection: "column" as const,
-    minWidth: "132px",
-    padding: "6px",
-    borderRadius: "12px",
-    background: "var(--x-color-panel)",
-    border: "1px solid var(--x-color-line)",
-    boxShadow: "0 18px 44px rgba(15,23,42,0.25)",
-  },
-  printMenuItem: {
-    padding: "9px 12px",
-    borderRadius: "8px",
-    border: "none",
-    background: "transparent",
-    color: "var(--x-color-ink)",
-    fontWeight: 600,
-    fontSize: "13px",
-    textAlign: "left" as const,
-    cursor: "pointer",
-  },
   dangerAction: {
     padding: "7px 10px",
     borderRadius: "6px",
