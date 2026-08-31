@@ -1,3 +1,4 @@
+import { useEffect } from "react";
 import type { CSSProperties, ReactNode } from "react";
 
 // 法会工作区那只右侧抽屉（原 ylp-intake-drawer）：牌位填写页预览、牌位打印预览都用它，
@@ -5,6 +6,16 @@ import type { CSSProperties, ReactNode } from "react";
 export const INTAKE_DRAWER_CSS = `
 @keyframes ylpIntakeSlideIn { from { transform: translateX(100%); } to { transform: translateX(0); } }
 .ylp-intake-drawer { animation: ylpIntakeSlideIn 0.28s cubic-bezier(0.22, 1, 0.36, 1); }
+/* 手机上抽屉是盖住整屏的一「页」，标题栏跟着钉住，划到多下面都点得到返回 */
+.ylp-intake-drawer-sheet > .ylp-drawer-header {
+  position: sticky;
+  top: -16px;
+  z-index: 1;
+  margin: -16px -16px 0;
+  padding: 16px;
+  background: var(--x-color-panel);
+  border-bottom: 1px solid var(--x-color-line-soft, var(--x-color-line));
+}
 `;
 
 export function YlpDrawer({
@@ -26,10 +37,30 @@ export function YlpDrawer({
   actions?: ReactNode;
   children: ReactNode;
 }) {
+  // 手机上抽屉是盖住整屏的，底下那张列表不该还能跟着滚 —— 不锁的话
+  // 在抽屉里滑到底会把下面的列表带着走，退出来发现位置全变了。
+  useEffect(() => {
+    if (!isMobile) {
+      return;
+    }
+    const previous = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    return () => {
+      document.body.style.overflow = previous;
+    };
+  }, [isMobile]);
+
   return (
     <aside
       style={drawerStyles.panel(isMobile, navbarHeight)}
-      className={className ? `ylp-intake-drawer ${className}` : "ylp-intake-drawer"}
+      className={[
+        "ylp-intake-drawer",
+        // 手机版才是整屏的「页」，桌面仍是右侧那条常驻栏
+        isMobile ? "ylp-intake-drawer-sheet" : "",
+        className || "",
+      ]
+        .filter(Boolean)
+        .join(" ")}
     >
       <style>{INTAKE_DRAWER_CSS}</style>
       <header style={drawerStyles.header} className="ylp-drawer-header">
@@ -45,24 +76,51 @@ export function YlpDrawer({
 }
 
 export const drawerStyles = {
-  panel: (isMobile: boolean, navbarHeight: number): CSSProperties => ({
-    width: isMobile ? "100%" : "min(400px, 42vw)",
-    flexShrink: 0,
-    position: isMobile ? "static" : "sticky",
-    top: `${navbarHeight + 12}px`,
-    alignSelf: "flex-start",
-    maxHeight: isMobile ? "none" : `calc(100vh - ${navbarHeight + 24}px)`,
-    overflowY: "auto",
-    display: "grid",
-    gridTemplateRows: "auto auto",
-    gap: "12px",
-    padding: "16px",
-    boxSizing: "border-box",
-    background: "var(--x-color-panel)",
-    border: "1px solid var(--x-color-line)",
-    borderRadius: "16px",
-    boxShadow: "0 24px 60px var(--x-color-shadow)",
-  }),
+  // 手机和桌面是两种东西，别硬塞进一套三元里：
+  //   桌面 —— 右侧一条常驻栏，跟列表并排，sticky 跟着滚
+  //   手机 —— 点卡片后盖住整屏的一「页」，只让开顶部导航，退出靠标题栏那颗返回
+  panel: (isMobile: boolean, navbarHeight: number): CSSProperties =>
+    isMobile
+      ? {
+          position: "fixed",
+          top: `${navbarHeight}px`,
+          left: 0,
+          right: 0,
+          bottom: 0,
+          zIndex: 60,
+          width: "100%",
+          overflowY: "auto",
+          // 抽屉滑到底不要把底下的页面也带着滚
+          overscrollBehavior: "contain",
+          display: "grid",
+          gridTemplateRows: "auto 1fr",
+          alignContent: "start",
+          gap: "12px",
+          padding: "16px",
+          paddingBottom: "max(16px, env(safe-area-inset-bottom))",
+          boxSizing: "border-box",
+          background: "var(--x-color-panel)",
+          border: "none",
+          borderRadius: 0,
+        }
+      : {
+          width: "min(400px, 42vw)",
+          flexShrink: 0,
+          position: "sticky",
+          top: `${navbarHeight + 12}px`,
+          alignSelf: "flex-start",
+          maxHeight: `calc(100vh - ${navbarHeight + 24}px)`,
+          overflowY: "auto",
+          display: "grid",
+          gridTemplateRows: "auto auto",
+          gap: "12px",
+          padding: "16px",
+          boxSizing: "border-box",
+          background: "var(--x-color-panel)",
+          border: "1px solid var(--x-color-line)",
+          borderRadius: "16px",
+          boxShadow: "0 24px 60px var(--x-color-shadow)",
+        },
   header: {
     display: "flex",
     justifyContent: "space-between",
