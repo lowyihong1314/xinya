@@ -112,6 +112,20 @@ export function ensureDesignTokens() {
       --x-font-serif: ${designTokens.fonts.serif};
       --x-font-mono: ${designTokens.fonts.mono};
     }
+
+    /* iOS Safari 会对 font-size 小于 16px 的输入框，在聚焦时自动放大整页，
+       而且收起键盘后不会自己复原 —— 表现就是「一点输入框画面往下跑，
+       收键盘也回不去」。触屏设备上把表单控件统一抬到 16px，从源头绕开。
+
+       页面里的输入框几乎都是内联 style 写死的字号，普通选择器压不过，
+       这里只能用 !important。 */
+    @media (hover: none) and (pointer: coarse) {
+      input:not([type="checkbox"]):not([type="radio"]):not([type="range"]),
+      select,
+      textarea {
+        font-size: 16px !important;
+      }
+    }
   `;
   document.head.appendChild(style);
 }

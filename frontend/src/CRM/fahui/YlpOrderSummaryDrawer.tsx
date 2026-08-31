@@ -2,6 +2,8 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import type { CSSProperties } from "react";
 
 import { downloadBlobOrShare, copyTextToClipboard } from "../../js/browserActions";
+import { ShareLinkQrModal } from "./ShareLinkQrModal";
+import type { ShareLinkInfo } from "./ShareLinkQrModal";
 import { showConfirmDialog } from "../../js/dialogs";
 import { correctPhoneInputMY } from "../../js/phone";
 import { show_alert } from "../../js/show_alert";
@@ -107,6 +109,8 @@ export function YlpOrderSummaryDrawer({
   const [itemModal, setItemModal] = useState<{ item: YlpOrderItem | null } | null>(null);
   // 预览牌位：整只抽屉切成预览，顶部换成「返回」（图由 PaiweiPreviewGrid 自己拉）
   const [previewOpen, setPreviewOpen] = useState(false);
+  // 公开链接生成后弹二维码；null = 没在弹
+  const [shareLink, setShareLink] = useState<ShareLinkInfo | null>(null);
   // 改动记录：右上角小图标切进来，和预览一样是整只抽屉换内容
   const [logsOpen, setLogsOpen] = useState(false);
   const [logs, setLogs] = useState<YlpOrderLog[]>([]);
@@ -311,6 +315,8 @@ export function YlpOrderSummaryDrawer({
       const days = Math.max(1, Math.round((res.expires_in || 0) / 86400));
       await copyTextToClipboard(url);
       show_alert("success", `公开链接已复制（${days} 天内有效）`);
+      // 当面给功德主看的时候剪贴板没用，扫码最快 —— 复制之后顺手把码摆出来
+      setShareLink({ url, days });
     });
 
   return (
@@ -696,6 +702,8 @@ export function YlpOrderSummaryDrawer({
           }}
         />
       ) : null}
+
+      {shareLink ? <ShareLinkQrModal info={shareLink} onClose={() => setShareLink(null)} /> : null}
     </>
   );
 }

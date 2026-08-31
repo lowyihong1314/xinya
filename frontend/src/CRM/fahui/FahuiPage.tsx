@@ -55,6 +55,8 @@ import { YlpPaymentModal } from "./YlpPaymentModal";
 import { YlpOrderSummaryDrawer } from "./YlpOrderSummaryDrawer";
 import { YlpAnalyticsPanel } from "./YlpAnalyticsPanel";
 import { PRINT_ALL_TEMPLATE, showPrintPlusDialog } from "./PrintPlusDialog";
+import { ShareLinkQrModal } from "./ShareLinkQrModal";
+import type { ShareLinkInfo } from "./ShareLinkQrModal";
 import { PaymentProofButton } from "./PaymentProof";
 import { PaiweiEditorModal } from "./intake/PaiweiEditorModal";
 import { paiweiFieldLabel } from "./intake/paiwei";
@@ -433,6 +435,8 @@ export function FahuiPage() {
   // 键盘上下键翻页时，新一页要选头还是选尾（往下翻选头、往上翻选尾）
   const ylpPendingSelectRef = useRef<"first" | "last" | null>(null);
   const [ylpRowDetailId, setYlpRowDetailId] = useState<number | null>(null);
+  // 公开链接生成后弹二维码；null = 没在弹
+  const [shareLink, setShareLink] = useState<ShareLinkInfo | null>(null);
   const [paiweiJob, setPaiweiJob] = useState<{ percent: number; status: "running" | "done" | "error"; message?: string } | null>(null);
   const paiweiPollRef = useRef<number | null>(null);
   const [ylpPagination, setYlpPagination] = useState<YlpPagination | null>(null);
@@ -1157,9 +1161,11 @@ export function FahuiPage() {
         await copyTextToClipboard(url);
         show_alert("success", `公开链接已复制（${days} 天内有效）`);
       } catch {
-        show_alert("error", `自动复制失败，请手动复制：${url}`);
+        show_alert("error", `自动复制失败，请扫下面的码或手动复制`);
       }
       setActionMessage(url);
+      // 当面给功德主看的时候，剪贴板没用，扫码最快 —— 复制之后顺手把码摆出来
+      setShareLink({ url, days });
     } catch (shareError) {
       show_alert("error", shareError instanceof Error ? shareError.message : "生成公开链接失败");
     }
@@ -2759,6 +2765,8 @@ export function FahuiPage() {
       {paymentConfigOpen ? (
         <PaymentChannelModal version={ylpVersion} onClose={() => setPaymentConfigOpen(false)} />
       ) : null}
+
+      {shareLink ? <ShareLinkQrModal info={shareLink} onClose={() => setShareLink(null)} /> : null}
 
       {relationConfigOpen ? <RelationOptionModal onClose={() => setRelationConfigOpen(false)} /> : null}
       {openWindowConfigOpen ? <OpenWindowModal fahuiKey="ylp" onClose={() => setOpenWindowConfigOpen(false)} /> : null}
