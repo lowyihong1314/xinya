@@ -113,6 +113,18 @@ export function ensureDesignTokens() {
       --x-font-mono: ${designTokens.fonts.mono};
     }
 
+    /* iOS Safari 的 text autosizing（文字膨胀）：它会按区块宽度相对视口的比例，
+       自作主张把块里的文字放大一档。聚焦输入框触发缩放后算法重跑，flex-wrap 的
+       容器（例如 .fahui-workspace-bar）文字一大就换行、变高，高度一变又触发下一轮
+       —— 表现就是「每点一次搜索框，整条工具栏就大一圈」。
+
+       100% = 按作者写的字号渲染，不许它自己缩放。桌面浏览器本来就没有这行为，
+       加上无副作用。 */
+    html {
+      -webkit-text-size-adjust: 100%;
+      text-size-adjust: 100%;
+    }
+
     /* iOS Safari 会对 font-size 小于 16px 的输入框，在聚焦时自动放大整页，
        而且收起键盘后不会自己复原 —— 表现就是「一点输入框画面往下跑，
        收键盘也回不去」。触屏设备上把表单控件统一抬到 16px，从源头绕开。

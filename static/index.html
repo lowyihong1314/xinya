@@ -7,6 +7,14 @@
     <link rel="icon" href="/favicon.ico">
     <link rel="apple-touch-icon" href="/favicon.ico">
     <style>
+      /* iOS Safari 的 text autosizing：会按区块宽度自作主张放大块内文字。
+         聚焦输入框触发缩放后算法重跑，flex-wrap 的容器一换行就变高，
+         高度一变又触发下一轮 —— 表现是「每点一次搜索框工具栏就大一圈」。
+         designTokens 里也写了一份，但那要等 React 挂载才注入，首屏这一下得靠这里。 */
+      html {
+        -webkit-text-size-adjust: 100%;
+        text-size-adjust: 100%;
+      }
       body {
         margin: 0;
         padding: 0;

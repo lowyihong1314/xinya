@@ -7,6 +7,12 @@
     <link rel="icon" href="/favicon.ico" />
     <link rel="apple-touch-icon" href="/favicon.ico" />
     <style>
+      /* 也写在这里一份：designTokens 的样式要等 React 挂载才注入，
+         首屏那一下 iOS Safari 已经可能把文字膨胀过一轮了。 */
+      html {
+        -webkit-text-size-adjust: 100%;
+        text-size-adjust: 100%;
+      }
       body {
         margin: 0;
         padding: 0;
