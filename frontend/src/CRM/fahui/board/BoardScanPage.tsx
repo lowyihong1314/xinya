@@ -42,7 +42,7 @@ const TOAST_STYLE: Record<ToastTone, { bg: string; icon: string }> = {
 function ordersLabel(result: BoardScanResult): string {
   const orders = result.orders || [];
   if (!orders.length) {
-    return `单号 #${result.pdf_id}`;
+    return `打印号(Barcode) #${result.pdf_id}`;
   }
   return orders
     .map((o) => (o.customer_name || `#${o.order_id}`) + (o.owner_or_deceased ? ` · ${o.owner_or_deceased}` : ""))
@@ -81,7 +81,7 @@ export function BoardScanPage() {
   // 免得人以为「扫到了怎么没反应」而反复对着同一张牌位晃。
   const [cooldown, setCooldown] = useState<{ code: string; id: number } | null>(null);
   const [sending, setSending] = useState(false);
-  // 扫不到时手打单号
+  // 扫不到时手动输入打印号
   const [manualCode, setManualCode] = useState("");
 
   // 摄像头开着的那块板：handleCode 是 useCallback，用 ref 拿最新的板，避免重建回调
@@ -244,11 +244,11 @@ export function BoardScanPage() {
     }
   }
 
-  /** 手打单号直接上板：光线差、条码磨花、牌位贴太高扫不到的时候用 */
+  /** 手动输入打印号直接上板：光线差、条码磨花、牌位贴太高扫不到的时候用 */
   async function submitManual() {
     const code = manualCode.replace(/[^0-9]/g, "");
     if (!code) {
-      pushToast("bad", "请输入牌位单号", "只认数字");
+      pushToast("bad", "请输入打印号(Barcode)", "只认数字");
       return;
     }
     setManualCode("");
@@ -396,7 +396,7 @@ export function BoardScanPage() {
           }}
           type="number"
           inputMode="numeric"
-          placeholder="扫不到？直接输单号"
+          placeholder="扫不到？直接输打印号(Barcode)"
           style={styles.manualInput}
         />
         <button type="button" style={styles.manualBtn} onClick={() => void submitManual()}>

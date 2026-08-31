@@ -2,7 +2,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import type { CSSProperties, PointerEvent as ReactPointerEvent } from "react";
 import jsQR from "jsqr";
 
-// 摄像头扫码的公用件：看板手机端（扫到直接上板）和打印弹窗（扫到往清单里加单号）共用。
+// 摄像头扫码的公用件：看板手机端（扫到直接上板）和打印弹窗（扫到往清单里加打印号）共用。
 //
 // 抽出来是因为这段东西的坑都在细节上 —— BarcodeDetector 与 jsQR 的取舍、
 // 解码节流、对焦、资源释放 —— 复制两份迟早各自漂移。

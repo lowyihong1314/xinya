@@ -176,7 +176,7 @@ export function BoardTerminalPage() {
                     {slot.print_pdf_id ? (
                       <img
                         src={previewUrl(slot.print_pdf_id)}
-                        alt={`单号 ${slot.print_pdf_id}`}
+                        alt={`打印号(Barcode) ${slot.print_pdf_id}`}
                         style={styles.slotImg}
                         loading="lazy"
                         draggable={false}

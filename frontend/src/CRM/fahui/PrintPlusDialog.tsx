@@ -16,7 +16,7 @@ import { orderStatusLabel } from "./orderStatus";
 //   整个版本   —— 默认：这个版本下全部订单，状态一概不筛（草稿 / 已取消都在里面）
 //   按勾选     —— 列表里勾中的订单（老行为）
 //   按订单单号 —— 直接贴一串订单号，跳过勾选
-//   按牌位单号 —— 贴条码号重印，单号原样复用，不会重新发号
+//   按打印号 —— 贴打印号重印，号码原样复用，不会重新发号
 //
 //   订单状态清单：默认全打勾（等同于改动前的「全印」），不要的自己取消
 //   只印未注册的：跳过已经注册过条码的牌位，专治「补印漏掉的那几张」
@@ -42,10 +42,10 @@ const MODE_TABS: { key: Mode; label: string }[] = [
   { key: "version", label: "整个版本" },
   { key: "selection", label: "按勾选" },
   { key: "orders", label: "按订单单号" },
-  { key: "pdfs", label: "按牌位单号" },
+  { key: "pdfs", label: "按打印号(Barcode)" },
 ];
 
-// 直接输单号的两种方式：不依赖列表勾选。工具栏那个常驻按钮进来就只有这两个。
+// 直接输号码的两种方式：不依赖列表勾选。工具栏那个常驻按钮进来就只有这两个。
 const ID_ONLY_MODES: Mode[] = ["orders", "pdfs"];
 
 /** 支持逗号 / 空格 / 换行 / 顿号分隔，以及 1100-1105 这种区间；#123 的井号自动去掉。 */
@@ -136,7 +136,7 @@ function PrintPlusDialog({
   selectedOrderIds,
   onResolve,
 }: {
-  /** 工具栏常驻入口没有列表上下文，「整个版本 / 按勾选」无从谈起，只能按单号来 */
+  /** 工具栏常驻入口没有列表上下文，「整个版本 / 按勾选」无从谈起，只能按号码来 */
   idOnly: boolean;
   version: string;
   selectedOrderIds: number[];
@@ -153,7 +153,7 @@ function PrintPlusDialog({
   const [onlyUnregistered, setOnlyUnregistered] = useState(false);
   const [excluded, setExcluded] = useState<string[]>([]);
 
-  // 摄像头扫码往清单里加单号：要补印一叠牌位时，一张张手打太慢
+  // 摄像头扫码往清单里加打印号：要补印一叠牌位时，一张张手打太慢
   const [scannerOn, setScannerOn] = useState(false);
   const [justAdded, setJustAdded] = useState<number[]>([]);
   const scanCooldownRef = useRef<Map<string, number>>(new Map());
@@ -203,7 +203,7 @@ function PrintPlusDialog({
   }, [queryKey]);
 
   useEffect(() => {
-    // 手打单号时防抖，别每敲一个数字就发一次请求。
+    // 手打号码时防抖，别每敲一个数字就发一次请求。
     const delay = mode === "selection" || mode === "version" ? 0 : 350;
     const timer = window.setTimeout(() => void reload(), delay);
     return () => window.clearTimeout(timer);
@@ -234,7 +234,7 @@ function PrintPlusDialog({
   );
   const registeredCount = useMemo(() => items.filter((item) => item.pdf_id != null).length, [items]);
 
-  // 重印是按「页」走的：模式三提交牌位单号，后端逐页渲染，单号才不会重新发。
+  // 重印是按「页」走的：模式三提交打印号，后端逐页渲染，号码才不会重新发。
   const reprintPdfIds = useMemo(() => {
     if (mode !== "pdfs") {
       return [];
@@ -247,7 +247,7 @@ function PrintPlusDialog({
   const sheets = mode === "pdfs" ? items.length : picked.length;
   const disabled = loading || sheets === 0;
 
-  /** 扫到一个码：取数字当牌位单号，去重后追加到输入框。
+  /** 扫到一个码：取数字当打印号，去重后追加到输入框。
    *  同一个码 2 秒内不重复处理 —— 镜头不移开会一直扫到它。 */
   const addScannedCode = useCallback((raw: string) => {
     const digits = raw.match(/\d+/)?.[0];
@@ -297,7 +297,7 @@ function PrintPlusDialog({
   const inputHint =
     mode === "orders"
       ? "逗号 / 空格 / 换行分隔，支持 1100-1105 这种区间"
-      : "牌位上印的条码号，逗号 / 空格 / 换行分隔，支持区间";
+      : "牌位上印的打印号(Barcode)，逗号 / 空格 / 换行分隔，支持区间";
 
   return (
     <div style={styles.overlay} onClick={() => onResolve(null)}>
@@ -312,7 +312,7 @@ function PrintPlusDialog({
           <h3 style={styles.title}>打印牌位</h3>
           <p style={styles.message}>
             {mode === "pdfs"
-              ? "按牌位上的条码号重印，沿用原来的单号，不会重新发号。"
+              ? "按牌位上的打印号(Barcode)重印，沿用原来的号，不会重新发号。"
               : idOnly
                 ? "贴订单号就能印，不用先在列表里勾。各类牌位会一起印成一份。"
                 : "各类牌位一起印。默认全部状态都印，不想印的（例如已取消）在下面取消勾选，张数会跟着变。"}
@@ -381,7 +381,7 @@ function PrintPlusDialog({
                       </span>
                     ))
                   ) : (
-                    <span style={styles.inputHint}>扫到的单号会自动加进上面的清单，重复的不会加两次</span>
+                    <span style={styles.inputHint}>扫到的打印号(Barcode)会自动加进上面的清单，重复的不会加两次</span>
                   )}
                 </div>
               </div>
@@ -453,7 +453,7 @@ function PrintPlusDialog({
           <p style={styles.warn}>{`这些订单号没有${TEMPLATE_LABEL}（或不存在）：${emptyOrderIds.join(", ")}`}</p>
         ) : null}
         {unknownPdfIds.length ? (
-          <p style={styles.warn}>{`查无这些牌位单号：${unknownPdfIds.join(", ")}`}</p>
+          <p style={styles.warn}>{`查无这些打印号(Barcode)：${unknownPdfIds.join(", ")}`}</p>
         ) : null}
         {(mode === "orders" ? parsedOrders.invalid : mode === "pdfs" ? parsedPdfs.invalid : []).length ? (
           <p style={styles.warn}>
@@ -466,13 +466,13 @@ function PrintPlusDialog({
             ? "统计中…"
             : sheets
               ? mode === "pdfs"
-                ? `将重印 ${reprintPdfIds.length} 个单号 · 共 ${sheets} 张${TEMPLATE_LABEL}`
+                ? `将重印 ${reprintPdfIds.length} 个打印号(Barcode) · 共 ${sheets} 张${TEMPLATE_LABEL}`
                 : `将打印 ${pickedOrderIds.length} 张订单里的 ${sheets} 张${TEMPLATE_LABEL}`
               : "当前范围没有可打印的牌位"}
         </p>
 
         <p style={styles.hint}>
-          注册条码后每张牌位会盖上单号，可在「看板」贴板追踪；不注册则只出图。
+          注册条码后每张牌位会盖上打印号(Barcode)，可在「看板」贴板追踪；不注册则只出图。
         </p>
 
         <div style={styles.actions}>
@@ -493,7 +493,7 @@ function PrintPlusDialog({
             disabled={disabled}
             onClick={() => finish(true)}
           >
-            {mode === "pdfs" ? "重印（沿用单号）" : "注册条码"}
+            {mode === "pdfs" ? "重印（沿用打印号）" : "注册条码"}
           </button>
         </div>
       </div>

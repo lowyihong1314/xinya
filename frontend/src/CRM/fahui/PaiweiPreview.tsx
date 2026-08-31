@@ -17,7 +17,7 @@ export function PaiweiPreviewGrid({
   orderIds: number[];
   /** 抽屉窄，给小一点；整页宽，给大一点 */
   minTileWidth?: number;
-  /** 一次看多张订单时把单号标出来；默认按订单数量自动决定 */
+  /** 一次看多张订单时把订单号标出来；默认按订单数量自动决定 */
   showOrderId?: boolean;
   emptyText?: string;
   onLoaded?: (count: number) => void;

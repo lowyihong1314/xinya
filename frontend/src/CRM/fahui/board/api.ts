@@ -136,7 +136,7 @@ export async function getPrintPdf(pdfId: number) {
   return readJson<{ status?: string; data?: { id: number; boards: BoardLocation[]; page_data?: unknown[] } }>(res);
 }
 
-/** 一个牌位单号在「合并」面板里的样子：什么类型、装了谁、贴在哪块板。 */
+/** 一个打印号在「合并」面板里的样子：什么类型、装了谁、贴在哪块板。 */
 export type MergePdfEntry = {
   pdf_id: number;
   code?: string | null;
@@ -158,7 +158,7 @@ export type MergePlan = {
   type_label?: string | null;
   capacity: number;
   total: number;
-  /** 同一个牌位挂在两个单号下的重复数，合并时会被去掉 */
+  /** 同一个牌位挂在两个打印号下的重复数，合并时会被去掉 */
   duplicates: number;
   target_id?: number | null;
   can_merge: boolean;

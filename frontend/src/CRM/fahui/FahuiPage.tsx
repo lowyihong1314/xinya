@@ -1397,6 +1397,10 @@ export function FahuiPage() {
                 );
               })}
             </div>
+            {/* 手机端只保留「找牌位 / 编辑牌位」这条主线，配置类和批量打印全部收起 ——
+                这些都要对着大表格慢慢挑，在手机上点不准也看不全。 */}
+            {!isMobile ? (
+              <>
             <button type="button" style={styles.secondaryActionCompact} onClick={() => setPaymentConfigOpen(true)}>
               配置支付路径
             </button>
@@ -1409,7 +1413,7 @@ export function FahuiPage() {
             <button type="button" style={styles.secondaryActionCompact} onClick={() => setPrintRecordsOpen(true)}>
               查看打印记录
             </button>
-            {/* 常驻入口：按订单号 / 牌位单号直接打印，不用先在列表里勾、也不用先挑类型。
+            {/* 常驻入口：按订单号 / 打印号直接打印，不用先在列表里勾、也不用先挑类型。
                 底部批量条那个「打印牌位 PLUS ▾」只在勾了订单之后才出现。 */}
             <button
               type="button"
@@ -1421,6 +1425,8 @@ export function FahuiPage() {
             <button type="button" style={styles.secondaryActionCompact} onClick={openYlpIntakePage}>
               打开牌位填写页
             </button>
+              </>
+            ) : null}
           </div>
         ) : null}
       </section>
@@ -1732,7 +1738,7 @@ export function FahuiPage() {
         setYlpBulkBusy(false);
       }
     }
-    // 弹窗里挑范围（勾选 / 订单单号 / 牌位单号）+ 状态过滤 + 要不要跳过已注册的，
+    // 弹窗里挑范围（勾选 / 订单单号 / 打印号）+ 状态过滤 + 要不要跳过已注册的，
     // 张数由后端 /scope 算好，确认后原样提交回去。点遮罩 / 取消都返回 null，当作放弃打印。
     const choice = await showPrintPlusDialog(selectedIds, ylpVersion, idOnly);
     if (!choice) {
@@ -1957,7 +1963,7 @@ export function FahuiPage() {
 
         {!ylpLoading && !ylpError ? (
           <>
-            {ylpCanSelectAllPages || ylpSelectAllPages ? (
+            {!isMobile && (ylpCanSelectAllPages || ylpSelectAllPages) ? (
               <div style={styles.selectAllBanner} className="ylp-select-all-banner">
                 {ylpSelectAllPages ? (
                   <>
@@ -1980,6 +1986,52 @@ export function FahuiPage() {
                 )}
               </div>
             ) : null}
+            {isMobile ? (
+              // 手机端：一张订单一个 section，不用表格。
+              // 手机进来九成是「搜出某张单 → 点开看牌位 → 改牌位」，所以卡片只留
+              // 找人认单要用的几项（功德主 / 单号 / 电话 / 金额 / 状态 / 上板进度），
+              // 勾选、排序、行内三点菜单这些要对着宽表格操作的一概不给。
+              <section style={styles.orderCards} className="ylp-order-cards">
+                <style>{YLP_ORDER_CARD_CSS}</style>
+                {sortedYlpOrders.map((order) => {
+                  const boardHint = boardStatusTitle(order.board_status);
+                  return (
+                    <section
+                      key={order.id}
+                      // 抽屉里翻上一张 / 下一张时靠这个属性把对应卡片滚进视野
+                      data-ylp-order-row={order.id}
+                      className={[
+                        "ylp-order-card",
+                        boardStatusClass(order.board_status?.status),
+                        ylpRowDetailId === order.id ? "ylp-order-card-active" : "",
+                      ]
+                        .filter(Boolean)
+                        .join(" ")}
+                      onClick={() => void openYlpRowDetail(order.id)}
+                    >
+                      <div className="ylp-order-card-top">
+                        <span className="ylp-order-card-name">{order.customer_name || order.name || "-"}</span>
+                        <span className="ylp-order-card-amount">
+                          {order.total_amount != null ? `RM ${order.total_amount}` : "-"}
+                        </span>
+                      </div>
+                      <div className="ylp-order-card-meta">
+                        <span>{`#${order.id}`}</span>
+                        <span>{order.phone || "-"}</span>
+                      </div>
+                      <div className="ylp-order-card-chips">
+                        <span style={ylpStatusChipStyle(order.order_status || "Draft")}>
+                          {orderStatusLabel(order.order_status)}
+                        </span>
+                        <span style={ylpStatusChipStyle(order.status)}>{paymentStatusLabel(order.status)}</span>
+                        {boardHint ? <span className="ylp-order-card-board">{boardHint}</span> : null}
+                      </div>
+                    </section>
+                  );
+                })}
+                {!sortedYlpOrders.length ? <p className="ylp-order-card-empty">没有符合条件的订单</p> : null}
+              </section>
+            ) : (
             <div style={styles.tableWrap} className="ylp-order-table-wrap">
               <style>{YLP_ORDER_TABLE_CSS}</style>
               <table className="ylp-order-table">
@@ -2078,10 +2130,11 @@ export function FahuiPage() {
                 </tbody>
               </table>
             </div>
+            )}
           </>
         ) : null}
 
-        {ylpSelectionActive ? (
+        {!isMobile && ylpSelectionActive ? (
           <div style={styles.bulkBar} className="ylp-bulk-bar">
             <span style={styles.bulkCount}>已选 {ylpSelectionCount} 条</span>
             <div style={styles.bulkActions}>
@@ -2891,6 +2944,68 @@ function boardStatusTitle(
   return `${text}（${counts}）`;
 }
 
+// 手机端的订单卡片。上板进度那四个底色和表格版共用同一套语义，
+// 只是挂在卡片上而不是 <tr> 上。
+const YLP_ORDER_CARD_CSS = `
+.ylp-order-card {
+  display: grid;
+  gap: 6px;
+  padding: 11px 12px;
+  border-radius: 12px;
+  border: 1px solid var(--x-color-line);
+  background: var(--x-color-panel);
+  cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
+}
+.ylp-order-card.ylp-board-unprinted { background: var(--x-color-canvas-alt, #f4f4f5); }
+.ylp-order-card.ylp-board-none { background: var(--x-color-warning-soft, #fff7ed); }
+.ylp-order-card.ylp-board-partial { background: var(--x-color-accent-soft, #eff6ff); }
+.ylp-order-card.ylp-board-all { background: var(--x-color-success-soft, #ecfdf5); }
+.ylp-order-card:active { transform: scale(0.995); }
+/* 抽屉正开着的那张：只描边不换底色，免得盖掉上板进度的颜色 */
+.ylp-order-card-active {
+  border-color: var(--x-color-accent);
+  box-shadow: inset 0 0 0 2px var(--x-color-accent-border);
+}
+.ylp-order-card-top {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 10px;
+}
+.ylp-order-card-name {
+  min-width: 0;
+  font-size: 16px;
+  font-weight: 700;
+  color: var(--x-color-ink);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.ylp-order-card-amount {
+  flex: 0 0 auto;
+  font-size: 14px;
+  font-weight: 700;
+  color: var(--x-color-ink);
+}
+.ylp-order-card-meta {
+  display: flex;
+  gap: 12px;
+  font-size: 13px;
+  color: var(--x-color-ink-muted);
+  font-variant-numeric: tabular-nums;
+}
+.ylp-order-card-chips { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
+.ylp-order-card-board { font-size: 11.5px; color: var(--x-color-ink-muted); }
+.ylp-order-card-empty {
+  margin: 0;
+  padding: 22px 0;
+  text-align: center;
+  font-size: 13.5px;
+  color: var(--x-color-ink-muted);
+}
+`;
+
 const YLP_ORDER_TABLE_CSS = `
 /* separate 而不是 collapse：collapse 下 <tr> 的 box-shadow 不会被绘制，
    整行的辉光只能拆到每个 <td> 上，看起来就是一格一格的。
@@ -3420,6 +3535,10 @@ const styles = {
   grid: {
     display: "grid",
     gridTemplateColumns: "repeat(auto-fill,minmax(220px,1fr))",
+    gap: "8px",
+  },
+  orderCards: {
+    display: "grid",
     gap: "8px",
   },
   tableWrap: {

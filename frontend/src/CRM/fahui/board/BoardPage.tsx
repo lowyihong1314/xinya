@@ -120,8 +120,8 @@ export function BoardPage() {
   const [newRow, setNewRow] = useState("10"); // 每行张数
   const [newForm, setNewForm] = useState(false);
 
-  // 合并牌位单号：把几张没排满的同类型牌位并成一张。
-  // mergeIds 是人一个个加进来的单号，mergeTarget 是要保留的那个，
+  // 合并打印号：把几张没排满的同类型牌位并成一张。
+  // mergeIds 是人一个个加进来的打印号，mergeTarget 是要保留的那个，
   // mergePlan 由后端算（能不能合、合完几张），前端只负责画和禁用按钮。
   const [mergeOpen, setMergeOpen] = useState(false);
   const [mergeInput, setMergeInput] = useState("");
@@ -185,7 +185,7 @@ export function BoardPage() {
   const [zoomPdfId, setZoomPdfId] = useState<number | null>(null);
   const [summaryOrderId, setSummaryOrderId] = useState<number | null>(null);
   // 牌位预览图后端存了磁盘缓存、浏览器又压了 30 天，订单改完必须两头一起破：
-  // 这里按牌位单号记一个自增号，带进 URL（换 URL 破浏览器缓存）并带 refresh=1（破磁盘缓存）。
+  // 这里按打印号记一个自增号，带进 URL（换 URL 破浏览器缓存）并带 refresh=1（破磁盘缓存）。
   const [previewNonce, setPreviewNonce] = useState<Record<number, number>>({});
   const [poolItems, setPoolItems] = useState<UnattachedPdf[]>([]);
   const [poolPage, setPoolPage] = useState(1);
@@ -250,7 +250,7 @@ export function BoardPage() {
       ? pdf.orders
           .map((o) => (o.customer_name || `#${o.order_id}`) + (o.owner_or_deceased ? ` · ${o.owner_or_deceased}` : ""))
           .join("；")
-      : `单号 #${pdf.id}`;
+      : `打印号(Barcode) #${pdf.id}`;
     const isDragged = dragging?.kind === "pool" && dragging.pdfId === pdf.id;
     return (
       <div
@@ -273,7 +273,7 @@ export function BoardPage() {
         <span style={styles.slotNo}>#{pdf.id}</span>
         <img
           src={previewUrl(pdf.id)}
-          alt={`单号 ${pdf.id}`}
+          alt={`打印号(Barcode) ${pdf.id}`}
           style={styles.slotImg}
           loading="lazy"
           draggable={false}
@@ -443,7 +443,7 @@ export function BoardPage() {
       } else if (payload?.action === "detached" && payload.pdf_id) {
         setLiveHint(`牌位 ${payload.pdf_id} 刚退板`);
       } else if (payload?.action === "merged" && payload.pdf_id) {
-        setLiveHint(`牌位单号刚并进 ${payload.pdf_id}`);
+        setLiveHint(`打印号(Barcode) 刚并进 ${payload.pdf_id}`);
       }
       if (timer !== null) {
         window.clearTimeout(timer);
@@ -473,7 +473,7 @@ export function BoardPage() {
     return () => window.clearTimeout(timer);
   }, [liveHint]);
 
-  // 单号或保留目标一变就重算方案。判断全在后端，避免前端另写一套规则跟后端对不上。
+  // 打印号或保留目标一变就重算方案。判断全在后端，避免前端另写一套规则跟后端对不上。
   useEffect(() => {
     if (!mergeOpen || mergeIds.length === 0) {
       setMergePlan(null);
@@ -529,7 +529,7 @@ export function BoardPage() {
     const dropped = mergeIds.filter((id) => id !== target);
     const ok = await showConfirmDialog({
       message:
-        `把单号 ${dropped.join("、")} 并进 #${target}？\n` +
+        `把打印号(Barcode) ${dropped.join("、")} 并进 #${target}？\n` +
         `牌位本身不动，全部挂到 #${target} 名下（合并后 ${mergePlan.total} 个）；` +
         `${dropped.length} 个旧号会被删掉，号码空出来给下次复用。\n` +
         `#${target} 这张纸的内容变了，记得重印一次。`,
@@ -537,7 +537,7 @@ export function BoardPage() {
     });
     if (!ok) return;
 
-    // 这里不走 run()：run 把失败也吞成提示，合失败时不该顺手清掉人刚输的一串单号
+    // 这里不走 run()：run 把失败也吞成提示，合失败时不该顺手清掉人刚输的一串打印号
     setBusy(true);
     setError("");
     try {
@@ -601,7 +601,7 @@ export function BoardPage() {
   async function handleAttach(board: Board, pdfIdRaw: string) {
     const pdfId = Number(String(pdfIdRaw).replace(/\D/g, ""));
     if (!Number.isFinite(pdfId) || pdfId <= 0) {
-      show_alert("error", "请输入正确的牌位单号");
+      show_alert("error", "请输入正确的打印号(Barcode)");
       return;
     }
     await run(() => attachPdfToBoard({ board_id: board.board_id, pdf_id: pdfId }), `已贴到「${board.board_name}」`);
@@ -615,7 +615,7 @@ export function BoardPage() {
   }
 
   /** 某个订单改过之后，把它涉及的牌位预览全部标记为要重渲。
-   *  只挑受影响的单号 —— 全量 refresh 等于让后端把满屏牌位重新渲一遍。 */
+   *  只挑受影响的打印号 —— 全量 refresh 等于让后端把满屏牌位重新渲一遍。 */
   function bumpPreviewsForOrder(orderId: number) {
     const affected = new Set<number>();
     poolItems.forEach((pdf) => {
@@ -714,7 +714,7 @@ export function BoardPage() {
 
   async function handleResetYear() {
     const ok = await showConfirmDialog({
-      message: `确认重置 ${version.replace("_YLP", "")} 年的所有条码/二维码？会清除该年已登记的牌位单号及其贴板位置（往年无法重置）。`,
+      message: `确认重置 ${version.replace("_YLP", "")} 年的所有条码/二维码？会清除该年已登记的打印号(Barcode)及其贴板位置（往年无法重置）。`,
       tone: "danger",
       confirmText: "重置",
     });
@@ -727,7 +727,7 @@ export function BoardPage() {
     try {
       const res = await quickSearchBoards(kw, version);
       setSearchResults(res.results || []);
-      // 纯数字也当牌位单号查一次板位
+      // 纯数字也当打印号查一次板位
       if (/^\d+$/.test(kw)) {
         try {
           const p = await getPrintPdf(Number(kw));
@@ -805,9 +805,9 @@ export function BoardPage() {
               type="button"
               style={styles.ghost}
               onClick={() => setMergeOpen((v) => !v)}
-              title="把几张没排满的同类型牌位并成一张，只留你选中的那个单号"
+              title="把几张没排满的同类型牌位并成一张，只留你选中的那个打印号(Barcode)"
             >
-              合并牌位号
+              合并打印号(Barcode)
             </button>
           ) : null}
           {canEdit ? (
@@ -831,15 +831,15 @@ export function BoardPage() {
 
       {mergeOpen && canEdit ? (
         <div style={styles.card}>
-          <p style={styles.cardTitle}>合并牌位单号</p>
+          <p style={styles.cardTitle}>合并打印号(Barcode)</p>
           <p style={styles.muted}>
-            把几张没排满的<b>同类型</b>牌位并成一张：单号一个个加进来，选中要保留的那个，其余的号会被删掉、号码空出来给下次复用。
+            把几张没排满的<b>同类型</b>牌位并成一张：打印号(Barcode)一个个加进来，选中要保留的那个，其余的号会被删掉、号码空出来给下次复用。
             大牌位一张 1 个、小牌位 5 个、冤亲债主 10 个，超过就合不了。
           </p>
           <div style={styles.inlineRow}>
             <input
               style={styles.input}
-              placeholder="牌位单号，可一次贴多个（446 447 或 446,447），扫码枪扫进来也行"
+              placeholder="打印号(Barcode)，可一次贴多个（446 447 或 446,447），扫码枪扫进来也行"
               value={mergeInput}
               onChange={(e) => setMergeInput(e.target.value)}
               onKeyDown={(e) => {
@@ -890,7 +890,7 @@ export function BoardPage() {
               {(mergePlan?.missing_ids || []).map((pdfId) => (
                 <div key={`merge-missing-${pdfId}`} style={styles.mergeMissing}>
                   <b style={styles.mergeNo}>#{pdfId}</b>
-                  <span style={{ flex: 1 }}>查不到这个牌位单号</span>
+                  <span style={{ flex: 1 }}>查不到这个打印号(Barcode)</span>
                   <button type="button" style={styles.tinyBtn} onClick={() => dropMergeId(pdfId)}>
                     移除
                   </button>
@@ -904,9 +904,9 @@ export function BoardPage() {
               {mergeLoading
                 ? "算一下…"
                 : mergePlan?.can_merge
-                  ? `合并后 ${mergePlan.total} / ${mergePlan.capacity} 个牌位，保留单号 #${mergeTarget}` +
+                  ? `合并后 ${mergePlan.total} / ${mergePlan.capacity} 个牌位，保留打印号(Barcode) #${mergeTarget}` +
                     (mergePlan.duplicates ? `（去掉 ${mergePlan.duplicates} 个重复的）` : "")
-                  : mergePlan?.reason || "先加两个以上的单号"}
+                  : mergePlan?.reason || "先加两个以上的打印号(Barcode)"}
             </span>
             <button
               type="button"
@@ -926,7 +926,7 @@ export function BoardPage() {
         <div style={styles.inlineRow}>
           <input
             style={styles.input}
-            placeholder="牌位单号 / 订单号 / 功德主 / 阳上名 / 电话（输入即搜）"
+            placeholder="打印号(Barcode) / 订单号 / 功德主 / 阳上名 / 电话（输入即搜）"
             value={keyword}
             onChange={(e) => setKeyword(e.target.value)}
             onFocus={() => {
@@ -940,7 +940,7 @@ export function BoardPage() {
         </div>
         {pdfLookup ? (
           <div style={styles.searchHit}>
-            单号 #{pdfLookup.id}：{pdfLookup.boards.length ? pdfLookup.boards.map((b) => `${b.board_name} ${formatBoardLocation(boards, (b as { board_id?: number | null }).board_id, b.location)}`).join("；") : "尚未贴板"}
+            打印号(Barcode) #{pdfLookup.id}：{pdfLookup.boards.length ? pdfLookup.boards.map((b) => `${b.board_name} ${formatBoardLocation(boards, (b as { board_id?: number | null }).board_id, b.location)}`).join("；") : "尚未贴板"}
           </div>
         ) : null}
         {searchResults ? (
@@ -1175,7 +1175,7 @@ export function BoardPage() {
                         </button>
                       ) : null}
                       {slot.print_pdf_id ? (
-                        <img src={previewUrl(slot.print_pdf_id)} alt={`单号 ${slot.print_pdf_id}`} style={styles.slotImg} loading="lazy" draggable={false} />
+                        <img src={previewUrl(slot.print_pdf_id)} alt={`打印号(Barcode) ${slot.print_pdf_id}`} style={styles.slotImg} loading="lazy" draggable={false} />
                       ) : (
                         <div style={styles.slotEmpty}>空位</div>
                       )}
@@ -1193,7 +1193,7 @@ export function BoardPage() {
               <div style={styles.attachRow}>
                 <input
                   style={styles.input}
-                  placeholder="输入牌位单号贴到此板"
+                  placeholder="输入打印号(Barcode)贴到此板"
                   inputMode="numeric"
                   onKeyDown={(e) => {
                     if (e.key === "Enter") {
@@ -1312,7 +1312,7 @@ export function BoardPage() {
               {slots.map((slot) => {
                 const caption = (slot.orders || [])
                   .map((o) => (o.customer_name || `#${o.order_id}`) + (o.owner_or_deceased ? ` · ${o.owner_or_deceased}` : ""))
-                  .join("；") || `单号 #${slot.print_pdf_id}`;
+                  .join("；") || `打印号(Barcode) #${slot.print_pdf_id}`;
                 return (
                   <div
                     key={slot.side_id}
@@ -1325,7 +1325,7 @@ export function BoardPage() {
                     <span style={styles.slotNo}>{formatBoardLocation(boards, target.board_id, slot.location) || "-"}</span>
                     <img
                       src={previewUrl(slot.print_pdf_id as number)}
-                      alt={`单号 ${slot.print_pdf_id}`}
+                      alt={`打印号(Barcode) ${slot.print_pdf_id}`}
                       style={styles.slotImg}
                       loading="lazy"
                       draggable={false}
@@ -1379,12 +1379,12 @@ export function BoardPage() {
         <div style={styles.zoomOverlay} className="ylp-board-zoom" onClick={() => setZoomPdfId(null)}>
           <img
             src={previewUrl(zoomPdfId)}
-            alt={`单号 ${zoomPdfId}`}
+            alt={`打印号(Barcode) ${zoomPdfId}`}
             style={styles.zoomImg}
             onClick={(event) => event.stopPropagation()}
           />
           <div style={styles.zoomBar} onClick={(event) => event.stopPropagation()}>
-            <span style={styles.zoomNo}>单号 #{zoomPdfId}</span>
+            <span style={styles.zoomNo}>打印号(Barcode) #{zoomPdfId}</span>
             <a href={previewUrl(zoomPdfId)} target="_blank" rel="noreferrer" style={styles.tinyBtn}>
               新标签打开
             </a>

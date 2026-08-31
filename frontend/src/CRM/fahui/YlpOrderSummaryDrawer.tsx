@@ -60,7 +60,7 @@ function logChipTone(action: string): CSSProperties {
 }
 
 type ItemPrint = {
-  /** 牌位单号 = print_pdf.id，条码印在牌位上，查板时靠它找位置 */
+  /** 打印号 = print_pdf.id，条码印在牌位上，查板时靠它找位置 */
   pdfId: number | null;
   boards: { board_id?: number | null; board_name?: string | null; position_label?: string | null }[];
 };
@@ -619,7 +619,7 @@ export function YlpOrderSummaryDrawer({
                           style={print.boards.length ? styles.boardRow : styles.boardRowPending}
                         >
                           <span style={styles.paiweiNoChip}>
-                            <i className="fa-solid fa-barcode" aria-hidden="true" /> 牌位号 #{print.pdfId ?? "?"}
+                            <i className="fa-solid fa-barcode" aria-hidden="true" /> 打印号(Barcode) #{print.pdfId ?? "?"}
                           </span>
                           {print.boards.length ? (
                             print.boards.map((board, index) => (

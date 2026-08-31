@@ -105,7 +105,7 @@ export function PrintRecordsModal({
 
         <div style={styles.body}>
           <p style={styles.hint}>
-            这里就是看板用的那份单号记录，不是另一份日志。在看板「一键清空未上板」或「重置年度单号」删掉的，这里同步消失；单号也会被下一次打印复用。
+            这里就是看板用的那份打印号(Barcode)记录，不是另一份日志。在看板「一键清空未上板」或「重置年度条码」删掉的，这里同步消失；打印号也会被下一次打印复用。
           </p>
 
           {error ? <div style={styles.errorBox}>{error}</div> : null}
@@ -125,7 +125,7 @@ export function PrintRecordsModal({
                 return (
                   <li key={record.id} style={styles.listItem}>
                     <div style={styles.rowTop}>
-                      <span style={styles.pdfId}>{`单号 #${record.id}`}</span>
+                      <span style={styles.pdfId}>{`打印号(Barcode) #${record.id}`}</span>
                       <span style={styles.time}>{record.created_at || "-"}</span>
                     </div>
 
