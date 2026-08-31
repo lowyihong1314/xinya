@@ -14,6 +14,7 @@ import {
   type PaiweiCode,
   type PaiweiDraft,
 } from "./paiwei";
+import { Z_MODAL } from "../zLayers";
 
 // 多人字段在编辑器里必须用「数组」维护（允许空行），保存时才拼回 draft 的换行字符串。
 // 否则空行会被 arrayToLines 过滤掉，导致「添加」按钮看起来点了没反应。
@@ -546,7 +547,7 @@ const styles: Record<string, CSSProperties> = {
   overlay: {
     position: "fixed",
     inset: 0,
-    zIndex: 1200,
+    zIndex: Z_MODAL,
     display: "flex",
     alignItems: "flex-end",
     justifyContent: "center",

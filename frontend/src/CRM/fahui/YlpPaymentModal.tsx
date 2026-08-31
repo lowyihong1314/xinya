@@ -3,6 +3,7 @@
 import { useState, type CSSProperties } from "react";
 
 import { approvePayment, createYlpOrderPayment } from "./api";
+import { Z_MODAL } from "./zLayers";
 
 const YLP_PAYMENT_MODES: { value: string; label: string }[] = [
   { value: "bank", label: "银行转账" },
@@ -156,7 +157,7 @@ const styles: Record<string, CSSProperties> = {
   overlay: {
     position: "fixed",
     inset: 0,
-    zIndex: 60,
+    zIndex: Z_MODAL,
     background: "rgba(15, 23, 42, 0.45)",
     display: "flex",
     alignItems: "center",

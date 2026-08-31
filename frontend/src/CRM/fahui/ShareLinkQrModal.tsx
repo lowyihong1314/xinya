@@ -4,6 +4,7 @@ import QRCode from "qrcode";
 
 import { copyTextToClipboard } from "../../js/browserActions";
 import { show_alert } from "../../js/show_alert";
+import { Z_MODAL_TOP } from "./zLayers";
 
 // 公开链接的 QR 弹窗：订单摘要抽屉和订单详情页共用。
 //
@@ -84,8 +85,7 @@ const styles: Record<string, CSSProperties> = {
   overlay: {
     position: "fixed",
     inset: 0,
-    // 压过抽屉的 1200
-    zIndex: 1400,
+    zIndex: Z_MODAL_TOP,
     display: "grid",
     placeItems: "center",
     padding: "20px",

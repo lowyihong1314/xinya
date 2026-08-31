@@ -1,6 +1,7 @@
 import { useState, type CSSProperties } from "react";
 
 import { API_BASE } from "../../js/apiBase";
+import { Z_MODAL } from "./zLayers";
 
 // 付款凭证查看：只要这笔付款有上传档（不分付款方式）就能点开看。
 // 走带权限的 /api/payment/payments/<id>/document —— 凭证上常有账户与姓名，不能走公开路径。
@@ -97,7 +98,7 @@ const styles: Record<string, CSSProperties> = {
   overlay: {
     position: "fixed",
     inset: 0,
-    zIndex: 70,
+    zIndex: Z_MODAL,
     background: "rgba(15, 23, 42, 0.55)",
     display: "flex",
     alignItems: "center",

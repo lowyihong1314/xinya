@@ -1,4 +1,6 @@
 import { useEffect, useState } from "react";
+
+import { Z_DRAWER } from "./zLayers";
 import type { CSSProperties, ReactNode } from "react";
 
 // 法会工作区那只右侧抽屉（原 ylp-intake-drawer）：牌位填写页预览、牌位打印预览都用它，
@@ -132,7 +134,7 @@ export const drawerStyles = {
           height: sheet ? `${sheet.height}px` : undefined,
           bottom: sheet ? undefined : 0,
           // 要压过导航栏的 z-index: 1000
-          zIndex: 1200,
+          zIndex: Z_DRAWER,
           width: "100%",
           overflowY: "auto",
           // 抽屉滑到底不要把底下的页面也带着滚
