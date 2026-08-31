@@ -2991,7 +2991,6 @@ const YLP_ORDER_CARD_CSS = `
 .ylp-order-card.ylp-board-none { background: var(--x-color-warning-soft, #fff7ed); }
 .ylp-order-card.ylp-board-partial { background: var(--x-color-accent-soft, #eff6ff); }
 .ylp-order-card.ylp-board-all { background: var(--x-color-success-soft, #ecfdf5); }
-.ylp-order-card:active { transform: scale(0.995); }
 /* 抽屉正开着的那张：只描边不换底色，免得盖掉上板进度的颜色 */
 .ylp-order-card-active {
   border-color: var(--x-color-accent);
@@ -3066,58 +3065,16 @@ const YLP_ORDER_TABLE_CSS = `
   box-shadow: inset 3px 0 0 var(--x-color-accent-border);
 }
 
-/* 选中行：所有样式都挂在 <tr> 上，整行是一整块。
-   放大靠 font-size（td 会继承），不用 transform —— 缩放会把边框和阴影一起拉糊。 */
-@keyframes ylpRowLight {
-  0% {
-    font-size: 13px;
-    box-shadow: inset 0 0 0 rgba(37, 99, 235, 0), 0 0 0 rgba(37, 99, 235, 0);
-  }
-  35% {
-    font-size: 15px;
-    box-shadow: inset 4px 0 0 var(--x-color-accent-strong), 0 0 24px 4px rgba(37, 99, 235, 0.5);
-  }
-  100% {
-    font-size: 14.5px;
-    box-shadow: inset 4px 0 0 var(--x-color-accent-strong), 0 0 12px 1px rgba(37, 99, 235, 0.3);
-  }
-}
-@keyframes ylpRowSweep {
-  0%   { transform: translateX(-60%); opacity: 0; }
-  25%  { opacity: 1; }
-  100% { transform: translateX(115%); opacity: 0; }
-}
+/* 选中行：静态高亮，没有动画、也没有盖在整行上的那层白光遮罩。
+   原本是「弹入 + 白光横扫 + font-size 放大」三件套（keyframes ylpRowLight /
+   ylpRowSweep 加一个 ::after 满行渐变）。Safari 上那层 ::after 会把整行盖住，
+   加上 font-size 变化带来的重排，点一下就把页面顶跑 —— 全部去掉。
 
+   现在只剩不改变布局的两样：左侧亮边 + 一圈辉光。 */
 .ylp-order-table tbody tr.ylp-order-row-active {
-  position: relative;
-  z-index: 1;
   color: var(--x-color-accent-strong);
   font-weight: 700;
-  /* forwards：停在最后一帧，放大与亮边常驻 */
-  animation: ylpRowLight 380ms cubic-bezier(0.22, 1, 0.36, 1) forwards;
-}
-/* 横扫的白光：铺满整行，不吃鼠标事件 */
-.ylp-order-table tbody tr.ylp-order-row-active::after {
-  content: "";
-  position: absolute;
-  inset: 0;
-  pointer-events: none;
-  background: linear-gradient(
-    100deg,
-    rgba(255, 255, 255, 0) 0%,
-    rgba(255, 255, 255, 0.75) 45%,
-    rgba(191, 219, 254, 0.55) 60%,
-    rgba(255, 255, 255, 0) 85%
-  );
-  animation: ylpRowSweep 620ms cubic-bezier(0.25, 0.6, 0.3, 1) 1;
-}
-@media (prefers-reduced-motion: reduce) {
-  .ylp-order-table tbody tr.ylp-order-row-active,
-  .ylp-order-table tbody tr.ylp-order-row-active::after { animation: none; }
-  .ylp-order-table tbody tr.ylp-order-row-active {
-    font-size: 14.5px;
-    box-shadow: inset 4px 0 0 var(--x-color-accent-strong), 0 0 12px 1px rgba(37, 99, 235, 0.3);
-  }
+  box-shadow: inset 4px 0 0 var(--x-color-accent-strong), 0 0 12px 1px rgba(37, 99, 235, 0.3);
 }
 .ylp-order-table thead th.ylp-sortable { cursor: pointer; user-select: none; }
 .ylp-order-table thead th.ylp-sortable:hover { color: var(--x-color-accent-strong); background: var(--x-color-accent-tint); }

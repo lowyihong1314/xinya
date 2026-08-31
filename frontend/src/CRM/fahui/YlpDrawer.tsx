@@ -4,8 +4,9 @@ import type { CSSProperties, ReactNode } from "react";
 // 法会工作区那只右侧抽屉（原 ylp-intake-drawer）：牌位填写页预览、牌位打印预览都用它，
 // 原始文档页的订单摘要也共用同一份，保证滑入动画与外观一致。
 export const INTAKE_DRAWER_CSS = `
-@keyframes ylpIntakeSlideIn { from { transform: translateX(100%); } to { transform: translateX(0); } }
-.ylp-intake-drawer { animation: ylpIntakeSlideIn 0.28s cubic-bezier(0.22, 1, 0.36, 1); }
+/* 原本有个 translateX(100%) → 0 的滑入动画，去掉了：手机版抽屉是 position: fixed，
+   而 transform 会让元素变成 fixed 后代的包含块 —— Safari 在动画那 0.28 秒里
+   会把整只抽屉的定位算错，正是「一进去画面就跑」的来源之一。 */
 /* 手机上抽屉是盖住整屏的一「页」，标题栏跟着钉住，划到多下面都点得到返回 */
 .ylp-intake-drawer-sheet > .ylp-drawer-header {
   position: sticky;
