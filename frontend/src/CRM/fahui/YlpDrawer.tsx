@@ -1,4 +1,4 @@
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
 import type { CSSProperties, ReactNode } from "react";
 
 // 法会工作区那只右侧抽屉（原 ylp-intake-drawer）：牌位填写页预览、牌位打印预览都用它，
@@ -17,6 +17,40 @@ export const INTAKE_DRAWER_CSS = `
   border-bottom: 1px solid var(--x-color-line-soft, var(--x-color-line));
 }
 `;
+
+type SheetRect = { top: number; height: number };
+
+/** iOS Safari 键盘一弹，只有「视觉视口」缩小，布局视口纹丝不动；
+ *  position: fixed 是钉在布局视口上的，于是抽屉整块被留在人眼看到的范围之外
+ *  —— 表现就是一打字画面整个往下跑。
+ *
+ *  visualViewport 报的就是人此刻真正看得到的那块矩形，抽屉跟着它走才不会跑。
+ *  老浏览器没有这个 API，回退到 inset:0，跟以前一样。 */
+function useVisualViewportRect(active: boolean): SheetRect | null {
+  const [rect, setRect] = useState<SheetRect | null>(null);
+
+  useEffect(() => {
+    if (!active) {
+      setRect(null);
+      return;
+    }
+    const viewport = window.visualViewport;
+    if (!viewport) {
+      return;
+    }
+    const sync = () => setRect({ top: viewport.offsetTop, height: viewport.height });
+    sync();
+    // resize = 键盘弹起/收起；scroll = Safari 自己把视觉视口挪去露出输入框
+    viewport.addEventListener("resize", sync);
+    viewport.addEventListener("scroll", sync);
+    return () => {
+      viewport.removeEventListener("resize", sync);
+      viewport.removeEventListener("scroll", sync);
+    };
+  }, [active]);
+
+  return rect;
+}
 
 export function YlpDrawer({
   isMobile,
@@ -50,9 +84,11 @@ export function YlpDrawer({
     };
   }, [isMobile]);
 
+  const sheetRect = useVisualViewportRect(isMobile);
+
   return (
     <aside
-      style={drawerStyles.panel(isMobile, navbarHeight)}
+      style={drawerStyles.panel(isMobile, navbarHeight, sheetRect)}
       className={[
         "ylp-intake-drawer",
         // 手机版才是整屏的「页」，桌面仍是右侧那条常驻栏
@@ -78,16 +114,24 @@ export function YlpDrawer({
 export const drawerStyles = {
   // 手机和桌面是两种东西，别硬塞进一套三元里：
   //   桌面 —— 右侧一条常驻栏，跟列表并排，sticky 跟着滚
-  //   手机 —— 点卡片后盖住整屏的一「页」，只让开顶部导航，退出靠标题栏那颗返回
-  panel: (isMobile: boolean, navbarHeight: number): CSSProperties =>
+  //   手机 —— 点卡片后盖住整屏的一「页」，退出靠标题栏那颗返回
+  //
+  // 手机端连顶部导航一起盖：导航是 sticky（钉在文档顶），键盘一弹视觉视口
+  // 挪走它就跟着不见了，再给它留一条 navbarHeight 的空隙，那空隙里会露出
+  // 底下的列表。盖满反而是稳的 —— 这本来就是一整页，返回按钮在标题栏里。
+  panel: (isMobile: boolean, navbarHeight: number, sheet: SheetRect | null): CSSProperties =>
     isMobile
       ? {
           position: "fixed",
-          top: `${navbarHeight}px`,
+          top: sheet ? `${sheet.top}px` : 0,
           left: 0,
           right: 0,
-          bottom: 0,
-          zIndex: 60,
+          // 拿得到视觉视口就用它的高度（键盘占掉的部分自动让开）；
+          // 拿不到就退回 bottom:0，和改动前一样
+          height: sheet ? `${sheet.height}px` : undefined,
+          bottom: sheet ? undefined : 0,
+          // 要压过导航栏的 z-index: 1000
+          zIndex: 1200,
           width: "100%",
           overflowY: "auto",
           // 抽屉滑到底不要把底下的页面也带着滚
