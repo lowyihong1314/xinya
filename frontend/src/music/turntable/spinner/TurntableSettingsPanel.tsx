@@ -1,7 +1,13 @@
 import { useState } from "react";
 import type { CSSProperties } from "react";
 
-import { clampSlotCount, defaultSlotName, buildDefaultSlots } from "./turntableRandom";
+import {
+  clampSlotCount,
+  defaultSlotName,
+  buildDefaultSlots,
+  MAX_SLOT_COUNT,
+  MIN_SLOT_COUNT,
+} from "./turntableRandom";
 import { TurntableUserPicker } from "./TurntableUserPicker";
 import type { SlotMachineSettings, SlotConfig } from "./types";
 
@@ -80,7 +86,7 @@ export function TurntableSettingsPanel({
             onChange={(e) => handleSlotCountChange(Number(e.target.value))}
             style={inputStyle}
           >
-            {[3, 4, 5, 6].map((v) => (
+            {Array.from({ length: MAX_SLOT_COUNT - MIN_SLOT_COUNT + 1 }, (_, i) => MIN_SLOT_COUNT + i).map((v) => (
               <option key={v} value={v}>
                 {v} 个角色
               </option>

@@ -441,7 +441,10 @@ const metaTextStyle: CSSProperties = { color: "var(--x-color-ink-muted)", fontWe
 
 const slotsRowStyle: CSSProperties = {
   display: "grid",
-  gridTemplateColumns: "repeat(auto-fit, minmax(160px, 1fr))",
+  // Capped column width + centring: 1 role stays a normal-sized card instead of
+  // stretching across the screen, and 7-9 roles wrap into tidy rows.
+  gridTemplateColumns: "repeat(auto-fit, minmax(160px, 220px))",
+  justifyContent: "center",
   gap: "14px",
 };
 

@@ -1,9 +1,12 @@
 import type { SlotConfig, SlotMachineRoundResult, SlotMachineSettings, SlotUser } from "./types";
 
-const DEFAULT_SLOT_NAMES = ["吉他手", "钢琴手", "歌手", "贝斯手", "鼓手", "小提琴手"];
+const DEFAULT_SLOT_NAMES = ["吉他手", "钢琴手", "歌手", "贝斯手", "鼓手", "小提琴手", "大提琴手", "长笛手", "萨克斯手"];
+
+export const MIN_SLOT_COUNT = 1;
+export const MAX_SLOT_COUNT = 9;
 
 export function clampSlotCount(value: number) {
-  return Math.max(3, Math.min(6, Math.round(value || 3)));
+  return Math.max(MIN_SLOT_COUNT, Math.min(MAX_SLOT_COUNT, Math.round(value || 3)));
 }
 
 export function defaultSlotName(index: number) {
@@ -49,7 +52,7 @@ export function checkCanStart(
   return { ok: true, reason: "" };
 }
 
-/** Backtracking check: can each slot get a unique person? (3-6 slots, trivially fast) */
+/** Backtracking check: can each slot get a unique person? (1-9 slots, trivially fast) */
 function canAssignUnique(slotCandidates: SlotUser[][], index: number, usedIds: Set<number>): boolean {
   if (index >= slotCandidates.length) return true;
   for (const user of slotCandidates[index]) {
