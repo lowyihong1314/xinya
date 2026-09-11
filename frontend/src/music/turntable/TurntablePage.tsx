@@ -3,10 +3,11 @@ import type { CSSProperties } from "react";
 
 import { useBaseNavbarVisibility } from "../../router/AppChromeContext";
 import { GameHostPage } from "./game/GameHostPage";
+import { MirrorHostPage } from "./mirror/MirrorHostPage";
 import { QuizHostPage } from "./quiz/QuizHostPage";
 import { TurntableSpinnerPage } from "./spinner/TurntableSpinnerPage";
 
-type ActivityMode = "quiz" | "game" | "turntable";
+type ActivityMode = "quiz" | "game" | "turntable" | "mirror";
 
 const ACTIVITY_ITEMS: Array<{
   key: ActivityMode;
@@ -28,6 +29,11 @@ const ACTIVITY_ITEMS: Array<{
     title: "转盘活动",
     icon: "fas fa-record-vinyl",
   },
+  {
+    key: "mirror",
+    title: "别人眼中的我",
+    icon: "fas fa-eye",
+  },
 ];
 
 export function TurntablePage() {
@@ -43,6 +49,10 @@ export function TurntablePage() {
 
     if (activeMode === "game") {
       return <GameHostPage onBack={() => setActiveMode(null)} />;
+    }
+
+    if (activeMode === "mirror") {
+      return <MirrorHostPage onBack={() => setActiveMode(null)} />;
     }
 
     return <TurntableSpinnerPage onBack={() => setActiveMode(null)} />;

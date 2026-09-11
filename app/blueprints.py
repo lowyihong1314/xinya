@@ -25,6 +25,7 @@ BLUEPRINT_SPECS = [
     ("app.music", "music_bp", "/music", "api"),
     ("app.quiz", "quiz_bp", "/quiz", "api"),
     ("app.quiz_game", "quiz_game_bp", "/quiz_game", "api"),
+    ("app.mirror", "mirror_bp", "/mirror", "api"),
     ("app.form", "form_bp", "/form", "api"),
     ("app.fahui.YLP.routes", "fahui_bp", "/fahui_router", "api"),
     ("app.songbook", "songbook_bp", "/songbook", "api"),

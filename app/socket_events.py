@@ -3,6 +3,7 @@ from flask_login import current_user
 from flask_socketio import emit, join_room
 
 from app.extensions import socketio
+from app.mirror import services as mirror_services
 from app.quiz import services as quiz_services
 from app.quiz_game import services as quiz_game_services
 from app.redis_client import redis_client
@@ -38,6 +39,19 @@ def handle_disconnect(reason=None):
             )
     except Exception as exc:  # noqa: BLE001 - presence cleanup must never break disconnect
         print("⚠️ Quiz game presence cleanup error:", exc)
+    try:
+        mirror_token = mirror_services.mark_offline_by_sid(request.sid)
+        if mirror_token:
+            emit(
+                "mirror:progress",
+                {
+                    "members": mirror_services.member_list(mirror_token),
+                    "member_count": len(mirror_services.member_list(mirror_token)),
+                },
+                to=mirror_services.socket_room(mirror_token),
+            )
+    except Exception as exc:  # noqa: BLE001 - presence cleanup must never break disconnect
+        print("⚠️ Mirror presence cleanup error:", exc)
 
 
 @socketio.on_error_default
@@ -241,3 +255,6 @@ def handle_quiz_guest_tap(data):
 
 # Register the 问答游戏 (Kahoot-style quiz) socket handlers on the same server.
 from app.quiz_game import socket_events as _quiz_game_socket_events  # noqa: E402,F401
+
+# Register the 「别人眼中的我」 socket handlers on the same server.
+from app.mirror import socket_events as _mirror_socket_events  # noqa: E402,F401
