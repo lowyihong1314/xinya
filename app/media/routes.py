@@ -1,11 +1,12 @@
 import os
 
 from flask import Blueprint, abort, jsonify, request, send_file
-from flask_login import login_required
+from flask_login import current_user, login_required
 
 from app.auth import permission_required
 from app.media.paths import BROKEN_IMAGE_PATH, event_photo_base_dir
 from app.media.services import (
+    album_file_heart_count,
     create_album_file,
     delete_album_file,
     get_album_file,
@@ -14,6 +15,7 @@ from app.media.services import (
     get_event_type_payload,
     resolve_media_path,
     rotate_album_file,
+    toggle_album_file_heart,
 )
 from app.media.utils import (
     JPEG_CACHE_SOURCE_EXTS,
@@ -26,6 +28,42 @@ from models import db
 
 media_bp = Blueprint("media", __name__)
 nginx_media_router = Blueprint("media_file", __name__)
+
+
+def _viewer_identity(payload=None):
+    """谁在按：登录用户认 user_id，访客认浏览器里的 visitor_token。"""
+    if getattr(current_user, "is_authenticated", False):
+        return getattr(current_user, "id", None), None
+    source = payload if isinstance(payload, dict) else {}
+    token = str(source.get("visitor_token") or request.headers.get("X-Visitor-Token") or "").strip()
+    return None, (token[:64] or None)
+
+
+@media_bp.post("/album_file/<int:file_id>/heart")
+def toggle_album_file_heart_route(file_id):
+    """照片点爱心（再按一次取消）。活动公开时访客也能按。"""
+    album_file = get_album_file(file_id)
+    if not album_file:
+        abort(404)
+    event = album_file.event
+    # 不公开的活动对访客等于不存在，跟 get_event 保持一致
+    if event is not None and not event.is_public and not getattr(current_user, "is_authenticated", False):
+        abort(404)
+
+    payload = request.get_json(silent=True) or {}
+    user_id, visitor_token = _viewer_identity(payload)
+    if not user_id and not visitor_token:
+        return jsonify({"status": "error", "message": "缺少访客标识"}), 400
+
+    hearted, count = toggle_album_file_heart(file_id, user_id=user_id, visitor_token=visitor_token)
+    return jsonify({"status": "success", "hearted": hearted, "heart_count": count})
+
+
+@media_bp.get("/album_file/<int:file_id>/heart")
+def get_album_file_heart_route(file_id):
+    if not get_album_file(file_id):
+        abort(404)
+    return jsonify({"status": "success", "heart_count": album_file_heart_count(file_id)})
 
 
 def _event_photo_cache_source_path(filepath):

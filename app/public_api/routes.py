@@ -1,4 +1,4 @@
-from flask import Blueprint, jsonify
+from flask import Blueprint, jsonify, request
 from flask_login import current_user
 
 from app.auth import permission_required
@@ -20,7 +20,12 @@ def get_event(event_id):
     if not event.is_public and not current_user.is_authenticated:
         return jsonify({"status": "error", "message": "活动不存在"}), 404
 
-    data = event.to_dict_full()
+    # 访客的爱心认浏览器里的 visitor_token，登录的认账号
+    viewer_user_id = getattr(current_user, "id", None) if current_user.is_authenticated else None
+    viewer_token = None
+    if not viewer_user_id:
+        viewer_token = (request.args.get("visitor_token") or request.headers.get("X-Visitor-Token") or "").strip()[:64] or None
+    data = event.to_dict_full(viewer_user_id=viewer_user_id, viewer_token=viewer_token)
     # 公开接口：非登陆用户隐藏「仅登陆可见」的环节。
     if not current_user.is_authenticated:
         data["event_flows"] = [f for f in (data.get("event_flows") or []) if not f.get("login_only")]

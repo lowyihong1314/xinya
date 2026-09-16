@@ -6,6 +6,7 @@ from datetime import datetime, timezone
 
 import psutil
 from flask import abort
+from sqlalchemy.exc import IntegrityError
 from flask_login import current_user
 from werkzeug.utils import safe_join, secure_filename
 
@@ -23,7 +24,7 @@ from app.media.paths import (
 from app.media.utils import ensure_jpeg_cache_file, get_duration, is_video_valid, remove_jpeg_cache_file
 from app.media.video_tasks import current_video_tasks
 from models import db
-from models.event_data import AlbumFiles, EventData
+from models.event_data import AlbumFileHeart, AlbumFiles, EventData
 
 VIDEO_CACHE_DURATION_SECONDS = 15
 VIDEO_CACHE_MAX_WIDTH = 1280
@@ -690,3 +691,51 @@ def get_album_file(file_id):
 
 def get_album_files(file_ids):
     return [AlbumFiles.query.get(file_id) for file_id in file_ids]
+
+
+def album_file_heart_count(file_id):
+    return int(
+        db.session.query(db.func.count(AlbumFileHeart.id))
+        .filter(AlbumFileHeart.file_id == file_id)
+        .scalar()
+        or 0
+    )
+
+
+def toggle_album_file_heart(file_id, user_id=None, visitor_token=None):
+    """按一下爱心：同一个人再按一次就取消。返回 (是否已按, 总数)。
+
+    登录用户以 user_id 认人，未登录访客以浏览器里的 visitor_token 认人，
+    两者各有唯一索引，所以同一个人只可能留下一颗。
+    """
+    album_file = AlbumFiles.query.get(file_id)
+    if not album_file:
+        abort(404)
+    if not user_id and not visitor_token:
+        abort(400)
+
+    identity = (
+        AlbumFileHeart.user_id == user_id
+        if user_id
+        else AlbumFileHeart.visitor_token == visitor_token
+    )
+    existing = AlbumFileHeart.query.filter(AlbumFileHeart.file_id == album_file.id, identity).first()
+
+    if existing:
+        db.session.delete(existing)
+        db.session.commit()
+        return False, album_file_heart_count(album_file.id)
+
+    db.session.add(
+        AlbumFileHeart(
+            file_id=album_file.id,
+            user_id=user_id,
+            visitor_token=None if user_id else visitor_token,
+        )
+    )
+    try:
+        db.session.commit()
+    except IntegrityError:
+        # 同一个人连点两下撞上唯一索引：当成已经按过，不报错
+        db.session.rollback()
+    return True, album_file_heart_count(album_file.id)

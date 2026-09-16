@@ -74,6 +74,9 @@ export type AlbumFile = {
   file_type?: string;
   created_at?: string;
   user_display_name?: string;
+  /** 爱心数（相册按赞），以及当前访客有没有按过 */
+  heart_count?: number;
+  hearted_by_me?: boolean;
   [key: string]: unknown;
   /** 是否对外公开：false 时未登录访客看不到这个活动 */
   is_public?: boolean;

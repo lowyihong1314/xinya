@@ -11,6 +11,7 @@ import type {
 } from "./types";
 import { API_BASE } from "../../js/apiBase";
 import { apiFetch } from "../../js/apiFetch";
+import { getVisitorToken } from "../../js/visitorToken";
 
 async function parseJson<T>(response: Response): Promise<T> {
   const data = (await response.json().catch(() => ({}))) as T & {
@@ -31,10 +32,23 @@ export async function fetchAllEventsSorted() {
 }
 
 export async function fetchEventDetail(eventId: number | string) {
-  const response = await apiFetch(`/api/api/get_event/${eventId}`, {
+  // 带上访客标识，未登录也能看出自己给哪些照片点过爱心
+  const visitorToken = getVisitorToken();
+  const query = visitorToken ? `?visitor_token=${encodeURIComponent(visitorToken)}` : "";
+  const response = await apiFetch(`/api/api/get_event/${eventId}${query}`, {
     credentials: "include",
   });
   return parseJson<EventDetailResponse>(response);
+}
+
+export async function toggleAlbumFileHeart(fileId: number) {
+  const response = await apiFetch(`/media/album_file/${fileId}/heart`, {
+    method: "POST",
+    credentials: "include",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ visitor_token: getVisitorToken() }),
+  });
+  return parseJson<{ status?: string; hearted: boolean; heart_count: number }>(response);
 }
 
 export async function saveEvent(

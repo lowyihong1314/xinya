@@ -154,14 +154,20 @@ class EventData(db.Model):
             "display_name": getattr(self.user, "display_name", None)
         }
 
-    def to_dict_full(self, max_file=1000):
+    def to_dict_full(self, max_file=1000, viewer_user_id=None, viewer_token=None):
         data = self.to_dict()
 
         data["max_file"] = max_file
 
+        album_files = self.album_files[:max_file]
+        heart_stats = collect_heart_stats(
+            [file.id for file in album_files],
+            viewer_user_id=viewer_user_id,
+            viewer_token=viewer_token,
+        )
         data["album_files"] = [
-            file.to_dict()
-            for file in self.album_files[:max_file]
+            file.to_dict(heart_stats=heart_stats.get(file.id))
+            for file in album_files
         ]
         data["event_files"] = [
             file.to_dict()
@@ -597,8 +603,7 @@ class AlbumFiles(db.Model):
 
         return prev_id, next_id
 
-    
-    def to_dict(self):
+    def to_dict(self, heart_stats=None):
         prev_id, next_id = self.get_prev_next_ids(
             db.session,
             self.event_id,
@@ -624,5 +629,76 @@ class AlbumFiles(db.Model):
             "tags": self.tags,
             "category": self.category,
             "extra_metadata": self.extra_metadata,
-            "file_type": self.file_type
+            "file_type": self.file_type,
+            # 爱心：调用方没给统计就当场查这一张（单张返回的接口用），
+            # 列表接口一律走 heart_stats 批量传入。
+            "heart_count": (heart_stats or {}).get("count", self.hearts.count()),
+            "hearted_by_me": bool((heart_stats or {}).get("mine", False)),
         }
+
+
+class AlbumFileHeart(db.Model):
+    """相册照片的「爱心」：一人一张照片最多一颗。
+
+    登录用户按 user_id 认人；未登录访客按浏览器里的 visitor_token 认人（活动相册
+    本来就允许公开浏览）。两个唯一索引各管一种身份，所以同一个人重复点只会 toggle
+    自己那一颗，不会把别人的顶掉。
+    """
+
+    __tablename__ = "album_file_heart"
+    __table_args__ = (
+        db.UniqueConstraint("file_id", "user_id", name="uq_album_file_heart_user"),
+        db.UniqueConstraint("file_id", "visitor_token", name="uq_album_file_heart_visitor"),
+    )
+
+    id = db.Column(db.Integer, primary_key=True, autoincrement=True)
+    file_id = db.Column(
+        db.Integer,
+        db.ForeignKey("album_files.id", ondelete="CASCADE", onupdate="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    user_id = db.Column(
+        db.Integer,
+        db.ForeignKey("user_data.id", ondelete="CASCADE", onupdate="CASCADE"),
+        nullable=True,
+        index=True,
+    )
+    # 未登录访客的浏览器标识（localStorage 里的随机串）
+    visitor_token = db.Column(db.String(64), nullable=True, index=True)
+    created_at = db.Column(db.DateTime, server_default=db.func.current_timestamp(), nullable=False)
+
+    file = db.relationship(
+        "AlbumFiles",
+        backref=db.backref("hearts", lazy="dynamic", cascade="all, delete-orphan", passive_deletes=True),
+    )
+
+
+def collect_heart_stats(file_ids, viewer_user_id=None, viewer_token=None):
+    """一次查完整批照片的爱心数 + 当前访客按过哪些，避免每张照片各查一次。"""
+    ids = [int(file_id) for file_id in (file_ids or []) if file_id]
+    if not ids:
+        return {}
+
+    counts = dict(
+        db.session.query(AlbumFileHeart.file_id, db.func.count(AlbumFileHeart.id))
+        .filter(AlbumFileHeart.file_id.in_(ids))
+        .group_by(AlbumFileHeart.file_id)
+        .all()
+    )
+
+    mine = set()
+    if viewer_user_id or viewer_token:
+        identity = (
+            AlbumFileHeart.user_id == viewer_user_id
+            if viewer_user_id
+            else AlbumFileHeart.visitor_token == viewer_token
+        )
+        mine = {
+            row[0]
+            for row in db.session.query(AlbumFileHeart.file_id)
+            .filter(AlbumFileHeart.file_id.in_(ids), identity)
+            .all()
+        }
+
+    return {file_id: {"count": counts.get(file_id, 0), "mine": file_id in mine} for file_id in ids}

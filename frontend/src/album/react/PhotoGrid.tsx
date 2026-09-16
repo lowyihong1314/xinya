@@ -17,7 +17,9 @@ import { showConfirmDialog } from "../../js/dialogs";
 import type { SmartMediaAsset } from "../../js/get_img";
 import { show_alert } from "../../js/show_alert";
 import { isMobileNativeRuntime } from "../../mobile/native/capacitor";
+import { toggleAlbumFileHeart } from "../../event/shared/api";
 import { PhotoGridBatchActions } from "./PhotoGridBatchActions";
+import { PhotoHeartButton } from "./PhotoHeartButton";
 import type { MediaNotification } from "./mediaRealtime";
 
 const LOAD_BATCH_SIZE = 24;
@@ -58,6 +60,8 @@ export function PhotoGrid({
   const [selectionMode, setSelectionMode] = useState(false);
   const [selectedIds, setSelectedIds] = useState<number[]>([]);
   const [removedIds, setRemovedIds] = useState<number[]>([]);
+  const [heartOverrides, setHeartOverrides] = useState<Record<number, { count: number; mine: boolean }>>({});
+  const [heartBusyIds, setHeartBusyIds] = useState<number[]>([]);
   const [busy, setBusy] = useState(false);
   const [loadingMore, setLoadingMore] = useState(false);
   const [previewBumps, setPreviewBumps] = useState<Record<number, number>>({});
@@ -74,10 +78,14 @@ export function PhotoGrid({
     () =>
       [...(detail.album_files || [])]
         .filter((file) => !removedIds.includes(file.id))
-        .sort(
-        (left, right) =>
-          new Date(right.created_at || 0).getTime() - new Date(left.created_at || 0).getTime(),
-    ),
+        // 爱心多的排前面，一样多再按时间新的优先。
+        // 这里刻意用服务器发来的 heart_count 而不是本地覆盖值：否则刚点的那张会
+        // 立刻从手指底下跳走，重新进页面才重排。
+        .sort((left, right) => {
+          const gap = Number(right.heart_count || 0) - Number(left.heart_count || 0);
+          if (gap !== 0) return gap;
+          return new Date(right.created_at || 0).getTime() - new Date(left.created_at || 0).getTime();
+        }),
     [detail.album_files, removedIds],
   );
   const [page, setPage] = useState(0);
@@ -92,6 +100,44 @@ export function PhotoGrid({
     [files, paged, safePage, pageSize, visibleCount],
   );
   const hasMore = !paged && visibleCount < files.length;
+  const heartStateFor = useCallback(
+    (file: AlbumFile) =>
+      heartOverrides[file.id] || {
+        count: Number(file.heart_count || 0),
+        mine: Boolean(file.hearted_by_me),
+      },
+    [heartOverrides],
+  );
+
+  const handleToggleHeart = useCallback(
+    async (fileId: number) => {
+      const target = (detail.album_files || []).find((file) => file.id === fileId);
+      const current = heartOverrides[fileId] || {
+        count: Number(target?.heart_count || 0),
+        mine: Boolean(target?.hearted_by_me),
+      };
+      // 先按乐观结果更新，失败再退回去
+      const optimistic = {
+        mine: !current.mine,
+        count: Math.max(0, current.count + (current.mine ? -1 : 1)),
+      };
+      setHeartOverrides((prev) => ({ ...prev, [fileId]: optimistic }));
+      setHeartBusyIds((prev) => (prev.includes(fileId) ? prev : [...prev, fileId]));
+      try {
+        const result = await toggleAlbumFileHeart(fileId);
+        setHeartOverrides((prev) => ({
+          ...prev,
+          [fileId]: { count: Number(result.heart_count || 0), mine: Boolean(result.hearted) },
+        }));
+      } catch {
+        setHeartOverrides((prev) => ({ ...prev, [fileId]: current }));
+      } finally {
+        setHeartBusyIds((prev) => prev.filter((id) => id !== fileId));
+      }
+    },
+    [detail.album_files, heartOverrides],
+  );
+
   const previewIdFromArgs = useMemo(() => readPreviewIdFromArgs(location.search), [location.search]);
   const activePreviewIndex = activePreviewId ? files.findIndex((file) => file.id === activePreviewId) : -1;
   const activePreviewFile = activePreviewIndex >= 0 ? files[activePreviewIndex] : null;
@@ -515,6 +561,10 @@ export function PhotoGrid({
                 previewVersion={previewBumps[file.id] || 0}
                 videoProgress={videoProgress[file.id]}
                 shouldLoad={settledMediaIds.includes(file.id) || activeLoadId === file.id}
+                heartCount={heartStateFor(file).count}
+                hearted={heartStateFor(file).mine}
+                heartBusy={heartBusyIds.includes(file.id)}
+                onToggleHeart={handleToggleHeart}
                 onToggleSelect={toggleSelect}
                 onStartSelection={startSelectionMode}
                 onOpenPreview={onPickPhoto || openPreview}
@@ -666,6 +716,10 @@ function PhotoCard({
   previewVersion,
   videoProgress,
   shouldLoad,
+  heartCount,
+  hearted,
+  heartBusy,
+  onToggleHeart,
   onToggleSelect,
   onStartSelection,
   onOpenPreview,
@@ -681,6 +735,10 @@ function PhotoCard({
   previewVersion: number;
   videoProgress?: VideoProgressState;
   shouldLoad: boolean;
+  heartCount: number;
+  hearted: boolean;
+  heartBusy: boolean;
+  onToggleHeart: (fileId: number) => void;
   onToggleSelect: (fileId: number) => void;
   onStartSelection: (fileId: number) => void;
   onOpenPreview: (fileId: number) => void;
@@ -822,6 +880,15 @@ function PhotoCard({
         >
           <i className="fa-solid fa-magnifying-glass-plus" aria-hidden="true" style={selectionZoomIconStyle} />
         </button>
+      ) : null}
+      {!selectionMode ? (
+        <PhotoHeartButton
+          fileId={file.id}
+          count={heartCount}
+          hearted={hearted}
+          busy={heartBusy}
+          onToggle={onToggleHeart}
+        />
       ) : null}
       <CacheMediaPlayer
         id={`event-detail-photo-${file.id}-media`}
