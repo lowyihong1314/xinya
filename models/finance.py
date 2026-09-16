@@ -33,6 +33,12 @@ class ReimbursementRequest(db.Model):
     vendor_contact_number = db.Column(db.String(80), nullable=True)
     purchase_datetime = db.Column(db.DateTime, nullable=True)
 
+    # 收款资料（钱要打去哪）：默认取申请人档案里的银行资料，可在单上改。
+    # 字段名与 User 上的同名字段保持一致，方便直接带出。
+    bank_name = db.Column(db.String(100), nullable=True)
+    bank_account = db.Column(db.String(100), nullable=True)
+    account_name = db.Column(db.String(120), nullable=True)
+
     # link token（申请链接）
     public_token = db.Column(db.String(128), unique=True, nullable=False, index=True)
 

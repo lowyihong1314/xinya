@@ -25,6 +25,10 @@ export function buildInitialCreateState(user: AccountUser | null): CreateState {
     vendor_address: "",
     vendor_contact_number: "",
     purchase_datetime: "",
+    // 收款资料默认用申请人自己档案里的银行户口，报给别人时再改
+    bank_name: String(user?.bank_name || ""),
+    bank_account: String(user?.bank_account || ""),
+    account_name: String(user?.account_name || user?.display_name || user?.name_NRIC || ""),
     selectedEvent: null,
     files: [],
     signJsonData: null,
@@ -68,6 +72,9 @@ export function buildClaimFormData(
   if (s.vendor_address.trim()) fd.append("vendor_address", s.vendor_address.trim());
   if (s.vendor_contact_number.trim()) fd.append("vendor_contact_number", s.vendor_contact_number.trim());
   if (s.purchase_datetime) fd.append("purchase_datetime", s.purchase_datetime);
+  if (s.bank_name.trim()) fd.append("bank_name", s.bank_name.trim());
+  if (s.bank_account.trim()) fd.append("bank_account", s.bank_account.trim());
+  if (s.account_name.trim()) fd.append("account_name", s.account_name.trim());
   if (s.selectedEvent?.id) fd.append("event_id", String(s.selectedEvent.id));
   if (extra?.eventBudgetId) fd.append("event_budget_id", String(extra.eventBudgetId));
   s.files.forEach((file) => fd.append("files", file));

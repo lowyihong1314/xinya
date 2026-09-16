@@ -68,6 +68,9 @@ type ClaimEditDraft = {
   vendor_address: string;
   vendor_contact_number: string;
   purchase_datetime: string;
+  bank_name: string;
+  bank_account: string;
+  account_name: string;
 };
 
 export function ClaimDetail({
@@ -261,6 +264,9 @@ export function ClaimDetail({
         vendor_address: editDraft.vendor_address.trim(),
         vendor_contact_number: editDraft.vendor_contact_number.trim(),
         purchase_datetime: editDraft.purchase_datetime,
+        bank_name: editDraft.bank_name.trim(),
+        bank_account: editDraft.bank_account.trim(),
+        account_name: editDraft.account_name.trim(),
       });
       onClaimUpdated(updated);
       setEditDraft(buildEditDraft(updated));
@@ -570,12 +576,22 @@ export function ClaimDetail({
                   <Field label="商家联络号码"><input style={inputStyle} value={editDraft.vendor_contact_number} onChange={(e) => setEditDraft((p) => ({ ...p, vendor_contact_number: e.target.value }))} /></Field>
                   <Field label="商家地址"><input style={inputStyle} value={editDraft.vendor_address} onChange={(e) => setEditDraft((p) => ({ ...p, vendor_address: e.target.value }))} /></Field>
                 </div>
+                <div style={fieldsGridStyle}>
+                  <Field label="收款银行"><input style={inputStyle} value={editDraft.bank_name} onChange={(e) => setEditDraft((p) => ({ ...p, bank_name: e.target.value }))} /></Field>
+                  <Field label="银行账号"><input style={inputStyle} inputMode="numeric" value={editDraft.bank_account} onChange={(e) => setEditDraft((p) => ({ ...p, bank_account: e.target.value }))} /></Field>
+                  <Field label="账户名"><input style={inputStyle} value={editDraft.account_name} onChange={(e) => setEditDraft((p) => ({ ...p, account_name: e.target.value }))} /></Field>
+                </div>
               </>
             ) : (
               <>
                 {claim.vendor_name || claim.vendor_address || claim.vendor_contact_number ? (
                   <Field label="商家资料">
                     <FieldValue multiline value={[claim.vendor_name ? `商家名称：${claim.vendor_name}` : "", claim.vendor_contact_number ? `联络号码：${claim.vendor_contact_number}` : "", claim.vendor_address ? `地址：${claim.vendor_address}` : ""].filter(Boolean).join("\n")} />
+                  </Field>
+                ) : null}
+                {claim.bank_name || claim.bank_account || claim.account_name ? (
+                  <Field label="收款资料">
+                    <FieldValue multiline value={[claim.account_name ? `账户名：${claim.account_name}` : "", claim.bank_name ? `银行：${claim.bank_name}` : "", claim.bank_account ? `账号：${claim.bank_account}` : ""].filter(Boolean).join("\n")} />
                   </Field>
                 ) : null}
               </>
@@ -868,6 +884,9 @@ function buildEditDraft(claim: ClaimRecord): ClaimEditDraft {
     vendor_address: claim.vendor_address || "",
     vendor_contact_number: claim.vendor_contact_number || "",
     purchase_datetime: toDateTimeLocalValue(claim.purchase_datetime),
+    bank_name: claim.bank_name || "",
+    bank_account: claim.bank_account || "",
+    account_name: claim.account_name || "",
   };
 }
 

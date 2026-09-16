@@ -71,6 +71,9 @@ CLAIM_EDIT_FIELD_LABELS = {
     "vendor_address": "商家地址",
     "vendor_contact_number": "商家联络号码",
     "purchase_datetime": "采购日期",
+    "bank_name": "收款银行",
+    "bank_account": "银行账号",
+    "account_name": "账户名",
     "event_id": "活动",
     "attachment": "附件",
 }
@@ -854,7 +857,6 @@ def _save_claim_attachment(request_obj, uploaded_file, current_user=None):
 def create_claim_from_form(form, files, current_user=None):
     applicant_name = form.get("applicant_name")
     request_date_raw = form.get("request_date")
-    amount_raw = form.get("amount")
     purpose = _optional_text(form.get("purpose"))
     event_id_raw = form.get("event_id")
     sign_json_data_raw = form.get("sign_json_data")
@@ -864,6 +866,9 @@ def create_claim_from_form(form, files, current_user=None):
     vendor_address = _optional_text(form.get("vendor_address"))
     vendor_contact_number = _optional_text(form.get("vendor_contact_number"), 80, "商家联络号码")
     purchase_datetime = _parse_optional_datetime(form.get("purchase_datetime"), "采购日期")
+    bank_name = _optional_text(form.get("bank_name"), 100, "收款银行")
+    bank_account = _optional_text(form.get("bank_account"), 100, "银行账号")
+    account_name = _optional_text(form.get("account_name"), 120, "账户名")
 
     if not all([applicant_name, request_date_raw, sign_json_data_raw]):
         raise ValidationError("缺少必要字段")
@@ -876,20 +881,10 @@ def create_claim_from_form(form, files, current_user=None):
     except Exception as exc:
         raise ValidationError("数据格式错误") from exc
 
-    # 没传明细的老客户端：拿用途 + 金额兜底成一行，保证每张单都有明细
+    # 报销单一律走明细结构：不再拿「用途 + 总额」兜底成一行整单，否则又会产生
+    # 没有逐项明细的单据（历史数据由 a1d4f7c2b830 清洗过）。
     if not line_items:
-        fallback_amount = _parse_decimal(amount_raw, "金额")
-        if not fallback_amount:
-            raise ValidationError("请至少填写一行用途明细")
-        line_items = [
-            {
-                "description": (purpose or "报销").strip()[:2000],
-                "category": None,
-                "quantity": None,
-                "unit_price": None,
-                "amount": fallback_amount,
-            }
-        ]
+        raise ValidationError("请至少填写一行用途明细")
 
     amount = claim_lines_total(line_items)
     if amount <= 0:
@@ -900,6 +895,9 @@ def create_claim_from_form(form, files, current_user=None):
         applicant_name=applicant_name,
         request_date=request_date,
         amount=amount,
+        bank_name=bank_name,
+        bank_account=bank_account,
+        account_name=account_name,
         department_name=department_name,
         purpose=purpose,
         vendor_name=vendor_name,
@@ -1109,8 +1107,18 @@ def update_claim(request_id, payload, user):
     optional_field_limits = {
         "vendor_name": (255, "商家名称"),
         "vendor_contact_number": (80, "商家联络号码"),
+        "bank_name": (100, "收款银行"),
+        "bank_account": (100, "银行账号"),
+        "account_name": (120, "账户名"),
     }
-    for optional_field in ("vendor_name", "vendor_address", "vendor_contact_number"):
+    for optional_field in (
+        "vendor_name",
+        "vendor_address",
+        "vendor_contact_number",
+        "bank_name",
+        "bank_account",
+        "account_name",
+    ):
         if optional_field in payload:
             max_length, field_label = optional_field_limits.get(optional_field, (None, "字段"))
             next_value = _optional_text(payload.get(optional_field), max_length, field_label)

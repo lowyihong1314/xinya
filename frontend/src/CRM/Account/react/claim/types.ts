@@ -17,6 +17,10 @@ export type AccountUser = {
   phone?: string;
   NRIC?: string;
   departments?: Department[];
+  // 个人档案里的银行资料，新建报销时用来预填收款资料
+  bank_name?: string | null;
+  bank_account?: string | null;
+  account_name?: string | null;
 };
 
 export type ClaimAttachment = {
@@ -70,6 +74,10 @@ export type ClaimRecord = {
   vendor_address?: string | null;
   vendor_contact_number?: string | null;
   purchase_datetime?: string | null;
+  // 收款资料（表头）
+  bank_name?: string | null;
+  bank_account?: string | null;
+  account_name?: string | null;
   event_id?: number;
   event_name?: string;
   created_at?: string;

@@ -151,6 +151,9 @@ export async function updateClaim(
       | "vendor_name"
       | "vendor_address"
       | "vendor_contact_number"
+      | "bank_name"
+      | "bank_account"
+      | "account_name"
       | "purchase_datetime"
       | "event_id"
     >

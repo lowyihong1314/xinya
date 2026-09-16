@@ -302,6 +302,16 @@ def _draw_centered_image(pdf, image, left, bottom, width, height):
     pdf.drawImage(ImageReader(image), draw_left, draw_bottom, width=draw_width, height=draw_height)
 
 
+def _format_claim_payee(claim):
+    """收款资料渲染成「户名 · 银行 · 账号」，缺的部分自动略过。"""
+    parts = [
+        str(claim.get("account_name") or "").strip(),
+        str(claim.get("bank_name") or "").strip(),
+        str(claim.get("bank_account") or "").strip(),
+    ]
+    return " · ".join(part for part in parts if part)
+
+
 def _format_claim_line_items(line_items):
     """明细行渲染成「1. 项目 x2 RM 12.00」这样的多行文本。"""
     lines = []
@@ -420,6 +430,10 @@ def _draw_claim_report_page(pdf, claim, index, total, page_width, page_height):
             pdf.drawString(left, current_y, line)
             current_y -= 4 * mm
         return current_y - 1 * mm
+
+    payee_text = _format_claim_payee(claim)
+    if payee_text:
+        y = draw_block("收款资料", payee_text, y, 2)
 
     # 用途明细（line item）优先占版面，剩余空间才放文字说明
     line_items = claim.get("line_items") or []

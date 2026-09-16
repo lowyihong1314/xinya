@@ -24,7 +24,8 @@ import { lineItemsTotal, type LineItemDraft } from "./lineItems";
 import type { AccountUser } from "./types";
 
 // 报销申请的唯一输入布局：新建申请、活动预算弹窗、批量申请「信息」弹窗全部用这一份。
-// 版块顺序：① 关联活动 → ② 附件与签名 → ③ 申请信息 → ④ 用途说明 + 明细 → ⑤ 商家信息 →（末尾）只读的申请金额
+// 版块顺序：① 关联活动 → ② 附件与签名 → ③ 申请信息 → ④ 用途说明 + 明细 → ⑤ 商家信息
+//          → ⑥ 收款资料 →（末尾）只读的申请金额
 // 金额由明细自动合计、不给填，所以不占编号，放最后收尾。
 export type CreateState = {
   applicant_name: string;
@@ -37,6 +38,9 @@ export type CreateState = {
   vendor_address: string;
   vendor_contact_number: string;
   purchase_datetime: string;
+  bank_name: string;
+  bank_account: string;
+  account_name: string;
   selectedEvent: { id: number; event_name?: string } | null;
   files: File[];
   signJsonData: { strokes?: unknown[] } | null;
@@ -243,6 +247,31 @@ export function ClaimFormSections({
               type="datetime-local"
               value={state.purchase_datetime}
               onChange={(event) => patch({ purchase_datetime: event.target.value })}
+              style={inputStyle}
+            />
+          </Field>
+        </div>
+      </Section>
+
+      {/* ⑥ 收款资料：钱打去哪。默认带出申请人档案里的银行资料，可改成别人的户口 */}
+      <Section title="⑥ 收款资料">
+        <div style={formGridStyle(isMobile)}>
+          <Field label="银行">
+            <input value={state.bank_name} onChange={(event) => patch({ bank_name: event.target.value })} style={inputStyle} />
+          </Field>
+          <Field label="银行账号">
+            <input
+              value={state.bank_account}
+              inputMode="numeric"
+              onChange={(event) => patch({ bank_account: event.target.value })}
+              style={inputStyle}
+            />
+          </Field>
+          <Field label="账户名" wide>
+            <input
+              value={state.account_name}
+              placeholder="收款人姓名，需与银行户口一致"
+              onChange={(event) => patch({ account_name: event.target.value })}
               style={inputStyle}
             />
           </Field>

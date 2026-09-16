@@ -21,6 +21,10 @@ def serialize_request_data(request_obj, with_children=True):
         "purchase_datetime": request_obj.purchase_datetime.isoformat()
         if request_obj.purchase_datetime
         else None,
+        # 收款资料（表头）
+        "bank_name": request_obj.bank_name,
+        "bank_account": request_obj.bank_account,
+        "account_name": request_obj.account_name,
         "public_token": request_obj.public_token,
         "sign_json_data": request_obj.sign_json_data,
         "voucher_recipient_name": request_obj.voucher_recipient_name,
