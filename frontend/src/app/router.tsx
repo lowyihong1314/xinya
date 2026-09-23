@@ -47,6 +47,9 @@ const EventsPage = lazy(() =>
 const EventDetailPage = lazy(() =>
   import("@/features/events/routes/EventDetailPage").then((m) => ({ default: m.EventDetailPage })),
 );
+const MusicPage = lazy(() =>
+  import("@/features/music/routes/MusicPage").then((m) => ({ default: m.MusicPage })),
+);
 const ClaimsPage = lazy(() =>
   import("@/features/claims/routes/ClaimsPage").then((m) => ({ default: m.ClaimsPage })),
 );
@@ -110,6 +113,7 @@ const routes: RouteObject[] = [
       },
       { path: "/email", element: lazyBoundary(<EmailPage />) },
       { path: "/songbook", element: lazyBoundary(<SongbookPage />) },
+      { path: "/music", element: lazyBoundary(<MusicPage />) },
       { path: "/songbook/:songId", element: lazyBoundary(<SongDetailPage />) },
     ],
   },
