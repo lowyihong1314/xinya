@@ -11,19 +11,32 @@
 import { http } from "../api/client";
 import type { CurrentUser } from "./types";
 
-interface UserDataResponse {
-  user?: CurrentUser;
-  permissions?: string[];
-  [key: string]: unknown;
+/**
+ * 从用户对象里摊平权限名。
+ *
+ * ★ 后端 GET /user_control/get_user_data 返回的是 User.to_dict() **平铺在顶层**，
+ *   且**没有顶层 permissions 键** —— 权限挂在 departments[].permissions[].name 下。
+ *   这与后端 core/auth.py 的 get_current_user_permissions 是同一套口径。
+ *   读顶层 permissions 的话永远是空集，表现是所有带权限的菜单/按钮都不显示。
+ */
+function flattenPermissions(user: CurrentUser | null): string[] {
+  if (!user) return [];
+  const names = new Set<string>();
+  for (const dept of user.departments ?? []) {
+    for (const perm of dept.permissions ?? []) {
+      if (perm?.name) names.add(perm.name);
+    }
+  }
+  return [...names];
 }
 
 export async function fetchCurrentUser(): Promise<{ user: CurrentUser | null; permissions: string[] }> {
-  const data = await http.get<UserDataResponse>("/user_control/get_user_data");
-  // 后端这条历史上把用户字段平铺在顶层，也可能包在 user 里。两种都认下来，
-  // 免得「登录成功但界面显示未登录」这种最难查的症状。
-  const user = (data.user ?? (data.id !== undefined ? (data as unknown as CurrentUser) : null)) || null;
-  const permissions = Array.isArray(data.permissions) ? data.permissions : [];
-  return { user, permissions };
+  const data = await http.get<Record<string, unknown>>("/user_control/get_user_data");
+  // 用户字段平铺在顶层（没有 user 外壳）。留一手认 data.user，
+  // 是为了万一哪天后端包了一层，不会静默变成"未登录"。
+  const raw = (data.user as CurrentUser | undefined) ?? (data as unknown as CurrentUser);
+  const user = raw && raw.id !== undefined ? raw : null;
+  return { user, permissions: flattenPermissions(user) };
 }
 
 export async function loginWithPassword(username: string, password: string): Promise<void> {
