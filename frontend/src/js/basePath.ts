@@ -4,7 +4,7 @@ import { API_BASE } from "./apiBase";
 // 项目路径前缀（BASE_PATH）
 // ----------------------------------------------------------------------------
 // 多个项目共用一个域名之后，本项目住在 https://host/UTBA_DEMO/ 下面，
-// 而不是住在 /。应用内部的路由表**不变**（还是 /api/... /event/...），
+// 而不是住在 /。应用内部的路由表**不变**（还是 /account/... /event/...），
 // 只在「要发到网络上去的 URL」这一刻补上前缀 —— 这样本地开发（前缀为空、
 // 不起 nginx）和线上（前缀 /UTBA_DEMO）跑的是同一份代码。
 //
@@ -26,7 +26,7 @@ import { API_BASE } from "./apiBase";
  * 这套规则必须和另外两处**逐字一致**，否则拼出来的地址会差一个斜杠：
  *   - scripts/gen_frontend_env.sh（生成 .env.production 时先归一化一次）
  *   - 后端 core/config.py 的 APP_BASE_PATH
- * 差一个斜杠的表现是 `//api/x`（nginx 也许还能忍）或 `/UTBA_DEMOapi/x`（直接死）。
+ * 差一个斜杠的表现是 `//members`（nginx 也许还能忍）或 `/UTBA_DEMOmembers`（直接死）。
  */
 function normalizeBasePath(raw: unknown): string {
   const value = String(raw ?? "").trim();
@@ -55,8 +55,8 @@ function isAbsoluteUrl(path: string): boolean {
 /**
  * 内部路径 → 带前缀的**相对路径**（给 fetch / EventSource 用）。
  *
- *   BASE_PATH = ""            apiPath("/api/claims") → "/api/claims"   （与现在逐字节一致）
- *   BASE_PATH = "/UTBA_DEMO"  apiPath("/api/claims") → "/UTBA_DEMO/api/claims"
+ *   BASE_PATH = ""            apiPath("/claims") → "/claims"   （与现在逐字节一致）
+ *   BASE_PATH = "/UTBA_DEMO"  apiPath("/claims") → "/UTBA_DEMO/claims"
  *
  * **幂等**：已经带前缀的路径不会再补一遍。多条链路会叠加（apiFetch 补一次、
  * APK 缓存层重拼 URL 又补一次；后端 public_url() 给的地址前端又拼一次），
@@ -66,7 +66,7 @@ export function apiPath(path: string): string {
   const raw = String(path ?? "");
   if (isAbsoluteUrl(raw)) return raw;
 
-  // 统一成单个前导斜杠，免得 "api/x" 和 "/api/x" 拼出两种结果。
+  // 统一成单个前导斜杠，免得 "members" 和 "/members" 拼出两种结果。
   const normalized = `/${raw.replace(/^\/+/, "")}`;
   if (!BASE_PATH) return normalized;
   if (normalized === BASE_PATH || normalized.startsWith(`${BASE_PATH}/`)) return normalized;

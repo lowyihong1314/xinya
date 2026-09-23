@@ -14,7 +14,7 @@ async function parseJson(response: Response): Promise<{ status?: string; message
 }
 
 export async function registerPerson(formId: number, payload: Record<string, unknown>) {
-  const response = await apiFetch(`/api/form/register/${formId}`, {
+  const response = await apiFetch(`/form/register/${formId}`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(payload),
@@ -23,7 +23,7 @@ export async function registerPerson(formId: number, payload: Record<string, unk
 }
 
 export async function completeParental(formId: number, nric: string, parentalPayload: Record<string, unknown>) {
-  const response = await apiFetch(`/api/form/parental/complete/${formId}`, {
+  const response = await apiFetch(`/form/parental/complete/${formId}`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ nric, parental_payload: parentalPayload }),

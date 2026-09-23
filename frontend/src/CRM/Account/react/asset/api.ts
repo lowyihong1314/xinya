@@ -23,7 +23,7 @@ async function parseJson<T>(response: Response): Promise<T> {
 }
 
 export async function fetchAssetDashboard() {
-  const response = await apiFetch("/api/asset/dashboard", {
+  const response = await apiFetch("/asset/dashboard", {
     credentials: "include",
   });
   const payload = await parseJson<{ data?: AssetDashboardPayload }>(response);
@@ -34,7 +34,7 @@ export async function fetchAssetDashboard() {
 }
 
 export async function fetchAssetMasterData() {
-  const response = await apiFetch("/api/asset/master-data", {
+  const response = await apiFetch("/asset/master-data", {
     credentials: "include",
   });
   const payload = await parseJson<{ data?: AssetMasterDataPayload }>(response);
@@ -45,7 +45,7 @@ export async function fetchAssetMasterData() {
 }
 
 export async function fetchAssetInventoryData() {
-  const response = await apiFetch("/api/asset/inventory", {
+  const response = await apiFetch("/asset/inventory", {
     credentials: "include",
   });
   const payload = await parseJson<{ data?: AssetInventoryPayload }>(response);
@@ -56,7 +56,7 @@ export async function fetchAssetInventoryData() {
 }
 
 export async function fetchAssetDocumentsData() {
-  const response = await apiFetch("/api/asset/stock-documents", {
+  const response = await apiFetch("/asset/stock-documents", {
     credentials: "include",
   });
   const payload = await parseJson<{ data?: AssetDocumentsPayload }>(response);
@@ -67,7 +67,7 @@ export async function fetchAssetDocumentsData() {
 }
 
 export async function fetchAssetMovementsData() {
-  const response = await apiFetch("/api/asset/movements", {
+  const response = await apiFetch("/asset/movements", {
     credentials: "include",
   });
   const payload = await parseJson<{ data?: AssetMovementsPayload }>(response);
@@ -83,7 +83,7 @@ export async function createAssetWarehouse(payload: {
   location?: string;
   remark?: string;
 }) {
-  const response = await apiFetch("/api/asset/warehouses", {
+  const response = await apiFetch("/asset/warehouses", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     credentials: "include",
@@ -105,7 +105,7 @@ export async function updateAssetWarehouse(
     remark?: string;
   },
 ) {
-  const response = await apiFetch(`/api/asset/warehouses/${warehouseId}`, {
+  const response = await apiFetch(`/asset/warehouses/${warehouseId}`, {
     method: "PATCH",
     headers: { "Content-Type": "application/json" },
     credentials: "include",
@@ -119,7 +119,7 @@ export async function updateAssetWarehouse(
 }
 
 export async function deleteAssetWarehouse(warehouseId: number) {
-  const response = await apiFetch(`/api/asset/warehouses/${warehouseId}`, {
+  const response = await apiFetch(`/asset/warehouses/${warehouseId}`, {
     method: "DELETE",
     credentials: "include",
   });
@@ -133,7 +133,7 @@ export async function createAssetItem(payload: {
   unit?: string;
   remark?: string;
 }) {
-  const response = await apiFetch("/api/asset/items", {
+  const response = await apiFetch("/asset/items", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     credentials: "include",
@@ -155,7 +155,7 @@ export async function createAssetPartner(payload: {
   address?: string;
   remark?: string;
 }) {
-  const response = await apiFetch("/api/asset/partners", {
+  const response = await apiFetch("/asset/partners", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     credentials: "include",
@@ -180,7 +180,7 @@ export async function updateAssetPartner(
     remark?: string;
   },
 ) {
-  const response = await apiFetch(`/api/asset/partners/${partnerId}`, {
+  const response = await apiFetch(`/asset/partners/${partnerId}`, {
     method: "PATCH",
     headers: { "Content-Type": "application/json" },
     credentials: "include",
@@ -194,7 +194,7 @@ export async function updateAssetPartner(
 }
 
 export async function deleteAssetPartner(partnerId: number) {
-  const response = await apiFetch(`/api/asset/partners/${partnerId}`, {
+  const response = await apiFetch(`/asset/partners/${partnerId}`, {
     method: "DELETE",
     credentials: "include",
   });
@@ -211,7 +211,7 @@ export async function updateAssetItem(
     remark?: string;
   },
 ) {
-  const response = await apiFetch(`/api/asset/items/${itemId}`, {
+  const response = await apiFetch(`/asset/items/${itemId}`, {
     method: "PATCH",
     headers: { "Content-Type": "application/json" },
     credentials: "include",
@@ -225,7 +225,7 @@ export async function updateAssetItem(
 }
 
 export async function deleteAssetItem(itemId: number) {
-  const response = await apiFetch(`/api/asset/items/${itemId}`, {
+  const response = await apiFetch(`/asset/items/${itemId}`, {
     method: "DELETE",
     credentials: "include",
   });
@@ -243,7 +243,7 @@ export async function createAssetSubItem(
     remark?: string;
   },
 ) {
-  const response = await apiFetch(`/api/asset/items/${itemId}/sub-items`, {
+  const response = await apiFetch(`/asset/items/${itemId}/sub-items`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     credentials: "include",
@@ -268,7 +268,7 @@ export async function updateAssetSubItem(
     remark?: string;
   },
 ) {
-  const response = await apiFetch(`/api/asset/sub-items/${subItemId}`, {
+  const response = await apiFetch(`/asset/sub-items/${subItemId}`, {
     method: "PATCH",
     headers: { "Content-Type": "application/json" },
     credentials: "include",
@@ -282,7 +282,7 @@ export async function updateAssetSubItem(
 }
 
 export async function deleteAssetSubItem(subItemId: number) {
-  const response = await apiFetch(`/api/asset/sub-items/${subItemId}`, {
+  const response = await apiFetch(`/asset/sub-items/${subItemId}`, {
     method: "DELETE",
     credentials: "include",
   });
@@ -311,7 +311,7 @@ export async function createAssetStockDocument(payload: {
     remark?: string;
   }>;
 }) {
-  const response = await apiFetch("/api/asset/stock-documents", {
+  const response = await apiFetch("/asset/stock-documents", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     credentials: "include",
@@ -349,7 +349,7 @@ export async function updateAssetStockDocument(
     }>;
   },
 ) {
-  const response = await apiFetch(`/api/asset/stock-documents/${documentId}`, {
+  const response = await apiFetch(`/asset/stock-documents/${documentId}`, {
     method: "PATCH",
     headers: { "Content-Type": "application/json" },
     credentials: "include",
@@ -363,7 +363,7 @@ export async function updateAssetStockDocument(
 }
 
 export async function confirmAssetStockDocument(documentId: number) {
-  const response = await apiFetch(`/api/asset/stock-documents/${documentId}/confirm`, {
+  const response = await apiFetch(`/asset/stock-documents/${documentId}/confirm`, {
     method: "POST",
     credentials: "include",
   });
@@ -375,7 +375,7 @@ export async function confirmAssetStockDocument(documentId: number) {
 }
 
 export async function postAssetStockDocumentToFinance(documentId: number) {
-  const response = await apiFetch(`/api/asset/stock-documents/${documentId}/post-to-finance`, {
+  const response = await apiFetch(`/asset/stock-documents/${documentId}/post-to-finance`, {
     method: "POST",
     credentials: "include",
   });
@@ -387,7 +387,7 @@ export async function postAssetStockDocumentToFinance(documentId: number) {
 }
 
 export async function cancelAssetStockDocument(documentId: number) {
-  const response = await apiFetch(`/api/asset/stock-documents/${documentId}/cancel`, {
+  const response = await apiFetch(`/asset/stock-documents/${documentId}/cancel`, {
     method: "POST",
     credentials: "include",
   });
@@ -399,7 +399,7 @@ export async function cancelAssetStockDocument(documentId: number) {
 }
 
 export async function deleteAssetStockDocument(documentId: number) {
-  const response = await apiFetch(`/api/asset/stock-documents/${documentId}`, {
+  const response = await apiFetch(`/asset/stock-documents/${documentId}`, {
     method: "DELETE",
     credentials: "include",
   });
@@ -407,7 +407,7 @@ export async function deleteAssetStockDocument(documentId: number) {
 }
 
 export async function updateAssetInventoryThreshold(inventoryId: number, minQuantity: number) {
-  const response = await apiFetch(`/api/asset/inventory/${inventoryId}/threshold`, {
+  const response = await apiFetch(`/asset/inventory/${inventoryId}/threshold`, {
     method: "PATCH",
     headers: { "Content-Type": "application/json" },
     credentials: "include",
@@ -424,7 +424,7 @@ export async function uploadAssetDocumentInvoice(documentId: number, file: File)
   const formData = new FormData();
   formData.append("file", file);
 
-  const response = await apiFetch(`/api/asset/stock-documents/${documentId}/invoice`, {
+  const response = await apiFetch(`/asset/stock-documents/${documentId}/invoice`, {
     method: "POST",
     credentials: "include",
     body: formData,

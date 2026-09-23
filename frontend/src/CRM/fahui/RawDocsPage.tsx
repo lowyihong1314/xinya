@@ -21,9 +21,9 @@ import { YlpOrderSummaryDrawer } from "./YlpOrderSummaryDrawer";
 import type { FahuiRawDoc } from "./types";
 
 // 法会「原始文档」：左边是手写单据原图清单，点一张右边就看大图。
-// 图片走带权限的 /api/fahui_router/raw_docs/file/...（单据上有姓名电话，不能走公开 /media_file）。
+// 图片走带权限的 /fahui_router/raw_docs/file/...（单据上有姓名电话，不能走公开 /media_file）。
 function fileUrl(filename: string) {
-  const path = `/api/fahui_router/raw_docs/file/${encodeURIComponent(filename)}`;
+  const path = `/fahui_router/raw_docs/file/${encodeURIComponent(filename)}`;
   return API_BASE ? `${API_BASE}${path}` : path;
 }
 

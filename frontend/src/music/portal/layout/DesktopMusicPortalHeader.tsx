@@ -1,7 +1,7 @@
 import type { CSSProperties } from "react";
 
 import { CachedImage } from "../../../components/CachedMedia";
-import { API_BASE } from "../../../js/apiBase";
+import { API_ROOT } from "../../../js/basePath";
 import type { PortalNavItem, PortalNavKey } from "./portalNavItems";
 
 export function DesktopMusicPortalHeader({
@@ -28,7 +28,7 @@ export function DesktopMusicPortalHeader({
       <div style={brandWrapStyle}>
         <div style={brandBadgeStyle}>
           <CachedImage
-            src={`${API_BASE}/static/images/logo/logo.png`}
+            src={`${API_ROOT}/static/images/logo/logo.png`}
             cacheKey="music-portal-desktop-logo"
             alt="UTBA logo"
             style={brandLogoStyle}

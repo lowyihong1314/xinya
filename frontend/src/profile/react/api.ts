@@ -10,7 +10,7 @@ async function parseResponse<T>(response: Response): Promise<T> {
 }
 
 export async function updateProfile(userId: number, payload: ProfileFormValues) {
-  const response = await apiFetch(`/api/user_control/update_user/${userId}`, {
+  const response = await apiFetch(`/user_control/update_user/${userId}`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(payload),
@@ -22,7 +22,7 @@ export async function uploadProfileImage(file: File) {
   const formData = new FormData();
   formData.append("image", file);
 
-  const response = await apiFetch("/api/user_control/upload_profile_image", {
+  const response = await apiFetch("/user_control/upload_profile_image", {
     method: "POST",
     body: formData,
   });
@@ -31,20 +31,20 @@ export async function uploadProfileImage(file: File) {
 }
 
 export async function fetchMyFootprints() {
-  const response = await apiFetch("/api/user_control/my_footprints", {
+  const response = await apiFetch("/user_control/my_footprints", {
     credentials: "include",
   });
   return parseResponse<ProfileFootprintPayload>(response);
 }
 
 export async function fetchMembershipContext() {
-  const response = await apiFetch("/api/user_control/membership/context", { credentials: "include" });
+  const response = await apiFetch("/user_control/membership/context", { credentials: "include" });
   const data = await parseResponse<{ context: MembershipContext }>(response);
   return data.context;
 }
 
 export async function startMembershipRenewal() {
-  const response = await apiFetch("/api/user_control/membership/renew", {
+  const response = await apiFetch("/user_control/membership/renew", {
     method: "POST",
     credentials: "include",
   });
@@ -52,7 +52,7 @@ export async function startMembershipRenewal() {
 }
 
 export async function fetchAppReleases(): Promise<AppRelease[]> {
-  const response = await apiFetch("/api/app/releases");
+  const response = await apiFetch("/app/releases");
   const data = await parseResponse<{ releases: AppRelease[] }>(response);
   return data.releases ?? [];
 }
@@ -72,7 +72,7 @@ export interface EmailLogItem {
 }
 
 export async function listEmails() {
-  const response = await apiFetch("/api/email/list", { credentials: "include" });
+  const response = await apiFetch("/email/list", { credentials: "include" });
   return parseResponse<{ status?: string; data: EmailLogItem[]; from_email?: string }>(response);
 }
 
@@ -83,7 +83,7 @@ export async function sendEmail(payload: {
   cc_email?: string;
   bcc_email?: string;
 }) {
-  const response = await apiFetch("/api/email/send", {
+  const response = await apiFetch("/email/send", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     credentials: "include",
@@ -93,7 +93,7 @@ export async function sendEmail(payload: {
 }
 
 export async function requestEmailChange(email: string) {
-  const response = await apiFetch("/api/email/change-request", {
+  const response = await apiFetch("/email/change-request", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     credentials: "include",
@@ -103,7 +103,7 @@ export async function requestEmailChange(email: string) {
 }
 
 export async function verifyCurrentEmail() {
-  const response = await apiFetch("/api/email/verify-request", {
+  const response = await apiFetch("/email/verify-request", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     credentials: "include",
@@ -113,7 +113,7 @@ export async function verifyCurrentEmail() {
 }
 
 export async function changeMyPassword(payload: { old_password?: string; new_password: string }) {
-  const response = await apiFetch("/api/user_control/change_password", {
+  const response = await apiFetch("/user_control/change_password", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     credentials: "include",

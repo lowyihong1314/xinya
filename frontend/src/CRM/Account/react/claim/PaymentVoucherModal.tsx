@@ -79,12 +79,12 @@ export function PaymentVoucherModal({
     }
     const filename = `payment-voucher-${claimId}.pdf`;
     try {
-      await downloadUrlOrShare(`/api/account/print_payment_voucher/download_payment_voucher/${claimId}`, filename, {
+      await downloadUrlOrShare(`/account/print_payment_voucher/download_payment_voucher/${claimId}`, filename, {
         isMobile,
         title: filename,
         text: `Payment Voucher #${claimId}`,
         // 裸路径交给 normalizeShareUrl 统一补前缀
-        fallbackUrl: `/api/account/print_payment_voucher/download_payment_voucher/${claimId}`,
+        fallbackUrl: `/account/print_payment_voucher/download_payment_voucher/${claimId}`,
         mimeType: "application/pdf",
       });
     } catch (err) {

@@ -612,7 +612,7 @@ export function BoardPage() {
   function previewUrl(pdfId: number): string {
     const nonce = previewNonce[pdfId];
     const query = nonce ? `?refresh=1&v=${nonce}` : "";
-    const path = `/api/print_paiwei/print-pdfs/${pdfId}/preview-image${query}`;
+    const path = `/print_paiwei/print-pdfs/${pdfId}/preview-image${query}`;
     return API_BASE ? `${API_BASE}${path}` : path;
   }
 

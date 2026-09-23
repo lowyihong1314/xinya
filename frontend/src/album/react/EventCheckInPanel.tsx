@@ -54,7 +54,7 @@ function DesktopEventCheckInPanel({
     async function loadUsers() {
       setLoadingUsers(true);
       try {
-        const response = await apiFetch("/api/user_control/get_all_user_data", {
+        const response = await apiFetch("/user_control/get_all_user_data", {
           credentials: "include",
         });
         const payload = (await response.json().catch(() => ({}))) as { data?: UserRecord[]; error?: string; message?: string };
@@ -177,7 +177,7 @@ function DesktopEventCheckInPanel({
             return (
               <div key={member.id} className="event-checkin__user-card" style={deskCardStyle(checked)}>
                 <CachedImage
-                  src={`/api/user_control/get_profile_image/${member.id}`}
+                  src={`/user_control/get_profile_image/${member.id}`}
                   cacheKey={`event-checkin-user:${member.id}`}
                   resolveRelativeToApi
                   alt=""

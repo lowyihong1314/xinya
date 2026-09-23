@@ -16,17 +16,17 @@ async function parseJson(response: Response) {
 }
 
 export async function fetchHistoryViews() {
-  const response = await apiFetch("/api/files/history/views");
+  const response = await apiFetch("/files/history/views");
   return parseJson(response);
 }
 
 export async function fetchTree(): Promise<TreeResponse> {
-  const response = await apiFetch("/api/files/tree");
+  const response = await apiFetch("/files/tree");
   return parseJson(response);
 }
 
 export async function fetchDirectory(path: string): Promise<DirectoryResult> {
-  const response = await apiFetch("/api/files/query", {
+  const response = await apiFetch("/files/query", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ path }),
@@ -35,22 +35,22 @@ export async function fetchDirectory(path: string): Promise<DirectoryResult> {
 }
 
 export async function fetchFileDetail(fileId: number): Promise<FileDetail> {
-  const response = await apiFetch(`/api/files/items/${fileId}`);
+  const response = await apiFetch(`/files/items/${fileId}`);
   return parseJson(response);
 }
 
 export async function fetchPermissions(fileId: number): Promise<{ permissions: PermissionRow[] }> {
-  const response = await apiFetch(`/api/files/items/${fileId}/permissions`);
+  const response = await apiFetch(`/files/items/${fileId}/permissions`);
   return parseJson(response);
 }
 
 export async function fetchTrash(): Promise<{ items: TrashRow[] }> {
-  const response = await apiFetch("/api/files/trash");
+  const response = await apiFetch("/files/trash");
   return parseJson(response);
 }
 
 export async function createDirectory(path: string) {
-  const response = await apiFetch("/api/files/directories", {
+  const response = await apiFetch("/files/directories", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ path }),
@@ -59,7 +59,7 @@ export async function createDirectory(path: string) {
 }
 
 export async function renameDirectory(oldPath: string, newName: string) {
-  const response = await apiFetch("/api/files/directories/rename", {
+  const response = await apiFetch("/files/directories/rename", {
     method: "PATCH",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ old_path: oldPath, new_name: newName }),
@@ -68,7 +68,7 @@ export async function renameDirectory(oldPath: string, newName: string) {
 }
 
 export async function renameFile(fileId: number, newName: string) {
-  const response = await apiFetch(`/api/files/items/${fileId}/rename`, {
+  const response = await apiFetch(`/files/items/${fileId}/rename`, {
     method: "PATCH",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ new_name: newName }),
@@ -77,7 +77,7 @@ export async function renameFile(fileId: number, newName: string) {
 }
 
 export async function moveFile(filePath: string, dirPath: string) {
-  const response = await apiFetch("/api/files/items/move", {
+  const response = await apiFetch("/files/items/move", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ file_path: filePath, dir_path: dirPath }),
@@ -86,7 +86,7 @@ export async function moveFile(filePath: string, dirPath: string) {
 }
 
 export async function deleteDirectory(path: string) {
-  const response = await apiFetch("/api/files/directories", {
+  const response = await apiFetch("/files/directories", {
     method: "DELETE",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ path }),
@@ -95,7 +95,7 @@ export async function deleteDirectory(path: string) {
 }
 
 export async function deleteFiles(ids: number[]) {
-  const response = await apiFetch("/api/files/items", {
+  const response = await apiFetch("/files/items", {
     method: "DELETE",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ ids }),
@@ -104,7 +104,7 @@ export async function deleteFiles(ids: number[]) {
 }
 
 export async function createShare(fileId: number, minutes: number, credit: number) {
-  const response = await apiFetch("/api/files/shares", {
+  const response = await apiFetch("/files/shares", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ file_id: fileId, minutes, credit }),
@@ -113,12 +113,12 @@ export async function createShare(fileId: number, minutes: number, credit: numbe
 }
 
 export async function restoreTrash(trashId: number) {
-  const response = await apiFetch(`/api/files/trash/${trashId}/restore`, { method: "POST" });
+  const response = await apiFetch(`/files/trash/${trashId}/restore`, { method: "POST" });
   return parseJson(response);
 }
 
 export async function removePermission(permissionId: number) {
-  const response = await apiFetch(`/api/files/permissions/${permissionId}`, { method: "DELETE" });
+  const response = await apiFetch(`/files/permissions/${permissionId}`, { method: "DELETE" });
   return parseJson(response);
 }
 
@@ -128,7 +128,7 @@ export async function setDirectoryPermission(
   id: number,
   permission: string,
 ) {
-  const response = await apiFetch("/api/files/directories/permissions", {
+  const response = await apiFetch("/files/directories/permissions", {
     method: "PUT",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ dir_path: dirPath, type, id, permission }),
@@ -137,7 +137,7 @@ export async function setDirectoryPermission(
 }
 
 export async function uploadEntries(formData: FormData) {
-  const response = await apiFetch("/api/files/uploads", {
+  const response = await apiFetch("/files/uploads", {
     method: "POST",
     body: formData,
   });
@@ -145,7 +145,7 @@ export async function uploadEntries(formData: FormData) {
 }
 
 export async function downloadArchive(ids: number[]) {
-  const response = await apiFetch("/api/files/items/archive", {
+  const response = await apiFetch("/files/items/archive", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ ids }),

@@ -9,7 +9,7 @@ import type {
   EventSortResponse,
   SharedEventRecord,
 } from "./types";
-import { API_BASE } from "../../js/apiBase";
+import { API_ROOT } from "../../js/basePath";
 import { apiFetch } from "../../js/apiFetch";
 import { getVisitorToken } from "../../js/visitorToken";
 
@@ -25,7 +25,7 @@ async function parseJson<T>(response: Response): Promise<T> {
 }
 
 export async function fetchAllEventsSorted() {
-  const response = await apiFetch("/api/event_data/get_all_event_sort", {
+  const response = await apiFetch("/event_data/get_all_event_sort", {
     credentials: "include",
   });
   return parseJson<EventSortResponse>(response);
@@ -35,7 +35,7 @@ export async function fetchEventDetail(eventId: number | string) {
   // 带上访客标识，未登录也能看出自己给哪些照片点过爱心
   const visitorToken = getVisitorToken();
   const query = visitorToken ? `?visitor_token=${encodeURIComponent(visitorToken)}` : "";
-  const response = await apiFetch(`/api/api/get_event/${eventId}${query}`, {
+  const response = await apiFetch(`/event_data/${eventId}${query}`, {
     credentials: "include",
   });
   return parseJson<EventDetailResponse>(response);
@@ -54,7 +54,7 @@ export async function toggleAlbumFileHeart(fileId: number) {
 export async function saveEvent(
   payload: Partial<SharedEventRecord> & { event_id: number; end_datetime?: string | null },
 ) {
-  const response = await apiFetch("/api/event_data/new_event", {
+  const response = await apiFetch("/event_data/new_event", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     credentials: "include",
@@ -64,7 +64,7 @@ export async function saveEvent(
 }
 
 export async function setEventPoster(eventId: number, fileId: number) {
-  const response = await apiFetch(`/api/event_data/set_poster/${eventId}/${fileId}`, {
+  const response = await apiFetch(`/event_data/set_poster/${eventId}/${fileId}`, {
     method: "POST",
     credentials: "include",
   });
@@ -72,14 +72,14 @@ export async function setEventPoster(eventId: number, fileId: number) {
 }
 
 export async function fetchEventFlows(eventId: number | string) {
-  const response = await apiFetch(`/api/event_data/event_flow/list/${eventId}`, {
+  const response = await apiFetch(`/event_data/event_flow/list/${eventId}`, {
     credentials: "include",
   });
   return parseJson<EventFlowListResponse>(response);
 }
 
 export async function createEventFlow(payload: Record<string, unknown>) {
-  const response = await apiFetch("/api/event_data/event_flow/new", {
+  const response = await apiFetch("/event_data/event_flow/new", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     credentials: "include",
@@ -89,7 +89,7 @@ export async function createEventFlow(payload: Record<string, unknown>) {
 }
 
 export async function updateEventFlow(flowId: number, payload: Record<string, unknown>) {
-  const response = await apiFetch(`/api/event_data/event_flow/update/${flowId}`, {
+  const response = await apiFetch(`/event_data/event_flow/update/${flowId}`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     credentials: "include",
@@ -99,7 +99,7 @@ export async function updateEventFlow(flowId: number, payload: Record<string, un
 }
 
 export async function deleteEventFlow(flowId: number) {
-  const response = await apiFetch(`/api/event_data/event_flow/delete/${flowId}`, {
+  const response = await apiFetch(`/event_data/event_flow/delete/${flowId}`, {
     method: "POST",
     credentials: "include",
   });
@@ -107,7 +107,7 @@ export async function deleteEventFlow(flowId: number) {
 }
 
 export async function reorderEventFlows(eventId: number, flowIds: number[]) {
-  const response = await apiFetch("/api/event_data/event_flow/reorder", {
+  const response = await apiFetch("/event_data/event_flow/reorder", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     credentials: "include",
@@ -131,7 +131,7 @@ export async function uploadEventMedia(
 
   const payload = await new Promise<EventMediaUploadResponse>((resolve, reject) => {
     const xhr = new XMLHttpRequest();
-    xhr.open("POST", `${API_BASE}/media/upload_media`);
+    xhr.open("POST", `${API_ROOT}/media/upload_media`);
     xhr.withCredentials = true;
 
     options.onProgress?.(0, 0, file.size || 0);
@@ -191,7 +191,7 @@ export async function uploadEventBrochure(eventId: number, file: File) {
   const formData = new FormData();
   formData.append("file", file);
 
-  const response = await apiFetch(`/api/event_data/upload_brochure/${eventId}`, {
+  const response = await apiFetch(`/event_data/upload_brochure/${eventId}`, {
     method: "POST",
     credentials: "include",
     body: formData,
@@ -207,7 +207,7 @@ export async function saveEventCheckIn(payload: {
   check_in_time?: string;
   valid_user_id?: number | null;
 }) {
-  const response = await apiFetch("/api/event_data/check_in/save", {
+  const response = await apiFetch("/event_data/check_in/save", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     credentials: "include",
@@ -217,7 +217,7 @@ export async function saveEventCheckIn(payload: {
 }
 
 export async function createEventCheckInQr(eventId: number) {
-  const response = await apiFetch("/api/event_data/check_in/qr/create", {
+  const response = await apiFetch("/event_data/check_in/qr/create", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     credentials: "include",
@@ -227,7 +227,7 @@ export async function createEventCheckInQr(eventId: number) {
 }
 
 export async function scanEventCheckInQr(eventId: number, token: string) {
-  const response = await apiFetch("/api/event_data/check_in/qr/scan", {
+  const response = await apiFetch("/event_data/check_in/qr/scan", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     credentials: "include",
@@ -237,7 +237,7 @@ export async function scanEventCheckInQr(eventId: number, token: string) {
 }
 
 export async function deleteEventCheckIn(checkInId: number) {
-  const response = await apiFetch(`/api/event_data/check_in/delete/${checkInId}`, {
+  const response = await apiFetch(`/event_data/check_in/delete/${checkInId}`, {
     method: "POST",
     credentials: "include",
   });

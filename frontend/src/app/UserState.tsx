@@ -44,7 +44,7 @@ type CurrentUserFetchResult = {
 
 async function fetchCurrentUser(): Promise<CurrentUserFetchResult> {
   try {
-    const response = await apiFetch("/api/user_control/get_user_data", {
+    const response = await apiFetch("/user_control/get_user_data", {
       credentials: "include",
     });
     if (response.status === 401 || response.status === 403) {
@@ -126,7 +126,7 @@ export function UserStateProvider({
   async function login(username: string, password: string) {
     const nativeSession = await loginWithMobileSession(username, password);
     if (!nativeSession) {
-      const response = await apiFetch("/api/user_control/login", {
+      const response = await apiFetch("/user_control/login", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         credentials: "include",
@@ -146,7 +146,7 @@ export function UserStateProvider({
     let logoutError: Error | null = null;
 
     try {
-      const response = await apiFetch("/api/user_control/logout", {
+      const response = await apiFetch("/user_control/logout", {
         credentials: "include",
       });
       const data = await response.json();

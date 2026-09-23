@@ -20,18 +20,18 @@ async function parseJson<T>(response: Response): Promise<T> {
 }
 
 export async function fetchAlbums() {
-  const response = await apiFetch("/api/music/albums", { credentials: "include" });
+  const response = await apiFetch("/music/albums", { credentials: "include" });
   return parseJson<AlbumRecord[]>(response);
 }
 
 export async function fetchAlbum(albumId: number) {
-  const response = await apiFetch(`/api/music/albums/${albumId}`, { credentials: "include" });
+  const response = await apiFetch(`/music/albums/${albumId}`, { credentials: "include" });
   return parseJson<AlbumRecord>(response);
 }
 
 export async function fetchMusicList() {
   const perPage = 200;
-  const firstResponse = await apiFetch(`/api/music/list?per_page=${perPage}&page=1`, { credentials: "include" });
+  const firstResponse = await apiFetch(`/music/list?per_page=${perPage}&page=1`, { credentials: "include" });
   const firstPage = await parseJson<{ musics?: MusicRecord[]; total_pages?: number }>(firstResponse);
 
   const musics = [...(firstPage.musics || [])];
@@ -40,7 +40,7 @@ export async function fetchMusicList() {
   if (totalPages > 1) {
     const responses = await Promise.all(
       Array.from({ length: totalPages - 1 }, (_, index) =>
-        apiFetch(`/api/music/list?per_page=${perPage}&page=${index + 2}`, { credentials: "include" }),
+        apiFetch(`/music/list?per_page=${perPage}&page=${index + 2}`, { credentials: "include" }),
       ),
     );
     const pages = await Promise.all(
@@ -55,7 +55,7 @@ export async function fetchMusicList() {
 }
 
 export async function fetchMusicDetail(musicId: number) {
-  const response = await apiFetch(`/api/music/detail/${musicId}`, { credentials: "include" });
+  const response = await apiFetch(`/music/detail/${musicId}`, { credentials: "include" });
   return parseJson<MusicRecord>(response);
 }
 
@@ -72,21 +72,21 @@ export async function fetchMinuteLogs(params?: {
   if (params?.userId != null) search.set("user_id", String(params.userId));
 
   const response = await apiFetch(
-    `/api/music/minute_logs${search.size ? `?${search.toString()}` : ""}`,
+    `/music/minute_logs${search.size ? `?${search.toString()}` : ""}`,
     { credentials: "include" },
   );
   return parseJson<MinuteLogsResponse>(response);
 }
 
 export async function fetchLastPlayedMusic() {
-  const response = await apiFetch("/api/music/last_played", {
+  const response = await apiFetch("/music/last_played", {
     credentials: "include",
   });
   return parseJson<LastPlayedMusicResponse>(response);
 }
 
 export async function createAlbum(name: string) {
-  const response = await apiFetch("/api/music/album", {
+  const response = await apiFetch("/music/album", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     credentials: "include",
@@ -96,7 +96,7 @@ export async function createAlbum(name: string) {
 }
 
 export async function editAlbum(albumId: number, payload: { name: string; description?: string }) {
-  const response = await apiFetch(`/api/music/album/${albumId}`, {
+  const response = await apiFetch(`/music/album/${albumId}`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     credentials: "include",
@@ -106,7 +106,7 @@ export async function editAlbum(albumId: number, payload: { name: string; descri
 }
 
 export async function deleteAlbum(albumId: number) {
-  const response = await apiFetch(`/api/music/album/${albumId}`, {
+  const response = await apiFetch(`/music/album/${albumId}`, {
     method: "DELETE",
     credentials: "include",
   });
@@ -116,7 +116,7 @@ export async function deleteAlbum(albumId: number) {
 export async function uploadAlbumCover(albumId: number, file: File) {
   const form = new FormData();
   form.append("file", file);
-  const response = await apiFetch(`/api/music/albums/${albumId}/upload_cover`, {
+  const response = await apiFetch(`/music/albums/${albumId}/upload_cover`, {
     method: "POST",
     credentials: "include",
     body: form,
@@ -129,7 +129,7 @@ export async function uploadMusic(albumId: number, upload: MusicUploadDraft) {
   form.append("album_id", String(albumId));
   form.append("title", upload.title);
   form.append("files", upload.file);
-  const response = await apiFetch("/api/music/upload", {
+  const response = await apiFetch("/music/upload", {
     method: "POST",
     credentials: "include",
     body: form,
@@ -138,7 +138,7 @@ export async function uploadMusic(albumId: number, upload: MusicUploadDraft) {
 }
 
 export async function deleteMusic(musicId: number) {
-  const response = await apiFetch(`/api/music/delete/${musicId}`, {
+  const response = await apiFetch(`/music/delete/${musicId}`, {
     method: "DELETE",
     credentials: "include",
   });
@@ -146,7 +146,7 @@ export async function deleteMusic(musicId: number) {
 }
 
 export async function editMusic(musicId: number, payload: { title: string; album_id?: number | null }) {
-  const response = await apiFetch(`/api/music/edit/${musicId}`, {
+  const response = await apiFetch(`/music/edit/${musicId}`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     credentials: "include",
@@ -158,7 +158,7 @@ export async function editMusic(musicId: number, payload: { title: string; album
 export async function replaceMusicFile(musicId: number, file: File) {
   const form = new FormData();
   form.append("file", file);
-  const response = await apiFetch(`/api/music/replace/${musicId}`, {
+  const response = await apiFetch(`/music/replace/${musicId}`, {
     method: "POST",
     credentials: "include",
     body: form,
@@ -167,7 +167,7 @@ export async function replaceMusicFile(musicId: number, file: File) {
 }
 
 export async function addOneMinute(musicId: number) {
-  const response = await apiFetch(`/api/music/add_one_minute/${musicId}`, {
+  const response = await apiFetch(`/music/add_one_minute/${musicId}`, {
     method: "POST",
     credentials: "include",
   });

@@ -3,11 +3,13 @@ import { apiPath } from "./basePath";
 import { getNativeAuthorizationHeader, shouldUseMobileNativeAuth } from "../mobile/native/authHeader";
 
 // 包一层 fetch()：以 "/" 开头的内部路径统一补上 origin 和项目前缀。
-//   网页版   API_BASE=""  BASE_PATH=""            → "/api/x"（和加前缀之前逐字节一致）
-//   网页版   API_BASE=""  BASE_PATH="/UTBA_DEMO"  → "/UTBA_DEMO/api/x"
-//   APK 版   API_BASE="https://utbabuddha.com"    → "https://utbabuddha.com/UTBA_DEMO/api/x"
+//   网页版   API_BASE=""  BASE_PATH=""            → "/members"
+//   网页版   API_BASE=""  BASE_PATH="/UTBA_DEMO"  → "/UTBA_DEMO/members"
+//   APK 版   API_BASE="https://utbabuddha.com"    → "https://utbabuddha.com/UTBA_DEMO/members"
 // 全仓 400 个调用点里有 394 个走这里，所以前缀只在这一处拼；
-// 剩下那些自己拼 `${API_BASE}${path}` 的地方要改用 basePath.ts 的 API_ROOT / apiPath()。
+// 剩下那些绕过 apiFetch 自己拼 URL 的地方（img src / xhr.open / 下载直链）一律用
+// basePath.ts 的 API_ROOT —— 它已经把 BASE_PATH 算进去了。
+// ⚠️ v3 起路径里**没有 /api 这一段**（BASE_PATH 已经区分项目），别加回去。
 export async function apiFetch(input: string | URL | Request, init?: RequestInit): Promise<Response> {
   const originalInput = input;
   if (typeof input === "string" && input.startsWith("/")) {

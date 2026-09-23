@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState, type CSSProperties } from "react";
 
 import { useUserState } from "../app/UserState";
 import { useEventData } from "../event/shared/EventDataContext";
-import { API_BASE } from "../js/apiBase";
+import { API_ROOT } from "../js/basePath";
 import { CacheMediaPlayer } from "./CacheMediaPlayer";
 import { CachedImage } from "./CachedMedia";
 
@@ -103,7 +103,7 @@ export function PageHero({ title, subtitle, idPrefix = "page-hero", tone = "defa
         <div id={`${idPrefix}-logo-wrap`} style={logoCircleStyle(isMobile, tone)}>
           <CachedImage
             id={`${idPrefix}-logo`}
-            src={`${API_BASE}/static/images/logo/logo.png`}
+            src={`${API_ROOT}/static/images/logo/logo.png`}
             cacheKey="page-hero-logo"
             alt="logo"
             style={logoStyle(isMobile)}

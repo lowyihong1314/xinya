@@ -33,8 +33,8 @@ function displayName(entry: WorkbenchEntry): string {
 
 const membershipConfig: WorkbenchConfig = {
   scope: "membership",
-  endpoints: makeEndpoints("/api/user_control/membership"),
-  roster: { fetch: makeRosterFetcher("/api/user_control/membership/roster") },
+  endpoints: makeEndpoints("/user_control/membership"),
+  roster: { fetch: makeRosterFetcher("/user_control/membership/roster") },
   canRead: true,
   canEdit: true,
   detailEyebrowPrefix: "会员申请 #",

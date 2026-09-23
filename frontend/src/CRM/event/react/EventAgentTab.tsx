@@ -103,7 +103,7 @@ export function EventAgentTab({ eventId, canEdit, isMobile, onApplied }: { event
     setInput("");
     setPending(true);
     try {
-      const res = await apiFetch(`/api/event_data/agent/chat/${eventId}`, {
+      const res = await apiFetch(`/event_data/agent/chat/${eventId}`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ messages: history }),
@@ -131,7 +131,7 @@ export function EventAgentTab({ eventId, canEdit, isMobile, onApplied }: { event
     const lines = summarizePlan(entry.plan);
     if (!(await showConfirmDialog({ message: `确认执行以下改动？\n${lines.join("\n")}`, tone: "danger" }))) return;
     try {
-      const res = await apiFetch(`/api/event_data/agent/apply/${eventId}`, {
+      const res = await apiFetch(`/event_data/agent/apply/${eventId}`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ plan: entry.plan }),

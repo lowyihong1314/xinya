@@ -243,7 +243,7 @@ export function TurntableSpinnerPage({ onBack }: { onBack: () => void }) {
                         <div style={userDisplayStyle}>
                           {!rolling ? (
                             <CachedImage
-                              src={`/api/user_control/get_profile_image/${user.id}`}
+                              src={`/user_control/get_profile_image/${user.id}`}
                               cacheKey={`slot-user:${user.id}`}
                               resolveRelativeToApi
                               alt=""

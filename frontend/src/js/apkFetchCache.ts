@@ -13,7 +13,7 @@ type GlobalFetchState = typeof globalThis & {
 };
 
 function shouldProxyPath(pathname: string) {
-  return pathname.startsWith("/api/") || pathname.startsWith("/media/") || pathname.startsWith("/media_file/");
+  return pathname.startsWith("/") || pathname.startsWith("/media/") || pathname.startsWith("/media_file/");
 }
 
 function isMutationLikePath(pathname: string) {
@@ -113,7 +113,7 @@ function getRequestDescriptor(request: Request) {
   }
 
   const url = new URL(request.url);
-  if (!url.pathname.startsWith("/api/")) {
+  if (!url.pathname.startsWith("/")) {
     return null;
   }
 

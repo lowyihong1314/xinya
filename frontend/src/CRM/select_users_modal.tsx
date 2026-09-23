@@ -23,7 +23,7 @@ type SelectUsersDialogProps = {
 };
 
 async function fetchUsers() {
-  const response = await apiFetch("/api/user_control/get_all_user_data", {
+  const response = await apiFetch("/user_control/get_all_user_data", {
     credentials: "include",
   });
   const payload = (await response.json().catch(() => ({}))) as UserResponse;
@@ -153,7 +153,7 @@ function SelectUsersDialog({ maxId, disabledIds, onClose }: SelectUsersDialogPro
                     onClick={() => toggleUser(user.id)}
                   >
                     <CachedImage
-                      src={`/api/user_control/get_profile_image/${user.id}`}
+                      src={`/user_control/get_profile_image/${user.id}`}
                       cacheKey={`select-users-avatar:${user.id}`}
                       resolveRelativeToApi
                       alt=""
@@ -287,7 +287,7 @@ function SelectCounterpartyDialog({
                     onClick={() => setSelectedId(user.id)}
                   >
                     <CachedImage
-                      src={`/api/user_control/get_profile_image/${user.id}`}
+                      src={`/user_control/get_profile_image/${user.id}`}
                       cacheKey={`select-counterparty-avatar:${user.id}`}
                       resolveRelativeToApi
                       alt=""

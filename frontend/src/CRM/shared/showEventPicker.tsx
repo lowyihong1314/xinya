@@ -62,7 +62,7 @@ function formatMonthLabel(monthKey: string) {
 }
 
 async function fetchEvents() {
-  const response = await apiFetch("/api/event_data/get_all_event_sort", {
+  const response = await apiFetch("/event_data/get_all_event_sort", {
     credentials: "include",
   });
   const payload = (await response.json().catch(() => ({}))) as EventPickerResponse;

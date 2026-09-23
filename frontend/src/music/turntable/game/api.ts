@@ -20,7 +20,7 @@ async function parse(response: Response): Promise<ApiPayload> {
   return payload;
 }
 
-const BASE = "/api/quiz_game";
+const BASE = "/quiz_game";
 
 function requireSet(payload: ApiPayload): QuizGameSet {
   if (!payload.set) throw new Error("服务器没有返回题库");

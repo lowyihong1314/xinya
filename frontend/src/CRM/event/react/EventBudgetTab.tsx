@@ -81,7 +81,7 @@ export function EventBudgetTab({
     setLoading(true);
     setError("");
     try {
-      const res = await apiFetch(`/api/event_data/event_budget/list/${eventId}`, { credentials: "include" });
+      const res = await apiFetch(`/event_data/event_budget/list/${eventId}`, { credentials: "include" });
       const data = await res.json();
       setItems(Array.isArray(data.data) ? data.data : []);
     } catch {
@@ -100,7 +100,7 @@ export function EventBudgetTab({
     const category = ni.category.trim();
     if (!category) return;
     try {
-      const res = await apiFetch(`/api/event_data/event_budget/new`, {
+      const res = await apiFetch(`/event_data/event_budget/new`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ event_id: eventId, type, category, budget_amount: ni.budget_amount, actual_amount: ni.actual_amount }),
@@ -119,7 +119,7 @@ export function EventBudgetTab({
     if (typeof id !== "number") return;
     setItems((cur) => cur.map((it) => (it.id === id ? { ...it, ...body } : it)));
     try {
-      await apiFetch(`/api/event_data/event_budget/update/${id}`, {
+      await apiFetch(`/event_data/event_budget/update/${id}`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(body),
@@ -134,7 +134,7 @@ export function EventBudgetTab({
     if (!(await showConfirmDialog({ message: "删除这条预算？", tone: "danger" }))) return;
     setItems((cur) => cur.filter((it) => it.id !== id));
     try {
-      await apiFetch(`/api/event_data/event_budget/delete/${id}`, { method: "POST" });
+      await apiFetch(`/event_data/event_budget/delete/${id}`, { method: "POST" });
     } catch {
       void load();
     }
@@ -175,7 +175,7 @@ export function EventBudgetTab({
       {loading ? <div style={emptyStyle}>加载中…</div> : null}
 
       <div style={{ display: "flex", justifyContent: "flex-end" }}>
-        <a href={`/api/event_data/event_budget/report/${eventId}`} target="_blank" rel="noreferrer" style={reportBtnStyle}>
+        <a href={`/event_data/event_budget/report/${eventId}`} target="_blank" rel="noreferrer" style={reportBtnStyle}>
           <i className="fa-solid fa-print" style={{ marginRight: 6 }} />
           打印财政报告
         </a>

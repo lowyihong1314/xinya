@@ -66,7 +66,7 @@ function buildExtraPayload(values: Record<string, unknown>, configs?: PublicExtr
 }
 
 function posterUrl(formId: number): string {
-  const path = `/api/form/event_poster/${formId}/cache`;
+  const path = `/form/event_poster/${formId}/cache`;
   return API_BASE ? `${API_BASE}${path}` : path;
 }
 
@@ -508,7 +508,7 @@ export function RegisterPage({ formId }: { formId: number }) {
               <span style={styles.noteEn}>We have received your registration.</span>
             </p>
             {hasFees ? (
-              <a href={`/api/form/pay_register/${formId}`} style={styles.primaryLink}>
+              <a href={`/form/pay_register/${formId}`} style={styles.primaryLink}>
                 前往付款
                 <span style={styles.btnEn}>Proceed to Payment</span>
               </a>

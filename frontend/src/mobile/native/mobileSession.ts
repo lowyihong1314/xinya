@@ -78,7 +78,7 @@ async function readJson(response: Response) {
 export async function loginWithMobileSession(username: string, password: string) {
   if (!shouldUseMobileNativeAuth()) return null;
 
-  const response = await fetch(mobileApiUrl("/api/mobile/session/login"), {
+  const response = await fetch(mobileApiUrl("/mobile/session/login"), {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     credentials: "include",
@@ -98,7 +98,7 @@ export async function loginWithMobileSession(username: string, password: string)
 export async function exchangeMobileSession() {
   if (!shouldUseMobileNativeAuth()) return null;
 
-  const response = await apiFetch("/api/mobile/session/exchange", {
+  const response = await apiFetch("/mobile/session/exchange", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     credentials: "include",
@@ -144,7 +144,7 @@ export async function revokeMobileSession() {
   }
 
   try {
-    await fetch(mobileApiUrl("/api/mobile/session/logout"), {
+    await fetch(mobileApiUrl("/mobile/session/logout"), {
       method: "DELETE",
       headers,
       credentials: "include",

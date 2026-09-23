@@ -114,7 +114,7 @@ export function BoardTerminalPage() {
   }
 
   function previewUrl(pdfId: number): string {
-    const path = `/api/print_paiwei/print-pdfs/${pdfId}/preview-image`;
+    const path = `/print_paiwei/print-pdfs/${pdfId}/preview-image`;
     return API_BASE ? `${API_BASE}${path}` : path;
   }
 

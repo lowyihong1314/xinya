@@ -22,7 +22,7 @@ export function ManualPage() {
 
   // 加载文档目录
   useEffect(() => {
-    apiFetch("/api/info/manual", { credentials: "include" })
+    apiFetch("/info/manual", { credentials: "include" })
       .then((res) => res.json())
       .then((data) => {
         const list: ManualDoc[] = data?.docs || [];
@@ -44,7 +44,7 @@ export function ManualPage() {
     if (!activeName) return;
     setLoading(true);
     setError("");
-    apiFetch(`/api/info/manual/${encodeURIComponent(activeName)}`, { credentials: "include" })
+    apiFetch(`/info/manual/${encodeURIComponent(activeName)}`, { credentials: "include" })
       .then((res) => res.json())
       .then((data) => {
         if (data?.status === "success") {

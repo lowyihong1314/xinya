@@ -147,7 +147,7 @@ export function ClaimDetail({
       const entries = await Promise.all(
         approverIds.map(async (userId) => {
           try {
-            const response = await apiFetch(`/api/user_control/get_user_detail/${userId}`, {
+            const response = await apiFetch(`/user_control/get_user_detail/${userId}`, {
               credentials: "include",
             });
             const payload = (await response.json().catch(() => ({}))) as ApproverUserProfile;
@@ -685,7 +685,7 @@ export function ClaimDetail({
                   }}
                 >
                   <CachedImage
-                    src={`/api/user_control/get_profile_image/${approver.user_id}`}
+                    src={`/user_control/get_profile_image/${approver.user_id}`}
                     cacheKey={`claim-approver:${approver.user_id}`}
                     resolveRelativeToApi
                     alt=""

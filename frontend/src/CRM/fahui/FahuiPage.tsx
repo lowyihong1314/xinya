@@ -398,7 +398,7 @@ export function FahuiPage() {
   const { user, isMobile } = useUserState();
   // 顶部导航条是 sticky 的，右侧面板贴顶/算高度都要把它让出来（导航条藏起来时测得 0）。
   const navbarHeight = useOptionalAppChrome()?.navbarHeight ?? 60;
-  // 审核付款要 account_edit，和后端 /api/payment/review/* 的权限一致
+  // 审核付款要 account_edit，和后端 /payment/review/* 的权限一致
   const canReviewPayment = useMemo(() => getUserPermissionNames(user).has("account_edit"), [user]);
   const initialRouteState = parseFahuiRouteState(location.search);
   const [screen, setScreen] = useState<ScreenState>(initialRouteState.screen);
@@ -996,12 +996,12 @@ export function FahuiPage() {
   async function handleDownloadQuotation(orderId: number) {
     const filename = `ylp-order-${orderId}-quotation.pdf`;
     try {
-      await downloadUrlOrShare(`/api/payment/orders/${orderId}/quotation`, filename, {
+      await downloadUrlOrShare(`/payment/orders/${orderId}/quotation`, filename, {
         isMobile,
         title: filename,
         text: `订单 #${orderId} 报价单`,
         // 裸路径交给 normalizeShareUrl 统一补前缀
-        fallbackUrl: `/api/payment/orders/${orderId}/quotation`,
+        fallbackUrl: `/payment/orders/${orderId}/quotation`,
         mimeType: "application/pdf",
       });
       setActionMessage(isMobile ? "报价单已打开系统分享" : "报价单已开始下载");
@@ -1500,7 +1500,7 @@ export function FahuiPage() {
                       <p style={styles.typeBadge(payment.type === "ylp")}>{getPaymentTypeLabel(payment)}</p>
                       {approved && payment.submitter_id ? (
                         <CachedImage
-                          src={`/api/user_control/get_profile_image/${payment.submitter_id}`}
+                          src={`/user_control/get_profile_image/${payment.submitter_id}`}
                           cacheKey={`fahui-submitter:${payment.submitter_id}`}
                           resolveRelativeToApi
                           alt=""

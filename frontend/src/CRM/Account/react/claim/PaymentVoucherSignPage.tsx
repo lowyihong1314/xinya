@@ -121,7 +121,7 @@ export function PaymentVoucherSignPage() {
   }
 
   const claim = payload?.claim;
-  const downloadUrl = token ? `/api/account/print_payment_voucher/public/${token}/download` : "";
+  const downloadUrl = token ? `/account/print_payment_voucher/public/${token}/download` : "";
 
   return (
     <div style={pageShellStyle}>

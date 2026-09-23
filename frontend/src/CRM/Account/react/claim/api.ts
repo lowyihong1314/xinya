@@ -19,14 +19,14 @@ async function parseJson<T>(response: Response): Promise<T> {
 }
 
 export async function fetchClaims() {
-  const response = await apiFetch("/api/account/get_all_claim", {
+  const response = await apiFetch("/account/get_all_claim", {
     credentials: "include",
   });
   return parseJson<ClaimListResponse>(response);
 }
 
 export async function submitClaim(formData: FormData) {
-  const response = await apiFetch("/api/account/submit_new_claim", {
+  const response = await apiFetch("/account/submit_new_claim", {
     method: "POST",
     body: formData,
     credentials: "include",
@@ -45,7 +45,7 @@ export async function readClaimBill(
   if (options.debug) {
     formData.append("debug", "true");
   }
-  const response = await apiFetch("/api/account/claim/read_bill", {
+  const response = await apiFetch("/account/claim/read_bill", {
     method: "POST",
     body: formData,
     credentials: "include",
@@ -57,7 +57,7 @@ export async function decideClaim(
   requestId: number,
   payload: { action: "approve" | "reject"; comment: string; sign_json_data?: unknown },
 ) {
-  const response = await apiFetch(`/api/account/claim_decision/${requestId}`, {
+  const response = await apiFetch(`/account/claim_decision/${requestId}`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     credentials: "include",
@@ -67,7 +67,7 @@ export async function decideClaim(
 }
 
 export async function deleteClaim(requestId: number) {
-  const response = await apiFetch(`/api/account/delete_claim/${requestId}`, {
+  const response = await apiFetch(`/account/delete_claim/${requestId}`, {
     method: "DELETE",
     credentials: "include",
   });
@@ -75,7 +75,7 @@ export async function deleteClaim(requestId: number) {
 }
 
 export async function downloadClaimReport(claimIds: number[]) {
-  const response = await apiFetch("/api/account/claim/report", {
+  const response = await apiFetch("/account/claim/report", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     credentials: "include",
@@ -89,7 +89,7 @@ export async function downloadClaimReport(claimIds: number[]) {
 }
 
 export async function downloadPaymentVoucher(requestId: number) {
-  const response = await apiFetch(`/api/account/print_payment_voucher/download_payment_voucher/${requestId}`, {
+  const response = await apiFetch(`/account/print_payment_voucher/download_payment_voucher/${requestId}`, {
     credentials: "include",
   });
   if (!response.ok) {
@@ -100,7 +100,7 @@ export async function downloadPaymentVoucher(requestId: number) {
 }
 
 export async function deleteClaimAttachment(attachmentId: number) {
-  const response = await apiFetch(`/api/account/claim/attachments/${attachmentId}`, {
+  const response = await apiFetch(`/account/claim/attachments/${attachmentId}`, {
     method: "DELETE",
     credentials: "include",
   });
@@ -112,7 +112,7 @@ export async function deleteClaimAttachment(attachmentId: number) {
 }
 
 export async function updateClaimEvent(requestId: number, eventId: number | null) {
-  const response = await apiFetch(`/api/account/claim/${requestId}/event`, {
+  const response = await apiFetch(`/account/claim/${requestId}/event`, {
     method: "PUT",
     headers: { "Content-Type": "application/json" },
     credentials: "include",
@@ -127,7 +127,7 @@ export async function updateClaimEvent(requestId: number, eventId: number | null
 
 // 批准人撤回自己的审批签名（撤回后申请解除「已批准锁定」，可再编辑/删除）。
 export async function withdrawClaimDecision(requestId: number) {
-  const response = await apiFetch(`/api/account/claim/${requestId}/withdraw_decision`, {
+  const response = await apiFetch(`/account/claim/${requestId}/withdraw_decision`, {
     method: "POST",
     credentials: "include",
   });
@@ -162,7 +162,7 @@ export async function updateClaim(
     line_items?: ReturnType<typeof serializeLineItems>;
   },
 ) {
-  const response = await apiFetch(`/api/account/claim/${requestId}`, {
+  const response = await apiFetch(`/account/claim/${requestId}`, {
     method: "PUT",
     headers: { "Content-Type": "application/json" },
     credentials: "include",
@@ -178,7 +178,7 @@ export async function updateClaim(
 export async function uploadClaimAttachments(requestId: number, files: File[]) {
   const formData = new FormData();
   files.forEach((file) => formData.append("files", file));
-  const response = await apiFetch(`/api/account/claim/${requestId}/attachments`, {
+  const response = await apiFetch(`/account/claim/${requestId}/attachments`, {
     method: "POST",
     body: formData,
     credentials: "include",
@@ -191,7 +191,7 @@ export async function uploadClaimAttachments(requestId: number, files: File[]) {
 }
 
 export async function fetchPaymentVoucherShare(requestId: number) {
-  const response = await apiFetch(`/api/account/print_payment_voucher/share_payment_voucher/${requestId}`, {
+  const response = await apiFetch(`/account/print_payment_voucher/share_payment_voucher/${requestId}`, {
     credentials: "include",
   });
   const payload = await parseJson<{ data?: PaymentVoucherSharePayload }>(response);
@@ -202,7 +202,7 @@ export async function fetchPaymentVoucherShare(requestId: number) {
 }
 
 export async function fetchPublicPaymentVoucher(token: string) {
-  const response = await apiFetch(`/api/account/print_payment_voucher/public/${token}`, {
+  const response = await apiFetch(`/account/print_payment_voucher/public/${token}`, {
     credentials: "include",
   });
   const payload = await parseJson<{ data?: PaymentVoucherPublicPayload }>(response);
@@ -216,7 +216,7 @@ export async function submitPublicPaymentVoucherSign(
   token: string,
   payload: { full_name: string; sign_json_data: unknown },
 ) {
-  const response = await apiFetch(`/api/account/print_payment_voucher/public/${token}/sign`, {
+  const response = await apiFetch(`/account/print_payment_voucher/public/${token}/sign`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     credentials: "include",

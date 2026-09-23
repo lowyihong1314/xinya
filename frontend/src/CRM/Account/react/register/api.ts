@@ -15,7 +15,7 @@ async function parseJson<T>(response: Response): Promise<T> {
 }
 
 export async function fetchRegisterPaymentForms() {
-  const response = await apiFetch("/api/form/get_all_form", {
+  const response = await apiFetch("/form/get_all_form", {
     credentials: "include",
   });
   const payload = await parseJson<FormListResponse>(response);
@@ -28,7 +28,7 @@ export async function fetchFinancePayments(params?: { scope?: string; status?: s
   if (params?.scope && params.scope !== "all") query.set("scope", params.scope);
   if (params?.status && params.status !== "all") query.set("status", params.status);
   const suffix = query.toString();
-  const response = await apiFetch(`/api/account/payments${suffix ? `?${suffix}` : ""}`, {
+  const response = await apiFetch(`/account/payments${suffix ? `?${suffix}` : ""}`, {
     credentials: "include",
   });
   const payload = await parseJson<{ payments?: FinancePayment[] }>(response);
@@ -46,7 +46,7 @@ export async function createManualFinancePayment(payload: {
   event_id?: number | null;
   remark?: string;
 }) {
-  const response = await apiFetch("/api/account/payments/manual", {
+  const response = await apiFetch("/account/payments/manual", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     credentials: "include",
@@ -56,7 +56,7 @@ export async function createManualFinancePayment(payload: {
 }
 
 export async function deleteManualFinancePayment(paymentId: number) {
-  const response = await apiFetch(`/api/account/payments/manual/${paymentId}`, {
+  const response = await apiFetch(`/account/payments/manual/${paymentId}`, {
     method: "DELETE",
     credentials: "include",
   });
@@ -64,7 +64,7 @@ export async function deleteManualFinancePayment(paymentId: number) {
 }
 
 export async function updateFinancePaymentStatus(paymentId: number, status: string) {
-  const response = await apiFetch(`/api/account/payments/${paymentId}/status`, {
+  const response = await apiFetch(`/account/payments/${paymentId}/status`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     credentials: "include",
@@ -74,7 +74,7 @@ export async function updateFinancePaymentStatus(paymentId: number, status: stri
 }
 
 export async function updateRegisterPaymentStatus(paymentId: number, status: FormPayment["status"]) {
-  const response = await apiFetch(`/api/form/payment/update_status/${paymentId}`, {
+  const response = await apiFetch(`/form/payment/update_status/${paymentId}`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ status }),
@@ -85,7 +85,7 @@ export async function updateRegisterPaymentStatus(paymentId: number, status: For
 export async function replaceRegisterPaymentProof(paymentId: number, file: File) {
   const formData = new FormData();
   formData.append("proof_image", file);
-  const response = await apiFetch(`/api/form/payment/proof_image/${paymentId}/replace`, {
+  const response = await apiFetch(`/form/payment/proof_image/${paymentId}/replace`, {
     method: "POST",
     body: formData,
   });
@@ -93,14 +93,14 @@ export async function replaceRegisterPaymentProof(paymentId: number, file: File)
 }
 
 export async function deleteRegisterPayment(paymentId: number) {
-  const response = await apiFetch(`/api/form/payment/${paymentId}`, {
+  const response = await apiFetch(`/form/payment/${paymentId}`, {
     method: "DELETE",
   });
   return parseJson<{ status?: string; message?: string; payment_id?: number; regis_form_id?: number }>(response);
 }
 
 export async function downloadPaymentReport(paymentIds: number[]) {
-  const response = await apiFetch("/api/account/payments/report", {
+  const response = await apiFetch("/account/payments/report", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     credentials: "include",

@@ -21,7 +21,7 @@ import { orderStatusLabel } from "./orderStatus";
 //   订单状态清单：默认全打勾（等同于改动前的「全印」），不要的自己取消
 //   只印未注册的：跳过已经注册过条码的牌位，专治「补印漏掉的那几张」
 //
-// 张数不是前端猜的：每次输入变化都问后端 /api/print_paiwei/scope，
+// 张数不是前端猜的：每次输入变化都问后端 /print_paiwei/scope，
 // 拿到的 item 清单原样提交回去打印，弹窗上看到几张就印几张。
 
 export type PrintPlusResult = {

@@ -1,5 +1,5 @@
 import { apiFetch } from "../../../js/apiFetch";
-import { API_BASE } from "../../../js/apiBase";
+import { API_ROOT } from "../../../js/basePath";
 
 export const PINNED_ALL_SONGS_AUDIO_CACHE_SCOPE = "all-songs-top-10";
 export const QUEUE_NEXT_AUDIO_CACHE_SCOPE = "queue-next";
@@ -22,7 +22,7 @@ const webAudioCache = new Map<string, WebAudioCacheEntry>();
 const pendingWebAudioCache = new Map<string, Promise<string>>();
 
 export function buildMusicDownloadUrl(musicId: number) {
-  return `${API_BASE}/api/music/download/${musicId}`;
+  return `${API_ROOT}/music/download/${musicId}`;
 }
 
 export function buildMusicAudioRevision(track: MusicAudioCacheTrackLike) {

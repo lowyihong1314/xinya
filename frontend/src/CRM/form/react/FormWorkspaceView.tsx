@@ -3,7 +3,6 @@ import type { CSSProperties, DragEvent, ReactNode } from "react";
 import { io, type Socket } from "socket.io-client";
 import QRCode from "qrcode";
 
-import { API_BASE } from "../../../js/apiBase";
 import { apiPath, publicUrl } from "../../../js/basePath";
 import { CachedImage } from "../../../components/CachedMedia";
 import { downloadBlobOrShare } from "../../../js/browserActions";
@@ -26,7 +25,7 @@ const PUBLIC_ORIGIN = "https://utbabuddha.com";
 
 /**
  * 钉死的生产 origin + 部署前缀。
- * 为什么要补前缀：加前缀部署后 /api/form/index/3 住在 /UTBA_DEMO/api/form/index/3，
+ * 为什么要补前缀：加前缀部署后 /form/index/3 住在 /UTBA_DEMO/form/index/3，
  * 印出去的二维码少了这一段就是扫出 404。
  * 前缀为空时产物与改前逐字节一致；apiPath 是幂等的，重复调用不会拼出双前缀。
  * 待拍板：若确认所有构建（含 dev）都注入 VITE_PUBLIC_ORIGIN，这里可整体简化成 publicUrl(path)。
@@ -630,7 +629,7 @@ function MembersTab({
 
 function MemberTerminalDock({ formId, member, isMobile, onClose }: { formId: number; member: FormMember; isMobile: boolean; onClose: () => void }) {
   // 会员终端链接，复制给会员在自己手机上打开
-  const url = publicFormUrl(`/api/form/member?form_id=${formId}&nric=${encodeURIComponent(String(member.nric || ""))}`);
+  const url = publicFormUrl(`/form/member?form_id=${formId}&nric=${encodeURIComponent(String(member.nric || ""))}`);
   const [copied, setCopied] = useState("");
   async function copy() {
     const ok = await copyToClipboard(url);
@@ -1158,11 +1157,11 @@ function RegistrationStatusControl({
 
 function PublicTab({ formId, isMobile }: { formId: number; isMobile: boolean }) {
   // 这四条全部会喂给 QRCode.toDataURL（见下方 openQr）给人扫码报名，
-  // 预期产物形如 https://utbabuddha.com/UTBA_DEMO/api/form/index/3
-  const registerUrl = publicFormUrl(`/api/form/index/${formId}`);
+  // 预期产物形如 https://utbabuddha.com/UTBA_DEMO/form/index/3
+  const registerUrl = publicFormUrl(`/form/index/${formId}`);
   const forceRegisterUrl = `${registerUrl}?force=true`;
-  const payUrl = publicFormUrl(`/api/form/pay_register/${formId}`);
-  const memberUrl = publicFormUrl(`/api/form/member?form_id=${formId}`);
+  const payUrl = publicFormUrl(`/form/pay_register/${formId}`);
+  const memberUrl = publicFormUrl(`/form/member?form_id=${formId}`);
   const [copied, setCopied] = useState("");
   async function copy(url: string, label: string) {
     const ok = await copyToClipboard(url);

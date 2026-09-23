@@ -35,7 +35,7 @@ export function TurntableUserPicker({
       setLoading(true);
       setError("");
       try {
-        const response = await apiFetch("/api/user_control/get_all_user_data", {
+        const response = await apiFetch("/user_control/get_all_user_data", {
           credentials: "include",
         });
         const payload = (await response.json().catch(() => ({}))) as UserResponse;
@@ -125,7 +125,7 @@ export function TurntableUserPicker({
                 return (
                   <button key={user.id} type="button" onClick={() => toggleUser(user)} style={userCardStyle(selected)}>
                     <CachedImage
-                      src={`/api/user_control/get_profile_image/${user.id}`}
+                      src={`/user_control/get_profile_image/${user.id}`}
                       cacheKey={`turntable-user:${user.id}`}
                       resolveRelativeToApi
                       alt=""

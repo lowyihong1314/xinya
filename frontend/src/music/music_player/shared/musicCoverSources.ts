@@ -1,4 +1,5 @@
 import { API_BASE } from "../../../js/apiBase";
+import { API_ROOT } from "../../../js/basePath";
 
 export type MusicCoverSource =
   | string
@@ -9,8 +10,12 @@ export type MusicCoverSource =
   | null
   | undefined;
 
+// 线上主站的封面兜底（本地没有这张封面时用）。
+// ⚠️ 这里写死的是**生产**地址：生产今天还跑 Flask，路径仍带 /api；等生产切到
+//    FastAPI 后要改成 https://utbabuddha.com/music/album_cover。
+//    见 docs/flask_to_fastAPI/00-迁移进度.md 的「生产切换」。
 const REMOTE_COVER_ROOT = "https://utbabuddha.com/api/music/album_cover";
-const LOCAL_COVER_ROOT = `${API_BASE}/api/music/album_cover`;
+const LOCAL_COVER_ROOT = `${API_ROOT}/music/album_cover`;
 
 export const DEFAULT_REMOTE_COVER_URL = `${REMOTE_COVER_ROOT}/defult.jpeg`;
 export const DEFAULT_LOCAL_COVER_URL = `${LOCAL_COVER_ROOT}/defult.jpeg`;

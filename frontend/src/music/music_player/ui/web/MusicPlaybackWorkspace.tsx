@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import type { CSSProperties, ReactNode } from "react";
 
-import { API_BASE } from "../../../../js/apiBase";
+import { API_ROOT } from "../../../../js/basePath";
 import { useEnsureDesignTokens } from "../../../../theme/designTokens";
 import {
   PINNED_ALL_SONGS_AUDIO_CACHE_SCOPE,
@@ -138,7 +138,7 @@ export function MusicPlaybackWorkspace({
       return;
     }
 
-    const directUrl = `${API_BASE}/api/music/download/${currentMusic.id}`;
+    const directUrl = `${API_ROOT}/music/download/${currentMusic.id}`;
     const isPinnedTrack = pinnedAllSongsCacheSet.has(currentMusic.id);
     const cachedUrl = getCachedMusicAudioUrl(currentMusic);
 

@@ -13,12 +13,12 @@ async function parseJson(response: Response) {
 
 export async function searchFiles(q: string, limit = 100): Promise<SearchResult> {
   const params = new URLSearchParams({ q, limit: String(limit) });
-  const response = await apiFetch(`/api/files/search?${params}`);
+  const response = await apiFetch(`/files/search?${params}`);
   return parseJson(response);
 }
 
 export async function batchDelete(items: BatchDeleteItem[]): Promise<BatchDeleteResult> {
-  const response = await apiFetch("/api/files/items/batch_delete", {
+  const response = await apiFetch("/files/items/batch_delete", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ items }),
@@ -27,12 +27,12 @@ export async function batchDelete(items: BatchDeleteItem[]): Promise<BatchDelete
 }
 
 export async function purgeTrash(trashId: number) {
-  const response = await apiFetch(`/api/files/trash/${trashId}`, { method: "DELETE" });
+  const response = await apiFetch(`/files/trash/${trashId}`, { method: "DELETE" });
   return parseJson(response);
 }
 
 export async function purgeAllTrash(): Promise<{ success: boolean; purged: number }> {
-  const response = await apiFetch("/api/files/trash", { method: "DELETE" });
+  const response = await apiFetch("/files/trash", { method: "DELETE" });
   return parseJson(response);
 }
 
@@ -48,12 +48,12 @@ export type DirectoryDetail = {
 };
 
 export async function fetchDirectoryDetail(path: string): Promise<DirectoryDetail> {
-  const response = await apiFetch(`/api/files/directories/detail?path=${encodeURIComponent(path)}`);
+  const response = await apiFetch(`/files/directories/detail?path=${encodeURIComponent(path)}`);
   return parseJson(response);
 }
 
 export async function fetchFileBlob(fileId: number): Promise<Blob> {
-  const response = await apiFetch(`/api/files/items/${fileId}/content`);
+  const response = await apiFetch(`/files/items/${fileId}/content`);
   if (!response.ok) {
     let message = "文件加载失败";
     try {

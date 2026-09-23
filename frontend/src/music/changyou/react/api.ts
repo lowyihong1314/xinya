@@ -13,7 +13,7 @@ export async function fetchSongbookEntries(query = "", variant = "") {
   const search = new URLSearchParams();
   if (query.trim()) search.set("q", query.trim());
   if (variant) search.set("variant", variant);
-  const response = await apiFetch(`/api/songbook/list?${search.toString()}`, { credentials: "include" });
+  const response = await apiFetch(`/songbook/list?${search.toString()}`, { credentials: "include" });
   return parseJson<{ entries: SongbookEntry[] }>(response);
 }
 
@@ -23,12 +23,12 @@ export async function fetchSongbookEntry(entryId: number, options?: { versionKin
   if (options?.editorUserId) search.set("editor_user_id", String(options.editorUserId));
   if (options?.includeUnpublished) search.set("include_unpublished", "1");
   const suffix = search.toString() ? `?${search.toString()}` : "";
-  const response = await apiFetch(`/api/songbook/entry/${entryId}${suffix}`, { credentials: "include" });
+  const response = await apiFetch(`/songbook/entry/${entryId}${suffix}`, { credentials: "include" });
   return parseJson<{ entry: SongbookEntry }>(response);
 }
 
 export async function saveMySongbookEdit(entryId: number, content: string) {
-  const response = await apiFetch(`/api/songbook/entry/${entryId}/my_edit`, {
+  const response = await apiFetch(`/songbook/entry/${entryId}/my_edit`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     credentials: "include",
@@ -38,7 +38,7 @@ export async function saveMySongbookEdit(entryId: number, content: string) {
 }
 
 export async function deleteMySongbookEdit(entryId: number) {
-  const response = await apiFetch(`/api/songbook/entry/${entryId}/my_edit`, {
+  const response = await apiFetch(`/songbook/entry/${entryId}/my_edit`, {
     method: "DELETE",
     credentials: "include",
   });
@@ -50,12 +50,12 @@ export async function fetchSongbookEntriesForAdmin(query = "", variant = "") {
   if (query.trim()) search.set("q", query.trim());
   if (variant) search.set("variant", variant);
   search.set("include_unpublished", "1");
-  const response = await apiFetch(`/api/songbook/list?${search.toString()}`, { credentials: "include" });
+  const response = await apiFetch(`/songbook/list?${search.toString()}`, { credentials: "include" });
   return parseJson<{ entries: SongbookEntry[] }>(response);
 }
 
 export async function saveSongbookEntry(payload: Partial<SongbookEntry> & { title: string; content: string }) {
-  const response = await apiFetch("/api/songbook/entry", {
+  const response = await apiFetch("/songbook/entry", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     credentials: "include",
@@ -65,7 +65,7 @@ export async function saveSongbookEntry(payload: Partial<SongbookEntry> & { titl
 }
 
 export async function deleteSongbookEntry(entryId: number) {
-  const response = await apiFetch(`/api/songbook/entry/${entryId}`, {
+  const response = await apiFetch(`/songbook/entry/${entryId}`, {
     method: "DELETE",
     credentials: "include",
   });
@@ -73,7 +73,7 @@ export async function deleteSongbookEntry(entryId: number) {
 }
 
 export async function importSongbookDocx(path: string, replaceExisting = false) {
-  const response = await apiFetch("/api/songbook/import_docx", {
+  const response = await apiFetch("/songbook/import_docx", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     credentials: "include",

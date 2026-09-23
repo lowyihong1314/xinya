@@ -5,7 +5,8 @@ import { Link, useNavigate, useParams } from "react-router-dom";
 import { useUserState } from "../../app/UserState";
 import { CachedImage } from "../../components/CachedMedia";
 import { useEnsureDesignTokens } from "../../theme/designTokens";
-import { API_BASE, IS_APK } from "../../js/apiBase";
+import { IS_APK } from "../../js/apiBase";
+import { API_ROOT } from "../../js/basePath";
 import { publicUrl } from "../../js/basePath";
 import { downloadUrl } from "../../js/browserActions";
 import { calcAgeFromNric } from "../../js/nric";
@@ -518,9 +519,9 @@ export function ProfilePage() {
 
   const avatarSrc = useMemo(() => {
     if (!profileUser?.username) {
-      return `${API_BASE}/static/images/logo/logo.png`;
+      return `${API_ROOT}/static/images/logo/logo.png`;
     }
-    return `${API_BASE}/api/user_control/get_profile_image/${profileUser.username}?t=${avatarVersion}`;
+    return `${API_ROOT}/user_control/get_profile_image/${profileUser.username}?t=${avatarVersion}`;
   }, [avatarVersion, profileUser?.username]);
 
   const footprintSummary = footprints.summary ?? emptyFootprintSummary();

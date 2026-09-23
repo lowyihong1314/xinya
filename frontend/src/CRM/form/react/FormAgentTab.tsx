@@ -107,7 +107,7 @@ export function FormAgentTab({ formId, canEdit, isMobile, onApplied }: { formId:
     setInput("");
     setPending(true);
     try {
-      const res = await apiFetch(`/api/form/agent/chat/${formId}`, {
+      const res = await apiFetch(`/form/agent/chat/${formId}`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ messages: history }),
@@ -135,7 +135,7 @@ export function FormAgentTab({ formId, canEdit, isMobile, onApplied }: { formId:
     const lines = summarizePlan(entry.plan);
     if (!(await showConfirmDialog({ message: `确认执行以下改动？\n${lines.join("\n")}`, tone: "danger" }))) return;
     try {
-      const res = await apiFetch(`/api/form/agent/apply/${formId}`, {
+      const res = await apiFetch(`/form/agent/apply/${formId}`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ plan: entry.plan }),

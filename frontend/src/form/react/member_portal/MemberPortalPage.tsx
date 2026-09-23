@@ -140,7 +140,7 @@ function NricGate() {
   // 进入先尝试用当前登录用户的 NRIC 自动进入；失败/未登录才手动输入。
   useEffect(() => {
     let active = true;
-    apiFetch("/api/user_control/get_user_data")
+    apiFetch("/user_control/get_user_data")
       .then((r) => (r.ok ? r.json() : null))
       .then((d) => {
         if (!active) return;
@@ -189,7 +189,7 @@ function ParticipatedView({ nric }: { nric: string }) {
     let active = true;
     setLoading(true);
     setError("");
-    apiFetch(`/api/form/member/participated?nric=${encodeURIComponent(nric)}`)
+    apiFetch(`/form/member/participated?nric=${encodeURIComponent(nric)}`)
       .then((r) => r.json())
       .then((data) => {
         if (!active) return;
@@ -275,7 +275,7 @@ function PortalView({ nric, formId }: { nric: string; formId: number }) {
     let active = true;
     setLoading(true);
     setError("");
-    apiFetch(`/api/form/member/detail?nric=${encodeURIComponent(nric)}&form_id=${formId}`)
+    apiFetch(`/form/member/detail?nric=${encodeURIComponent(nric)}&form_id=${formId}`)
       .then((r) => r.json())
       .then((d) => { if (active) setData(d); })
       .catch(() => { if (active) setError("网络错误，请稍后再试"); })
@@ -302,7 +302,7 @@ function PortalView({ nric, formId }: { nric: string; formId: number }) {
 
   // 付款提交后静默刷新详情（更新付款状态），不闪整页 loading。
   function reload() {
-    apiFetch(`/api/form/member/detail?nric=${encodeURIComponent(nric)}&form_id=${formId}`)
+    apiFetch(`/form/member/detail?nric=${encodeURIComponent(nric)}&form_id=${formId}`)
       .then((r) => r.json())
       .then((d) => setData(d))
       .catch(() => { /* ignore */ });
@@ -351,7 +351,7 @@ function PortalView({ nric, formId }: { nric: string; formId: number }) {
     if (scoreToken) return;
     setScoreErr("");
     try {
-      const r = await apiFetch(`/api/form/member/score_panel/${formId}`, { method: "POST" });
+      const r = await apiFetch(`/form/member/score_panel/${formId}`, { method: "POST" });
       const d = await r.json();
       if (r.ok && d.token) {
         setScoreToken(d.token);
@@ -384,7 +384,7 @@ function PortalView({ nric, formId }: { nric: string; formId: number }) {
               style={ghostStyle}
               onClick={async () => {
                 try {
-                  await apiFetch("/api/user_control/logout");
+                  await apiFetch("/user_control/logout");
                 } catch {
                   /* ignore */
                 }

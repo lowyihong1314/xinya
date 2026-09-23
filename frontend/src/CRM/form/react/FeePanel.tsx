@@ -161,7 +161,7 @@ export function FeePanel({
   descriptionPlaceholder = "收费说明",
 }: FeePanelProps) {
   const { isMobile } = useUserState();
-  const resolvedLinkHref = linkHref || (formId ? `/api/form/pay_register/${formId}` : "");
+  const resolvedLinkHref = linkHref || (formId ? `/form/pay_register/${formId}` : "");
 
   return (
     <div style={sectionBodyStyle(isMobile)}>

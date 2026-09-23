@@ -14,7 +14,7 @@ async function parseJson<T>(response: Response): Promise<T> {
 }
 
 export async function fetchLampRegistrations() {
-  const response = await apiFetch("/api/lampRegistration_API/registrations", {
+  const response = await apiFetch("/lampRegistration_API/registrations", {
     credentials: "include",
   });
   return parseJson<LampListResponse>(response);
@@ -24,7 +24,7 @@ export async function updateLampRegistration(
   id: number,
   patch: Partial<Pick<LampRegistrationRecord, "devotee_name" | "phone" | "address" | "status">>,
 ) {
-  const response = await apiFetch("/api/lampRegistration_API/edit", {
+  const response = await apiFetch("/lampRegistration_API/edit", {
     method: "POST",
     credentials: "include",
     headers: { "Content-Type": "application/json" },
@@ -34,7 +34,7 @@ export async function updateLampRegistration(
 }
 
 export async function deleteLampRegistration(id: number) {
-  const response = await apiFetch("/api/lampRegistration_API/delete", {
+  const response = await apiFetch("/lampRegistration_API/delete", {
     method: "POST",
     credentials: "include",
     headers: { "Content-Type": "application/json" },

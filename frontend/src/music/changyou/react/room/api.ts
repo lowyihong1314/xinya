@@ -47,12 +47,12 @@ async function parseJson<T>(response: Response): Promise<T> {
 }
 
 export async function fetchChangyouRooms() {
-  const response = await apiFetch('/api/changyou_room/list', { credentials: 'include' });
+  const response = await apiFetch('/changyou_room/list', { credentials: 'include' });
   return parseJson<{ rooms: ChangyouRoom[] }>(response);
 }
 
 export async function createChangyouRoom(topic: string) {
-  const response = await apiFetch('/api/changyou_room/create', {
+  const response = await apiFetch('/changyou_room/create', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     credentials: 'include',
@@ -62,12 +62,12 @@ export async function createChangyouRoom(topic: string) {
 }
 
 export async function fetchChangyouRoom(roomId: string) {
-  const response = await apiFetch(`/api/changyou_room/room/${roomId}`, { credentials: 'include' });
+  const response = await apiFetch(`/changyou_room/room/${roomId}`, { credentials: 'include' });
   return parseJson<{ room: ChangyouRoom }>(response);
 }
 
 export async function fetchChangyouRoomCurrent(roomId: string) {
-  const response = await apiFetch(`/api/changyou_room/room/${roomId}/current`, { credentials: 'include' });
+  const response = await apiFetch(`/changyou_room/room/${roomId}/current`, { credentials: 'include' });
   return parseJson<{
     room: ChangyouRoom;
     entry: SongbookEntry | null;
@@ -76,7 +76,7 @@ export async function fetchChangyouRoomCurrent(roomId: string) {
 }
 
 export async function pushChangyouRoomSong(roomId: string, payload: { song_entry_id: number; version_kind: 'base' | 'user'; editor_user_id?: number | null }) {
-  const response = await apiFetch(`/api/changyou_room/room/${roomId}/push`, {
+  const response = await apiFetch(`/changyou_room/room/${roomId}/push`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     credentials: 'include',
@@ -99,7 +99,7 @@ export async function projectChangyouRoomPage(
     marker_index?: number | null;
   },
 ) {
-  const response = await apiFetch(`/api/changyou_room/room/${roomId}/project`, {
+  const response = await apiFetch(`/changyou_room/room/${roomId}/project`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     credentials: 'include',
@@ -114,7 +114,7 @@ export async function projectChangyouRoomPage(
 }
 
 export async function updateChangyouRoomMarker(roomId: string, payload: { marker_index?: number | null }) {
-  const response = await apiFetch(`/api/changyou_room/room/${roomId}/marker`, {
+  const response = await apiFetch(`/changyou_room/room/${roomId}/marker`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     credentials: 'include',
@@ -129,7 +129,7 @@ export async function updateChangyouRoomMarker(roomId: string, payload: { marker
 }
 
 export async function notifyChangyouRoom(roomId: string, payload: { kind: "text" | "qr"; content: string }) {
-  const response = await apiFetch(`/api/changyou_room/room/${roomId}/notify`, {
+  const response = await apiFetch(`/changyou_room/room/${roomId}/notify`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     credentials: 'include',

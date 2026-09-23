@@ -75,7 +75,7 @@ function LegacyImageRedirect() {
 
     void (async () => {
       try {
-        const response = await apiFetch(`/api/api/get_file_data/${imageId}`, { credentials: "include" });
+        const response = await apiFetch(`/get_file_data/${imageId}`, { credentials: "include" });
         const payload = (await response.json().catch(() => ({}))) as LegacyImagePayload;
         if (!response.ok || payload.status !== "success") {
           throw new Error(payload.message || "读取媒体失败");

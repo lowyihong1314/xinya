@@ -739,7 +739,7 @@ function OrganizersTab({ event, canEditEvent, onAddOrganizers }: { event: EventR
           event.organizers!.map((user) => (
             <div key={user.id} style={organizerCardStyle}>
               <CachedImage
-                src={`/api/user_control/get_profile_image/${user.id}`}
+                src={`/user_control/get_profile_image/${user.id}`}
                 cacheKey={`event-table-user:${user.id}`}
                 resolveRelativeToApi
                 alt={user.display_name || user.username || String(user.id)}
@@ -784,7 +784,7 @@ function LinkedFormHeadChip({ event, form, onOpen }: { event: EventRecord | null
       <button
         type="button"
         style={headChipOpenStyle}
-        onClick={() => window.open(apiPath(`/api/form/index/${form.id}`), "_blank", "noopener,noreferrer")}
+        onClick={() => window.open(apiPath(`/form/index/${form.id}`), "_blank", "noopener,noreferrer")}
         title="打开报名表格"
       >
         ↗

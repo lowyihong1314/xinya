@@ -52,7 +52,7 @@ function getDownloadFilename(response: Response, fallback: string) {
 }
 
 export async function fetchPayments() {
-  const response = await apiFetch("/api/payment/review", {
+  const response = await apiFetch("/payment/review", {
     credentials: "include",
   });
 
@@ -60,7 +60,7 @@ export async function fetchPayments() {
 }
 
 export async function approvePayment(paymentId: number) {
-  const response = await apiFetch(`/api/payment/review/${paymentId}/approve`, {
+  const response = await apiFetch(`/payment/review/${paymentId}/approve`, {
     method: "POST",
     credentials: "include",
   });
@@ -69,7 +69,7 @@ export async function approvePayment(paymentId: number) {
 }
 
 export async function revokePayment(paymentId: number) {
-  const response = await apiFetch(`/api/payment/review/${paymentId}/revoke`, {
+  const response = await apiFetch(`/payment/review/${paymentId}/revoke`, {
     method: "POST",
     credentials: "include",
   });
@@ -79,7 +79,7 @@ export async function revokePayment(paymentId: number) {
 
 /** 撤回一条付款：记录标成「已拒绝」，凭证保留，**订单状态保持不变**。 */
 export async function withdrawPayment(paymentId: number) {
-  const response = await apiFetch(`/api/payment/payments/${paymentId}/withdraw`, {
+  const response = await apiFetch(`/payment/payments/${paymentId}/withdraw`, {
     method: "POST",
     credentials: "include",
   });
@@ -88,7 +88,7 @@ export async function withdrawPayment(paymentId: number) {
 }
 
 export async function removePayment(paymentId: number) {
-  const response = await apiFetch(`/api/payment/review/${paymentId}`, {
+  const response = await apiFetch(`/payment/review/${paymentId}`, {
     method: "DELETE",
     credentials: "include",
   });
@@ -97,7 +97,7 @@ export async function removePayment(paymentId: number) {
 }
 
 export async function fetchYlpVersions() {
-  const response = await apiFetch("/api/fahui_router/versions", {
+  const response = await apiFetch("/fahui_router/versions", {
     credentials: "include",
   });
 
@@ -106,7 +106,7 @@ export async function fetchYlpVersions() {
 
 /** 读某个版本绑定了哪个活动（没绑定返回 data: null）。 */
 export async function fetchFahuiRawDocs() {
-  const response = await apiFetch("/api/fahui_router/raw_docs", {
+  const response = await apiFetch("/fahui_router/raw_docs", {
     credentials: "include",
   });
 
@@ -118,7 +118,7 @@ export async function updateFahuiRawDocLink(
   orderId: number,
   action: "add" | "confirm" | "remove",
 ) {
-  const response = await apiFetch(`/api/fahui_router/raw_docs/${docId}/link`, {
+  const response = await apiFetch(`/fahui_router/raw_docs/${docId}/link`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     credentials: "include",
@@ -129,7 +129,7 @@ export async function updateFahuiRawDocLink(
 }
 
 export async function setFahuiRawDocFlag(docId: number, flagId: number, resolved: boolean) {
-  const response = await apiFetch(`/api/fahui_router/raw_docs/${docId}/flag`, {
+  const response = await apiFetch(`/fahui_router/raw_docs/${docId}/flag`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     credentials: "include",
@@ -155,7 +155,7 @@ export type FahuiOldOrderSuggestion = {
 export async function uploadFahuiRawDocs(files: File[]) {
   const formData = new FormData();
   files.forEach((file) => formData.append("files", file));
-  const response = await apiFetch("/api/fahui_router/raw_docs/upload", {
+  const response = await apiFetch("/fahui_router/raw_docs/upload", {
     method: "POST",
     body: formData,
     credentials: "include",
@@ -170,7 +170,7 @@ export async function uploadFahuiRawDocs(files: File[]) {
 
 /** BytePlus 读图 + 拿单据资料去往年版本里找最像的订单（最多 3 张）。 */
 export async function suggestOldOrdersForRawDoc(docId: number) {
-  const response = await apiFetch(`/api/fahui_router/raw_docs/${docId}/suggest_old`, {
+  const response = await apiFetch(`/fahui_router/raw_docs/${docId}/suggest_old`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     credentials: "include",
@@ -202,7 +202,7 @@ export async function suggestOldOrdersForRawDoc(docId: number) {
 }
 
 export async function fetchYlpVersionEvent(version: string) {
-  const response = await apiFetch(`/api/fahui_router/versions/${encodeURIComponent(version)}/event`, {
+  const response = await apiFetch(`/fahui_router/versions/${encodeURIComponent(version)}/event`, {
     credentials: "include",
   });
 
@@ -211,7 +211,7 @@ export async function fetchYlpVersionEvent(version: string) {
 
 /** 绑定 / 解绑（eventId 传 null 就是解绑）。 */
 export async function setYlpVersionEvent(version: string, eventId: number | null) {
-  const response = await apiFetch(`/api/fahui_router/versions/${encodeURIComponent(version)}/event`, {
+  const response = await apiFetch(`/fahui_router/versions/${encodeURIComponent(version)}/event`, {
     method: "PUT",
     headers: { "Content-Type": "application/json" },
     credentials: "include",
@@ -241,7 +241,7 @@ export async function searchYlpOrders(params: {
     search.set("dir", params.dir || "asc");
   }
 
-  const response = await apiFetch(`/api/fahui_router/orders/search?${search.toString()}`, {
+  const response = await apiFetch(`/fahui_router/orders/search?${search.toString()}`, {
     credentials: "include",
   });
 
@@ -249,7 +249,7 @@ export async function searchYlpOrders(params: {
 }
 
 export async function fetchYlpOrderDetail(orderId: number) {
-  const response = await apiFetch(`/api/fahui_router/orders/${orderId}`, {
+  const response = await apiFetch(`/fahui_router/orders/${orderId}`, {
     credentials: "include",
   });
 
@@ -260,7 +260,7 @@ export async function fetchYlpOrdersByPhone(phone: string) {
   const search = new URLSearchParams();
   search.set("phone", phone);
 
-  const response = await apiFetch(`/api/fahui_router/orders/by-phone?${search.toString()}`, {
+  const response = await apiFetch(`/fahui_router/orders/by-phone?${search.toString()}`, {
     credentials: "include",
   });
 
@@ -277,7 +277,7 @@ export async function createYlpOrder(payload: {
   /** true = 就算同名同号也另开一张，不去重（避免第二张单覆盖第一张）。 */
   force_new?: boolean;
 }) {
-  const response = await apiFetch("/api/fahui_router/orders", {
+  const response = await apiFetch("/fahui_router/orders", {
     method: "POST",
     credentials: "include",
     headers: {
@@ -290,7 +290,7 @@ export async function createYlpOrder(payload: {
 }
 
 export async function createYlpOrderItem(orderId: number, payload: Record<string, unknown>) {
-  const response = await apiFetch(`/api/board_router/orders/${orderId}/items`, {
+  const response = await apiFetch(`/board_router/orders/${orderId}/items`, {
     method: "POST",
     credentials: "include",
     headers: {
@@ -303,7 +303,7 @@ export async function createYlpOrderItem(orderId: number, payload: Record<string
 }
 
 export async function deleteYlpOrderItem(orderId: number, itemId: number) {
-  const response = await apiFetch(`/api/board_router/orders/${orderId}/items/${itemId}`, {
+  const response = await apiFetch(`/board_router/orders/${orderId}/items/${itemId}`, {
     method: "DELETE",
     credentials: "include",
   });
@@ -312,7 +312,7 @@ export async function deleteYlpOrderItem(orderId: number, itemId: number) {
 }
 
 export async function updateYlpOrderItem(orderId: number, itemId: number, payload: Record<string, unknown>) {
-  const response = await apiFetch(`/api/board_router/orders/${orderId}/items/${itemId}`, {
+  const response = await apiFetch(`/board_router/orders/${orderId}/items/${itemId}`, {
     method: "POST",
     credentials: "include",
     headers: {
@@ -332,7 +332,7 @@ export async function updateYlpOrderCustomer(
     phone?: string;
   },
 ) {
-  const response = await apiFetch(`/api/board_router/orders/${orderId}/customer`, {
+  const response = await apiFetch(`/board_router/orders/${orderId}/customer`, {
     method: "POST",
     credentials: "include",
     headers: {
@@ -360,7 +360,7 @@ export async function createYlpOrderPayment(
     formData.append("file", file);
   }
 
-  const response = await apiFetch(`/api/payment/orders/${orderId}/payments`, {
+  const response = await apiFetch(`/payment/orders/${orderId}/payments`, {
     method: "POST",
     credentials: "include",
     body: formData,
@@ -370,7 +370,7 @@ export async function createYlpOrderPayment(
 }
 
 export async function downloadYlpReceiptImage(orderId: number) {
-  const response = await apiFetch(`/api/payment/orders/${orderId}/receipt-image`, {
+  const response = await apiFetch(`/payment/orders/${orderId}/receipt-image`, {
     credentials: "include",
   });
 
@@ -401,7 +401,7 @@ export async function listYlpPrintRecords(version: string, page = 1, perPage = 2
   search.set("page", String(page));
   search.set("per_page", String(perPage));
 
-  const response = await apiFetch(`/api/board_router/print-pdfs/history?${search.toString()}`, {
+  const response = await apiFetch(`/board_router/print-pdfs/history?${search.toString()}`, {
     credentials: "include",
   });
 
@@ -414,7 +414,7 @@ export async function listYlpPrintRecords(version: string, page = 1, perPage = 2
 }
 
 export async function createYlpShareLink(orderId: number) {
-  const response = await apiFetch(`/api/fahui_router/orders/${orderId}/share-link`, {
+  const response = await apiFetch(`/fahui_router/orders/${orderId}/share-link`, {
     method: "POST",
     credentials: "include",
   });
@@ -426,7 +426,7 @@ export async function fetchYlpSharedOrder(token: string) {
   const search = new URLSearchParams();
   search.set("token", token);
 
-  const response = await apiFetch(`/api/fahui_router/orders/shared?${search.toString()}`, {
+  const response = await apiFetch(`/fahui_router/orders/shared?${search.toString()}`, {
     credentials: "include",
   });
 
@@ -434,7 +434,7 @@ export async function fetchYlpSharedOrder(token: string) {
 }
 
 export async function deleteYlpOrdersBatch(orderIds: number[]) {
-  const response = await apiFetch("/api/board_router/orders/delete", {
+  const response = await apiFetch("/board_router/orders/delete", {
     method: "POST",
     credentials: "include",
     headers: {
@@ -447,7 +447,7 @@ export async function deleteYlpOrdersBatch(orderIds: number[]) {
 }
 
 export async function copyYlpOrdersToCurrent(orderIds: number[]) {
-  const response = await apiFetch("/api/board_router/orders/copy-to-current", {
+  const response = await apiFetch("/board_router/orders/copy-to-current", {
     method: "POST",
     credentials: "include",
     headers: {
@@ -466,7 +466,7 @@ export async function copyYlpOrdersToCurrent(orderIds: number[]) {
 }
 
 export async function updateYlpOrderStatus(orderId: number, status: string) {
-  const response = await apiFetch(`/api/board_router/orders/${orderId}/status`, {
+  const response = await apiFetch(`/board_router/orders/${orderId}/status`, {
     method: "POST",
     credentials: "include",
     headers: {
@@ -479,7 +479,7 @@ export async function updateYlpOrderStatus(orderId: number, status: string) {
 }
 
 export async function fetchYlpPayments(orderId: number) {
-  const response = await apiFetch(`/api/payment/orders/${orderId}/payments`, {
+  const response = await apiFetch(`/payment/orders/${orderId}/payments`, {
     credentials: "include",
   });
 
@@ -491,11 +491,11 @@ export async function fetchYlpPayments(orderId: number) {
   return payload.data || [];
 }
 
-// 注：整份 PDF 的单订单预览接口（GET /api/print_paiwei/orders/<id>/preview）后端仍在，
+// 注：整份 PDF 的单订单预览接口（GET /print_paiwei/orders/<id>/preview）后端仍在，
 // 但前端已全部改用 PaiweiPreviewGrid（逐张裁切图），这里不再保留封装。
 
 export async function downloadYlpPaiwei(orderId: number) {
-  const response = await apiFetch("/api/print_paiwei/preview/by-orders", {
+  const response = await apiFetch("/print_paiwei/preview/by-orders", {
     method: "POST",
     credentials: "include",
     headers: {
@@ -523,14 +523,14 @@ export async function downloadYlpPaiwei(orderId: number) {
 
 export async function listYlpPaymentChannels(version: string) {
   const response = await apiFetch(
-    `/api/board_router/payment-channels?version=${encodeURIComponent(version)}`,
+    `/board_router/payment-channels?version=${encodeURIComponent(version)}`,
     { credentials: "include" },
   );
   return parseJson<YlpPaymentChannelListResponse>(response);
 }
 
 export async function createYlpPaymentChannel(formData: FormData) {
-  const response = await apiFetch("/api/board_router/payment-channels", {
+  const response = await apiFetch("/board_router/payment-channels", {
     method: "POST",
     credentials: "include",
     body: formData,
@@ -539,7 +539,7 @@ export async function createYlpPaymentChannel(formData: FormData) {
 }
 
 export async function updateYlpPaymentChannel(channelId: number, formData: FormData) {
-  const response = await apiFetch(`/api/board_router/payment-channels/${channelId}`, {
+  const response = await apiFetch(`/board_router/payment-channels/${channelId}`, {
     method: "POST",
     credentials: "include",
     body: formData,
@@ -548,7 +548,7 @@ export async function updateYlpPaymentChannel(channelId: number, formData: FormD
 }
 
 export async function deleteYlpPaymentChannel(channelId: number) {
-  const response = await apiFetch(`/api/board_router/payment-channels/${channelId}`, {
+  const response = await apiFetch(`/board_router/payment-channels/${channelId}`, {
     method: "DELETE",
     credentials: "include",
   });
@@ -556,14 +556,14 @@ export async function deleteYlpPaymentChannel(channelId: number) {
 }
 
 export async function fetchYlpOrderLogs(orderId: number) {
-  const response = await apiFetch(`/api/board_router/orders/${orderId}/logs`, {
+  const response = await apiFetch(`/board_router/orders/${orderId}/logs`, {
     credentials: "include",
   });
   return parseJson<YlpOrderLogResponse>(response);
 }
 
 export async function previewYlpPaiweiImages(orderIds: number[]) {
-  const response = await apiFetch("/api/print_paiwei/orders/paiwei-preview", {
+  const response = await apiFetch("/print_paiwei/orders/paiwei-preview", {
     method: "POST",
     credentials: "include",
     headers: { "Content-Type": "application/json" },
@@ -573,7 +573,7 @@ export async function previewYlpPaiweiImages(orderIds: number[]) {
 }
 
 export async function createYlpGroupPayment(formData: FormData) {
-  const response = await apiFetch("/api/payment/orders/group-payment", {
+  const response = await apiFetch("/payment/orders/group-payment", {
     method: "POST",
     credentials: "include",
     body: formData,
@@ -588,12 +588,12 @@ export async function createYlpGroupPayment(formData: FormData) {
 }
 
 export async function listYlpRelationOptions() {
-  const response = await apiFetch("/api/board_router/relation-options", { credentials: "include" });
+  const response = await apiFetch("/board_router/relation-options", { credentials: "include" });
   return parseJson<YlpRelationOptionListResponse>(response);
 }
 
 export async function createYlpRelationOption(label: string) {
-  const response = await apiFetch("/api/board_router/relation-options", {
+  const response = await apiFetch("/board_router/relation-options", {
     method: "POST",
     credentials: "include",
     headers: { "Content-Type": "application/json" },
@@ -603,7 +603,7 @@ export async function createYlpRelationOption(label: string) {
 }
 
 export async function importYlpRelationOptions() {
-  const response = await apiFetch("/api/board_router/relation-options/import", {
+  const response = await apiFetch("/board_router/relation-options/import", {
     method: "POST",
     credentials: "include",
   });
@@ -611,7 +611,7 @@ export async function importYlpRelationOptions() {
 }
 
 export async function deleteYlpRelationOption(optionId: number) {
-  const response = await apiFetch(`/api/board_router/relation-options/${optionId}`, {
+  const response = await apiFetch(`/board_router/relation-options/${optionId}`, {
     method: "DELETE",
     credentials: "include",
   });
@@ -622,7 +622,7 @@ export async function listYlpOrdersForExport(version: string, value = "") {
   const search = new URLSearchParams();
   search.set("version", version);
   if (value) search.set("value", value);
-  const response = await apiFetch(`/api/fahui_router/orders/export?${search.toString()}`, {
+  const response = await apiFetch(`/fahui_router/orders/export?${search.toString()}`, {
     credentials: "include",
   });
   return parseJson<{ status?: string; data?: { items: YlpOrderExportRow[]; total: number } }>(response);
@@ -630,7 +630,7 @@ export async function listYlpOrdersForExport(version: string, value = "") {
 
 /** 牌位清单 PDF（按类型分段的核对表）。orderIds 为空 = 整个版本。 */
 export async function exportYlpOrdersPdf(version: string, value = "", orderIds: number[] = []) {
-  const response = await apiFetch("/api/fahui_router/orders/export-pdf", {
+  const response = await apiFetch("/fahui_router/orders/export-pdf", {
     method: "POST",
     credentials: "include",
     headers: { "Content-Type": "application/json" },
@@ -644,7 +644,7 @@ export async function exportYlpOrdersPdf(version: string, value = "", orderIds: 
 }
 
 export async function printYlpPaiweiByTemplate(orderIds: number[], template: string) {
-  const response = await apiFetch("/api/print_paiwei/preview/by-template", {
+  const response = await apiFetch("/print_paiwei/preview/by-template", {
     method: "POST",
     credentials: "include",
     headers: { "Content-Type": "application/json" },
@@ -682,7 +682,7 @@ export async function fetchYlpPrintScope(params: {
   orderIds?: number[];
   pdfIds?: number[];
 }) {
-  const response = await apiFetch("/api/print_paiwei/scope", {
+  const response = await apiFetch("/print_paiwei/scope", {
     method: "POST",
     credentials: "include",
     headers: { "Content-Type": "application/json" },
@@ -703,7 +703,7 @@ export async function startYlpPaiweiJob(
   needBarcode = false,
   extra?: { itemIds?: number[]; pdfIds?: number[] },
 ) {
-  const response = await apiFetch("/api/print_paiwei/jobs/by-template", {
+  const response = await apiFetch("/print_paiwei/jobs/by-template", {
     method: "POST",
     credentials: "include",
     headers: { "Content-Type": "application/json" },
@@ -719,7 +719,7 @@ export async function startYlpPaiweiJob(
 }
 
 export async function downloadYlpPaiweiJob(jobId: string) {
-  const response = await apiFetch(`/api/print_paiwei/jobs/${jobId}/download`, { credentials: "include" });
+  const response = await apiFetch(`/print_paiwei/jobs/${jobId}/download`, { credentials: "include" });
   if (!response.ok) {
     const payload = (await response.json().catch(() => ({}))) as { message?: string };
     throw new Error(payload.message || "下载失败");
@@ -728,7 +728,7 @@ export async function downloadYlpPaiweiJob(jobId: string) {
 }
 
 export async function getYlpPaiweiJobStatus(jobId: string) {
-  const response = await apiFetch(`/api/print_paiwei/jobs/${jobId}`, { credentials: "include" });
+  const response = await apiFetch(`/print_paiwei/jobs/${jobId}`, { credentials: "include" });
   return parseJson<{
     status?: string;
     message?: string;
@@ -752,12 +752,12 @@ export type FahuiOpenWindowStatus = {
 };
 
 export async function fetchFahuiOpenWindows(key: "ylp" | "lamp") {
-  const response = await apiFetch(`/api/fahui_router/open_windows?key=${key}`, { credentials: "include" });
+  const response = await apiFetch(`/fahui_router/open_windows?key=${key}`, { credentials: "include" });
   return parseJson<{ status?: string; data: FahuiOpenWindowStatus }>(response);
 }
 
 export async function createFahuiOpenWindow(payload: { fahui_key: "ylp" | "lamp"; start_md: string; end_md: string; note?: string }) {
-  const response = await apiFetch("/api/fahui_router/open_windows", {
+  const response = await apiFetch("/fahui_router/open_windows", {
     method: "POST",
     credentials: "include",
     headers: { "Content-Type": "application/json" },
@@ -767,7 +767,7 @@ export async function createFahuiOpenWindow(payload: { fahui_key: "ylp" | "lamp"
 }
 
 export async function deleteFahuiOpenWindow(windowId: number) {
-  const response = await apiFetch(`/api/fahui_router/open_windows/${windowId}`, {
+  const response = await apiFetch(`/fahui_router/open_windows/${windowId}`, {
     method: "DELETE",
     credentials: "include",
   });
@@ -780,6 +780,6 @@ export type FahuiOpenWindowAllStatus = {
 };
 
 export async function fetchAllFahuiOpenWindows() {
-  const response = await apiFetch("/api/fahui_router/open_windows", { credentials: "include" });
+  const response = await apiFetch("/fahui_router/open_windows", { credentials: "include" });
   return parseJson<{ status?: string; data: FahuiOpenWindowAllStatus }>(response);
 }

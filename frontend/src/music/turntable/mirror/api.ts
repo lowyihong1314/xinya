@@ -10,7 +10,7 @@ type ApiPayload = {
   session?: MirrorHostSnapshot | MirrorSessionMeta;
 };
 
-const BASE = "/api/mirror";
+const BASE = "/mirror";
 
 async function parse(response: Response): Promise<ApiPayload> {
   const payload = (await response.json().catch(() => ({}))) as ApiPayload;

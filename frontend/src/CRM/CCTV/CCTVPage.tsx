@@ -35,7 +35,7 @@ type Recording = {
 const PTZ_SPEED = 0.4;
 
 function ptzMove(x: number, y: number, z = 0) {
-  void apiFetch("/api/move_camera/ptz/move", {
+  void apiFetch("/move_camera/ptz/move", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ x, y, z }),
@@ -43,7 +43,7 @@ function ptzMove(x: number, y: number, z = 0) {
 }
 
 function ptzStop() {
-  void apiFetch("/api/move_camera/ptz/stop", { method: "POST" });
+  void apiFetch("/move_camera/ptz/stop", { method: "POST" });
 }
 
 export function CCTVPage() {
@@ -305,7 +305,7 @@ function PlaybackView() {
     setLoading(true);
     setError(null);
     try {
-      const res = await apiFetch("/api/move_camera/recordings");
+      const res = await apiFetch("/move_camera/recordings");
       const data = await res.json();
       if (!data.ok) throw new Error(data.error || "加载失败");
       const list: Recording[] = data.items || [];

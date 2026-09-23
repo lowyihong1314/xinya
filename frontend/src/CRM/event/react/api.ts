@@ -22,14 +22,14 @@ async function parseJson<T>(response: Response): Promise<T> {
 }
 
 export async function fetchAllEvents() {
-  const response = await apiFetch("/api/event_data/get_all_event_sort", {
+  const response = await apiFetch("/event_data/get_all_event_sort", {
     credentials: "include",
   });
   return parseJson<EventListResponse>(response);
 }
 
 export async function saveEvent(payload: EventMutationPayload & { event_id: number }) {
-  const response = await apiFetch("/api/event_data/new_event", {
+  const response = await apiFetch("/event_data/new_event", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     credentials: "include",
@@ -39,7 +39,7 @@ export async function saveEvent(payload: EventMutationPayload & { event_id: numb
 }
 
 export async function createEvent(payload: EventCreatePayload) {
-  const response = await apiFetch("/api/event_data/new_event", {
+  const response = await apiFetch("/event_data/new_event", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     credentials: "include",
@@ -62,7 +62,7 @@ export async function saveEventUnit(params: {
   formData.append("unit_name", params.unitName);
   if (params.logo) formData.append("logo", params.logo);
 
-  const response = await apiFetch("/api/event_data/units/save", {
+  const response = await apiFetch("/event_data/units/save", {
     method: "POST",
     credentials: "include",
     body: formData,
@@ -71,7 +71,7 @@ export async function saveEventUnit(params: {
 }
 
 export async function reorderEventUnits(eventId: number, unitIds: number[]) {
-  const response = await apiFetch("/api/event_data/units/reorder", {
+  const response = await apiFetch("/event_data/units/reorder", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     credentials: "include",
@@ -81,7 +81,7 @@ export async function reorderEventUnits(eventId: number, unitIds: number[]) {
 }
 
 export async function deleteEventUnit(unitId: number) {
-  const response = await apiFetch(`/api/event_data/units/delete/${unitId}`, {
+  const response = await apiFetch(`/event_data/units/delete/${unitId}`, {
     method: "POST",
     credentials: "include",
   });
@@ -89,7 +89,7 @@ export async function deleteEventUnit(unitId: number) {
 }
 
 export async function deleteEvent(eventId: number) {
-  const response = await apiFetch(`/api/event_data/delete_event/${eventId}`, {
+  const response = await apiFetch(`/event_data/delete_event/${eventId}`, {
     method: "DELETE",
     credentials: "include",
   });
@@ -100,7 +100,7 @@ export async function uploadEventBrochure(eventId: number, file: File) {
   const formData = new FormData();
   formData.append("file", file);
 
-  const response = await apiFetch(`/api/event_data/upload_brochure/${eventId}`, {
+  const response = await apiFetch(`/event_data/upload_brochure/${eventId}`, {
     method: "POST",
     credentials: "include",
     body: formData,
@@ -114,7 +114,7 @@ export async function setEventPosterFile(eventId: number, fileId: number) {
 }
 
 export async function setEventBrochure(eventId: number, fileId: number | null) {
-  const response = await apiFetch(`/api/event_data/set_brochure/${eventId}`, {
+  const response = await apiFetch(`/event_data/set_brochure/${eventId}`, {
     method: "POST",
     credentials: "include",
     headers: { "Content-Type": "application/json" },
@@ -128,7 +128,7 @@ export async function uploadEventFile(eventId: number, file: File) {
   const formData = new FormData();
   formData.append("file", file);
 
-  const response = await apiFetch(`/api/event_data/event_file/upload/${eventId}`, {
+  const response = await apiFetch(`/event_data/event_file/upload/${eventId}`, {
     method: "POST",
     credentials: "include",
     body: formData,
@@ -155,7 +155,7 @@ export async function uploadEventPoster(eventId: number, file: File) {
 }
 
 export async function deleteEventFile(fileId: number) {
-  const response = await apiFetch(`/api/event_data/event_file/delete/${fileId}`, {
+  const response = await apiFetch(`/event_data/event_file/delete/${fileId}`, {
     method: "POST",
     credentials: "include",
   });

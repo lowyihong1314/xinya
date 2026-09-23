@@ -72,7 +72,7 @@ async function parseJson<T>(response: Response): Promise<T> {
   return data;
 }
 
-const BASE = "/api/diy_paiwei";
+const BASE = "/diy_paiwei";
 
 export async function listDiyTemplates() {
   const response = await apiFetch(`${BASE}/templates`, { credentials: "include" });

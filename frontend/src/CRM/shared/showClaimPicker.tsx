@@ -22,7 +22,7 @@ type ClaimPickerResponse = {
 };
 
 async function fetchClaims() {
-  const response = await apiFetch("/api/account/get_all_claim", {
+  const response = await apiFetch("/account/get_all_claim", {
     credentials: "include",
   });
   const payload = (await response.json().catch(() => ({}))) as ClaimPickerResponse;

@@ -12,7 +12,7 @@ import {
   type WorkbenchEntry,
 } from "./workbenchConfig";
 
-const YOUTH_BASE = "/api/form/youth-class-registration";
+const YOUTH_BASE = "/form/youth-class-registration";
 
 async function upgradeYouthToMembership(entryId: number): Promise<{ message?: string }> {
   const response = await apiFetch(`${YOUTH_BASE}/${entryId}/upgrade-to-membership`, {

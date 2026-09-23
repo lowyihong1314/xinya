@@ -23,7 +23,7 @@ export type PaymentQuote = {
 
 export async function fetchPaymentQuote(formId: number, nric: string): Promise<PaymentQuote> {
   const response = await apiFetch(
-    `/api/form/payment_quote/${formId}?nric=${encodeURIComponent(nric)}`,
+    `/form/payment_quote/${formId}?nric=${encodeURIComponent(nric)}`,
   );
   let data: Partial<PaymentQuote> = {};
   try {
@@ -37,7 +37,7 @@ export async function fetchPaymentQuote(formId: number, nric: string): Promise<P
   return data as PaymentQuote;
 }
 
-// fee.image_path / poster URLs are public "/static/..." or "/api/..." paths.
+// fee.image_path / poster URLs are public "/static/..." or "/..." paths.
 // Prefix API_BASE so they resolve inside the APK build too.
 export function resolveStaticUrl(pathValue?: string | null): string {
   if (!pathValue) return "";

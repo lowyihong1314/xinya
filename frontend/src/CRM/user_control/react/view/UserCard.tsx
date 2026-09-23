@@ -1,5 +1,5 @@
 import { CachedImage } from "../../../../components/CachedMedia";
-import { API_BASE } from "../../../../js/apiBase";
+import { API_ROOT } from "../../../../js/basePath";
 import type { UserRecord } from "../types";
 import * as styles from "./styles";
 
@@ -22,7 +22,7 @@ export function UserCard({
   const body = (
     <>
       <CachedImage
-        src={`${API_BASE}/api/user_control/get_profile_image/${user.id}`}
+        src={`${API_ROOT}/user_control/get_profile_image/${user.id}`}
         cacheKey={`user-control-avatar:${user.id}`}
         alt={user.display_name || user.username || String(user.id)}
         style={styles.avatarStyle}

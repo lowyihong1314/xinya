@@ -50,7 +50,7 @@ export function GooglePlaceInput({
     setLoading(true);
     const t = window.setTimeout(async () => {
       try {
-        const res = await apiFetch(`/api/event_data/place/autocomplete?q=${encodeURIComponent(kw)}`, { credentials: "include" });
+        const res = await apiFetch(`/event_data/place/autocomplete?q=${encodeURIComponent(kw)}`, { credentials: "include" });
         const data = await res.json();
         if (seq.current !== mySeq) return;
         if (data.status === "success") {
@@ -74,7 +74,7 @@ export function GooglePlaceInput({
     setPicking(true);
     setError("");
     try {
-      const res = await apiFetch(`/api/event_data/place/detail?place_id=${encodeURIComponent(p.place_id)}`, { credentials: "include" });
+      const res = await apiFetch(`/event_data/place/detail?place_id=${encodeURIComponent(p.place_id)}`, { credentials: "include" });
       const data = await res.json();
       if (data.status === "success" && data.place) {
         const place = data.place as PlaceSelection;

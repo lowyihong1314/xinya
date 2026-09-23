@@ -7,7 +7,7 @@ import {
   type SyntheticEvent,
 } from "react";
 
-import { API_BASE } from "../js/apiBase";
+import { API_ROOT } from "../js/basePath";
 import { clearSmartImageCache, smartMediaAsset, type SmartMediaAsset, type SmartMediaVariant } from "../js/get_img";
 import { CachedImage, CachedVideo } from "./CachedMedia";
 import {
@@ -51,7 +51,7 @@ type CacheMediaPlayerProps = {
   onAssetChange?: (asset: SmartMediaAsset | null) => void;
 };
 
-const FALLBACK_IMAGE_URL = `${API_BASE}/static/img/placeholder.png`;
+const FALLBACK_IMAGE_URL = `${API_ROOT}/static/img/placeholder.png`;
 
 export function CacheMediaPlayer({
   id,

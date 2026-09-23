@@ -18,7 +18,7 @@ function requireSession(payload: QuizApiPayload): QuizSessionSnapshot {
 
 export async function createQuizSession() {
   const payload = await parseQuizResponse(
-    await apiFetch("/api/quiz/session", {
+    await apiFetch("/quiz/session", {
       method: "POST",
       credentials: "include",
     }),
@@ -28,7 +28,7 @@ export async function createQuizSession() {
 
 export async function getQuizSession(token: string) {
   const payload = await parseQuizResponse(
-    await apiFetch(`/api/quiz/session/${encodeURIComponent(token)}`, {
+    await apiFetch(`/quiz/session/${encodeURIComponent(token)}`, {
       credentials: "include",
     }),
   );
@@ -37,7 +37,7 @@ export async function getQuizSession(token: string) {
 
 export async function saveQuizConfig(token: string, config: QuizConfig) {
   const payload = await parseQuizResponse(
-    await apiFetch(`/api/quiz/session/${encodeURIComponent(token)}`, {
+    await apiFetch(`/quiz/session/${encodeURIComponent(token)}`, {
       method: "POST",
       credentials: "include",
       headers: { "Content-Type": "application/json" },
@@ -49,7 +49,7 @@ export async function saveQuizConfig(token: string, config: QuizConfig) {
 
 export async function publishQuizSession(token: string) {
   const payload = await parseQuizResponse(
-    await apiFetch(`/api/quiz/session/${encodeURIComponent(token)}/publish`, {
+    await apiFetch(`/quiz/session/${encodeURIComponent(token)}/publish`, {
       method: "POST",
       credentials: "include",
     }),
@@ -59,7 +59,7 @@ export async function publishQuizSession(token: string) {
 
 export async function resetQuizSession(token: string) {
   const payload = await parseQuizResponse(
-    await apiFetch(`/api/quiz/session/${encodeURIComponent(token)}/reset`, {
+    await apiFetch(`/quiz/session/${encodeURIComponent(token)}/reset`, {
       method: "POST",
       credentials: "include",
     }),
@@ -69,7 +69,7 @@ export async function resetQuizSession(token: string) {
 
 export async function closeQuizSession(token: string) {
   const payload = await parseQuizResponse(
-    await apiFetch(`/api/quiz/session/${encodeURIComponent(token)}/close`, {
+    await apiFetch(`/quiz/session/${encodeURIComponent(token)}/close`, {
       method: "POST",
       credentials: "include",
     }),

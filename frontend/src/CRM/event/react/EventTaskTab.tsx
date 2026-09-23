@@ -30,7 +30,7 @@ export function EventTaskTab({ eventId, canEdit, isMobile }: { eventId: number; 
     setLoading(true);
     setError("");
     try {
-      const res = await apiFetch(`/api/event_data/event_task/list/${eventId}`, { credentials: "include" });
+      const res = await apiFetch(`/event_data/event_task/list/${eventId}`, { credentials: "include" });
       const data = await res.json();
       setTasks(Array.isArray(data.data) ? data.data : []);
     } catch {
@@ -48,7 +48,7 @@ export function EventTaskTab({ eventId, canEdit, isMobile }: { eventId: number; 
     const title = nt.title.trim();
     if (!title) return;
     try {
-      const res = await apiFetch(`/api/event_data/event_task/new`, {
+      const res = await apiFetch(`/event_data/event_task/new`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ event_id: eventId, title, assignee: nt.assignee.trim(), due_date: nt.due_date }),
@@ -66,7 +66,7 @@ export function EventTaskTab({ eventId, canEdit, isMobile }: { eventId: number; 
   async function patch(id: number, body: Record<string, unknown>) {
     setTasks((cur) => cur.map((t) => (t.id === id ? { ...t, ...body } : t)));
     try {
-      await apiFetch(`/api/event_data/event_task/update/${id}`, {
+      await apiFetch(`/event_data/event_task/update/${id}`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(body),
@@ -80,7 +80,7 @@ export function EventTaskTab({ eventId, canEdit, isMobile }: { eventId: number; 
     if (!(await showConfirmDialog({ message: "删除这条待办？", tone: "danger" }))) return;
     setTasks((cur) => cur.filter((t) => t.id !== id));
     try {
-      await apiFetch(`/api/event_data/event_task/delete/${id}`, { method: "POST" });
+      await apiFetch(`/event_data/event_task/delete/${id}`, { method: "POST" });
     } catch {
       void load();
     }

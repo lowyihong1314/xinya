@@ -63,7 +63,7 @@ export function PayRegisterPage({ formId, formTitle }: PayRegisterPageProps) {
   const [resultMessage, setResultMessage] = useState("");
 
   const liveAge = useMemo(() => calcAgeFromNric(nric), [nric]);
-  const posterUrl = resolveStaticUrl(`/api/form/event_poster/${formId}/cache`);
+  const posterUrl = resolveStaticUrl(`/form/event_poster/${formId}/cache`);
 
   function resetToStart() {
     setStep("nric");

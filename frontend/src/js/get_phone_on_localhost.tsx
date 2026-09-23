@@ -137,7 +137,7 @@ function PhoneVerificationModal({
     setNotice(null);
     try {
       const payload = await parseJson(
-        await apiFetch("/api/twilio/send_otp", {
+        await apiFetch("/twilio/send_otp", {
           method: "POST",
           body: formData,
         }),
@@ -185,7 +185,7 @@ function PhoneVerificationModal({
     setNotice(null);
     try {
       await parseJson(
-        await apiFetch("/api/twilio/verify", {
+        await apiFetch("/twilio/verify", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ phone, otp }),

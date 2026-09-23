@@ -116,7 +116,7 @@ export function ClaimList(props: ClaimListProps) {
       const entries = await Promise.all(
         approverIds.map(async (userId) => {
           try {
-            const response = await apiFetch(`/api/user_control/get_user_detail/${userId}`, { credentials: "include" });
+            const response = await apiFetch(`/user_control/get_user_detail/${userId}`, { credentials: "include" });
             const payload = (await response.json().catch(() => ({}))) as ApproverUserProfile;
             return response.ok ? ([userId, payload] as const) : null;
           } catch {

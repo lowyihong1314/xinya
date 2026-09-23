@@ -4,9 +4,9 @@ import { API_BASE } from "../../js/apiBase";
 import { Z_MODAL } from "./zLayers";
 
 // 付款凭证查看：只要这笔付款有上传档（不分付款方式）就能点开看。
-// 走带权限的 /api/payment/payments/<id>/document —— 凭证上常有账户与姓名，不能走公开路径。
+// 走带权限的 /payment/payments/<id>/document —— 凭证上常有账户与姓名，不能走公开路径。
 export function paymentProofUrl(paymentId: number) {
-  const path = `/api/payment/payments/${paymentId}/document`;
+  const path = `/payment/payments/${paymentId}/document`;
   return API_BASE ? `${API_BASE}${path}` : path;
 }
 

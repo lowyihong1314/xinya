@@ -239,12 +239,12 @@ export function useFileSystemV2Controller() {
 
   async function downloadItem(item: SelectableItem) {
     if (item.type === "dir" || item.file_id < 0) return;
-    await downloadUrlOrShare(`/api/files/items/${item.file_id}/content`, item.name, {
+    await downloadUrlOrShare(`/files/items/${item.file_id}/content`, item.name, {
       isMobile,
       title: item.name,
       text: item.name,
       // 裸路径交给 normalizeShareUrl 统一补前缀
-      fallbackUrl: `/api/files/items/${item.file_id}/content`,
+      fallbackUrl: `/files/items/${item.file_id}/content`,
     });
   }
 

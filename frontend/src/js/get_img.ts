@@ -1,6 +1,6 @@
 import heic2any from "heic2any";
 
-import { API_BASE } from "./apiBase";
+import { API_ROOT } from "./basePath";
 import { apiFetch } from "./apiFetch";
 import { invalidateNativeMediaCache, resolveNativeCachedUrl } from "./nativeMediaCache";
 
@@ -27,7 +27,7 @@ type ConvertedHeicEntry = {
   cacheTag: string;
 };
 
-const FALLBACK_IMAGE_URL = `${API_BASE}/static/images/file_icon/broken-image.png`;
+const FALLBACK_IMAGE_URL = `${API_ROOT}/static/images/file_icon/broken-image.png`;
 const smartImageCache = new Map<string, Promise<string>>();
 const smartMediaCache = new Map<string, Promise<SmartMediaAsset>>();
 const convertedHeicUrls = new Map<string, ConvertedHeicEntry>();
@@ -155,7 +155,7 @@ async function resolveMediaUrl(id: number | string, type: string) {
       continue;
     }
 
-    const url = `${API_BASE}/media_file/${info.path}`;
+    const url = `${API_ROOT}/media_file/${info.path}`;
     const cacheKey = `smart-image:${id}:${candidate}`;
     if (isHeicPath(url)) {
       return convertHeicUrlToObjectUrl(url, `${cacheKey}:heic`);
@@ -189,7 +189,7 @@ async function resolveMediaAsset(
       continue;
     }
 
-    const url = `${API_BASE}/media_file/${info.path}`;
+    const url = `${API_ROOT}/media_file/${info.path}`;
     const cacheKey = `smart-media:${id}:${candidate}`;
 
     if ((info.kind === "video" || isBaseVideoType(normalizedType) || isVideoPath(url)) && /\.mp4$/i.test(url)) {

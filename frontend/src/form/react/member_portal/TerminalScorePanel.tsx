@@ -32,7 +32,7 @@ export function TerminalScorePanel({ token }: { token: string }) {
   useEffect(() => {
     let active = true;
     setLoading(true);
-    apiFetch(`/api/form/score_panel/${token}/data`)
+    apiFetch(`/form/score_panel/${token}/data`)
       .then((r) => r.json())
       .then((d: PanelData) => {
         if (!active) return;
@@ -69,7 +69,7 @@ export function TerminalScorePanel({ token }: { token: string }) {
     if (!selected || busy || !delta) return;
     setBusy(true);
     try {
-      const res = await apiFetch(`/api/form/score_panel/${token}/adjust`, {
+      const res = await apiFetch(`/form/score_panel/${token}/adjust`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ group_id: selected.id, delta }),

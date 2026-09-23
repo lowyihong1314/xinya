@@ -121,7 +121,7 @@ export function YlpOrderSummaryDrawer({
   const [paymentsError, setPaymentsError] = useState("");
   const [paymentModalOpen, setPaymentModalOpen] = useState(false);
   const { user } = useUserState();
-  // 审核付款要 account_edit，和后端 /api/payment/review/* 一致
+  // 审核付款要 account_edit，和后端 /payment/review/* 一致
   const canReviewPayment = useMemo(() => getUserPermissionNames(user).has("account_edit"), [user]);
 
   const load = useCallback(async () => {

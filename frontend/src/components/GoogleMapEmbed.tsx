@@ -3,12 +3,12 @@ import type { CSSProperties } from "react";
 
 import { apiFetch } from "../js/apiFetch";
 
-// Maps Embed key 由后端 /api/event_data/maps/config 提供（.flaskenv 里的
+// Maps Embed key 由后端 /event_data/maps/config 提供（.flaskenv 里的
 // VITE_GOOGLE_MAPS_EMBED_API_KEY 不会进前端构建，所以运行时向后端取）。模块级缓存一次。
 let keyPromise: Promise<string> | null = null;
 function getEmbedKey(): Promise<string> {
   if (!keyPromise) {
-    keyPromise = apiFetch("/api/event_data/maps/config")
+    keyPromise = apiFetch("/event_data/maps/config")
       .then((r) => r.json())
       .then((d) => (typeof d?.embed_key === "string" ? d.embed_key : ""))
       .catch(() => "");
