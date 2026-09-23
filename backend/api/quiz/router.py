@@ -273,3 +273,110 @@ def close_quiz_session(token: str):
         return json_response({"status": "success", "session": snapshot})
     except Exception as exc:
         return _json_error(exc)
+
+
+# ════════════ 入向动作：Socket.IO 事件 → POST 接口 ════════════
+#
+# 规则见 docs/flask_to_fastAPI/16-入向事件转POST.md。要点：
+#   · 原来 `emit(..., to=request.sid)`（只回发送者）→ **就是 HTTP 响应体**
+#   · 原来 `emit(..., to=room)`（广播房间）→ publish_sync
+#   · 原来 `join_room(room)` → **不需要**，客户端订阅 SSE 时带 ?room= 即可
+#   · 原来的 `request.sid` → SSE 的 connection_id（ready 事件里下发）
+#
+# 主持人那 5 个事件（host:save_config / publish / reset / close / join）
+# 上面已经有等价的 HTTP 路由了（POST /session/{token} 系列），不重复造。
+# 这里补的是**参与者**那 3 个。
+
+
+@router.post("/guest/join")
+def quiz_guest_join(payload: Optional[dict] = _JSON_BODY):
+    """参与者入场。原 socket 事件 ``quiz:guest:join``。
+
+    与原实现的对应：
+      · ``join_room(...)`` 去掉了 —— 订阅 SSE 就是加入房间。
+      · ``add_guest(token, guest_id, sid=request.sid)`` 里的 sid 换成
+        客户端上报的 ``connection_id``（SSE 的连接标识）。缺了它只是
+        断线时清不掉这个 guest，不影响入场本身，所以不强制。
+      · 原来广播完不返回任何东西，调用方要等自己的广播绕回来才知道成功；
+        这里**同时**把 snapshot 作为响应返回，手感更跟手。
+
+    幂等：add_guest 是「存在就更新」，断线重连重发一次是安全的。
+    """
+    data = payload or {}
+    try:
+        token = service.normalize_token(data.get("room_token") or data.get("token"))
+        guest_name = str(data.get("guest_name") or "").strip()
+        guest_id = str(data.get("guest_id") or "").strip()
+        # ★ 校验顺序照搬原代码：先 normalize_token（token 不对先报 token 的错），
+        #   再查名字。顺序反了的话，两个都错时前端看到的提示就不一样了。
+        if not guest_name:
+            raise service.QuizError("请先输入名称", 400, "missing_guest_name")
+
+        service.add_guest(token, guest_id, sid=data.get("connection_id") or None)
+        # 广播让主持台的人数实时更新（原代码也是广播整份 snapshot，不是只发人数）。
+        snapshot = _broadcast_snapshot("quiz:snapshot", token)
+        return json_response({"status": "success", "session": snapshot})
+    except Exception as exc:
+        return _json_error(exc)
+
+
+@router.post("/guest/tap")
+def quiz_guest_tap(payload: Optional[dict] = _JSON_BODY):
+    """抢答。原 socket 事件 ``quiz:guest:tap``。
+
+    ★ **不幂等**：它记一次抢答。客户端不能自动重试，失败要让用户自己再点
+      （Socket.IO 时代也没有重试，行为一致）。http 客户端的 mutation 默认
+      retry: false，正好。
+
+    ★ 错误处理与别处不同：原代码对 QuizError 回的是 ``quiz:tap_rejected``
+      事件（只发给本人，带 reason/message），而不是通用的 quiz:error。
+      HTTP 版里这就是**响应体**，形状照搬 {"reason","message"}，
+      前端按 reason 分支（太早、已关闭、重复抢等）。
+    """
+    data = payload or {}
+    try:
+        snapshot = service.record_tap(
+            data.get("room_token") or data.get("token"),
+            data.get("guest_id"),
+            data.get("guest_name"),
+            data.get("client_clicked_at_ms"),
+        )
+        # 原来广播的是 quiz:leaderboard（不是 snapshot），事件名不能改：
+        # 前端 addEventListener 按名字注册，改名就是静默失联。
+        publish_sync(
+            _REALTIME_APP,
+            snapshot["room_token"],
+            "quiz:leaderboard",
+            snapshot,
+            sender=data.get("connection_id") or None,
+        )
+        return json_response({"status": "success", "session": snapshot})
+    except service.QuizError as exc:
+        # 对齐原 tap_rejected 的形状
+        return json_response(
+            {"status": "error", "reason": exc.reason, "message": str(exc)}, exc.status_code
+        )
+    except Exception as exc:
+        return _json_error(exc)
+
+
+@router.post("/time/ping")
+def quiz_time_ping(payload: Optional[dict] = _JSON_BODY):
+    """对时。原 socket 事件 ``quiz:time:ping``。
+
+    客户端拿它估算自己与服务端的时钟差（把 client_sent_at_ms 原样带回，
+    客户端用 (收到时刻 - 发出时刻) 折半估单程延迟）。
+
+    ⚠️ HTTP 的往返延迟比 WebSocket 大、抖动也更明显，**对时精度会下降**。
+      可以接受的原因：抢答排序本来就以**服务端收到的时刻**为准
+      （record_tap 里记的是 now_ms()），客户端时钟只用来在界面上显示
+      "你的反应时间"。真要更准，得把时间戳塞进 SSE 的 keepalive 帧。
+    """
+    data = payload or {}
+    return json_response(
+        {
+            "status": "success",
+            "server_now_ms": service.now_ms(),
+            "client_sent_at_ms": data.get("client_sent_at_ms"),
+        }
+    )
