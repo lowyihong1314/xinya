@@ -27,6 +27,11 @@ export function onUnauthorized(fn: () => void): () => void {
   return () => unauthorizedHandlers.delete(fn);
 }
 
+/** 让 upload.ts（走 XHR，不经过本文件的 fetch）也能触发同一套 401 处理。 */
+export function onUnauthorizedBroadcast(): void {
+  for (const fn of unauthorizedHandlers) fn();
+}
+
 export interface RequestOptions extends Omit<RequestInit, "body"> {
   /** 请求体。普通对象会被 JSON 序列化；FormData / Blob / string 原样发送。 */
   body?: unknown;

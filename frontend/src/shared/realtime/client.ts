@@ -38,7 +38,7 @@
 // API_ROOT === API_BASE + BASE_PATH（origin + 项目前缀）。不自己拼这两段，是为了让
 // 归一化规则只活在 basePath.ts 一处：前缀差一个斜杠的表现是 `//quiz/realtime` 或
 // `/UTBA_DEMOquiz/realtime`，而 SSE 连不上时浏览器不报错，排查成本极高。
-import { API_ROOT } from "./basePath";
+import { API_ROOT } from "@/shared/config/env";
 
 // ── 与服务端对齐的硬限制（core/realtime.py）──────────────────────────────
 // 超限的后果不同：房间数超了服务端会静默截断（只有日志），房间 id 超长会被静默丢弃。
@@ -305,6 +305,13 @@ function handleFrame(pool: Pool, event: string, ev: MessageEvent): void {
     pool.retryAt = 0;
     setStatus(pool, "open");
     flushReadyWaiters(pool, pool.connectionId);
+    // 契约上 ready 必带 connection_id（core/realtime.py 的 _payload 保证）。
+    // 真拿不到就**不发 onReady** —— 塞个 null 下去，下游拿它去 POST 动作时
+    // 服务端会认不出发送者，表现是"自己的操作自己也收到一遍回声"。
+    if (!pool.connectionId) {
+      console.warn("[realtime] ready 事件没有 connection_id，跳过 onReady");
+      return;
+    }
     const info: RealtimeReadyInfo = {
       connectionId: pool.connectionId,
       rooms: Array.isArray(envelope?.rooms) ? envelope.rooms : [],
