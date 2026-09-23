@@ -368,6 +368,19 @@ app.include_router(make_realtime_router(prefix=settings.api_prefix))
 #
 # 本文件只认识一条 router。分组、顺序、以及「为什么 public_api 必须最后」
 # 全在 backend/api/router.py 里 —— 加模块只改那一个文件。
+# ── 静态资源 ────────────────────────────────────────────────────
+# Flask 的 static_folder 会自动挂 /static，FastAPI 不会，必须显式挂。
+# 必须在 include_router(api_router) **之前**：api_router 末尾有 SPA catch-all，
+# 挂在它后面的话 /static/... 会被 catch-all 接走，返回一份 HTML 而不是 js/css
+# （症状：页面白屏，控制台报 "Expected a JavaScript module but got text/html"）。
+#
+# 生产上 /static 由 nginx 直接发，这里主要给「不过 nginx 直连端口」的场景用。
+from fastapi.staticfiles import StaticFiles  # noqa: E402
+
+from backend.core.paths import STATIC_ROOT  # noqa: E402
+
+app.mount("/static", StaticFiles(directory=str(STATIC_ROOT)), name="static")
+
 from backend.api.router import api_router  # noqa: E402
 
 app.include_router(api_router)
@@ -409,6 +422,15 @@ if __name__ == "__main__":
         host="127.0.0.1",
         port=settings.dev_port,
         reload=settings.app_debug,
+        # ★ 关掉 uvicorn 自带的 proxy-headers 处理。
+        #   它默认开启，会先把 scope["client"] 从 X-Forwarded-For 改成**真实用户 IP**。
+        #   而我们自己的 core.middleware.ProxyHeadersMiddleware 要先校验
+        #   「对端必须是 127.0.0.1（也就是 nginx）」才肯采信转发头 ——
+        #   uvicorn 改在前面，那道校验看到的就是用户 IP，于是**每一个经 nginx
+        #   进来的请求都被我们的中间件跳过了**，X-Forwarded-Prefix 从来没被读过。
+        #   症状：静态资源 404、分享链接少一段前缀，而日志里一切正常。
+        #   两套只能留一套，留我们自己那套（它还管前缀和 scheme）。
+        proxy_headers=False,
         # root_path 不在这里传：已经由 FastAPI(root_path=...) 喂进去了，
         # 两处都写的话，改配置时容易只改一处。
     )

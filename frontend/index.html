@@ -1,35 +1,33 @@
 <!doctype html>
-<html lang="en">
+<html lang="zh-Hans">
   <head>
     <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>地南佛学会</title>
-    <!-- ⚠️ 首页有两份：**这一份只给 APK**（Capacitor 打包 apk_dist/index.html，
-         同时也是 dev server 的文档），网页版是 static/index.html。
-         <head> 里的资源路径两处都要改，只改一份就是另一端白屏。
+    <!-- viewport-fit=cover：配合 CSS 里的 env(safe-area-inset-*)，
+         内容能铺到刘海屏边缘而又不被状态栏/底部横条盖住 -->
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+    <meta name="color-scheme" content="light dark" />
+    <title>心芽 · UTBA</title>
 
-         这里用相对路径：APK 的 vite base 是 "./"，产物跑在 capacitor://localhost 上，
-         写死 "/favicon.ico" 指的是 APK 包的根而不是这份产物所在目录；
-         项目前缀（BASE_PATH）对 APK 只作用在**请求后端**的地址上，
-         那条路走 src/js/basePath.ts，与这里的静态资源无关。
-         dev 时文档在 "/"，"./favicon.ico" 解析结果仍是 /favicon.ico，与改动前一致。 -->
+    <!-- 相对路径：APK 的 vite base 是 "./"，产物跑在 capacitor://localhost 上，
+         写死 "/favicon.ico" 指的是 APK 包的根而不是产物所在目录。
+         网页版 base 是 {前缀}/static/vite/，vite 会在构建时把它改写成带前缀的绝对路径。 -->
     <link rel="icon" href="./favicon.ico" />
     <link rel="apple-touch-icon" href="./favicon.ico" />
+
     <style>
-      /* 也写在这里一份：designTokens 的样式要等 React 挂载才注入，
-         首屏那一下 iOS Safari 已经可能把文字膨胀过一轮了。 */
+      /* 必须内联：等 CSS 分块下载完，iOS Safari 已经把文字膨胀过一轮了，
+         首屏会看到字忽大忽小。 */
       html {
         -webkit-text-size-adjust: 100%;
         text-size-adjust: 100%;
       }
       body {
         margin: 0;
-        padding: 0;
       }
     </style>
   </head>
   <body>
     <div id="root"></div>
-    <script type="module" src="./main.tsx"></script>
+    <script type="module" src="/src/main.tsx"></script>
   </body>
 </html>

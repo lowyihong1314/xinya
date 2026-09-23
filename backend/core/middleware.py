@@ -119,6 +119,31 @@ class ProxyHeadersMiddleware:
         prefix = base_path(SimpleNamespace(headers=headers))
         if prefix:
             scope["root_path"] = prefix
+            # ★ 同时把前缀补回 scope["path"]，恢复 ASGI 约定。
+            #
+            #   ASGI 规定 path **包含** root_path，root_path 只是说明"前面这一段是挂载点"。
+            #   我们的 nginx 用 `rewrite ^/UTBA_DEMO/(.*)$ /$1 break` 把前缀剥掉了，
+            #   于是 path 里没有前缀、root_path 里有 —— 约定被破坏。
+            #
+            #   普通路由碰巧没事：starlette 的 get_route_path() 有一条兜底
+            #   `if not path.startswith(root_path): return path`。
+            #   但 **Mount 会错**：Mount.matches 把子作用域的 root_path 设成
+            #   `root_path + matched_path`（如 "/UTBA_DEMO" + "/static"），
+            #   而 path 仍是 "/static/vite/x.js"，两者对不上，兜底分支返回整条 path，
+            #   StaticFiles 于是去找 <STATIC_ROOT>/static/vite/x.js —— 不存在，404。
+            #   症状是「页面能打开但白屏，控制台说 js 是 text/html」，
+            #   而服务端日志里那条 404 看起来平平无奇。
+            #
+            #   补回去之后：get_route_path 把前缀减掉，路由表照样匹配裸路径；
+            #   Mount 的子作用域算术也对上了。读原始 path 的地方只有三处日志。
+            path = scope.get("path") or ""
+            if not path.startswith(f"{prefix}/") and path != prefix:
+                scope["path"] = f"{prefix}{path}"
+            raw = scope.get("raw_path")
+            if isinstance(raw, bytes):
+                pre = prefix.encode()
+                if not raw.startswith(pre + b"/") and raw != pre:
+                    scope["raw_path"] = pre + raw
 
         forwarded_for = headers.get("x-forwarded-for")
         if forwarded_for:

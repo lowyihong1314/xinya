@@ -29,6 +29,7 @@ from fastapi import APIRouter
 from backend.api import app_release, camera, changyou_room, content, email, gl
 from backend.api import mobile, permission_mgmt, quiz, songbook, twilio
 from backend.api import public_api  # 根级路由，必须最后 include
+from backend.api import web  # SPA 兜底，catch-all，必须最最后
 
 api_router = APIRouter()
 
@@ -47,6 +48,11 @@ api_router.include_router(changyou_room.router)    # /changyou_room/*       唱�
 
 # ── 第二组：挂在根上的，最后 ────────────────────────────────────
 api_router.include_router(public_api.router)       # /ping /forms /members /payments /event_data/{id} …
+
+# ── 第三组：SPA 兜底，必须最最后 ────────────────────────────────
+# web.router 里有一条 GET /{spa_path:path}，它匹配一切路径。
+# 放在任何业务路由之前都会把那条业务路由吃掉（症状：接口返回一坨 HTML）。
+api_router.include_router(web.router)              # /favicon.ico + SPA catch-all
 
 # ── 尚未迁移的模块 ──────────────────────────────────────────────
 # 剩下的按 docs/flask_to_fastAPI/05 的模块顺序继续搬，搬完一个在上面加一行，

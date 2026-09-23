@@ -1,0 +1,151 @@
+@import "tailwindcss";
+@import "tw-animate-css";
+
+/*
+ * 设计令牌。**全仓唯一**的颜色/圆角/字体来源。
+ *
+ * 命名沿用 shadcn/ui 的语义名（background / foreground / primary / muted …），
+ * 这样社区组件抄过来不用改一行样式就能吃上我们的配色。
+ * 色值来自旧的 src/theme/designTokens.ts —— 墨色 + 青绿这套观感是保留的，
+ * 重构的是「怎么写样式」，不是「长什么样」。
+ *
+ * ⚠️ 组件里不要写具体色值（bg-[#0f766e] 这种）。一旦出现，换主题就得全仓搜。
+ *    需要新颜色就在这里加一个令牌。
+ */
+
+@theme {
+  /* ── 字体 ─────────────────────────────────────────────── */
+  --font-sans: "Avenir Next", "Segoe UI", "Helvetica Neue", "PingFang SC", "Microsoft YaHei", sans-serif;
+  --font-serif: "Songti SC", "STSong", "Noto Serif SC", "Source Han Serif SC", "SimSun", serif;
+  --font-mono: "IBM Plex Mono", "SFMono-Regular", monospace;
+
+  /* ── 圆角 ─────────────────────────────────────────────── */
+  --radius-sm: 10px;
+  --radius-md: 16px;
+  --radius-lg: 24px;
+
+  /* ── 语义色（浅色） ───────────────────────────────────── */
+  --color-background: #eef3f9;        /* 页面底色 canvas */
+  --color-foreground: #1d2433;        /* 正文 ink */
+
+  --color-card: #ffffff;              /* 卡片/面板 panel */
+  --color-card-foreground: #1d2433;
+  --color-popover: #ffffff;
+  --color-popover-foreground: #1d2433;
+
+  --color-primary: #0f766e;           /* 主色 accent（青绿） */
+  --color-primary-foreground: #ffffff;
+  --color-primary-strong: #115e59;    /* hover/active */
+  --color-primary-soft: #d9f3ef;      /* 浅底：标签、选中态 */
+
+  --color-secondary: #e7edf4;         /* 次要按钮底 canvasAlt */
+  --color-secondary-foreground: #1d2433;
+
+  --color-muted: #f6f8fc;             /* 弱化区块 panelAlt */
+  --color-muted-foreground: #5d6678;  /* 辅助文字 inkMuted */
+
+  --color-accent: #d9f3ef;            /* hover 高亮底 */
+  --color-accent-foreground: #115e59;
+
+  --color-destructive: #c2410c;       /* 危险/删除 */
+  --color-destructive-foreground: #ffffff;
+  --color-destructive-soft: #ffedd5;
+
+  --color-warning: #d97706;
+  --color-warning-soft: #fef3c7;
+  --color-success: #15803d;
+  --color-success-soft: #dcfce7;
+  --color-info: #1d4ed8;
+  --color-info-soft: #dbeafe;
+
+  --color-border: #d8dfeb;            /* 描边 line */
+  --color-input: #d8dfeb;
+  --color-ring: #0f766e;              /* 焦点环 = 主色 */
+
+  /* 导航渐变（顶栏/侧栏） */
+  --color-nav-start: #12343b;
+  --color-nav-end: #0f766e;
+}
+
+/*
+ * 深色模式。跟随系统，也可以由 <html data-theme="dark"> 强制。
+ * 这里只重定义令牌，组件一个字都不用改 —— 这就是令牌层存在的意义。
+ */
+@layer base {
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --color-background: #0f1720;
+      --color-foreground: #e6ecf5;
+      --color-card: #161f2b;
+      --color-card-foreground: #e6ecf5;
+      --color-popover: #161f2b;
+      --color-popover-foreground: #e6ecf5;
+      --color-primary: #2dd4bf;
+      --color-primary-foreground: #0b1418;
+      --color-primary-strong: #5eead4;
+      --color-primary-soft: #14343a;
+      --color-secondary: #1f2a38;
+      --color-secondary-foreground: #e6ecf5;
+      --color-muted: #18212d;
+      --color-muted-foreground: #97a3b6;
+      --color-accent: #14343a;
+      --color-accent-foreground: #5eead4;
+      --color-border: #27323f;
+      --color-input: #27323f;
+      --color-ring: #2dd4bf;
+    }
+  }
+
+  :root[data-theme="dark"] {
+    --color-background: #0f1720;
+    --color-foreground: #e6ecf5;
+    --color-card: #161f2b;
+    --color-card-foreground: #e6ecf5;
+    --color-popover: #161f2b;
+    --color-popover-foreground: #e6ecf5;
+    --color-primary: #2dd4bf;
+    --color-primary-foreground: #0b1418;
+    --color-primary-strong: #5eead4;
+    --color-primary-soft: #14343a;
+    --color-secondary: #1f2a38;
+    --color-secondary-foreground: #e6ecf5;
+    --color-muted: #18212d;
+    --color-muted-foreground: #97a3b6;
+    --color-accent: #14343a;
+    --color-accent-foreground: #5eead4;
+    --color-border: #27323f;
+    --color-input: #27323f;
+    --color-ring: #2dd4bf;
+  }
+
+  * {
+    border-color: var(--color-border);
+  }
+
+  html {
+    /* iOS 上横向滚动条/回弹会把固定头部顶歪，这里统一关掉横向溢出。 */
+    overflow-x: hidden;
+  }
+
+  body {
+    background-color: var(--color-background);
+    color: var(--color-foreground);
+    font-family: var(--font-sans);
+    -webkit-font-smoothing: antialiased;
+    /* APK 里长按会弹出系统选择菜单，正文区不需要。输入框单独放开（见下）。 */
+    -webkit-tap-highlight-color: transparent;
+  }
+
+  input,
+  textarea,
+  [contenteditable="true"] {
+    -webkit-user-select: text;
+    user-select: text;
+  }
+
+  /* 键盘可达性：只在键盘聚焦时显示焦点环，鼠标点击不显示。 */
+  :focus-visible {
+    outline: 2px solid var(--color-ring);
+    outline-offset: 2px;
+  }
+}

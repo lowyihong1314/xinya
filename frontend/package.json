@@ -8,10 +8,10 @@
   },
   "scripts": {
     "dev": "vite",
-    "build": "vite build",
-    "build:mobile": "vite build --mode apk",
-    "build:apk": "vite build --mode apk",
-    "build:apk:emulator": "VITE_API_BASE=http://10.0.2.2:5102 vite build --mode apk",
+    "build": "npm run check:routes && tsc --noEmit && vite build",
+    "build:mobile": "npm run check:routes && tsc --noEmit && vite build --mode apk",
+    "build:apk": "npm run check:routes && tsc --noEmit && vite build --mode apk",
+    "build:apk:emulator": "VITE_API_BASE=http://10.0.2.2:5102 npm run build:apk",
     "preview": "vite preview",
     "cap:sync": "bash scripts/with_node22.sh npx cap sync android",
     "cap:sync:android": "bash scripts/with_node22.sh npx cap sync android",
@@ -23,7 +23,9 @@
     "mobile:verify": "bash scripts/verify_mobile_build.sh",
     "cap:open": "bash scripts/with_node22.sh npx cap open android",
     "cap:open:android": "bash scripts/with_node22.sh npx cap open android",
-    "cap:open:ios": "bash scripts/with_node22.sh npx cap open ios"
+    "cap:open:ios": "bash scripts/with_node22.sh npx cap open ios",
+    "check:routes": "node scripts/check-route-collisions.mjs",
+    "typecheck": "tsc --noEmit"
   },
   "devDependencies": {
     "@vitejs/plugin-react": "^6.0.1",
