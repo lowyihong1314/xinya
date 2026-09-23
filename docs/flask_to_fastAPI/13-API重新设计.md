@@ -93,12 +93,20 @@ def approve_payment_route(payment_id=None): ...
 ### 3.1 统一资源路径
 
 ```
-{BASE}/api/v1/{resource}                    GET 列表 · POST 创建
-{BASE}/api/v1/{resource}/{id}               GET 详情 · PATCH 局部更新 · DELETE 删除
-{BASE}/api/v1/{resource}/{id}/{sub}         子资源
-{BASE}/api/v1/{resource}/{id}:{action}      动词动作（冒号，明确区分于子资源）
-{BASE}/api/{app}/realtime                   SSE（见 12 文档）
+{BASE}/v1/{resource}                    GET 列表 · POST 创建
+{BASE}/v1/{resource}/{id}               GET 详情 · PATCH 局部更新 · DELETE 删除
+{BASE}/v1/{resource}/{id}/{sub}         子资源
+{BASE}/v1/{resource}/{id}:{action}      动词动作（冒号，明确区分于子资源）
+{BASE}/{app}/realtime                   SSE（见 12 文档）
 ```
+
+`{BASE}` 是项目前缀（如 `/UTBA_DEMO`）。**没有 `/api` 这一段** —— 项目前缀已经
+把不同项目分开了，`/api` 不带信息量；整个后端就挂在 `{BASE}` 下，形如
+`https://yukang.utbabuddha.com/UTBA_DEMO/v1/claims`。
+
+⚠️ 代价：API 路径与公开页路径（`{BASE}/event/<id>` 分享卡片、`{BASE}/mirror` 短链）
+共用一个命名空间。现有的公开页名字与资源名不冲突，但**以后新增资源要避开这些名字**。
+`/v1` 保留 —— 它解决的是版本演进，与 `/api` 解决的问题不同。
 
 **动作为什么用冒号**：`approve` / `revoke` / `reveal` 这类状态跃迁不是 CRUD，
 硬塞成 `PATCH {status:"approved"}` 会丢失语义（审批要记录人、时间、意见）。
@@ -109,11 +117,11 @@ def approve_payment_route(payment_id=None): ...
 
 | 现在 | 改成 |
 |---|---|
-| `POST /api/lampRegistration_API/approve_payment` + 另外 2 条别名 | `POST /api/v1/lamp-payments/{id}:approve` |
-| `GET /api/lampRegistration_API/get_all_register_by_payment` | `GET /api/v1/lamp-payments?status=pending` |
-| `POST /api/form/payment/update_status/{id}` | `PATCH /api/v1/registration-payments/{id}` |
-| `GET /api/info/get_about_us_text` | `GET /api/v1/content/about-us` |
-| `POST /api/event_data/upload_brochure/{id}` | `POST /api/v1/events/{id}/attachments` |
+| `POST /api/lampRegistration_API/approve_payment` + 另外 2 条别名 | `POST {BASE}/v1/lamp-payments/{id}:approve` |
+| `GET /api/lampRegistration_API/get_all_register_by_payment` | `GET {BASE}/v1/lamp-payments?status=pending` |
+| `POST /api/form/payment/update_status/{id}` | `PATCH {BASE}/v1/registration-payments/{id}` |
+| `GET /api/info/get_about_us_text` | `GET {BASE}/v1/content/about-us` |
+| `POST /api/event_data/upload_brochure/{id}` | `POST {BASE}/v1/events/{id}/attachments` |
 
 ### 3.2 统一响应信封
 
@@ -138,7 +146,7 @@ def approve_payment_route(payment_id=None): ...
 5% 的分页率是个隐患（也是 MCP 的死穴，见 [14](14-MCP接入设计.md)）。统一为：
 
 ```
-GET /api/v1/{resource}?q=&status=&from=&to=&sort=-created_at&limit=50&cursor=…
+GET {BASE}/v1/{resource}?q=&status=&from=&to=&sort=-created_at&limit=50&cursor=…
 ```
 
 - `limit` 默认 50、上限 200
@@ -149,9 +157,9 @@ GET /api/v1/{resource}?q=&status=&from=&to=&sort=-created_at&limit=50&cursor=…
 
 | 公共服务 | 取代 |
 |---|---|
-| `POST /api/v1/files` + `GET /api/v1/files/{id}` | 10 个上传端点 + 53 个下载端点 |
-| `POST /api/v1/{resource}/{id}:approve` 统一审批语义 | 19 条审批接口 |
-| `POST /api/v1/share-links` 统一分享/二维码 | 28 条散落实现 |
+| `POST {BASE}/v1/files` + `GET {BASE}/v1/files/{id}` | 10 个上传端点 + 53 个下载端点 |
+| `POST {BASE}/v1/{resource}/{id}:approve` 统一审批语义 | 19 条审批接口 |
+| `POST {BASE}/v1/share-links` 统一分享/二维码 | 28 条散落实现 |
 
 文件服务是收益最大的一块：统一校验、统一权限、统一缩略图、统一 Range 支持。
 

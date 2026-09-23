@@ -42,7 +42,7 @@ utbabuddha.com/aci/...        → 127.0.0.1:5012
 | `frontend/vite.config.js` `base` | 1 | `` `${BASE}/static/vite/` ``（APK 仍是 `./`） |
 | `apiFetch()` 里拼 URL | 1 处（覆盖 400 个调用点） | `API_BASE + BASE_PATH + path` |
 | `window.location.origin + "/..."` | **41 处** | 统一走新助手 `publicUrl(path)` |
-| socket `io(origin)` | 5+ 处 | **整体删除**，改订阅 `{BASE}/api/{app}/realtime`（见 [12](12-SSE改造方案.md)） |
+| socket `io(origin)` | 5+ 处 | **整体删除**，改订阅 `{BASE}/{app}/realtime`（见 [12](12-SSE改造方案.md)） |
 | `static/index.html` 与 `frontend/index.html` | 2 份 | `/static/vite/init.js`、`/favicon.ico` 要带前缀 |
 | 短链构造（二维码） | `buildMirrorPlayerUrl` / `buildGamePlayerUrl` 等 | 带上前缀 |
 

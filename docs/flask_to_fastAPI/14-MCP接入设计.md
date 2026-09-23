@@ -25,7 +25,7 @@
 
 | | 本项目的实时推送 | MCP 传输 |
 |---|---|---|
-| 协议 | SSE（`{BASE}/api/{app}/realtime`） | **Streamable HTTP** |
+| 协议 | SSE（`{BASE}/{app}/realtime`） | **Streamable HTTP** |
 | 用途 | 浏览器收广播 | LLM 调工具 |
 | 说明 | 见 [12](12-SSE改造方案.md) | MCP 的旧 SSE 传输**已废弃**，不要用 |
 

@@ -16,7 +16,7 @@ Server-Sent Events 只能 **服务器 → 客户端**。现有 35 个 Socket.IO 
 ```
 以前：  客户端 ⇄ Socket.IO 双向长连接（/socket.io/）
 以后：  客户端 ──POST──→ 服务器            （动作：抢答、评分、主持人控制）
-        客户端 ←──SSE──── {BASE}/api/{app}/realtime   （广播：排行榜、状态、进度）
+        客户端 ←──SSE──── {BASE}/{app}/realtime   （广播：排行榜、状态、进度）
 ```
 
 ## 2. 统一契约：`/{app}/realtime`
@@ -24,15 +24,20 @@ Server-Sent Events 只能 **服务器 → 客户端**。现有 35 个 Socket.IO 
 **所有实时订阅只有这一种形状**，每个模块不再自己发明路径。
 
 ```http
-GET {BASE}/api/{app}/realtime?room=<id>&room=<id2>
+GET {BASE}/{app}/realtime?room=<id>&room=<id2>
 Accept: text/event-stream
 ```
 
 | 部分 | 说明 |
 |---|---|
-| `{BASE}` | 项目路径前缀，见 [11-BASE_PATH.md](11-BASE_PATH.md) |
+| `{BASE}` | 项目路径前缀（如 `/UTBA_DEMO`），见 [11-BASE_PATH.md](11-BASE_PATH.md) |
 | `{app}` | 模块名：`quiz` `quiz_game` `mirror` `changyou_room` `form` `media` `fahui` `event` |
 | `room` | 房间标识，**可重复**（一条连接订多个房间） |
+
+> **为什么没有 `/api` 这一段**：`{BASE}` 已经把项目区分开了
+> （`utbabuddha.com/UTBA_DEMO/…` vs `utbabuddha.com/fahui/…`），
+> 再套一层 `/api` 不带任何信息量。REST 同理 —— 整个后端挂在 `{BASE}` 下，
+> 形如 `https://yukang.utbabuddha.com/UTBA_DEMO/{restAPI}`。
 
 响应事件统一信封：
 
@@ -179,7 +184,7 @@ class RealtimeApp:
 
 REGISTRY: dict[str, RealtimeApp] = {}
 
-@router.get("/api/{app}/realtime")
+@router.get("/{app}/realtime")
 async def realtime(app: str, request: Request, room: list[str] = Query(default=[])):
     spec = REGISTRY.get(app) or raise_404()
     user = current_user_of(request)

@@ -18,3 +18,8 @@ paiwei_template/
 
 # 财务附件本地备份（收据/账单，不进版本库）
 /TNB/
+
+# 含真实密钥的配置文件（v3 配置中心，见 docs/flask_to_fastAPI/10-配置中心.md）
+system_config.env
+system_config.*.env
+!system_config.example.env
