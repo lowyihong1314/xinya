@@ -110,7 +110,7 @@ def _fahui_registration_for(event):
     # YLP 那一堆 Flask 蓝图。提到模块顶层等于让 FastAPI 一启动就把整棵 Flask 路由树拉起来。
     # ⚠️ 也就是说这条路径**现在还依赖 flask 装在环境里**；等 app/fahui 搬完，
     #    这个 import 会自然变干净（open_window 本身只依赖 models，不碰 flask）。
-    from backend.app.fahui.common import open_window
+    from backend.api.fahui.common import open_window
     from backend.models.fahui import FahuiVersionEvent
 
     binding = (
@@ -129,7 +129,7 @@ def _fahui_registration_for(event):
     # 登记页永远只写当年，所以往年的活动（例：2025 那场绑的是 2025_YLP）不给入口，
     # 免得访客从旧活动点进去、结果报了今年的名。
     if workspace == "ylp":
-        from backend.app.fahui.YLP.shared import active_order_version
+        from backend.api.fahui.ylp.shared import active_order_version
 
         if str(binding.version or "") != active_order_version():
             return None

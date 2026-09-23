@@ -25,7 +25,7 @@ user_control 有 11 个符号住在 form 模块里（NRIC 年龄推算、成员 
 用的就是同一招，注释也在那里。
 
 ★ TODO(form 模块搬完时)：把下面每个函数体里的
-  ``from backend.app.form.services import X`` 改成
+  ``from backend.api.form.service import X`` 改成
   ``from backend.api.form.service import X``，然后这个文件就只剩一层没必要的转发，
   可以整个删掉、调用点直接 import。**删之前先确认 form 那边的函数名没变。**
 
@@ -56,19 +56,19 @@ MEMBERSHIP_FEE_SCOPE = "membership"
 
 
 def _calc_age_from_nric(nric):
-    from backend.app.form.services import _calc_age_from_nric as impl
+    from backend.api.form.service import _calc_age_from_nric as impl
 
     return impl(nric)
 
 
 def _apply_member_nric_change(member, new_nric):
-    from backend.app.form.services import _apply_member_nric_change as impl
+    from backend.api.form.service import _apply_member_nric_change as impl
 
     return impl(member, new_nric)
 
 
 def _get_or_create_member_by_nric(nric, *, name_nric=None):
-    from backend.app.form.services import _get_or_create_member_by_nric as impl
+    from backend.api.form.service import _get_or_create_member_by_nric as impl
 
     return impl(nric, name_nric=name_nric)
 
@@ -80,7 +80,7 @@ def _get_scoped_regis_payment_or_404(payment_id, payment_scope):
     core/db.py 的垫片改抛 fastapi.HTTPException(404)，响应体变成
     ``{"detail": "..."}``。这是 core/db.py 已登记在案的框架级差异，不是本次改的。
     """
-    from backend.app.form.services import _get_scoped_regis_payment_or_404 as impl
+    from backend.api.form.service import _get_scoped_regis_payment_or_404 as impl
 
     return impl(payment_id, payment_scope)
 
@@ -89,25 +89,25 @@ def _get_scoped_regis_payment_or_404(payment_id, payment_scope):
 
 
 def _serialize_long_term_payment_settings(*, age=None, fee_scope=None, fee_source=None):
-    from backend.app.form.services import _serialize_long_term_payment_settings as impl
+    from backend.api.form.service import _serialize_long_term_payment_settings as impl
 
     return impl(age=age, fee_scope=fee_scope, fee_source=fee_source)
 
 
 def _replace_scoped_registration_fees(fee_scope, raw_options):
-    from backend.app.form.services import _replace_scoped_registration_fees as impl
+    from backend.api.form.service import _replace_scoped_registration_fees as impl
 
     return impl(fee_scope, raw_options)
 
 
 def _collect_long_term_fee_images(items):
-    from backend.app.form.services import _collect_long_term_fee_images as impl
+    from backend.api.form.service import _collect_long_term_fee_images as impl
 
     return impl(items)
 
 
 def _delete_register_fee_image(image_path):
-    from backend.app.form.services import _delete_register_fee_image as impl
+    from backend.api.form.service import _delete_register_fee_image as impl
 
     return impl(image_path)
 
@@ -116,14 +116,14 @@ def _delete_register_fee_image(image_path):
 
 
 def _resolve_register_payment_proof(image_path):
-    from backend.app.form.services import _resolve_register_payment_proof as impl
+    from backend.api.form.service import _resolve_register_payment_proof as impl
 
     return impl(image_path)
 
 
 def _save_register_payment_proof(file_storage):
     """落盘一张付款截图。入参要长得像 werkzeug 的 FileStorage（见 UploadFileStorage）。"""
-    from backend.app.form.services import _save_register_payment_proof as impl
+    from backend.api.form.service import _save_register_payment_proof as impl
 
     return impl(file_storage)
 

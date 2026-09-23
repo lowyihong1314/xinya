@@ -28,7 +28,7 @@ from fastapi import APIRouter
 
 from backend.api import account, app_release, asset, camera, changyou_room, content
 from backend.api import email, event, filesystem, gl, media, mobile, music
-from backend.api import form, lamp, mirror, permission_mgmt, quiz, quiz_game
+from backend.api import fahui, form, lamp, mirror, permission_mgmt, quiz, quiz_game
 from backend.api import songbook, twilio, user_control
 from backend.api import public_api  # 根级路由，必须最后 include
 from backend.api import web  # SPA 兜底，catch-all，必须最最后
@@ -58,6 +58,20 @@ api_router.include_router(form.router)             # /form/*                表�
 api_router.include_router(lamp.router)             # /lampRegistration_API/* 点灯登记
 api_router.include_router(mirror.router)           # /mirror/*              别人眼中的我（含 9 个入向动作）
 api_router.include_router(quiz_game.router)        # /quiz_game/*           问答游戏（含 10 个入向动作）
+
+# ── 法会：六个 router ──────────────────────────────────────────
+# ★★ common_payment_router **必须**排在 ylp_payment_router 前面。★★
+#   两者挂在**同一个前缀 /payment** 下。Flask 那边是两个 Blueprint 注册到同一个
+#   url_prefix，共存靠的就是注册顺序（blueprints.py 里 common 那行在 YLP 上面）。
+#   Starlette 同样是先注册先匹配、不回溯，照抄顺序就等于照抄语义。
+#   今天两边没有一条路径重叠，所以顺序不改变任何可观察行为；
+#   但以后谁在任一边加了同名路径，胜出的那个必须是 common —— 这是原有语义。
+api_router.include_router(fahui.common_payment_router)  # /payment/*        法会收款（通用）
+api_router.include_router(fahui.ylp_payment_router)     # /payment/*        YLP 收款
+api_router.include_router(fahui.board_router)           # /board_router/*   排位板
+api_router.include_router(fahui.print_paiwei_router)    # /print_paiwei/*   排位打印
+api_router.include_router(fahui.diy_paiwei_router)      # /diy_paiwei/*     自定义排位
+api_router.include_router(fahui.fahui_router)           # /fahui_router/*   法会主体
 # ★ media_file_router 挂在**根上**（/media_file/<path>），不带 /media 前缀：
 #   nginx 那条 `location /media_file/ { alias …; }` 和库里存的相对路径都咬死了根路径。
 api_router.include_router(media.media_file_router)  # /media_file/<path>    nginx 找不到文件时的回落

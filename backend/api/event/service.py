@@ -1174,7 +1174,7 @@ def _registration_income_rows(event, include_pending=False):
     # 延迟导入，避免 event ↔ form 循环依赖。
     # ⚠️ form 模块还没搬，这一行会在**运行时**把 flask/werkzeug 拉进进程（见模块头）。
     #    位置保持在函数体内 —— 提到模块顶层的话 import 期就破功了。
-    from backend.app.form.services import (
+    from backend.api.form.service import (
         FORM_FEE_SCOPE,
         _calc_age_from_nric,
         _pick_fee_for_age,

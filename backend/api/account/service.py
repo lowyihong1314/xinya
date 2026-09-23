@@ -1646,7 +1646,7 @@ _FINANCE_STATUS_TO_FAHUI = {"checked": "approved", "fail": "rejected", "process"
 
 
 def _serialize_fahui_finance_payment(payment):
-    from backend.app.fahui.common.payment import normalize_fahui_payment_status
+    from backend.api.fahui.common.payment import normalize_fahui_payment_status
 
     order = getattr(payment, "order", None)
     scope = "fahui_lamp" if payment.payment_type == "lamp" else "fahui_ylp"
@@ -1829,11 +1829,11 @@ def update_finance_payment_status(payment_id, data):
 
         return membership_service.update_membership_payment_status(payment_id, data)
     if scope == "youth_class":
-        from backend.app.form import services as form_services
+        from backend.api.form import service as form_services
 
         return form_services.update_youth_class_payment_status(payment_id, data)
 
-    from backend.app.form import services as form_services
+    from backend.api.form import service as form_services
 
     return form_services.update_payment_status(payment_id, data)
 
@@ -1844,7 +1844,7 @@ def _update_fahui_finance_payment_status(payment_id, data):
     #    拉进进程（函数本身不碰 flask，所以功能是好的）。见模块 docstring ★①。
     from backend.core.auth import current_user
 
-    from backend.app.fahui.common.payment_review import get_payment_or_404, set_payment_review_status
+    from backend.api.fahui.common.payment_review import get_payment_or_404, set_payment_review_status
 
     real_id = payment_id - FAHUI_FINANCE_ID_OFFSET
     payment = get_payment_or_404(real_id)
