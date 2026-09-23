@@ -128,6 +128,11 @@ export function usePlayer() {
     else audio.pause();
   }, []);
 
+  /** 强制暂停。失去播放权时由外部调用 —— 不是用户点的，所以不走 toggle。 */
+  const pause = useCallback(() => {
+    audioRef.current?.pause();
+  }, []);
+
   const seek = useCallback((seconds: number) => {
     const audio = audioRef.current;
     if (!audio) return;
@@ -154,5 +159,5 @@ export function usePlayer() {
     load(next ? accId : music.id, at);
   }, [state.current, state.accompanimentMode, load]);
 
-  return { ...state, play, toggle, seek, toggleAccompaniment };
+  return { ...state, play, toggle, pause, seek, toggleAccompaniment };
 }

@@ -2,7 +2,8 @@ import { ListMusic, Mic2, MicOff, Music2, Pause, Play } from "lucide-react";
 
 import { cn } from "@/shared/lib/cn";
 import { Button } from "@/shared/ui";
-import type { usePlayer } from "./usePlayer";
+import { DevicePicker } from "./DevicePicker";
+import type { useConnectedPlayer } from "./useConnectedPlayer";
 
 /**
  * 底部播放条。fixed 定位，所以页面要留出底部空间（见各页面的 pb-24）。
@@ -12,21 +13,50 @@ export function PlayerBar({
   queueCount,
   onOpenQueue,
 }: {
-  player: ReturnType<typeof usePlayer>;
+  player: ReturnType<typeof useConnectedPlayer>;
   queueCount?: number;
   onOpenQueue?: () => void;
 }) {
   const { current, playing, position, duration, accompanimentMode, toggle, seek, toggleAccompaniment } =
     player;
-  if (!current) return null;
+  const { devices, activeId, myConnectionId, isActive, nowPlaying, status, claim } = player.devices;
 
-  const hasAccompaniment = current.accompaniment_id != null;
+  // 本机没在放、但别的设备在放 —— 显示一条「正在 xx 上播放」，
+  // 而不是一个空的播放条。没有这一条的话用户会以为音乐停了。
+  const remote =
+    !current && nowPlaying?.music_id != null
+      ? devices.find((d) => d.connection_id === nowPlaying.connection_id) ?? null
+      : null;
+
+  if (!current && !remote) return null;
+
+  const hasAccompaniment = current?.accompaniment_id != null;
 
   return (
     <div className="fixed inset-x-0 bottom-0 z-40 border-t border-border bg-card/95 backdrop-blur pb-[env(safe-area-inset-bottom)]">
       <div className="mx-auto flex w-full max-w-6xl items-center gap-2 px-4 py-2.5 sm:gap-3">
         <Music2 className="hidden size-5 shrink-0 text-primary sm:block" aria-hidden />
 
+        {/* 本机没在放：只显示「正在 xx 上播放」+ 设备选择器，不给进度条和播放键
+            —— 那些操作在本机做没有意义，先把播放权拿过来才行 */}
+        {!current && remote ? (
+          <>
+            <div className="min-w-0 flex-1">
+              <p className="truncate text-sm font-medium">{nowPlaying?.title || "正在播放"}</p>
+              <p className="truncate text-xs text-muted-foreground">正在「{remote.name}」上播放</p>
+            </div>
+            <DevicePicker
+              devices={devices}
+              activeId={activeId}
+              myConnectionId={myConnectionId}
+              connected={status === "open"}
+              onClaim={claim}
+            />
+          </>
+        ) : null}
+
+        {current ? (
+        <>
         <div className="min-w-0 flex-1">
           <p className="flex items-center gap-1.5 truncate text-sm font-medium">
             <span className="truncate">{current.title}</span>
@@ -83,9 +113,28 @@ export function PlayerBar({
           </Button>
         ) : null}
 
-        <Button variant="primary" size="icon" onClick={toggle} aria-label={playing ? "暂停" : "播放"}>
+        <DevicePicker
+          devices={devices}
+          activeId={activeId}
+          myConnectionId={myConnectionId}
+          connected={status === "open"}
+          onClaim={claim}
+        />
+
+        <Button
+          variant="primary"
+          size="icon"
+          onClick={toggle}
+          // 播放权不在本机时禁用：点了也会被上面那条 effect 立刻停掉，
+          // 表现成「按钮闪一下就弹回去」，不如直接禁用并在设备选择器里给出路。
+          disabled={!isActive}
+          aria-label={playing ? "暂停" : "播放"}
+          title={isActive ? undefined : "播放权在其他设备上"}
+        >
           {playing ? <Pause /> : <Play />}
         </Button>
+        </>
+        ) : null}
       </div>
     </div>
   );

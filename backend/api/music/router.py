@@ -440,3 +440,110 @@ def set_accompaniment(music_id: int, payload: Optional[dict] = _JSON_BODY):
 def clear_accompaniment(music_id: int):
     """解除伴奏关系。伴奏本身不删，退回普通曲目。"""
     return accompaniment_service.clear_accompaniment(music_id)
+
+
+# ═══════════════════ 播放设备与播放权（Spotify Connect 那一套）═══════════════════
+#
+# 一个用户可能同时开着电脑浏览器、手机浏览器、APK。规则是
+# **同一时刻只有一个在放**，另外几个只能看状态或把播放接管过来。
+#
+# 实时通道：app 名 ``music``，房间就是**用户自己的 id** —— 一条私人频道，
+# 别人订会被 authorize 拒掉。设备的上下线由 on_connect / on_disconnect 登记。
+
+from backend.core.realtime import RealtimeApp, register  # noqa: E402
+
+from backend.api.music import playback_service  # noqa: E402
+
+
+def _music_authorize(room_id, user, params):
+    """只有本人能订自己的频道。
+
+    ``room_id`` 就是 user_id 的字符串形式。比字符串而不是比 int：
+    房间 id 在 Redis 频道里本来就是字符串，转 int 还要处理转不动的情况。
+    """
+    del params
+    if user is None or not getattr(user, "is_authenticated", False):
+        return False
+    return str(room_id) == str(getattr(user, "id", ""))
+
+
+def _music_snapshot(room_id, user, params):
+    """首帧：当前设备表 + 谁在放。
+
+    ★ 这一帧很重要：SSE **重连即自愈**靠的就是它。
+      设备断线重连后 connection_id 会变，没有快照的话它会以为自己还持有播放权。
+    """
+    del user, params
+    devices, active = playback_service._device_list(room_id)
+    import json as _json
+
+    raw = playback_service.redis_client.get(playback_service._now_key(room_id))
+    try:
+        now_playing = _json.loads(raw) if raw else None
+    except (TypeError, ValueError):
+        now_playing = None
+    return {"devices": devices, "active_connection_id": active, "now_playing": now_playing}
+
+
+def _music_on_connect(conn):
+    """设备上线。名字由客户端在查询参数里报上来（?device=Chrome · Windows）。"""
+    user_id = getattr(conn.user, "id", None)
+    if not user_id:
+        return
+    playback_service.register_device(
+        user_id,
+        conn.id,
+        conn.params.get("device"),
+        conn.params.get("kind"),
+    )
+
+
+def _music_on_disconnect(conn):
+    user_id = getattr(conn.user, "id", None)
+    if user_id:
+        playback_service.unregister_device(user_id, conn.id)
+
+
+# 导入本模块时注册一次。backend/api/router.py include 本 router 就会触发。
+register(
+    RealtimeApp(
+        name="music",
+        authorize=_music_authorize,
+        snapshot=_music_snapshot,
+        on_connect=_music_on_connect,
+        on_disconnect=_music_on_disconnect,
+    )
+)
+
+
+@router.get("/playback/devices")
+@login_required
+def list_playback_devices():
+    """当前用户的在线设备 + 谁持有播放权 + 在放什么。
+
+    前端首屏用它；之后靠 SSE 的 music:devices 事件增量更新。
+    """
+    return playback_service.get_devices(current_user.id)
+
+
+@router.post("/playback/claim")
+@login_required
+def claim_playback(payload: Optional[dict] = _JSON_BODY):
+    """把播放权拿到某台设备上。
+
+    两个场景共用这一条：本机点播放（传自己的 connection_id），
+    或在下拉里选了另一台（传那一台的，即 Spotify 的「转移播放」）。
+    """
+    return playback_service.claim_playback(current_user.id, payload or {})
+
+
+@router.post("/playback/state")
+@login_required
+def report_playback_state(payload: Optional[dict] = _JSON_BODY):
+    """上报当前在放什么，让别的设备能显示。
+
+    ★ 只有**持有播放权**的设备说得算（服务端校验）。不校验的话，
+      一台刚被接管走、还没停下来的设备上报的状态会覆盖掉新设备的，
+      两边来回打架。
+    """
+    return playback_service.report_state(current_user.id, payload or {})

@@ -20,7 +20,7 @@ import {
 import { PlayerBar } from "../components/PlayerBar";
 import { QueueDrawer } from "../components/QueueDrawer";
 import { TrackActions } from "../components/TrackActions";
-import { usePlayer } from "../components/usePlayer";
+import { useConnectedPlayer } from "../components/useConnectedPlayer";
 import { fetchMusics, fetchQueue, musicKeys } from "../api";
 import { MyPlaylists } from "../components/MyPlaylists";
 
@@ -29,7 +29,7 @@ export function MusicPage() {
   const [keyword, setKeyword] = useState("");
   const search = useDeferredValue(keyword);
   const [queueOpen, setQueueOpen] = useState(false);
-  const player = usePlayer();
+  const player = useConnectedPlayer();
 
   // ★ 列表默认**不含伴奏** —— 伴奏不是独立作品，混进来会凭空多出一批重复歌名。
   //   要听伴奏是在播放器里切，不是从列表里单独找一条。
