@@ -45,15 +45,15 @@ export const changyouKeys = {
 
 // room_id 是后端生成的 8 位 [A-Za-z0-9]，本来不用转义；但地址栏里的 roomId
 // 是用户可改的，不转义的话 "a/b" 会把路径拼歪（变成另一条路由）。
-const roomPath = (roomId: string) => `/changyou_room/room/${encodeURIComponent(roomId)}`;
+const roomPath = (roomId: string) => `/music/rooms/${encodeURIComponent(roomId)}`;
 
 /** 最近 100 个未过期的房间，按创建时间倒序。 */
 export const fetchRooms = async (): Promise<ChangyouRoom[]> =>
-  (await http.get<RoomListResponse>("/changyou_room/list")).rooms;
+  (await http.get<RoomListResponse>("/music/rooms/list")).rooms;
 
 /** 建房。任何登录用户都能建，建的人自动是房主（房主永远能控制自己的房间）。 */
 export const createRoom = async (topic: string): Promise<ChangyouRoom> =>
-  (await http.post<CreateRoomResponse>("/changyou_room/create", { topic })).room;
+  (await http.post<CreateRoomResponse>("/music/rooms/create", { topic })).room;
 
 /** 房间元信息。**这是拿 role 的唯一途径** —— 别在前端自己算「我是不是房主」。 */
 export const fetchRoom = async (roomId: string): Promise<ChangyouRoom> =>

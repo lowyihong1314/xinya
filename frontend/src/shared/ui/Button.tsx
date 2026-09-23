@@ -54,16 +54,35 @@ export const Button = forwardRef<HTMLButtonElement, ButtonProps>(function Button
   ref,
 ) {
   const Comp = asChild ? Slot : "button";
+
+  // ★ asChild 时**只能传单一子节点**。
+  //   Radix 的 Slot 判定是 `Children.count(children) === 1 && isValidElement(children)`，
+  //   而 `{loading ? <Loader2/> : null}{children}` 即使 loading 为假也是**两个**子节点
+  //   （null 也算一个，实测 Children.count([null, <a/>]) === 2）。
+  //   于是 Slot 抛 "Slot failed to slot onto its children"，
+  //   每一处 <Button asChild><Link>…</Link></Button> 直接把整个页面炸掉。
+  //   所以 asChild 分支原样透传 children，转圈图标只在普通 button 分支渲染
+  //   —— asChild 的场景（把样式套给 <Link>）本来也不该有 loading 态。
+  const content = asChild ? (
+    children
+  ) : (
+    <>
+      {loading ? <Loader2 className="animate-spin" aria-hidden /> : null}
+      {children}
+    </>
+  );
+
   return (
     <Comp
       ref={ref}
       className={cn(buttonVariants({ variant, size }), className)}
-      disabled={disabled || loading}
+      // Slot 会把属性合并到子元素上；<Link> 没有 disabled 属性，传了会变成
+      // 一个无效的 DOM 属性并在控制台报警告，所以 asChild 时不传。
+      disabled={asChild ? undefined : disabled || loading}
       aria-busy={loading || undefined}
       {...props}
     >
-      {loading ? <Loader2 className="animate-spin" aria-hidden /> : null}
-      {children}
+      {content}
     </Comp>
   );
 });

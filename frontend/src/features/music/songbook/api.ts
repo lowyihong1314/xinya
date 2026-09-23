@@ -24,7 +24,7 @@ export interface SongListParams {
 }
 
 export const fetchSongs = (params: SongListParams = {}) =>
-  http.get<SongListResponse>("/songbook/list", {
+  http.get<SongListResponse>("/music/songbook/list", {
     query: {
       q: params.q || undefined,
       variant: params.variant || undefined,
@@ -36,11 +36,11 @@ export const fetchSongs = (params: SongListParams = {}) =>
 /** ⚠️ 详情接口返回的是 {"entry": {...}}，不是裸对象。这里剥掉外层，
  *  让调用方拿到的形状和列表里的一致 —— 两种形状会让页面代码到处分支。 */
 export const fetchSong = async (id: number): Promise<SongEntry> =>
-  (await http.get<SongDetailResponse>(`/songbook/entry/${id}`)).entry;
+  (await http.get<SongDetailResponse>(`/music/songbook/entry/${id}`)).entry;
 
 /** 保存"我的版本"（个人覆盖，不影响别人看到的内容）。 */
 export const saveMyEdit = (id: number, content: string) =>
-  http.post(`/songbook/entry/${id}/my_edit`, { content });
+  http.post(`/music/songbook/entry/${id}/my_edit`, { content });
 
 /** 删掉我的版本，回到原版。 */
-export const deleteMyEdit = (id: number) => http.delete(`/songbook/entry/${id}/my_edit`);
+export const deleteMyEdit = (id: number) => http.delete(`/music/songbook/entry/${id}/my_edit`);

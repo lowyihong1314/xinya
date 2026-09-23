@@ -41,8 +41,8 @@ import {
 // 歌本列表：接口路径写在 songbook 模块的 api.ts 里，这里直接复用那个函数，
 // 不在本模块再写一遍 "/songbook/list" —— 同一条路径出现两处就会漂移。
 // （它现在被两个模块用了，按架构约定该考虑上浮到 shared，见交接说明。）
-import { fetchSongs, songbookKeys } from "@/features/songbook/api";
-import type { SongEntry } from "@/features/songbook/types";
+import { fetchSongs, songbookKeys } from "@/features/music/songbook/api";
+import type { SongEntry } from "@/features/music/songbook/types";
 
 import {
   changyouKeys,

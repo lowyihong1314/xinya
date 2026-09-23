@@ -65,7 +65,7 @@ export function SongbookPage() {
             <li key={song.id}>
               <Card className="h-full transition-colors hover:border-primary/40">
                 <Link
-                  to={`/songbook/${song.id}`}
+                  to={`/music/songbook/${song.id}`}
                   className="flex h-full items-start gap-3 p-4"
                 >
                   <span className="mt-0.5 w-8 shrink-0 text-right font-mono text-sm text-muted-foreground">

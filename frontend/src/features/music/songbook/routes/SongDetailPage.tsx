@@ -66,7 +66,7 @@ export function SongDetailPage() {
   return (
     <div>
       <Button asChild variant="ghost" size="sm" className="-ml-2 mb-2">
-        <Link to="/songbook">
+        <Link to="/music/songbook">
           <ArrowLeft />
           歌本
         </Link>

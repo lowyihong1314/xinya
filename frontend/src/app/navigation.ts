@@ -58,14 +58,17 @@ export const NAV: readonly NavGroup[] = [
     title: "法务财务",
     items: [
       { to: "/claims", label: "报销", icon: Receipt, anyOf: ["account_read", "account_edit", "account_submit_claim"] },
-      { to: "/ledger", label: "总账", icon: BookOpen, anyOf: ["account_read", "account_edit", "account_submit_claim"] },
+      // 总账只认 account_read / account_edit —— 后端 gl/permissions.py 的 user_can_read_gl
+      // 不认 account_submit_claim。写上它的话，只有报销提交权限的人看得见菜单、
+      // 点进去每条 /gl/* 都 403。
+      { to: "/ledger", label: "总账", icon: BookOpen, anyOf: ["account_read", "account_edit"] },
       { to: "/assets", label: "资产", icon: FolderTree, anyOf: ["asset_read", "asset_edit"] },
     ],
   },
   {
     title: "共修",
     items: [
-      { to: "/songbook", label: "歌本", icon: BookOpen },
+      { to: "/music/songbook", label: "歌本", icon: BookOpen },
       { to: "/music", label: "音乐", icon: Music },
     ],
   },

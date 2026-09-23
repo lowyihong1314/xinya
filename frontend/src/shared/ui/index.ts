@@ -4,6 +4,7 @@
  */
 export { Badge } from "./Badge";
 export { Button, buttonVariants, type ButtonProps } from "./Button";
+export { Checkbox } from "./Checkbox";
 export { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "./Card";
 export {
   Dialog,
@@ -24,4 +25,5 @@ export { Skeleton } from "./Skeleton";
 export { EmptyState, ErrorState, LoadingState } from "./states";
 export { Textarea } from "./Textarea";
 export { ToastProvider, useToast } from "./toast";
+export { Tabs, TabsContent, TabsList, TabsTrigger } from "./Tabs";
 export { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "./Table";
