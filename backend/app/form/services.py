@@ -14,7 +14,7 @@ from werkzeug.utils import secure_filename
 
 from backend.app.timezone import malaysia_now, malaysia_now_naive
 from backend.core.paths import DATA_ROOT, PROJECT_ROOT, STATIC_ROOT, data_media_url
-from backend.app.redis_client import redis_client
+from backend.core.redis import redis_client
 from .pdf import merge_html_files_to_pdf
 from .realtime import emit_form_event, emit_youth_class_event
 from backend.models.form import (

@@ -4,7 +4,7 @@ import string
 import time
 from copy import deepcopy
 
-from backend.app.redis_client import redis_client
+from backend.core.redis import redis_client
 
 QUIZ_TTL_SECONDS = 24 * 60 * 60
 TOKEN_LENGTH = 6

@@ -50,7 +50,7 @@ from backend.models.user_data import Department, DepartmentPermission, db
 # prefix 用 settings.api_prefix 拼而不是写死 "/permission"：api_prefix 今天是空串
 # （BASE_PATH 已经区分了项目，再套一层 /api 不带信息量，见 11-BASE_PATH.md），
 # 但配置项留着就是为了需要时还能整体加回来 —— 写死的话那次改配置只会改到一半。
-# 与 asgi.py 里 make_realtime_router(prefix=settings.api_prefix) 的写法保持一致。
+# 与 backend/main.py 里 make_realtime_router(prefix=settings.api_prefix) 的写法保持一致。
 router = APIRouter(prefix=f"{settings.api_prefix}/permission", tags=["permission"])
 
 
@@ -75,7 +75,7 @@ def _resolve_permission_name(data):
 #     不带 embed，所以前端发的 {"department_id": 1, "permission_id": "cctv"} 原样进来。
 #   · 没有 body 时落到 None，路由里 ``payload or {}`` 补成空字典，
 #     后面的校验分支自然会回 400，与 Flask 时代一致。
-#   · body 不是合法 JSON / Content-Type 不对时，FastAPI 回 422（形状见 asgi.py 的
+#   · body 不是合法 JSON / Content-Type 不对时，FastAPI 回 422（形状见 backend/main.py 的
 #     _validation_error_handler）。Flask 那边这种请求返回的是 400/415 的 **HTML 错误页**，
 #     前端一样解析不了，所以这处差异不算行为变更。
 _JSON_BODY = Body(default=None)
@@ -134,8 +134,8 @@ def remove_permission_from_department(payload: Optional[dict] = _JSON_BODY):
     )
 
 
-# asgi.py 里（「业务路由注册位」那一段）：
-#     from api import permission_mgmt
+# 注册在 backend/api/router.py（已完成）：
+#     from backend.api import permission_mgmt
 #     app.include_router(permission_mgmt.router)
 # 同时把 app/blueprints.py 里的 ("backend.app.permission_mgmt", "permission_bp", "/permission", "api")
 # 摘掉，并把 app/permission_mgmt/ 整个目录删掉 —— 两边同时在跑会让人分不清改哪份。

@@ -1,8 +1,8 @@
-"""asgi.py —— FastAPI 的进程入口。
+"""backend/main.py —— FastAPI 的进程入口（原 asgi.py）。
 
 部署（08-部署与回滚.md §2）：
 
-    gunicorn -k uvicorn.workers.UvicornWorker -w 4 -b 127.0.0.1:5006 asgi:app
+    gunicorn -k uvicorn.workers.UvicornWorker -w 4 -b 127.0.0.1:5006 backend.main:app
 
 这个文件只做**装配**：造 FastAPI 实例、按顺序装中间件、注册异常处理器、挂三样
 不属于任何业务模块的东西（/healthz、/time、SSE 端点），以及启停钩子。
@@ -54,7 +54,7 @@ from backend.core.responses import (
     make_http_exception_handler,
 )
 
-log = logging.getLogger("asgi")
+log = logging.getLogger("backend.main")
 
 
 # ═══════════════════════════ 1. CORS 放行名单 ═══════════════════════════
@@ -388,7 +388,9 @@ app.include_router(api_router)
 # ═══════════════════════════ 9. 本地直起 ═══════════════════════════
 
 if __name__ == "__main__":
-    # 仅供本机调试：`python asgi.py`。
+    # 仅供本机调试：`python -m backend.main`（注意：不能 `python backend/main.py`，
+    # 那样跑 backend 不在 sys.path 上，顶部的 `from backend.core...` 会 ImportError）。
+    # 平时用仓库根的 run.py，它读 DEV_PORT 并开 reload。
     # 生产走 gunicorn + UvicornWorker（08 文档 §2），不走这条路径。
     #
     # 端口用 DEV_PORT=5102 —— 对上 frontend/vite.config.js 里那几条 proxy target。
@@ -397,7 +399,7 @@ if __name__ == "__main__":
     import uvicorn
 
     uvicorn.run(
-        "asgi:app",
+        "backend.main:app",
         host="127.0.0.1",
         port=settings.dev_port,
         reload=settings.app_debug,

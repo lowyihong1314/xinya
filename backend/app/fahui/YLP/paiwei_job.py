@@ -6,7 +6,7 @@ import uuid
 from flask import current_app
 
 from backend.app.extensions import socket_broker, socketio
-from backend.app.redis_client import redis_client
+from backend.core.redis import redis_client
 
 from ..common.ylp_storage import preferred_dir
 from .print_generator import (

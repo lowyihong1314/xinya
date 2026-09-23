@@ -7,7 +7,7 @@ import secrets
 
 from flask import session
 
-from backend.app.redis_client import redis_client
+from backend.core.redis import redis_client
 
 SHARE_LINK_TTL_SECONDS = 30 * 24 * 3600  # 30 天
 

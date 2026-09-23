@@ -1,4 +1,4 @@
-"""core.middleware —— ASGI 中间件集合（给 asgi.py 装配用）。
+"""core.middleware —— ASGI 中间件集合（给 backend/main.py 装配用）。
 
 设计见 docs/flask_to_fastAPI/04-兼容层设计.md §1、02-差异与风险.md §6、11-BASE_PATH.md §3。
 
@@ -40,7 +40,7 @@ from starlette.datastructures import Headers
 # 它要 set/reset 的两个 ContextVar（_current_user / _current_request）是 core/auth.py 的
 # 模块私有状态，在这里另写一份就会出现「两套中间件各管一半」的局面 ——
 # 而这类错误的症状正是串号（A 请求看到 B 的身份），且不报错。
-# 重导出的好处：asgi.py 装配时四个中间件从同一个模块取，顺序一眼可见。
+# 重导出的好处：backend/main.py 装配时四个中间件从同一个模块取，顺序一眼可见。
 from backend.core.auth import AuthContextMiddleware
 from backend.core.config import settings
 from backend.core.db import close_scope, open_scope

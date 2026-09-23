@@ -933,7 +933,7 @@ class AuthError(HTTPException):
 
     带着 payload 走，是为了让响应体仍然是 {"status":"error","message":...}；
     FastAPI 默认的 HTTPException 处理器会包成 {"detail": ...}，形状就变了。
-    在 asgi.py 里注册：app.add_exception_handler(AuthError, auth_error_handler)
+    在 backend/main.py 里注册：app.add_exception_handler(AuthError, auth_error_handler)
     """
 
     def __init__(self, status_code, message, payload=None):

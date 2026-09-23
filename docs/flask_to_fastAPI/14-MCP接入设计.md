@@ -252,7 +252,7 @@ async def xinya_list_claims(params: ListClaimsInput) -> str:
 挂进 FastAPI（与业务 API 同进程）：
 
 ```python
-# asgi.py
+# backend/main.py
 app.mount(f"{settings.app_base_path}/mcp", mcp.streamable_http_app())
 ```
 

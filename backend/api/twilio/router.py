@@ -244,7 +244,3 @@ def clear_phone_session(request: Request) -> Response:
     """
     session, snapshot = _open_session(request)
     return _finish(session, snapshot, services.clear_phone_session(session))
-
-
-# asgi.py 里：app.include_router(twilio.router)
-#   from api import twilio

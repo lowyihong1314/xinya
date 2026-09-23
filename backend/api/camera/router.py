@@ -49,7 +49,7 @@ from backend.core.responses import json_response
 
 # prefix 用 settings.api_prefix 拼而不是写死：api_prefix 今天是空串（BASE_PATH 已经
 # 区分了项目，不必再套一层 /api，见 11-BASE_PATH.md），配置项留着是为了需要时能整体加回来。
-# 与 asgi.py 里 make_realtime_router(prefix=settings.api_prefix) 的写法保持一致。
+# 与 backend/main.py 里 make_realtime_router(prefix=settings.api_prefix) 的写法保持一致。
 router = APIRouter(prefix=f"{settings.api_prefix}/move_camera", tags=["camera"])
 
 
@@ -270,8 +270,8 @@ def api_ptz_stop():
 
 # ═══════════════════════════ 迁移交接 ═══════════════════════════
 #
-# asgi.py 里（「业务路由注册位」那一段）：
-#     from api import camera
+# 注册在 backend/api/router.py（已完成）：
+#     from backend.api import camera
 #     app.include_router(camera.router)
 #
 # 同时要做的三件事（都不是本文件的活）：

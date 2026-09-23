@@ -12,7 +12,7 @@ import string
 import time
 from copy import deepcopy
 
-from backend.app.redis_client import redis_client
+from backend.core.redis import redis_client
 from backend.models import db
 from backend.models.quiz_game import QuizGameQuestion, QuizGameSet
 

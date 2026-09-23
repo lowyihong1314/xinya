@@ -7,7 +7,7 @@
 # 返回值仍然是 (ok, 响应, 状态码) 三元组，调用方（services）一个字没改。
 from backend.core.responses import jsonify
 
-from backend.app.redis_client import redis_client
+from backend.core.redis import redis_client
 
 
 IP_RATE_LIMIT = 100

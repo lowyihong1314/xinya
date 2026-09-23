@@ -6,7 +6,7 @@ from backend.app.extensions import socketio
 from backend.app.mirror import services as mirror_services
 from backend.app.quiz import services as quiz_services
 from backend.app.quiz_game import services as quiz_game_services
-from backend.app.redis_client import redis_client
+from backend.core.redis import redis_client
 
 REDIS_ONLINE_KEY = "online_users"
 

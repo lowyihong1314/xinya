@@ -131,15 +131,10 @@ def download_apk(filename: str):
         return json_response({"error": "apk not found"}, status_code=404)
 
     # filename= 会带出 Content-Disposition: attachment（等价于 Flask 的
-    # as_attachment=True + download_name）。跨域时该头已在 asgi.py 的 CORS
+    # as_attachment=True + download_name）。跨域时该头已在 backend/main.py 的 CORS
     # expose_headers 里放行，APK 里读得到文件名。
     return FileResponse(
         apk_path,
         filename=filename,
         media_type="application/vnd.android.package-archive",
     )
-
-
-# asgi.py 里：
-#     from api import app_release
-#     app.include_router(app_release.router)

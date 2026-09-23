@@ -42,7 +42,7 @@ from backend.core.config import settings
 from backend.core.responses import json_response
 from backend.models.user_data import User
 
-# 前缀跟着 asgi.py 里 make_realtime_router 的写法走：api_prefix 现在是空串
+# 前缀跟着 backend/main.py 里 make_realtime_router 的写法走：api_prefix 现在是空串
 # （BASE_PATH 已经区分了项目，再套一层 /api 不带信息量），所以实际路径是 /mobile/...。
 # 留着这个配置项是为了需要时还能把 /api 加回来，两处写法一致才不会只改一半。
 router = APIRouter(prefix=f"{settings.api_prefix}/mobile", tags=["mobile"])
@@ -216,8 +216,8 @@ def logout_all_mobile_sessions() -> Response:
     return json_response({"status": "success"})
 
 
-# asgi.py 里：
-#     from api import mobile
+# 注册在 backend/api/router.py（已完成）：
+#     from backend.api import mobile
 #     app.include_router(mobile.router)
-# ⚠️ 必须挂在 AuthContextMiddleware 之下（asgi.py 现有装配顺序已满足）：
+# ⚠️ 必须挂在 AuthContextMiddleware 之下（backend/main.py 现有装配顺序已满足）：
 #    /session/me 与 /session/exchange 靠 current_user，身份是中间件解析好的。

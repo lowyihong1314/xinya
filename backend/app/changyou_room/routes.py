@@ -8,7 +8,7 @@ from flask_login import current_user, login_required
 
 from backend.app.auth import CHANGYOU_ROOM_CONTROL_PERMISSION, get_current_user_permissions
 from backend.app.extensions import socket_broker
-from backend.app.redis_client import redis_client
+from backend.core.redis import redis_client
 from backend.models.songbook import SongbookEntry
 from backend.models.songbook_user_edit import SongbookUserEdit
 from backend.models.user_data import User

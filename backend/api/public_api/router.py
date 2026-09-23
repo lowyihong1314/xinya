@@ -12,7 +12,7 @@
     /api/api/payments              →  /payments
 
 旧路径里那个 ``/api/api`` 是撞出来的：全局 ``API_PREFIX="/api"`` 再加上蓝图自己
-注册时的 ``url_prefix="/api"``（见 app/blueprints.py 第 10 行）。v3 里 BASE_PATH
+注册时的 ``url_prefix="/api"``（见 backend/app/blueprints.py）。v3 里 BASE_PATH
 （/UTBA_DEMO）已经把项目区分开了，``/api`` 这一段不带任何信息量，所以两段一起去掉，
 本路由器**不设 prefix**。
 
@@ -206,9 +206,9 @@ def get_payments():
     return json_response([payment.to_dict() for payment in payments])
 
 
-# ── 接线（由后面的接线 agent 做，本文件不碰 asgi.py）──────────────────────
-# asgi.py 里：
-#     from api import public_api
+# ── 接线（已完成，注册在 backend/api/router.py）──────────────────────
+# 注册在 backend/api/router.py（已完成）：
+#     from backend.api import public_api
 #     app.include_router(public_api.router)
 #
 # 注册顺序与 app/event（/event_data/*）之间**没有**先后要求：本文件的

@@ -11,7 +11,7 @@ from flask import jsonify, render_template
 from flask_login import current_user
 
 from backend.app.extensions import socket_broker
-from backend.app.redis_client import redis_client
+from backend.core.redis import redis_client
 from backend.models import db
 from backend.models.form import RegisForm, RegisFormGroup, RegisFormGroupScoreLog, regis_form_member
 
