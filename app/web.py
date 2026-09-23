@@ -7,6 +7,7 @@ from flask import make_response, redirect, render_template, request, send_from_d
 from werkzeug.utils import secure_filename
 
 from app.media.constants import IMAGE_EXTS, VIDEO_EXTS
+from core.urls import public_url
 from app.media.paths import event_photo_base_dir, event_photo_cache_dir, to_short_data_path
 from app.media.services import get_event_image_payload, resolve_media_path
 from app.paths import STATIC_ROOT
@@ -29,7 +30,12 @@ def _absolute_url(path):
         return normalized
     if not normalized.startswith("/"):
         normalized = f"/{normalized}"
-    return f"{request.url_root.rstrip('/')}{normalized}"
+    # 改走 core.urls：它会读 X-Forwarded-Prefix 补上项目前缀（如 /UTBA_DEMO），
+    # 并对这个头做安全校验（直连端口时它是客户端可控的，塞 //evil.com 就是开放重定向）。
+    # 反代下 request.url_root 既缺前缀、又可能是 127.0.0.1，不能直接用。
+    from core.urls import absolute_url as _core_absolute_url
+
+    return _core_absolute_url(normalized, request=request)
 
 
 def _with_version(url, version):
@@ -387,7 +393,7 @@ def register_web_routes(app):
 
     @app.route("/changyou-room-v2/<room_id>")
     def changyou_room_public_v2(room_id):
-        return redirect(f"/changyou-room/{room_id}")
+        return redirect(public_url(f"/changyou-room/{room_id}", request=request))
 
     @app.route("/music-portal")
     def music_portal():
@@ -399,7 +405,7 @@ def register_web_routes(app):
         target = "/#/music/turntable/quiz"
         if token:
             target = f"{target}?token={token}"
-        return redirect(target)
+        return redirect(public_url(target, request=request))
 
     @app.route("/game")
     def quiz_game_public_entry():
@@ -407,7 +413,7 @@ def register_web_routes(app):
         target = "/#/music/turntable/game"
         if token:
             target = f"{target}?token={token}"
-        return redirect(target)
+        return redirect(public_url(target, request=request))
 
     @app.route("/mirror")
     def mirror_public_entry():
@@ -415,11 +421,11 @@ def register_web_routes(app):
         target = "/#/music/turntable/mirror"
         if token:
             target = f"{target}?token={token}"
-        return redirect(target)
+        return redirect(public_url(target, request=request))
 
     @app.route("/privacy")
     def privacy_policy_short():
-        return redirect("/privacy-policy")
+        return redirect(public_url("/privacy-policy", request=request))
 
     @app.route("/privacy-policy")
     def privacy_policy():
@@ -432,7 +438,7 @@ def register_web_routes(app):
     @app.route("/template/youth-class-registration")
     def youth_class_registration_template():
         preferred = request.args.get("preferred") or "youth_class"
-        return redirect(f"/template/long-open-registration-form?preferred={preferred}")
+        return redirect(public_url(f"/template/long-open-registration-form?preferred={preferred}", request=request))
 
     @app.route("/template/youth-class-registration/payment")
     def youth_class_registration_payment_template():
@@ -445,7 +451,7 @@ def register_web_routes(app):
         target = f"/template/long-open-registration-form?preferred={preferred}"
         if source:
             target = f"{target}&source={source}"
-        return redirect(target)
+        return redirect(public_url(target, request=request))
 
     @app.route("/template/membership-payment")
     def membership_payment_template():

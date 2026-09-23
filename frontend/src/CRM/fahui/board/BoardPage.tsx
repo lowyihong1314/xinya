@@ -6,6 +6,7 @@ import { useUserState } from "../../../app/UserState";
 import { useOptionalAppChrome } from "../../../router/AppChromeContext";
 import { YlpOrderSummaryDrawer } from "../YlpOrderSummaryDrawer";
 import { getUserPermissionNames } from "../../../app/permissions";
+import { publicUrl } from "../../../js/basePath";
 import { copyTextToClipboard } from "../../../js/browserActions";
 import { showConfirmDialog } from "../../../js/dialogs";
 import { show_alert } from "../../../js/show_alert";
@@ -362,7 +363,8 @@ export function BoardPage() {
         show_alert("error", res.message || "生成终端链接失败");
         return;
       }
-      const url = `${window.location.origin}/#/ylp-board-terminal?token=${res.token}`;
+      // 复制给人在「另一台机器」上打开，所以必须是带前缀的完整地址
+      const url = publicUrl(`/#/ylp-board-terminal?token=${res.token}`);
       const days = Math.max(1, Math.round((res.expires_in || 0) / 86400));
       try {
         await copyTextToClipboard(url);

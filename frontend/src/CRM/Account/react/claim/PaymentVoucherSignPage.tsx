@@ -111,7 +111,8 @@ export function PaymentVoucherSignPage() {
         isMobile,
         title: filename,
         text: "Payment Voucher",
-        fallbackUrl: `${window.location.origin}${downloadUrl}`,
+        // 裸路径交给 normalizeShareUrl 统一补前缀
+        fallbackUrl: downloadUrl,
         mimeType: "application/pdf",
       });
     } catch (err) {

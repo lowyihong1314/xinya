@@ -12,7 +12,6 @@ import { showPromptDialog } from "../../../js/dialogs";
 import { FeePanel, type FeeDraft, normalizeFeeDrafts, summarizeFee } from "../../form/react/FeePanel";
 import { TablePagination, usePagedRows } from "../../shared/TablePagination";
 import {
-  PUBLIC_ORIGIN,
   registrationStatusLabel,
   toPublicUrl,
   type CouncilState,
@@ -133,7 +132,8 @@ export function RegistrationWorkbench({ config }: { config: WorkbenchConfig }) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  const applicationUrl = `${PUBLIC_ORIGIN}${config.publicFormPath}`;
+  // 公开报名表链接，复制出去给人填 —— 走 toPublicUrl 统一补生产 origin + 部署前缀
+  const applicationUrl = toPublicUrl(config.publicFormPath);
 
   const selectedId = useMemo(() => {
     const raw = searchParams.get("entry_id");

@@ -2,6 +2,7 @@ import { Share } from "@capacitor/share";
 import { isAndroidNativeRuntime, isMobileNativeRuntime } from "../mobile/native/capacitor";
 import { NativeFileSharePluginBridge } from "../mobile/native/fileSharePlugin";
 import { API_BASE } from "./apiBase";
+import { apiPath, publicUrl } from "./basePath";
 import { apiFetch } from "./apiFetch";
 
 type DownloadShareOptions = {
@@ -50,7 +51,9 @@ export async function shareUrlOrCopy(url: string, title: string, text = title): 
 
 export function downloadUrl(url: string, filename?: string) {
   const anchor = document.createElement("a");
-  anchor.href = url;
+  // 调用方可能传根相对路径（如后端给的 release.download_url），加了项目前缀部署后
+  // 直接用就是 404。apiPath 幂等、且对绝对 URL 原样放行，放这里做收口最稳妥。
+  anchor.href = apiPath(url);
   if (filename) {
     anchor.download = filename;
   }
@@ -337,18 +340,26 @@ function getFilenameFromUrl(url: string) {
   }
 }
 
+// fallbackUrl 与 shareUrlOrCopy 的唯一必经之路 —— 对外分享链接的收口点。
+// 各调用点只要给应用内的裸路径（/media_file/xxx），前缀在这里统一补上，
+// 免得 20 多处各拼各的、漏一处就是对方点开 404。
 function normalizeShareUrl(url: string) {
   if (/^https?:\/\//i.test(url)) {
+    // APK 的 WebView 住在 https://localhost，把这种"本机地址"改写回真实站点。
+    // 注意 pathname 里已经含部署前缀，这里不能再补一次。
     if (API_BASE && typeof window !== "undefined" && url.startsWith(window.location.origin)) {
       return `${API_BASE}${new URL(url).pathname}${new URL(url).search}`;
     }
     return url;
   }
+  // APK 里 window.location.origin 是 capacitor://localhost / https://localhost，发出去没人打得开，
+  // 所以 API_BASE 在时仍优先用它 —— 只是要把部署前缀一起带上。
   if (url.startsWith("/") && API_BASE) {
-    return `${API_BASE}${url}`;
+    return `${API_BASE}${apiPath(url)}`;
   }
   try {
-    return new URL(url, window.location.origin).toString();
+    // 网页端：publicUrl 产出 `${origin}${BASE_PATH}/xxx`，BASE_PATH 为空时与改前逐字节一致。
+    return publicUrl(url);
   } catch {
     return url;
   }

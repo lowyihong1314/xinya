@@ -7,6 +7,7 @@ import { useUserState } from "../../app/UserState";
 import { getUserPermissionNames } from "../../app/permissions";
 import { CachedImage } from "../../components/CachedMedia";
 import { showConfirmDialog } from "../../js/dialogs";
+import { publicUrl } from "../../js/basePath";
 import { copyTextToClipboard, downloadBlobOrShare, downloadUrlOrShare } from "../../js/browserActions";
 import { correctPhoneInputMY } from "../../js/phone";
 import { show_alert } from "../../js/show_alert";
@@ -999,7 +1000,8 @@ export function FahuiPage() {
         isMobile,
         title: filename,
         text: `订单 #${orderId} 报价单`,
-        fallbackUrl: `${window.location.origin}/api/payment/orders/${orderId}/quotation`,
+        // 裸路径交给 normalizeShareUrl 统一补前缀
+        fallbackUrl: `/api/payment/orders/${orderId}/quotation`,
         mimeType: "application/pdf",
       });
       setActionMessage(isMobile ? "报价单已打开系统分享" : "报价单已开始下载");
@@ -1155,7 +1157,8 @@ export function FahuiPage() {
         show_alert("error", res.message || "生成公开链接失败");
         return;
       }
-      const url = `${window.location.origin}/#/ylp-shared?token=${res.token}`;
+      // 既复制给功德主、又当场出二维码扫 —— 预期产物 https://host/UTBA_DEMO/#/ylp-shared?token=xxx
+      const url = publicUrl(`/#/ylp-shared?token=${res.token}`);
       const days = Math.max(1, Math.round((res.expires_in || 0) / 86400));
       try {
         await copyTextToClipboard(url);

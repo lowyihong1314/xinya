@@ -6,6 +6,7 @@ import { useUserState } from "../../app/UserState";
 import { CachedImage } from "../../components/CachedMedia";
 import { useEnsureDesignTokens } from "../../theme/designTokens";
 import { API_BASE, IS_APK } from "../../js/apiBase";
+import { publicUrl } from "../../js/basePath";
 import { downloadUrl } from "../../js/browserActions";
 import { calcAgeFromNric } from "../../js/nric";
 import {
@@ -699,7 +700,8 @@ export function ProfilePage() {
         setError("请先在资料页填写并保存 NRIC，再继续会员升级申请。");
         return;
       }
-      window.open(`${window.location.origin}/template/long-open-registration-form?preferred=membership&source=profile`, "_blank", "noopener,noreferrer");
+      // /template/... 是后端渲染的公开页，新标签要能独立打开 —— 裸路径会被按 origin 解析而丢前缀
+      window.open(publicUrl("/template/long-open-registration-form?preferred=membership&source=profile"), "_blank", "noopener,noreferrer");
       return;
     }
 

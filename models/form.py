@@ -1,13 +1,32 @@
 from datetime import datetime
 from flask_sqlalchemy import SQLAlchemy
-from sqlalchemy import func, or_
-from sqlalchemy.dialects.mysql import JSON
+from sqlalchemy import JSON, func, or_
+from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import synonym
 import json
 
 from models import db
 import os
 import mimetypes
+
+# JSON 列统一走这个类型：PG 上落成 jsonb，其他方言退回通用 JSON——
+# 不把方言写死在模型里（with_variant 只在 PG 方言下换实现）。
+#
+# 选 jsonb 而不是 json，前提是「这些列都不依赖键顺序」（jsonb 不保留键序、
+# 空白和重复键），下面三列逐个确认过：
+#   available_time_slot_json —— 存的是时间段数组，前端 state.js 直接 Array.isArray() 用；
+#                               jsonb 只重排对象的键，数组元素顺序原样保留。
+#   sign_json_data           —— 签名笔迹 {"strokes": [{"points": [...]}, ...]}，
+#                               定序靠数组，_normalize_sign_json() 也只按键取值。
+#   field_value_json         —— _coerce_extra_field_value() 只产出 str/int/float/bool/None
+#                               这些标量，压根不是对象。
+# 三列都没有「把原始 JSON 文本原样回显/比对」的用法（to_dict 回的是反序列化后的
+# Python 对象），所以 jsonb 的规范化不改变任何现有行为。
+# 换来的是：可建 GIN 索引、支持 = 和包含查询、读取不用每次重新解析文本。
+#
+# 同文件另有两处 db.JSON（snapshot_json、options）保持原样 —— 它们本来就是方言中立的，
+# 在 PG 上映射成 json；改成 jsonb 属于额外的 schema 变更，不在这次迁移范围内。
+JSONType = JSON().with_variant(JSONB(), "postgresql")
 
 # 1️⃣ 中间表
 regis_form_member = db.Table(
@@ -490,7 +509,7 @@ class RegisMemberData(db.Model):
     allergy = db.Column(db.Text, nullable=True)
     other_remark = db.Column(db.Text, nullable=True)
     # ⭐ 新增：可用时间段（JSON）
-    available_time_slot_json = db.Column(JSON, nullable=True)
+    available_time_slot_json = db.Column(JSONType, nullable=True)
 
     # 修改时间
     edit_at = db.Column(db.DateTime, default=datetime.utcnow)
@@ -600,7 +619,7 @@ class RegisParentalData(db.Model):
     # 签名相关
     sign = db.Column(db.String(30), nullable=True)               # 例如 "AD"
     sign_date = db.Column(db.Date, nullable=True)               # 2026-01-14
-    sign_json_data = db.Column(JSON, nullable=True)             # strokes 大对象原样存
+    sign_json_data = db.Column(JSONType, nullable=True)             # strokes 大对象原样存
 
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
 
@@ -674,8 +693,6 @@ class RegisFormExtraFieldConfig(db.Model):
             "created_at": self.created_at.isoformat() if self.created_at else None,
         }
 
-from sqlalchemy.dialects.mysql import JSON
-
 class RegisMemberFieldValue(db.Model):
     __tablename__ = "regis_member_field_value"
 
@@ -694,7 +711,7 @@ class RegisMemberFieldValue(db.Model):
     )
 
     # ✅ 新的 JSON 欄位
-    field_value_json = db.Column(JSON, nullable=True)
+    field_value_json = db.Column(JSONType, nullable=True)
 
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
 

@@ -83,7 +83,8 @@ export function PaymentVoucherModal({
         isMobile,
         title: filename,
         text: `Payment Voucher #${claimId}`,
-        fallbackUrl: `${window.location.origin}/api/account/print_payment_voucher/download_payment_voucher/${claimId}`,
+        // 裸路径交给 normalizeShareUrl 统一补前缀
+        fallbackUrl: `/api/account/print_payment_voucher/download_payment_voucher/${claimId}`,
         mimeType: "application/pdf",
       });
     } catch (err) {

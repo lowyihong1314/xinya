@@ -4,6 +4,7 @@ import QRCode from "qrcode";
 import type { Socket } from "socket.io-client";
 
 import { useUserState } from "../../../app/UserState";
+import { publicUrl } from "../../../js/basePath";
 import {
   createQuizSession,
   getQuizSession,
@@ -299,10 +300,14 @@ function clampWait(value: number) {
 }
 
 function buildGuestUrl(token: string) {
+  // 5173 判断跟部署前缀无关，别顺手删：Vite dev server 上没有后端的 /quiz 短链路由。
   if (window.location.port === "5173") {
-    return `${window.location.origin}/#/music/turntable/quiz?token=${token}`;
+    // 预期产物：http://localhost:5173/#/music/turntable/quiz?token=xxx
+    return publicUrl(`/#/music/turntable/quiz?token=${token}`);
   }
-  return `${window.location.origin}/quiz?token=${token}`;
+  // 这串直接喂给 QRCode.toDataURL 给人扫。
+  // 预期产物：https://utbabuddha.com/UTBA_DEMO/quiz?token=xxx（BASE_PATH 为空时与改前逐字节一致）
+  return publicUrl(`/quiz?token=${token}`);
 }
 
 function hostStatusLabel(status: string) {

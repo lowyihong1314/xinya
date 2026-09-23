@@ -13,7 +13,7 @@ import { EventCheckInPanel } from "./EventCheckInPanel";
 import { EventFlowInline } from "../../CRM/event/react/EventFlowInline";
 import { UploadMediaModal } from "./UploadMediaModal";
 import { useUserState } from "../../app/UserState";
-import { API_BASE } from "../../js/apiBase";
+import { publicUrl } from "../../js/basePath";
 import { downloadUrlOrShare, shareUrlOrCopy } from "../../js/browserActions";
 import { smartImageURL } from "../../js/get_img";
 import { show_alert } from "../../js/show_alert";
@@ -99,7 +99,8 @@ export function EventDetailPage() {
     let active = true;
     const title = detail.event_name || `活动 #${detail.id}`;
     const description = buildEventDocumentDescription(detail);
-    const canonicalUrl = typeof window !== "undefined" ? `${window.location.origin}/event/${detail.id}` : "";
+    // 写进 og:url 和 canonical；社交平台爬虫按这个地址抓，丢了前缀分享卡片就指向死链
+    const canonicalUrl = typeof window !== "undefined" ? publicUrl(`/event/${detail.id}`) : "";
 
     document.title = title;
     setDocumentMeta("name", "description", description);
@@ -284,7 +285,8 @@ export function EventDetailPage() {
         isMobile,
         title: detail.event_name || filename,
         text: filename,
-        fallbackUrl: `${window.location.origin}${url}`,
+        // 裸路径交给 normalizeShareUrl 统一补前缀（它在 APK 下还会改写到 API_BASE）
+        fallbackUrl: url,
         mimeType: detail.brochure_mime || undefined,
       });
     } catch (err) {
@@ -919,8 +921,9 @@ function buildEventDocumentDescription(detail: EventDetailRecord) {
 }
 
 function buildEventShareUrl(eventId: number) {
-  const base = API_BASE || window.location.origin;
-  return new URL(`/event/${eventId}`, base).toString();
+  // 发给微信 / WhatsApp 的分享链接。原先的 API_BASE 回退现在由 publicUrl 内部统一处理，
+  // 免得 APK 里分享出 capacitor://localhost 这种没人打得开的地址。
+  return publicUrl(`/event/${eventId}`);
 }
 
 function findDocumentMeta(attribute: "name" | "property", key: string) {
@@ -965,11 +968,11 @@ function setDocumentIcon(href: string) {
 }
 
 function toAbsoluteDocumentUrl(url: string) {
-  try {
-    return new URL(url, window.location.origin).toString();
-  } catch {
-    return url;
-  }
+  // 产物写进 og:image / twitter:image / favicon，外部爬虫按这个地址上门来抓，所以必须带部署前缀。
+  // 输入来自 smartImageURL：网页构建下是 /media_file/xxx（根相对，要补前缀），
+  // 但也可能是 blob: / data: / 已带 origin 的绝对地址 —— publicUrl 对这些原样放行，
+  // 不会把 blob URL 拼坏。
+  return publicUrl(url);
 }
 
 function isUsableDocumentImage(url: string) {

@@ -4,7 +4,11 @@ Flask-Login
 Flask-Migrate
 Flask-SocketIO
 Flask-SQLAlchemy
-PyMySQL
+# PostgreSQL 驱动（psycopg 3），连接串是 postgresql+psycopg://，见 docs/flask_to_fastAPI/15。
+# [binary] 直接带预编译的 libpq，省掉本机装 pg_config / 编译这一步。
+# 原来的 PyMySQL 已移除：全仓唯一还 import 它的是 sql/migrate_fahui_to_utba.py，
+# 那是一次性历史脚本，真要再跑时临时 pip install 即可，不值得把 MySQL 驱动留在清单里。
+psycopg[binary]
 python-dotenv
 eventlet
 redis
@@ -24,3 +28,15 @@ pillow-heif
 PyMuPDF
 onvif_zeep
 pytesseract
+
+# ─── v3 迁移新增 ───
+# Flask 那一组暂时保留：按 15 文档的排期，先在现有 Flask 代码上切 PG，
+# 框架迁到 FastAPI 之后（阶段 2）才删，这样出问题时能分清是库还是框架引起的。
+
+# core/config.py 的配置中心依赖它；PG 阶段就已经在用，不是 FastAPI 专属。
+pydantic-settings
+fastapi
+# [standard] 带 uvloop / httptools / watchfiles，长连接性能靠它。
+# 不加 sse-starlette：12-SSE改造方案.md 定的是 FastAPI 自带的 StreamingResponse
+# 直接吐 text/event-stream，多一层封装反而挡住心跳和断连的控制。
+uvicorn[standard]

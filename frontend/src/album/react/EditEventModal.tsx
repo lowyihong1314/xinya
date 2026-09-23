@@ -164,7 +164,8 @@ export function EditEventModal({ detail, onClose, onSaved, embedded = false }: P
         isMobile,
         title: detail.event_name || filename,
         text: filename,
-        fallbackUrl: `${window.location.origin}${url}`,
+        // 裸路径交给 normalizeShareUrl 统一补前缀
+        fallbackUrl: url,
         mimeType: detail.brochure_mime || undefined,
       });
     } catch (err) {

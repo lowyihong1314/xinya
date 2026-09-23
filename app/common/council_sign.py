@@ -11,6 +11,7 @@ from dataclasses import dataclass
 from datetime import datetime
 from typing import Any, Callable
 
+from core.urls import absolute_url
 from flask import current_app, jsonify, request
 from flask_login import current_user
 from itsdangerous import BadSignature, URLSafeSerializer
@@ -60,7 +61,8 @@ def _serializer():
 
 def build_council_sign_url(scope, registration):
     token = _serializer().dumps({"scope": scope, "registration_id": registration.id})
-    return f"{request.host_url.rstrip('/')}/template/council-sign?t={token}"
+    # 走 core.urls：host_url 在反代下既缺项目前缀、又可能拿到 127.0.0.1
+    return absolute_url(f"/template/council-sign?t={token}", request=request)
 
 
 def load_token(token):
@@ -317,7 +319,8 @@ BATCH_MAX = 200
 
 def build_batch_sign_url(scope, registration_ids):
     token = _serializer().dumps({"scope": scope, "registration_ids": list(registration_ids)})
-    return f"{request.host_url.rstrip('/')}/template/council-sign-batch?t={token}"
+    # 走 core.urls：host_url 在反代下既缺项目前缀、又可能拿到 127.0.0.1
+    return absolute_url(f"/template/council-sign-batch?t={token}", request=request)
 
 
 def batch_sign_url_response(scope, registration_ids):

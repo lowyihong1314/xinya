@@ -4,6 +4,7 @@ import { io, type Socket } from "socket.io-client";
 import QRCode from "qrcode";
 
 import { API_BASE } from "../../../js/apiBase";
+import { apiPath, publicUrl } from "../../../js/basePath";
 import { CachedImage } from "../../../components/CachedMedia";
 import { downloadBlobOrShare } from "../../../js/browserActions";
 import { smartImageURL } from "../../../js/get_img";
@@ -19,7 +20,20 @@ import type { ExtraFieldDraft } from "./ExtraFieldEditor";
 import type { ExtraFieldConfig, FormCreatePayload, FormEvent, FormFee, FormGroup, FormMember, FormRecord, GroupChatMessage, GroupPlan } from "./types";
 
 type Toast = { type: "success" | "error"; text: string } | null;
+// 报名 / 付款 / 会员这几条链接会印成二维码发给外人扫，必须指向生产站 ——
+// 哪怕 CRM 是在 localhost:5173 打开的。所以 origin 故意钉死，不跟 window.location 走。
 const PUBLIC_ORIGIN = "https://utbabuddha.com";
+
+/**
+ * 钉死的生产 origin + 部署前缀。
+ * 为什么要补前缀：加前缀部署后 /api/form/index/3 住在 /UTBA_DEMO/api/form/index/3，
+ * 印出去的二维码少了这一段就是扫出 404。
+ * 前缀为空时产物与改前逐字节一致；apiPath 是幂等的，重复调用不会拼出双前缀。
+ * 待拍板：若确认所有构建（含 dev）都注入 VITE_PUBLIC_ORIGIN，这里可整体简化成 publicUrl(path)。
+ */
+function publicFormUrl(path: string): string {
+  return `${PUBLIC_ORIGIN}${apiPath(path)}`;
+}
 
 type FeePayload = {
   category: string;
@@ -615,7 +629,8 @@ function MembersTab({
 }
 
 function MemberTerminalDock({ formId, member, isMobile, onClose }: { formId: number; member: FormMember; isMobile: boolean; onClose: () => void }) {
-  const url = `${PUBLIC_ORIGIN}/api/form/member?form_id=${formId}&nric=${encodeURIComponent(String(member.nric || ""))}`;
+  // 会员终端链接，复制给会员在自己手机上打开
+  const url = publicFormUrl(`/api/form/member?form_id=${formId}&nric=${encodeURIComponent(String(member.nric || ""))}`);
   const [copied, setCopied] = useState("");
   async function copy() {
     const ok = await copyToClipboard(url);
@@ -757,7 +772,7 @@ function GroupsTab({
           <button type="button" style={primaryButtonStyle} onClick={() => onCreateGroup(nextGroupName(sortedGroups))}>
             + 新建小组
           </button>
-          <button type="button" style={aiButtonStyle} onClick={async () => { const url = await onCreateScorePanel(); if (url) { setPanelUrl(`${PUBLIC_ORIGIN}${url}`); window.open(url, "_blank"); } }}>
+          <button type="button" style={aiButtonStyle} onClick={async () => { const url = await onCreateScorePanel(); if (url) { setPanelUrl(publicFormUrl(url)); window.open(publicUrl(url), "_blank"); } }}>
             <i className="fa-solid fa-gamepad" style={{ marginRight: 6 }} />积分控制面板
           </button>
         </div>
@@ -1142,10 +1157,12 @@ function RegistrationStatusControl({
 }
 
 function PublicTab({ formId, isMobile }: { formId: number; isMobile: boolean }) {
-  const registerUrl = `${PUBLIC_ORIGIN}/api/form/index/${formId}`;
+  // 这四条全部会喂给 QRCode.toDataURL（见下方 openQr）给人扫码报名，
+  // 预期产物形如 https://utbabuddha.com/UTBA_DEMO/api/form/index/3
+  const registerUrl = publicFormUrl(`/api/form/index/${formId}`);
   const forceRegisterUrl = `${registerUrl}?force=true`;
-  const payUrl = `${PUBLIC_ORIGIN}/api/form/pay_register/${formId}`;
-  const memberUrl = `${PUBLIC_ORIGIN}/api/form/member?form_id=${formId}`;
+  const payUrl = publicFormUrl(`/api/form/pay_register/${formId}`);
+  const memberUrl = publicFormUrl(`/api/form/member?form_id=${formId}`);
   const [copied, setCopied] = useState("");
   async function copy(url: string, label: string) {
     const ok = await copyToClipboard(url);

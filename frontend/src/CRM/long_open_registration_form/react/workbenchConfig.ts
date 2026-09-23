@@ -1,6 +1,9 @@
 import { apiFetch } from "../../../js/apiFetch";
+import { apiPath } from "../../../js/basePath";
 import type { FeeDraft } from "../../form/react/FeePanel";
 
+// 理事签名 / 付款 / 公开报名这几条链接是发给外人点的，必须指向生产站，
+// 所以 origin 故意钉死，不跟 window.location 走（dev 打开工作台复制出来的也是生产链接）。
 export const PUBLIC_ORIGIN = "https://utbabuddha.com";
 
 export function registrationStatusLabel(status: string | undefined): string {
@@ -9,11 +12,18 @@ export function registrationStatusLabel(status: string | undefined): string {
   return "处理中";
 }
 
+/**
+ * 把任意来源的 url 重写到生产 origin + 部署前缀，只保留 pathname 与 search
+ * （原实现就显式丢弃其余部分，这里保持不变，只是把前缀补上 ——
+ * 不补的话，加前缀部署后这一行会把前缀整段洗掉）。
+ * 空串 / undefined 保持早退返回 ""，不要变成 `${origin}/`。
+ */
 export function toPublicUrl(url: string | null | undefined): string {
   if (!url) return "";
   try {
     const parsed = new URL(url, PUBLIC_ORIGIN);
-    return `${PUBLIC_ORIGIN}${parsed.pathname}${parsed.search}`;
+    // apiPath 负责补部署前缀且是幂等的 —— 后端若已给带前缀的路径，不会再补一遍
+    return `${PUBLIC_ORIGIN}${apiPath(parsed.pathname)}${parsed.search}`;
   } catch {
     return url.replace(/^https?:\/\/[^/]+/, PUBLIC_ORIGIN);
   }

@@ -10,7 +10,6 @@ export const MIN_FONT_SIZE = 14;
 export const MAX_FONT_SIZE = 30;
 export const SONG_CARD_BATCH_DESKTOP = 18;
 export const SONG_CARD_BATCH_MOBILE = 10;
-export const APK_PUBLIC_ROOM_BASE_URL = "http://utbabuddha.com";
 
 export type ChordFamily = "original" | "C" | "D" | "E" | "F" | "G" | "A" | "B";
 export type ControllerPage = "songs" | "projection" | "control";

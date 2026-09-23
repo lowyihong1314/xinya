@@ -4,6 +4,7 @@ import { useUserState } from "../../../app/UserState";
 import { fetchAllUsers, fetchDepartments } from "../../user_control/react/api";
 import type { DepartmentRecord, UserRecord } from "../../user_control/react/types";
 import { showConfirmDialog, showPromptDialog } from "../../../js/dialogs";
+import { publicUrl } from "../../../js/basePath";
 import { downloadUrlOrShare } from "../../../js/browserActions";
 import { useEnsureDesignTokens } from "../../../theme/designTokens";
 import * as api from "./api";
@@ -188,7 +189,8 @@ export function useFileSystemController() {
       isMobile,
       title: item.name,
       text: item.name,
-      fallbackUrl: `${window.location.origin}/api/files/items/${item.file_id}/content`,
+      // 裸路径交给 normalizeShareUrl 统一补前缀
+      fallbackUrl: `/api/files/items/${item.file_id}/content`,
     });
   }
 
@@ -351,7 +353,9 @@ export function useFileSystemController() {
           const credit = Number(creditInput || 1);
           await runAction(async () => {
             const data = await api.createShare(selectedFile.file_id, minutes, credit);
-            const shareUrl = `${window.location.origin}${data.share_url}`;
+            // 后端 share_url 现在返回应用内裸路径，前缀由前端补。
+            // 若后端哪天改成返回完整绝对 URL，publicUrl 会原样放行，不会拼成双前缀。
+            const shareUrl = publicUrl(data.share_url);
             await navigator.clipboard?.writeText(shareUrl).catch(() => undefined);
             showToast("success", `分享链接已生成${navigator.clipboard ? "并复制" : ""}`);
             await showPromptDialog({

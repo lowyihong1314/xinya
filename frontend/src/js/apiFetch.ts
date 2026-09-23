@@ -1,13 +1,18 @@
 import { API_BASE } from "./apiBase";
+import { apiPath } from "./basePath";
 import { getNativeAuthorizationHeader, shouldUseMobileNativeAuth } from "../mobile/native/authHeader";
 
-// Wraps fetch() so that relative paths are prefixed with API_BASE.
-// In normal web builds API_BASE is "" so behaviour is unchanged.
-// In the APK build API_BASE is "https://utbabuddha.com".
+// 包一层 fetch()：以 "/" 开头的内部路径统一补上 origin 和项目前缀。
+//   网页版   API_BASE=""  BASE_PATH=""            → "/api/x"（和加前缀之前逐字节一致）
+//   网页版   API_BASE=""  BASE_PATH="/UTBA_DEMO"  → "/UTBA_DEMO/api/x"
+//   APK 版   API_BASE="https://utbabuddha.com"    → "https://utbabuddha.com/UTBA_DEMO/api/x"
+// 全仓 400 个调用点里有 394 个走这里，所以前缀只在这一处拼；
+// 剩下那些自己拼 `${API_BASE}${path}` 的地方要改用 basePath.ts 的 API_ROOT / apiPath()。
 export async function apiFetch(input: string | URL | Request, init?: RequestInit): Promise<Response> {
   const originalInput = input;
   if (typeof input === "string" && input.startsWith("/")) {
-    input = `${API_BASE}${input}`;
+    // apiPath() 是幂等的：调用方若已经拼过前缀（或 APK 缓存层重拼过一次），不会补成双前缀。
+    input = `${API_BASE}${apiPath(input)}`;
   }
 
   let nextInit = init;

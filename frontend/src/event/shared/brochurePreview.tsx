@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState, type CSSProperties } from "react";
 
 import { openOverlay } from "../../app/OverlayProvider";
+import { publicUrl } from "../../js/basePath";
 import { downloadUrlOrShare } from "../../js/browserActions";
 
 type BrochureRecord = {
@@ -21,7 +22,10 @@ function isPdf(ext: string, mime = "") {
 }
 
 function buildPublicFileUrl(filePath: string) {
-  return new URL(`/media_file/${filePath}`, window.location.origin).toString();
+  // 这个地址会塞进 view.officeapps.live.com 的 src 参数，由「微软的服务器」上门来抓，
+  // 所以必须是公网可达的带前缀绝对 URL，错了就是 Office 预览一片空白。
+  // 预期产物：https://utbabuddha.com/UTBA_DEMO/media_file/<path>
+  return publicUrl(`/media_file/${filePath}`);
 }
 
 function buildOfficeEmbedUrl(fileUrl: string) {

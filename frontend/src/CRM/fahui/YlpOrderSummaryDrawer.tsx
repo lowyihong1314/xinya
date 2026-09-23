@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import type { CSSProperties } from "react";
 
+import { publicUrl } from "../../js/basePath";
 import { downloadBlobOrShare, copyTextToClipboard } from "../../js/browserActions";
 import { ShareLinkQrModal } from "./ShareLinkQrModal";
 import type { ShareLinkInfo } from "./ShareLinkQrModal";
@@ -311,7 +312,9 @@ export function YlpOrderSummaryDrawer({
     run(async () => {
       const res = await createYlpShareLink(orderId);
       if (!res.token) throw new Error(res.message || "生成公开链接失败");
-      const url = `${window.location.origin}/#/ylp-shared?token=${res.token}`;
+      // 和 FahuiPage.handleCopyShareLink 是同一条链接的第二份拷贝，必须一起改；
+      // 漏一处就是「详情页的码能扫、抽屉的码扫不开」。
+      const url = publicUrl(`/#/ylp-shared?token=${res.token}`);
       const days = Math.max(1, Math.round((res.expires_in || 0) / 86400));
       await copyTextToClipboard(url);
       show_alert("success", `公开链接已复制（${days} 天内有效）`);

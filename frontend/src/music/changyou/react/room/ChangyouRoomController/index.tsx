@@ -5,6 +5,7 @@ import { useNavigate } from "react-router-dom";
 
 import { useUserState } from "../../../../../app/UserState";
 import { IS_APK } from "../../../../../js/apiBase";
+import { publicUrl } from "../../../../../js/basePath";
 import { useBaseNavbarVisibility } from "../../../../../router/AppChromeContext";
 import { useEnsureDesignTokens } from "../../../../../theme/designTokens";
 import {
@@ -17,7 +18,6 @@ import { fetchSongbookEntries, fetchSongbookEntry, saveMySongbookEdit } from "..
 import { buildProjectionBlocks, splitBlocksForDoublePage } from "../../projection";
 import type { SongbookEntry, SongbookVersionOption } from "../../types";
 import {
-  APK_PUBLIC_ROOM_BASE_URL,
   CHORD_FAMILY_OPTIONS,
   CHORD_FAMILY_STORAGE_KEY,
   DEFAULT_FONT_SIZE,
@@ -313,8 +313,12 @@ export function ChangyouRoomController({ roomId }: { roomId: string }) {
   const publicRoomExternalUrl = useMemo(() => {
     if (!room) return "";
     const roomPath = IS_APK ? getChangyouPublicRoomPath(room.room_id) : room.playback_url || getChangyouPublicRoomPath(room.room_id);
-    const originBase = IS_APK ? APK_PUBLIC_ROOM_BASE_URL : window.location.origin;
-    return new URL(roomPath, originBase).toString();
+    // 这串既出二维码给人扫、又用 window.open 开新标签，必须公网可达且带部署前缀。
+    // roomPath 可能是后端下发的完整地址（playback_url），publicUrl 对绝对 URL 原样放行。
+    // 预期产物：https://utbabuddha.com/UTBA_DEMO/changyou-room/<id>
+    // 原先 APK 分支钉死的 APK_PUBLIC_ROOM_BASE_URL 是 http:// 的既存 bug，
+    // 现在统一交给 publicUrl —— 它在 APK 下回退到 API_BASE（https），顺手修掉。
+    return publicUrl(roomPath);
   }, [room]);
 
   useEffect(() => {

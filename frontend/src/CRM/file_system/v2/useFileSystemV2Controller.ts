@@ -4,6 +4,7 @@ import { useUserState } from "../../../app/UserState";
 import { fetchAllUsers, fetchDepartments } from "../../user_control/react/api";
 import type { DepartmentRecord, UserRecord } from "../../user_control/react/types";
 import { showConfirmDialog } from "../../../js/dialogs";
+import { publicUrl } from "../../../js/basePath";
 import { downloadUrlOrShare } from "../../../js/browserActions";
 import { useEnsureDesignTokens } from "../../../theme/designTokens";
 import * as api from "./api";
@@ -242,7 +243,8 @@ export function useFileSystemV2Controller() {
       isMobile,
       title: item.name,
       text: item.name,
-      fallbackUrl: `${window.location.origin}/api/files/items/${item.file_id}/content`,
+      // 裸路径交给 normalizeShareUrl 统一补前缀
+      fallbackUrl: `/api/files/items/${item.file_id}/content`,
     });
   }
 
@@ -382,7 +384,8 @@ export function useFileSystemV2Controller() {
     if (item.type === "dir" || item.file_id < 0) return null;
     try {
       const data = await api.createShare(item.file_id, minutes, credit);
-      return `${window.location.origin}${data.share_url}`;
+      // 与 v1 同一约定：后端返回裸路径，前缀由前端补（两套并存，必须成对改）
+      return publicUrl(data.share_url);
     } catch (error) {
       showToast("error", errorMessage(error));
       return null;

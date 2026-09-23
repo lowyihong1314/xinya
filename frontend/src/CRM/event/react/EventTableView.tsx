@@ -1,3 +1,4 @@
+import { apiPath } from "../../../js/basePath";
 import { useEffect, useMemo, useRef, useState, type CSSProperties, type FormEvent, type RefObject } from "react";
 
 import { CachedImage } from "../../../components/CachedMedia";
@@ -166,7 +167,8 @@ export function EventTableView(props: {
         isMobile,
         title: filename,
         text: filename,
-        fallbackUrl: `${window.location.origin}${url}`,
+        // 裸路径交给 normalizeShareUrl 统一补前缀
+        fallbackUrl: url,
         mimeType: mimeType || undefined,
       });
     } catch (error) {
@@ -782,7 +784,7 @@ function LinkedFormHeadChip({ event, form, onOpen }: { event: EventRecord | null
       <button
         type="button"
         style={headChipOpenStyle}
-        onClick={() => window.open(`/api/form/index/${form.id}`, "_blank", "noopener,noreferrer")}
+        onClick={() => window.open(apiPath(`/api/form/index/${form.id}`), "_blank", "noopener,noreferrer")}
         title="打开报名表格"
       >
         ↗

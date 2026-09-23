@@ -4,7 +4,6 @@ from datetime import date, datetime
 
 from models import db
 from sqlalchemy import and_, asc, desc, or_
-from sqlalchemy.dialects.mysql import LONGTEXT
 
 event_organizer = db.Table(
     "event_organizer",
@@ -547,7 +546,9 @@ class AlbumFiles(db.Model):
     created_at = db.Column(db.DateTime, server_default=db.func.current_timestamp())
     tags = db.Column(db.String(255), default="")
     category = db.Column(db.String(100), default="")
-    extra_metadata = db.Column(LONGTEXT, nullable=True)
+    # PG 的 text 没有长度上限，MySQL 那套 TEXT/MEDIUMTEXT/LONGTEXT 的分级在 PG 里不存在，
+    # 所以方言专有的 LONGTEXT 直接换成中立的 Text —— 容量不会变小，也不再绑死 MySQL。
+    extra_metadata = db.Column(db.Text, nullable=True)
     file_type = db.Column(db.String(10), nullable=False)
 
     # 关系绑定

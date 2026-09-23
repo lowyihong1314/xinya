@@ -988,6 +988,12 @@ def _set_cookie(response: Response, name: str, value: str, max_age: int) -> None
     )
 
 
+# utbabuddha.com 这一个域名下跑着 6 个项目（BearBad / devops / fahui / kellytools /
+# sengchong / xinya），它们全是 Flask + flask_login，Cookie 名字都是框架默认值。
+# 也就是说 path=/ 上叫这两个名字的 Cookie **不一定是我们的**。
+_SHARED_COOKIE_NAMES = frozenset({"session", "remember_token"})
+
+
 def _delete_legacy_path_cookies(response: Response) -> None:
     """把老的 path=/ 同名 Cookie 删掉。
 
@@ -995,11 +1001,22 @@ def _delete_legacy_path_cookies(response: Response) -> None:
     并在同一个 Cookie 头里一起发上来；logout 时只删得掉新 path 那份，
     旧的永远留着 —— 表现就是「登出了又自动登回去」。
     所以每次下发/清除登录态时，都顺手对 path=/ 发一条删除。
+
+    ★ 但只能删**项目专属**的名字。删 Cookie 靠的是 name+path，分不出「这份是
+    迁移前的 xinya 留下的」还是「这份是 BearBad 现在正在用的」——
+    名字还是 session / remember_token 时删下去，等于每次登录登出都把用户从
+    另外 5 个项目踢下线，而那边日志上什么都看不到。
+    所以想清掉旧 path 的残留，前提是先在 system_config.env 把名字改成专属的
+    （现在 SESSION_COOKIE_NAME=xinya_session，所以会话那份是删得掉的）。
+    跳过 remember_token 的代价是零：登出时会话里写了 _remember="clear"，
+    load_user_from_request 会认这个标记，旧 remember_token 登不回来。
     """
     if _cookie_path() == "/":
         return
     secure, httponly, samesite = _cookie_security()
     for name in (SESSION_COOKIE_NAME, REMEMBER_COOKIE_NAME):
+        if name in _SHARED_COOKIE_NAMES:
+            continue
         response.delete_cookie(
             name, path="/", secure=secure, httponly=httponly, samesite=samesite
         )

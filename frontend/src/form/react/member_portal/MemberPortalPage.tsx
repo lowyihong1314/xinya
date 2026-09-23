@@ -1,3 +1,4 @@
+import { apiPath } from "../../../js/basePath";
 import { useEffect, useMemo, useState } from "react";
 import type { CSSProperties } from "react";
 import { io, type Socket } from "socket.io-client";
@@ -397,8 +398,11 @@ function PortalView({ nric, formId }: { nric: string; formId: number }) {
               type="button"
               style={ghostStyle}
               onClick={() => {
+                // back 取的是真实 pathname，本身已含项目前缀，且 LoginPage 把 next
+                // 当「完整地址」直接跳 —— 所以这里**不能**再给 back 套一层前缀。
+                // 要补前缀的只有 /#/login 这个跳转目标本身。
                 const back = window.location.pathname + window.location.search;
-                window.location.href = `/#/login?next=${encodeURIComponent(back)}`;
+                window.location.href = apiPath(`/#/login?next=${encodeURIComponent(back)}`);
               }}
             >
               🔑 登录
