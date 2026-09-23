@@ -3,12 +3,18 @@ import os
 import secrets
 from datetime import datetime, timedelta
 
-from flask import current_app
 from itsdangerous import BadSignature, SignatureExpired, URLSafeTimedSerializer
+
+from core.config import settings
 
 from models import db
 from models.user_data import MobileSession, User
 
+# TODO(v3): 这三个常量在 core/config.py 里已经有对应字段
+# （mobile_access_token_seconds / mobile_refresh_token_days / mobile_access_token_salt），
+# 今天两边取值完全一致（1800 / 90 / xinya-mobile-session），所以本次迁移不动它们 ——
+# 迁移的价值在于行为不变。要收编的话得连带确认 system_config.env 的值，
+# 尤其 TOKEN_SALT：改一个字符，全体在飞的 access_token 立刻失效。
 ACCESS_TOKEN_SECONDS = int(os.environ.get("MOBILE_ACCESS_TOKEN_SECONDS", 30 * 60))
 REFRESH_TOKEN_DAYS = int(os.environ.get("MOBILE_REFRESH_TOKEN_DAYS", 90))
 TOKEN_SALT = os.environ.get("MOBILE_ACCESS_TOKEN_SALT", "xinya-mobile-session")
@@ -23,7 +29,13 @@ def _refresh_token_hash(refresh_token):
 
 
 def _serializer():
-    return URLSafeTimedSerializer(current_app.config["SECRET_KEY"], salt=TOKEN_SALT)
+    # v3 唯一的改动：SECRET_KEY 的来源从 Flask 的 current_app.config 换成配置中心。
+    # Flask 已下线，没有 app context，原写法会抛 RuntimeError —— 而这条路径同时是
+    # core/auth.py 校验 Bearer 的入口，炸了等于所有 APK 用户掉线。
+    # ★ 值必须是同一个：settings.secret_key 逐字节来自 /srv/flaskapp/_token.py 的
+    #   SECRET_KEY（Flask 时代 app/settings.py 读的也是它），所以在飞的令牌不受影响。
+    #   盐、序列化器参数一个字都没动 —— 动了就是全体 access_token 当场失效。
+    return URLSafeTimedSerializer(settings.secret_key, salt=TOKEN_SALT)
 
 
 def _public_user(user):

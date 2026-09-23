@@ -3,7 +3,9 @@
 一个出口 IP 每小时 100 次、单个手机号每小时 10 次 —— 法会现场大家连同一个 WiFi 时
 不会互相挤掉（约容得下 10 个号码各试 10 次），同时单号被刷也挡得住。
 """
-from flask import jsonify
+# jsonify 从 core.responses 取：flask 的那个要 app context，FastAPI 进程里必炸。
+# 返回值仍然是 (ok, 响应, 状态码) 三元组，调用方（services）一个字没改。
+from core.responses import jsonify
 
 from app.redis_client import redis_client
 

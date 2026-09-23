@@ -1,5 +1,4 @@
 from datetime import datetime
-from flask_sqlalchemy import SQLAlchemy
 from sqlalchemy import JSON, func, or_
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import synonym

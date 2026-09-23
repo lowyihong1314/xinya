@@ -1,3 +1,7 @@
+# ⚠️ 已停用：本文件是 Flask 时代的路由，现由 api/twilio.py（FastAPI）接管。
+#    留着只为迁移对照 —— 它调用的 services 签名已经变了（多了 ip / session 两个
+#    关键字参数），照这份代码跑必然报 TypeError。确认无人引用后可以直接删。
+
 from flask import Blueprint, request, session
 
 from . import services

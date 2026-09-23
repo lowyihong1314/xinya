@@ -1,18 +1,14 @@
 # models/user_data.py
 from models import db
-from flask_sqlalchemy import SQLAlchemy
-from werkzeug.security import generate_password_hash, check_password_hash
-from flask_login import UserMixin,current_user,login_required
+from core.auth import UserMixin          # 替掉 flask_login.UserMixin
 from datetime import datetime
 from sqlalchemy.ext.declarative import declared_attr
 from sqlalchemy import Enum
 from sqlalchemy.ext.mutable import MutableList
-from flask_bcrypt import Bcrypt
+from core import passwords as bcrypt     # 替掉 flask_bcrypt，参数逐字节一致
 from sqlalchemy.inspection import inspect
 from sqlalchemy import desc
 from sqlalchemy.orm import synonym
-
-bcrypt = Bcrypt()
 
 # 权限清单是代码的一部分（见 app/auth.py 的 permission_names），DB 只存
 # 「部门 ↔ 权限名」的分配关系；行对象带 .name / .to_dict()，兼容旧的遍历写法。

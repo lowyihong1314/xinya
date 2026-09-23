@@ -108,14 +108,11 @@ async def lifespan(app: FastAPI):
     # ① 先把 models 全部 import 一遍，让 SQLAlchemy 的 metadata / mapper 配置齐全。
     #    放在最前面是为了**启动即失败**：映射配错（关系写错、字段名打错）会在这里炸，
     #    而不是等到某个冷门接口第一次被访问时才炸在用户脸上。
-    #    ⚠️ 过渡期实情：models/__init__.py 现在仍然是 `db = SQLAlchemy()`（Flask-SQLAlchemy），
-    #       所以这一步填的是 FSA 的 metadata，core.db 的 metadata 依旧是空的。
-    #       等 models/__init__.py 切到 core.db 之后，这一行才同时给 alembic 用上。
-    #    ★ 同一个原因导致的现状（实测）：**带有效登录 Cookie 的请求现在一律 500**。
-    #       认证要走 `User.query`，而那还是 FSA 的 query，没有 Flask app context 就抛
-    #       `RuntimeError: Working outside of application context`。匿名请求不受影响
-    #       （core/auth.py 会先看有没有凭据，没有就不查库），所以 /healthz 之类一切正常，
-    #       很容易误以为已经能用了。**切 models/__init__.py 是登录能用的前置条件。**
+    #    ⚠️ 这段注释原本写着「models/__init__.py 还是 Flask-SQLAlchemy，所以带登录
+    #       Cookie 的请求一律 500」。**那条前置条件已经完成**：models/__init__.py 现在
+    #       `from core.db import db`，这一步填的就是 core.db 的 metadata，alembic 直接可用，
+    #       带 Cookie / Bearer 的请求也已实测正常（批次一六个模块全链路跑通）。
+    #       留着这几行是为了让日后翻 git log 的人知道这个坑已经填了，别再照着旧注释排查。
     load_model_modules()
 
     # ② 拉起 Redis 扇出循环（每 worker 一条 psubscribe rt:*，进程内再分发）。
@@ -363,16 +360,45 @@ app.include_router(make_realtime_router(prefix=settings.api_prefix))
 
 # ═══════════════════════════ 8. 业务路由注册位 ═══════════════════════════
 #
-# ★ 这里**故意是空的**。阶段 1 只交付地基（05 文档的模块迁移顺序还没开始），
-#   现在往这儿挂路由等于把「框架能不能跑起来」和「某个模块搬得对不对」两件事绑在一起，
-#   出问题时无法归因 —— 和「PG 迁移与 FastAPI 迁移分两次切机」是同一个理由。
+# 阶段 2（批次一）：六个模块已从 app/<模块>/ 的 Flask Blueprint 搬到 api/<模块>.py。
+# 每条 include_router 都能单独注释掉回滚 —— 模块之间没有 import 依赖。
 #
-# 阶段 2 开始搬业务时，在下面按模块逐条加，每加一条都要能单独回滚：
+# ── 为什么分两组、组内为什么是这个顺序 ────────────────────────────────
 #
-#     from app.routers import register_routers
-#     register_routers(app)            # 574 条路由分模块注册，见 05 文档
+# Starlette 的路由表是**先注册先匹配**（第一条 path 正则匹配上就用它，不会回溯找
+# 更精确的）。所以规则只有一条：**带 prefix 的先挂，挂在根上的最后挂。**
 #
-# 另外两件同样等阶段 2 的事，一并记在这里免得散落：
+#   · 第一组五个模块各自占着 /mobile、/twilio、/permission、/move_camera、/app
+#     这些独立前缀，彼此不可能撞，组内顺序无所谓（按字母排只是为了好读）。
+#   · public_api 是历史杂物抽屉，六条路由**直接挂在应用根上**
+#     （/ping、/forms、/members、/payments、/event_data/{id}、/get_file_data/{id}），
+#     命名空间最宽，所以排最后。今天它和谁都不撞，但下一批搬 app/event 时，
+#     /event_data/get_all_event 这类具名路径就会和它的 /event_data/{event_id:int}
+#     同处一个命名空间 —— 靠的是 Starlette 的 :int 转换器在匹配阶段就只认数字
+#     （已实测两边谁先注册都不会互相抢），而不是靠注册顺序。
+#     ⚠️ 真要新增一条会与它重叠的根级路由，必须挂在 public_api **之前**。
+#
+# ⚠️ 各模块的 prefix 写在自己文件里（多数是 f"{settings.api_prefix}/xxx"，
+#    api_prefix 今天是空串），这里不重复声明 —— 两处各写一份迟早漂移。
+
+from api import app_release, camera, mobile, permission_mgmt, twilio  # noqa: E402
+from api import public_api  # noqa: E402  （根级路由，必须最后 include）
+
+# 第一组：各自独立前缀，互不重叠
+app.include_router(mobile.router)            # /mobile/session/*      APK 令牌签发
+app.include_router(twilio.router)            # /twilio/*              OTP
+app.include_router(permission_mgmt.router)   # /permission/*          部门权限分配
+app.include_router(camera.router)            # /move_camera/*         CCTV（含 nginx authz）
+app.include_router(app_release.router)       # /app/releases|download APK 分发
+
+# 第二组：挂在根上的，最后
+app.include_router(public_api.router)        # /ping /forms /members /payments /event_data/{id} …
+
+
+# ── 尚未迁移的模块 ────────────────────────────────────────────────
+# 剩下的按 05 文档的模块顺序继续搬，搬完一个在上面加一行。
+#
+# 另外两件同样等后续批次的事，一并记在这里免得散落：
 #
 #   · 静态文件。Flask 的 static_folder 会自动挂 /static，FastAPI 不会（02 文档 §6.6）：
 #         from fastapi.staticfiles import StaticFiles

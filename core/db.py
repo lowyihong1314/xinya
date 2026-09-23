@@ -166,28 +166,15 @@ class Pagination:
 
 
 def _raise_404(description=None):
-    """抛 404 —— **迁移期必须对 Flask 和 FastAPI 都正确**。
+    """抛 404，给 95 处 ``get_or_404`` / ``first_or_404`` 用。
 
-    ``fastapi.HTTPException`` 不是 werkzeug ``HTTPException`` 的子类
-    （实测 issubclass 为 False），所以在还跑 Flask 的时候直接抛它，
-    95 处 ``get_or_404`` 会变成 **500 + 堆栈**而不是 404 —— 而且是静默的行为退化：
-    接口"还能用"，只是把"没找到"报成了"服务器炸了"。
-
-    迁移分两次切机（先 PG 后 FastAPI，见 09 文档 D12），中间必然有一段
-    "已经用 core.db 垫片、但还是 Flask" 的时期，所以这里按运行时实际框架分流。
-    FastAPI 接管后 flask 不再安装，第一个分支自然失效，不需要回头清理。
+    历史：迁移中途有一段"已经用 core.db 垫片、但还跑 Flask"的时期，这里曾按
+    运行时框架分流去抛 werkzeug 的 NotFound —— 因为 ``fastapi.HTTPException``
+    并不是 werkzeug ``HTTPException`` 的子类，抛错了会变成 500 而不是 404。
+    Flask 已经下线，分流去掉；注意 flask 包**还装在 venv 里**，留着
+    ``from flask import ...`` 会在第一次 404 时把整个 Flask 拉回进程。
     """
-    detail = description or "Not Found"
-    try:
-        from flask import has_request_context
-        from werkzeug.exceptions import NotFound
-
-        if has_request_context():
-            raise NotFound(detail)
-    except ImportError:
-        pass  # 已经没有 Flask 了，走下面的 FastAPI 分支
-
-    raise HTTPException(status_code=404, detail=detail)
+    raise HTTPException(status_code=404, detail=description or "Not Found")
 
 
 class _Query(orm.Query):

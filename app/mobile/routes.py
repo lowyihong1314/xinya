@@ -1,3 +1,14 @@
+"""【已迁移 · 请勿再改这里】Flask 时代的移动端会话路由。
+
+v3 已搬到 ``api/mobile.py``（FastAPI）。本文件保留只是为了 Flask 回滚期还查得到原状，
+线上 FastAPI 进程**不会**加载它。
+要彻底删除的话，得同时拿掉两处，少一处就是启动期 AttributeError：
+  · ``app/blueprints.py`` 里的 ("app.mobile", "mobile_bp", "/mobile", "api")
+  · ``app/mobile/__init__.py`` 里的 ``from .routes import mobile_bp``
+⚠️ ``app/mobile/session_service.py`` 是两边**共用**的，不在删除范围内 ——
+   core/auth.py 校验 Bearer 走的就是它。
+"""
+
 from datetime import timedelta
 
 from flask import Blueprint, jsonify, request, session as flask_session
