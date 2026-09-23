@@ -7,11 +7,7 @@ BLUEPRINT_SPECS = [
     ("backend.app.fahui.YLP.board_routes", "board_router_bp", "/board_router", "api"),
     ("backend.app.fahui.YLP.print_routes", "print_paiwei_bp", "/print_paiwei", "api"),
     ("backend.app.fahui.YLP.diy_paiwei", "diy_paiwei_bp", "/diy_paiwei", "api"),
-    ("backend.app.quiz_game", "quiz_game_bp", "/quiz_game", "api"),
-    ("backend.app.mirror", "mirror_bp", "/mirror", "api"),
-    ("backend.app.form", "form_bp", "/form", "api"),
     ("backend.app.fahui.YLP.routes", "fahui_bp", "/fahui_router", "api"),
-    ("backend.app.fahui.lamp.routes", "lamp_registration_bp", "/lampRegistration_API", "api"),
 ]
 
 def _register_spec_blueprint(app, api_prefix, module_path, attr_name, suffix, scope):
