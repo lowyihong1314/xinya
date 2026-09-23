@@ -10,6 +10,7 @@ import {
   Button,
   Card,
   CardContent,
+  EmptyState,
   ErrorState,
   LoadingState,
   PageHeader,
@@ -59,6 +60,9 @@ export function SongDetailPage() {
 
   if (song.isPending) return <LoadingState />;
   if (song.isError) return <ErrorState error={song.error} onRetry={() => void song.refetch()} />;
+  // 歌曲 id 不是数字时查询被禁用（enabled:false），这里会走到 ——
+  // 渲染 404 而不是永久转圈（isPending 为 false 不等于一定有数据，见 useApiQuery）
+  if (!song.data) return <EmptyState title="找不到这首歌" description="链接里的编号不正确。" />;
 
   const data = song.data;
   const editing = draft !== null;

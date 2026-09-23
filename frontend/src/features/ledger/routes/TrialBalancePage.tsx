@@ -81,7 +81,7 @@ export function TrialBalancePage() {
             <LoadingState />
           ) : report.isError ? (
             <ErrorState error={report.error} onRetry={() => void report.refetch()} />
-          ) : report.data.rows.length ? (
+          ) : report.data?.rows.length ? (
             <Table>
               <TableHeader>
                 <TableRow>
@@ -96,7 +96,7 @@ export function TrialBalancePage() {
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {report.data.rows.map((row) => (
+                {report.data?.rows.map((row) => (
                   <TableRow key={row.account_id}>
                     <TableCell className="whitespace-nowrap font-mono">
                       <Link
@@ -130,10 +130,10 @@ export function TrialBalancePage() {
                 <TableRow className="font-medium hover:bg-transparent">
                   <TableCell colSpan={6}>合计</TableCell>
                   <TableCell className="whitespace-nowrap text-right font-mono tabular-nums">
-                    {formatMoney(report.data.total_debit)}
+                    {formatMoney(report.data?.total_debit)}
                   </TableCell>
                   <TableCell className="whitespace-nowrap text-right font-mono tabular-nums">
-                    {formatMoney(report.data.total_credit)}
+                    {formatMoney(report.data?.total_credit)}
                   </TableCell>
                 </TableRow>
               </TableBody>

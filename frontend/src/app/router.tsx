@@ -50,6 +50,42 @@ const EventDetailPage = lazy(() =>
 const MusicPage = lazy(() =>
   import("@/features/music/routes/MusicPage").then((m) => ({ default: m.MusicPage })),
 );
+const LedgerPage = lazy(() =>
+  import("@/features/ledger/routes/LedgerPage").then((m) => ({ default: m.LedgerPage })),
+);
+const TrialBalancePage = lazy(() =>
+  import("@/features/ledger/routes/TrialBalancePage").then((m) => ({ default: m.TrialBalancePage })),
+);
+const JournalEntryDetailPage = lazy(() =>
+  import("@/features/ledger/routes/JournalEntryDetailPage").then((m) => ({ default: m.JournalEntryDetailPage })),
+);
+const AccountLedgerPage = lazy(() =>
+  import("@/features/ledger/routes/AccountLedgerPage").then((m) => ({ default: m.AccountLedgerPage })),
+);
+const CctvLivePage = lazy(() =>
+  import("@/features/cctv/routes/CctvLivePage").then((m) => ({ default: m.CctvLivePage })),
+);
+const CctvPlaybackPage = lazy(() =>
+  import("@/features/cctv/routes/CctvPlaybackPage").then((m) => ({ default: m.CctvPlaybackPage })),
+);
+const QuizHostPage = lazy(() =>
+  import("@/features/quiz/routes/QuizHostPage").then((m) => ({ default: m.QuizHostPage })),
+);
+const QuizGuestPage = lazy(() =>
+  import("@/features/quiz/routes/QuizGuestPage").then((m) => ({ default: m.QuizGuestPage })),
+);
+const ChangyouRoomsPage = lazy(() =>
+  import("@/features/music/rooms/routes/ChangyouRoomsPage").then((m) => ({ default: m.ChangyouRoomsPage })),
+);
+const ChangyouRoomPage = lazy(() =>
+  import("@/features/music/rooms/routes/ChangyouRoomPage").then((m) => ({ default: m.ChangyouRoomPage })),
+);
+const ChangyouPlayerPage = lazy(() =>
+  import("@/features/music/rooms/routes/ChangyouPlayerPage").then((m) => ({ default: m.ChangyouPlayerPage })),
+);
+const AppDownloadPage = lazy(() =>
+  import("@/features/app-releases/routes/AppDownloadPage").then((m) => ({ default: m.AppDownloadPage })),
+);
 const ClaimsPage = lazy(() =>
   import("@/features/claims/routes/ClaimsPage").then((m) => ({ default: m.ClaimsPage })),
 );
@@ -80,6 +116,10 @@ const routes: RouteObject[] = [
       { path: "/forbidden", element: lazyBoundary(<ForbiddenPage />) },
       // 关于我们是公开页：后端那两条接口没挂 login_required
       { path: "/about", element: lazyBoundary(<AboutPage />) },
+      // APK 下载是给外部链接/二维码用的，不要求登录
+      { path: "/app-download", element: lazyBoundary(<AppDownloadPage />) },
+      // 抢答参与者从大屏二维码扫进来，多数是没账号的访客
+      { path: "/quiz/:token", element: lazyBoundary(<QuizGuestPage />) },
     ],
   },
   {
@@ -114,6 +154,52 @@ const routes: RouteObject[] = [
       { path: "/email", element: lazyBoundary(<EmailPage />) },
       { path: "/music/songbook", element: lazyBoundary(<SongbookPage />) },
       { path: "/music", element: lazyBoundary(<MusicPage />) },
+      // 唱游房间（music 域）
+      { path: "/music/rooms", element: lazyBoundary(<ChangyouRoomsPage />) },
+      { path: "/music/rooms/:roomId", element: lazyBoundary(<ChangyouRoomPage />) },
+      { path: "/music/rooms/:roomId/player", element: lazyBoundary(<ChangyouPlayerPage />) },
+      // 抢答主持台
+      { path: "/quiz", element: lazyBoundary(<QuizHostPage />) },
+      {
+        path: "/ledger",
+        element: (
+          <RequirePermission anyOf={["account_read", "account_edit"]}>
+            {lazyBoundary(<LedgerPage />)}
+          </RequirePermission>
+        ),
+      },
+      {
+        path: "/ledger/trial-balance",
+        element: (
+          <RequirePermission anyOf={["account_read", "account_edit"]}>
+            {lazyBoundary(<TrialBalancePage />)}
+          </RequirePermission>
+        ),
+      },
+      {
+        path: "/ledger/entries/:entryId",
+        element: (
+          <RequirePermission anyOf={["account_read", "account_edit"]}>
+            {lazyBoundary(<JournalEntryDetailPage />)}
+          </RequirePermission>
+        ),
+      },
+      {
+        path: "/ledger/accounts/:accountId",
+        element: (
+          <RequirePermission anyOf={["account_read", "account_edit"]}>
+            {lazyBoundary(<AccountLedgerPage />)}
+          </RequirePermission>
+        ),
+      },
+      {
+        path: "/cctv",
+        element: <RequirePermission anyOf={["cctv"]}>{lazyBoundary(<CctvLivePage />)}</RequirePermission>,
+      },
+      {
+        path: "/cctv/playback",
+        element: <RequirePermission anyOf={["cctv"]}>{lazyBoundary(<CctvPlaybackPage />)}</RequirePermission>,
+      },
       { path: "/music/songbook/:songId", element: lazyBoundary(<SongDetailPage />) },
     ],
   },

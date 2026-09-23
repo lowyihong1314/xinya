@@ -21,6 +21,7 @@ import {
   Image,
   Mail,
   Music,
+  Radio,
   Receipt,
   Users,
   UserCircle,
@@ -69,6 +70,7 @@ export const NAV: readonly NavGroup[] = [
     title: "共修",
     items: [
       { to: "/music/songbook", label: "歌本", icon: BookOpen },
+      { to: "/music/rooms", label: "唱游房间", icon: Radio },
       { to: "/music", label: "音乐", icon: Music },
     ],
   },

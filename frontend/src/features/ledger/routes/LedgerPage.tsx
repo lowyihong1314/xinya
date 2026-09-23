@@ -163,10 +163,10 @@ export function LedgerPage() {
             <LoadingState className="min-h-24" />
           ) : cash.isError ? (
             <ErrorState error={cash.error} onRetry={() => void cash.refetch()} className="min-h-24" />
-          ) : cash.data.accounts.length ? (
+          ) : cash.data?.accounts.length ? (
             <div className="space-y-3">
               <ul className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
-                {cash.data.accounts.map((account) => (
+                {cash.data?.accounts.map((account) => (
                   <li key={account.id} className="rounded-[var(--radius-sm)] bg-muted p-3">
                     <Link to={`/ledger/accounts/${account.id}`} className="block">
                       <p className="flex items-center gap-2 text-sm">
@@ -188,7 +188,7 @@ export function LedgerPage() {
               <p className="text-sm text-muted-foreground">
                 合计{" "}
                 <span className="font-mono tabular-nums text-foreground">
-                  {formatMoney(cash.data.total_balance)}
+                  {formatMoney(cash.data?.total_balance)}
                 </span>
                 {/* 草稿不计入余额，不说清楚的话对不上账时会以为是 bug */}
                 <span className="ml-2">（只算已过账的凭证）</span>
@@ -236,7 +236,7 @@ export function LedgerPage() {
             <LoadingState />
           ) : entries.isError ? (
             <ErrorState error={entries.error} onRetry={() => void entries.refetch()} />
-          ) : entries.data.length ? (
+          ) : entries.data?.length ? (
             <>
               <Table>
                 <TableHeader>
@@ -250,7 +250,7 @@ export function LedgerPage() {
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {entries.data.map((entry) => (
+                  {entries.data?.map((entry) => (
                     <TableRow key={entry.id}>
                       <TableCell className="whitespace-nowrap font-mono">
                         <Link to={`/ledger/entries/${entry.id}`} className="text-primary hover:underline">
@@ -273,7 +273,7 @@ export function LedgerPage() {
                 </TableBody>
               </Table>
               {/* 后端默认只给 200 条，到顶了要说一声，否则用户以为凭证就这么多 */}
-              {entries.data.length >= 200 ? (
+              {entries.data?.length >= 200 ? (
                 <p className="px-5 pt-3 text-xs text-muted-foreground">
                   只显示最近 200 张，用日期范围缩小查询。
                 </p>

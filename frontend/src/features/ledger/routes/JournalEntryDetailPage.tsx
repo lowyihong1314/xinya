@@ -12,6 +12,7 @@ import {
   CardContent,
   CardHeader,
   CardTitle,
+  EmptyState,
   ErrorState,
   LoadingState,
   PageHeader,
@@ -111,6 +112,8 @@ export function JournalEntryDetailPage() {
 
   if (entry.isPending) return <LoadingState />;
   if (entry.isError) return <ErrorState error={entry.error} onRetry={() => void entry.refetch()} />;
+  // 凭证 id 不是数字时查询被禁用，这里会走到 —— 渲染 404 而不是永久转圈
+  if (!entry.data) return <EmptyState title="找不到这张凭证" description="链接里的凭证编号不正确。" />;
 
   const data = entry.data;
   const isDraft = data.status === "draft";

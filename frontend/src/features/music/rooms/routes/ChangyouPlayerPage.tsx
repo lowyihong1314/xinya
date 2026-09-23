@@ -10,6 +10,7 @@ import {
   DialogContent,
   DialogHeader,
   DialogTitle,
+  EmptyState,
   ErrorState,
   LoadingState,
   PageHeader,
@@ -76,6 +77,8 @@ export function ChangyouPlayerPage() {
 
   if (query.isPending) return <LoadingState />;
   if (query.isError) return <ErrorState error={query.error} onRetry={() => void query.refetch()} />;
+  // roomId 缺失时查询被禁用（enabled:false）—— 渲染提示而不是永久转圈
+  if (!query.data) return <EmptyState title="找不到这个房间" description="房间可能已经结束。" />;
 
   const { room, entry, projection } = query.data;
   // 没投屏时退回整首歌 —— 和控制台的预览走同一个函数，两边显示的必须一样。

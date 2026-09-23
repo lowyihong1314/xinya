@@ -156,10 +156,12 @@ export function ChangyouRoomPage() {
   if (meta.isError) return <ErrorState error={meta.error} onRetry={() => void meta.refetch()} />;
   if (query.isError) return <ErrorState error={query.error} onRetry={() => void query.refetch()} />;
 
-  const room = query.data.room;
+  const room = query.data?.room;
   // playback_url 是后端拼的、**不带 BASE_PATH** 的裸路径（见 types.ts 的说明），
   // publicUrl 负责补前缀和 origin，而且是幂等的。
-  const playbackLink = publicUrl(room.playback_url);
+  // room 为 undefined 时（房间不存在/查询被禁用）给空串 —— publicUrl 对空串
+  // 返回空串，下面的链接区块本来就按 room 判空隐藏。
+  const playbackLink = publicUrl(room?.playback_url ?? "");
 
   async function handlePush(input: PushSongInput) {
     // 换歌会把上一首的投屏和标记一起清空（后端行为）。已经在投屏时这一步
@@ -200,11 +202,11 @@ export function ChangyouRoomPage() {
       </Button>
 
       <PageHeader
-        title={room.topic}
+        title={room?.topic}
         description={
           <span className="flex flex-wrap items-center gap-1.5">
             <Badge variant="neutral" className="font-mono">
-              {room.room_id}
+              {room?.room_id}
             </Badge>
             <Badge variant={canControl ? "primary" : "neutral"}>
               {canControl ? "控制台" : "观众"}

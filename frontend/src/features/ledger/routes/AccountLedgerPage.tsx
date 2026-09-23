@@ -49,6 +49,9 @@ export function AccountLedgerPage() {
 
   if (ledger.isPending) return <LoadingState />;
   if (ledger.isError) return <ErrorState error={ledger.error} onRetry={() => void ledger.refetch()} />;
+  // 科目 id 不是数字时查询被禁用（enabled:false），这里会走到 ——
+  // 渲染 404 而不是永久转圈（isPending 为 false 不等于一定有数据，见 useApiQuery）
+  if (!ledger.data) return <EmptyState title="找不到这个科目" description="链接里的科目编号不正确。" />;
 
   const { account } = ledger.data;
 

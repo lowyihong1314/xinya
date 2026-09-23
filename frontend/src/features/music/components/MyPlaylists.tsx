@@ -172,7 +172,7 @@ function PlaylistTracks({
 
   const byId = new Map((all.data?.musics ?? []).map((m) => [m.id, m]));
   // 按歌单里的顺序还原（后端有 position 排序），跳过已被删掉的歌
-  const tracks = (detail.data.music_ids ?? [])
+  const tracks = (detail.data?.music_ids ?? [])
     .map((id) => byId.get(id))
     .filter((m): m is Music => Boolean(m));
 

@@ -9,6 +9,7 @@ import {
   Button,
   Card,
   CardContent,
+  EmptyState,
   ErrorState,
   LoadingState,
   PageHeader,
@@ -61,6 +62,8 @@ export function EventDetailPage() {
 
   if (event.isPending) return <LoadingState />;
   if (event.isError) return <ErrorState error={event.error} onRetry={() => void event.refetch()} />;
+  // id 不是数字时查询被禁用（enabled:false），这里会走到 —— 渲染 404 而不是永久转圈
+  if (!event.data) return <EmptyState title="找不到这个活动" description="链接可能已经失效。" />;
 
   const ev = event.data;
   // 爱心多的排前面，与旧版一致；数量相同按序号，保证顺序稳定（否则每次渲染会跳）。

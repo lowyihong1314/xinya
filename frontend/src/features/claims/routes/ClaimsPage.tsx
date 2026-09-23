@@ -48,6 +48,8 @@ export function ClaimsPage() {
 
   if (list.isPending) return <LoadingState />;
   if (list.isError) return <ErrorState error={list.error} onRetry={() => void list.refetch()} />;
+  // isPending 为 false 不等于一定有数据（查询被禁用时也是 false，见 useApiQuery）
+  if (!list.data) return <EmptyState title="没有数据" />;
 
   const claims = list.data.data;
 
