@@ -11,13 +11,13 @@ v3 起 Flask 已下线（见 docs/flask_to_fastAPI/）。原来这里要先 even
 if __name__ == "__main__":
     import uvicorn
 
-    from core.config import settings
+    from backend.core.config import settings
 
     uvicorn.run(
-        "asgi:app",
+        "backend.main:app",
         host="0.0.0.0",
         port=settings.dev_port,
-        # reload 只在开发用：改了 core/ 或 app/ 下的文件自动重启。
+        # reload 只在开发用：改了 backend/ 下的文件自动重启。
         # 注意 reload 会另起子进程，日志里会看到两次启动横幅。
         reload=settings.app_debug,
         # SSE 是长连接，优雅关闭要给它时间断开，否则 Ctrl-C 会挂住。

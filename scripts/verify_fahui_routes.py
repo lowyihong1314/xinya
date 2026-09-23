@@ -9,8 +9,8 @@ PROJECT_ROOT = Path(__file__).resolve().parents[1]
 if str(PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(PROJECT_ROOT))
 
-from app import create_app
-from app.fahui.route_contracts import FAHUI_ANON_STATUS_CHECKS, FAHUI_ROUTE_GROUPS
+from backend.app import create_app
+from backend.app.fahui.route_contracts import FAHUI_ANON_STATUS_CHECKS, FAHUI_ROUTE_GROUPS
 
 
 def collect_route_methods(app) -> dict[str, set[str]]:
