@@ -20,3 +20,13 @@ export const fetchFootprints = () => http.get<FootprintsResponse>("/user_control
 /** 会员状态与可办理的升级/续期路径。 */
 export const fetchMembershipContext = () =>
   http.get<MembershipContextResponse>("/user_control/membership/context");
+
+/**
+ * 改个人资料。收的是**整份字段**（后端 edit_user_data），
+ * 所以调用方要把当前值一起带上，不能只发改动的那几个。
+ */
+export const saveProfile = (payload: Record<string, unknown>) =>
+  http.post("/user_control/edit_user_data", payload);
+
+export const changePassword = (payload: { old_password: string; new_password: string }) =>
+  http.post("/user_control/change_password", payload);

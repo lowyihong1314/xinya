@@ -171,6 +171,11 @@ const routes: RouteObject[] = [
         path: "/profile",
         element: <RequireAuth>{lazyBoundary(<ProfilePage />)}</RequireAuth>,
       },
+      {
+        // 资料分节（与旧版 /profile/:section 对齐）
+        path: "/profile/:section",
+        element: <RequireAuth>{lazyBoundary(<ProfilePage />)}</RequireAuth>,
+      },
       // CRM 聚合页：一页磁贴，点进去是各个子模块（与旧版一致）
       {
         path: "/crm",
