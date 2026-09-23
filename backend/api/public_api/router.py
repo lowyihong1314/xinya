@@ -37,7 +37,7 @@ from __future__ import annotations
 from fastapi import APIRouter, Request
 from starlette.responses import PlainTextResponse
 
-from backend.core.auth import current_user, permission_required
+from backend.core.auth import current_user, login_required, permission_required
 from backend.core.responses import json_response
 from backend.models.event_data import AlbumFiles, EventData
 from backend.models.form import NRIC_Asset, RegisForm, RegisPayment
@@ -179,29 +179,49 @@ def get_forms():
       6 条「能真的触发 500 分支」的路由里，public_api 那一条就是它。换成依赖注入
       会把状态码悄悄改成 401，前端分支随之失效。
 
-    TODO(坏代码，本次不改): ``RegisForm.to_dict()`` 的签名是 ``(self, is_public=False)``
-      （models/form.py:144），压根没有 ``with_child`` 这个参数 —— 也就是说这条接口
-      今天一调用就 TypeError → 500。照搬不重构：先原样搬过来保证行为不变，
-      要修得单独一次改动（确认是改成 to_dict(is_public=False) 还是别的意思）。
+    ★ 2026-09 修掉一个死 bug。原代码写的是 ``form.to_dict(with_child=True)``，
+      而 ``RegisForm.to_dict()`` 的签名是 ``(self, is_public=False)``
+      （models/form.py:144），**压根没有 with_child 这个参数** ——
+      也就是说这条接口自从写下来就一调用必 TypeError → 500。
+      迁移时先照搬（行为不变优先），搬完确认无调用方后改成 ``to_dict()``。
+      没有沿用 ``with_child`` 的语义（改调 to_dict_event）是因为猜不出原意，
+      而 to_dict() 已经带上了 fees 等子对象。
     """
     forms = RegisForm.query.all()
-    return json_response([form.to_dict(with_child=True) for form in forms])
+    return json_response([form.to_dict() for form in forms])
 
 
 @router.get("/members")
+@login_required
+@permission_required("member_detail")
 def get_members():
     """会员（NRIC 资产）全量导出。
 
-    TODO(安全，本次不改): 这条和下面的 /payments 都是**不鉴权**的全量导出，
-      身份证号、付款记录直接对匿名可见。原样搬过来是为了行为不变，
-      加权限要单独评估（谁在调、加了会不会打断现有页面）。
+    ★ 2026-09 补上鉴权。在此之前这条是**完全不鉴权**的：匿名请求能直接拿到
+      258 条记录，含**身份证号**、中英文姓名、电话、邮箱。
+      是 Flask 时代就有的问题，迁移时先照搬（行为不变优先），
+      搬完确认无调用方后修掉：
+        · 新前端零引用（grep）
+        · 旧前端历史版本零引用（git grep 过 HEAD~15/20/25）
+        · 模板与后端内部零引用
+      权限选 member_detail（"会员详细资料"），与 /members 的内容对得上。
+
+    ⚠️ 顺序是 login_required 在外、permission_required 在内：
+      permission_required 未登录时返回的是 **500**（core/auth.py 契约 2），
+      垫一层 login_required 才会先得到 401。
     """
     members = NRIC_Asset.query.all()
     return json_response([member.to_dict() for member in members])
 
 
 @router.get("/payments")
+@login_required
+@permission_required("account_read")
 def get_payments():
+    """报名付款记录全量导出。与 /members 同批补上鉴权，理由见上。
+
+    权限选 account_read（"财务查看"）——付款记录属于财务数据。
+    """
     payments = RegisPayment.query.all()
     return json_response([payment.to_dict() for payment in payments])
 
