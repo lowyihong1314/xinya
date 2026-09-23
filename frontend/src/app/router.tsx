@@ -41,6 +41,12 @@ const AboutPage = lazy(() =>
 const EmailPage = lazy(() =>
   import("@/features/email/routes/EmailPage").then((m) => ({ default: m.EmailPage })),
 );
+const EventsPage = lazy(() =>
+  import("@/features/events/routes/EventsPage").then((m) => ({ default: m.EventsPage })),
+);
+const EventDetailPage = lazy(() =>
+  import("@/features/events/routes/EventDetailPage").then((m) => ({ default: m.EventDetailPage })),
+);
 const ProfilePage = lazy(() =>
   import("@/features/profile/routes/ProfilePage").then((m) => ({ default: m.ProfilePage })),
 );
@@ -77,6 +83,8 @@ const routes: RouteObject[] = [
     children: [
       { index: true, element: lazyBoundary(<HomePage />) },
       { path: "/profile", element: lazyBoundary(<ProfilePage />) },
+      { path: "/events", element: lazyBoundary(<EventsPage />) },
+      { path: "/events/:eventId", element: lazyBoundary(<EventDetailPage />) },
       { path: "/email", element: lazyBoundary(<EmailPage />) },
       { path: "/songbook", element: lazyBoundary(<SongbookPage />) },
       { path: "/songbook/:songId", element: lazyBoundary(<SongDetailPage />) },
