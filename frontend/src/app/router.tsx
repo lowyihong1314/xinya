@@ -18,7 +18,7 @@ import {
 } from "react-router-dom";
 
 import { ROUTER_MODE } from "@/shared/config/env";
-import { RequireAuth } from "@/shared/auth/guards";
+import { RequireAuth, RequirePermission } from "@/shared/auth/guards";
 import { LoadingState } from "@/shared/ui";
 import { AppShell } from "./layouts/AppShell";
 import { PublicLayout } from "./layouts/PublicLayout";
@@ -46,6 +46,9 @@ const EventsPage = lazy(() =>
 );
 const EventDetailPage = lazy(() =>
   import("@/features/events/routes/EventDetailPage").then((m) => ({ default: m.EventDetailPage })),
+);
+const UsersPage = lazy(() =>
+  import("@/features/users/routes/UsersPage").then((m) => ({ default: m.UsersPage })),
 );
 const ProfilePage = lazy(() =>
   import("@/features/profile/routes/ProfilePage").then((m) => ({ default: m.ProfilePage })),
@@ -85,6 +88,15 @@ const routes: RouteObject[] = [
       { path: "/profile", element: lazyBoundary(<ProfilePage />) },
       { path: "/events", element: lazyBoundary(<EventsPage />) },
       { path: "/events/:eventId", element: lazyBoundary(<EventDetailPage />) },
+      {
+        // 用户与权限：要部门或权限相关的任一权限才进得去
+        path: "/users",
+        element: (
+          <RequirePermission anyOf={["department", "department_edit", "permission", "permission_edit"]}>
+            {lazyBoundary(<UsersPage />)}
+          </RequirePermission>
+        ),
+      },
       { path: "/email", element: lazyBoundary(<EmailPage />) },
       { path: "/songbook", element: lazyBoundary(<SongbookPage />) },
       { path: "/songbook/:songId", element: lazyBoundary(<SongDetailPage />) },
