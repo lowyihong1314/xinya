@@ -1825,7 +1825,7 @@ def update_finance_payment_status(payment_id, data):
 
     scope = payment.payment_scope or "form"
     if scope == "membership":
-        from backend.app.user_control import membership as membership_service
+        from backend.api.user_control import membership as membership_service
 
         return membership_service.update_membership_payment_status(payment_id, data)
     if scope == "youth_class":

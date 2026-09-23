@@ -78,16 +78,14 @@ Starlette 是**先注册先匹配、不回溯**。``{x:int}`` 转换器已经保
 · ``first_or_404`` 的 404 响应体从 werkzeug 的 HTML 页变成 ``{"detail": …}``，
   这是 core/db.py 已登记的框架级差异（影响 /membership/payment/**/status 与 proof_image）。
 
-── ⚠️ 一条要人拍板的事（**没有**顺手改）───────────────────────────
-``/logout`` 在原 Flask 里只注册了 **GET**（``@user_control_bp.get("/logout")``），
-这里逐字照搬。但新前端 ``frontend/src/shared/auth/api.ts:logout()`` 发的是
-``http.post("/user_control/logout")`` —— 挂上去之后**新 SPA 的登出会拿到 405**。
-旧前端（frontend/src/form/react/member_portal/MemberPortalPage.tsx:387）发的是 GET，
-所以这不是搬迁引入的，是新旧两边本来就没对齐。
-两种收法，都不该由搬迁这一步自己决定：
-  (a) 给 logout 加一条 ``@router.post("/logout")`` 指向同一个函数（一行，不影响 GET）；
-  (b) 把前端那行改回 GET。
-TODO(待拍板): 选一个。在此之前 /logout 只认 GET。
+── ⚠️ ``/logout`` 只认 GET（已核过，不是漏了）──────────────────────
+原 Flask 里它就只注册了 GET（``@user_control_bp.get("/logout")``），这里逐字照搬。
+搬迁时发现新前端 ``frontend/src/shared/auth/api.ts:logout()`` 当时发的是 **POST**，
+也就是挂上去之后登出会 405 —— 而 AuthProvider 的 finally 照样会清空本地会话，
+于是表现成「点退出看着成功了，但服务端会话还在」，换个标签页刷新又是登录状态。
+**已经从前端那一侧改回 GET**（见 commit「user_control 搬到 FastAPI」）。
+所以：要加 POST 之前先想清楚 —— 现在两边是对齐的，加一条 POST 只会让下一个人
+再猜一次哪个才是正路。
 """
 
 import os

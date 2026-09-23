@@ -8,7 +8,7 @@
 
 ── 搬迁时被迫改掉的 import（不是风格，是会把 Flask 拉回进程）────────────
 
-  · ``from backend.app.media.paths import DATA_PATH, to_short_data_path``
+  · ``from backend.api.media.paths import DATA_PATH, to_short_data_path``
     → ``from .storage import ...``。理由见 storage.py 的模块头
     （import 那个子模块会执行 app/media/__init__.py，连锁拉起 flask 全家）。
   · ``from werkzeug.utils import secure_filename``（在 budget_pdf.py 里）
@@ -21,12 +21,17 @@
 
   ``_registration_income_rows`` 借 ``backend.app.form.services`` 的四个纯函数，
   ``_manual_income_rows`` 借 ``backend.app.account.services`` 的两个常量。
-  form / account 两个模块还没搬，它们的 services.py 顶部就有
-  ``from flask import ...``，所以**一旦有人请求 ``/event_data/event_budget/list/{id}``
-  或 ``/event_budget/report/{id}``，这个进程里的 flask 模块数就不再是 0**。
-  这里故意不抄一份过来：那四个函数是收费档位/年龄的业务规则，复制 = 两边各漂各的。
-  惰性 import 的位置保持在函数体内（和原代码一致），所以 **import 期** 仍是 0。
-  TODO(收尾): form / account 搬完后把这两处改成 ``backend.api.*``。
+  两个 import 都在**函数体内**（和原代码一致），所以本模块的 **import 期** flask 数是 0；
+  但**一旦有人请求 ``/event_data/event_budget/list/{id}`` 或
+  ``/event_budget/report/{id}``，进程里的 flask 模块数就不再是 0** ——
+  这两条路由一次调用会同时走到上面两个函数。
+
+  故意不抄一份过来：那四个函数是收费档位/年龄的业务规则，复制 = 两边各漂各的。
+
+  TODO(收尾): account 已经搬好了（``backend.api.account.service`` 里
+  ``MANUAL_FINANCE_ID_OFFSET`` / ``MANUAL_INCOME_TYPE_LABELS`` 都在，且 flask-free），
+  但 **form 还没搬**，只改 account 这一处并不能让 flask 数降到 0，
+  反而让「哪些依赖还欠着」变得不好数。所以两处一起等 form 落地再翻。
 
 ── 「看着像 bug、故意保留」清单 ──────────────────────────────────────
 
@@ -1345,7 +1350,7 @@ def _manual_income_rows(event_id):
     锁定不可编辑，按收款审核状态上色（process 绿 / checked 蓝 / fail 红）。
     已确认(checked)金额计入实际收入，处理中/失败不计。"""
     # ⚠️ account 模块还没搬，这一行同样会在运行时把 flask 拉进进程（见模块头）。
-    from backend.app.account.services import MANUAL_FINANCE_ID_OFFSET, MANUAL_INCOME_TYPE_LABELS
+    from backend.api.account.service import MANUAL_FINANCE_ID_OFFSET, MANUAL_INCOME_TYPE_LABELS
 
     records = (
         ManualIncome.query
