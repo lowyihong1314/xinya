@@ -34,6 +34,7 @@
 
 from __future__ import annotations
 
+import logging
 import threading
 from contextlib import contextmanager
 from contextvars import ContextVar
@@ -46,6 +47,8 @@ from sqlalchemy import orm
 from sqlalchemy.orm import DeclarativeBase, scoped_session, sessionmaker
 
 from core.config import settings
+
+log = logging.getLogger("core.db")
 
 __all__ = ["db", "Model", "engine", "session", "Pagination",
            "db_session_scope", "open_scope", "close_scope", "current_scope",
@@ -235,7 +238,41 @@ class _Query(orm.Query):
 #   所以 scopefunc 在没开作用域时直接抛 RuntimeError，异常信息里写清怎么修。
 #   ⚠️ 已知有这么一处：app/fahui/YLP/paiwei_job.py 的 threading.Thread 里会查库，
 #      那里必须改成 `with db_session_scope():`（那是别人的文件，已在交接里点名）。
-_SCOPE: ContextVar[str | None] = ContextVar("db_scope", default=None)
+class _Scope:
+    """一次请求（或一次 ``with db_session_scope()``）的作用域标识。
+
+    ★ 故意用**可变对象**而不是字符串，这一点是下面那个坑的解药：
+
+      ``copy_context()`` 复制上下文时复制的是**引用**。同步路由被丢进线程池、
+      ``asyncio.create_task()`` 起一个游离任务，拿到的都是同一个 _Scope 实例。
+      于是中间件这边一 ``close``，所有继承了这个上下文的线程/任务立刻就看得见 ——
+      再碰 db.session 会当场 RuntimeError，而不是安静地开一个没人管的新 Session。
+
+      用字符串做不到这件事：字符串是不可变的，请求结束后游离任务手里那份副本
+      还是原来那个键，scopefunc 照样返回它，ScopedRegistry 里查不到就
+      ``setdefault`` 一个**全新 Session**塞回去 —— 那条 PG 连接从此再没人还，
+      registry 里那个条目也永远不会被清掉。实测过：请求结束 2 秒后游离任务
+      仍然能查库成功，registry 永久多一条。池子只有 12 条/worker，
+      十几次就把整个 worker 卡死，而日志里一个字都没有。
+    """
+
+    __slots__ = ("key", "closed")
+
+    def __init__(self, key: str):
+        self.key = key
+        self.closed = False
+
+
+# default 为什么是 None 而不是 "global"：
+#   给一个「能用」的默认值（如 "global"）会让所有没进过中间件的代码路径
+#   —— 后台线程、CLI 脚本、alembic、定时任务 —— **静默共用同一个 Session**，
+#   连报错都没有。宁可让漏网的调用点当场炸掉，也不要它安静地共享。
+#   所以 scopefunc 在没开作用域时直接抛 RuntimeError，异常信息里写清怎么修。
+#   ⚠️ 已知有这么一处：app/fahui/YLP/paiwei_job.py 的 threading.Thread 里会查库，
+#      那里必须改成 `with db_session_scope():`（那是别人的文件，已在交接里点名）。
+#      实测 threading.Thread 不继承 ContextVar（新线程是空 Context），
+#      所以那里现在就是 RuntimeError —— 这是对的，是「响亮地失败」。
+_SCOPE: ContextVar["_Scope | None"] = ContextVar("db_scope", default=None)
 
 
 def _scopefunc() -> str:
@@ -247,7 +284,17 @@ def _scopefunc() -> str:
             "后台线程、CLI 脚本、alembic 请自己包一层 `with db_session_scope():`。"
             "（故意不给默认作用域：否则所有漏网路径会静默共用同一个 Session。）"
         )
-    return scope
+    if scope.closed:
+        # 到这里说明：有人在**请求已经结束之后**，用那次请求继承下来的上下文碰了数据库。
+        # 典型是 asyncio.create_task() 起的游离任务（core/realtime.py 的 _spawn_cleanup、
+        # _ensure_fanout 都是这个形状）。不拦的话会新开一个永不归还的 Session。
+        raise RuntimeError(
+            f"数据库会话作用域 {scope.key} 已经关闭了，不能再用。"
+            "常见原因：在请求里 asyncio.create_task()/开线程起了一个活得比请求久的任务，"
+            "它继承了请求的上下文，但请求结束时作用域已经被关掉。"
+            "这类任务必须自己包一层 `with db_session_scope():` 来界定事务边界。"
+        )
+    return scope.key
 
 
 # autoflush / expire_on_commit 为什么都是 True：这是 Flask-SQLAlchemy 的现状行为，
@@ -277,6 +324,11 @@ SessionLocal = sessionmaker(
 # 必须是货真价实的 scoped_session，不能是自己撸的代理类：
 # models/event_data.py:608 把 db.session 当普通 Session 对象传进函数里用
 # （session.scalar(...) / session.get(...)），scoped_session 已经把这些方法全代理好了。
+#
+# ⚠️ 写测试的人会踩的一个坑：``session.configure(...)`` 第一行就是 ``registry.has()``，
+#    而 has() 要调 scopefunc —— 在作用域外调它会直接吃一个 RuntimeError。
+#    测试里要换 bind，请改 ``SessionLocal.configure(bind=...)``（工厂那一层不碰 registry），
+#    或者包在 ``with db_session_scope():`` 里。
 session = scoped_session(SessionLocal, scopefunc=_scopefunc)
 
 
@@ -300,7 +352,7 @@ def open_scope() -> object:
        （现有唯一的生成器响应是 app/media/utils.py:117，只读文件不碰库，安全。）
     """
     # 线程 id 只是为了日志/排查时一眼看出是谁；唯一性靠 uuid4。
-    return _SCOPE.set(f"t{threading.get_ident()}-{uuid4().hex}")
+    return _SCOPE.set(_Scope(f"t{threading.get_ident()}-{uuid4().hex}"))
 
 
 def close_scope(token=None) -> None:
@@ -308,18 +360,49 @@ def close_scope(token=None) -> None:
 
     注意 Session.remove() 不会自动 commit —— 和 Flask-SQLAlchemy 一致，
     没显式 commit 的改动会被丢弃（Session.close 里 rollback 掉）。
+
+    这个函数**永远不抛异常**：它只会被中间件/上下文管理器的 finally 调用，
+    在那里抛出去会把真正的响应或真正的异常整个盖掉（症状是「接口 500，
+    日志里只有还连接失败」，真正的业务报错一个字都看不到）。
     """
+    scope = _SCOPE.get()
     try:
-        if _SCOPE.get() is not None:
-            # 顺序很重要：remove() 内部要调 scopefunc 拿键，所以必须在 reset 之前。
-            session.remove()
+        if scope is not None and not scope.closed:
+            # 顺序很重要：remove() 内部要调 scopefunc 拿键，所以必须在标记 closed / reset 之前。
+            try:
+                session.remove()
+            except Exception:  # noqa: BLE001
+                # ★ scoped_session.remove() 的实现是
+                #       if registry.has(): registry().close()
+                #       registry.clear()
+                #   close() 里要 rollback，连接被 PG 掐掉时**是会抛的** —— 一抛，
+                #   下面那句 clear() 就跳过了，registry 里那条记录和它握着的连接
+                #   从此没人回收。PG 重启/网络抖一下，在飞的请求就会**每条漏一个**，
+                #   漏够 12 条（pool_size 8 + overflow 4）整个 worker 就卡死。
+                #   所以这里自己补一次 clear，并且把异常降级成一条日志。
+                log.exception("关闭数据库会话失败，强制清掉 registry 条目：%s", scope.key)
+                try:
+                    session.registry.clear()
+                except Exception:  # noqa: BLE001
+                    log.exception("清 registry 也失败了：%s", scope.key)
     finally:
-        # ★ 复位必须放 finally。remove() 里会 rollback，连接断了 / 事务坏了是**会抛异常**的；
-        #   异常一旦跳过复位，ContextVar 就留着那个旧作用域键不放。在没有上下文副本的场景
-        #   （普通后台线程、CLI 脚本、alembic）里，这意味着之后所有本该炸出 RuntimeError 的
-        #   无作用域访问，会安静地复用这个残留 Session —— 正好是本模块最想堵死的那个坑。
+        # ★ 标记 closed 必须发生，而且要在 reset 之前 —— 这是给所有**继承了本上下文**
+        #   的线程池任务 / asyncio 游离任务留的开关：它们手里是同一个 _Scope 对象，
+        #   一标记就全都看得见，之后再碰 db.session 会响亮地 RuntimeError，
+        #   而不是安静地开一个永不归还的新 Session（见 _Scope 的注释）。
+        if scope is not None:
+            scope.closed = True
+        # ★ 复位也必须放 finally。异常一旦跳过复位，ContextVar 就留着那个旧作用域不放。
+        #   在没有上下文副本的场景（普通后台线程、CLI 脚本、alembic）里，
+        #   这意味着之后本该炸出 RuntimeError 的无作用域访问会安静地复用残留作用域。
         if token is not None:
-            _SCOPE.reset(token)
+            try:
+                _SCOPE.reset(token)
+            except ValueError:
+                # token 是在别的 Context 里 set 的（典型是异步生成器被 GC 在另一个
+                # context 里 aclose 掉）。这时当前 context 里本来就没这个值，
+                # 置空即可；硬 reset 只会把真正的异常盖掉。
+                _SCOPE.set(None)
         else:
             # 没带 token 的零散调用：直接置空。不置的话作用域其实并没有关掉。
             _SCOPE.set(None)
@@ -348,8 +431,14 @@ def db_session_scope():
 
 
 def current_scope() -> str | None:
-    """当前作用域键；没开作用域时返回 None。只用来排查问题，业务别依赖它。"""
-    return _SCOPE.get()
+    """当前作用域键；没开作用域时返回 None。只用来排查问题，业务别依赖它。
+
+    作用域已经关闭时**仍然返回那个键**（而不是 None）：排查游离任务串场时，
+    「是哪次请求留下来的」这条信息比「现在不能用了」更值钱。
+    要判断还能不能用，直接去碰 db.session 让它自己抛。
+    """
+    scope = _SCOPE.get()
+    return None if scope is None else scope.key
 
 
 class _QueryProperty:

@@ -664,12 +664,69 @@ def release_auth_context(request: Request) -> None:
         _current_request.reset(request_token)
 
 
+def _merge_vary_cookie(headers: list) -> None:
+    """往响应头里并进 ``Vary: Cookie``（Flask 的 save_session 每次都会加）。
+
+    下发了 Set-Cookie 却不声明 Vary，中间任何一层缓存（nginx proxy_cache / CDN）
+    都可能把甲的响应连同甲的 Set-Cookie 一起喂给乙 —— 那是直接串号，不是掉线。
+    """
+    for index, (key, value) in enumerate(headers):
+        if key.lower() == b"vary":
+            if b"cookie" in value.lower():
+                return
+            headers[index] = (key, value + b", Cookie")
+            return
+    headers.append((b"vary", b"Cookie"))
+
+
+def _refresh_session_cookie(request: Request, message: dict) -> None:
+    """★ 会话滑动续期：把本请求带上来的会话 Cookie 原样重签一遍再发回去。
+
+    没有这一步，会话就是「登录后固定 7 天，到点必掉」：Cookie 里的
+    itsdangerous 时间戳停在登录那一刻，load_session_cookie 的 max_age 一到就 SignatureExpired。
+    而 Flask 现在的行为是**每个响应都重写一次会话 Cookie**
+    （SESSION_REFRESH_EACH_REQUEST 默认 True，permanent 会话必重写；
+    再加上 REMEMBER_COOKIE_REFRESH_EACH_REQUEST=True 会 set 一个 session["_remember"]
+    又立刻 pop 掉，把 session.modified 顶成 True），所以线上只要七天内来过一次就不会掉线。
+
+    少了这段的现象很难往 Cookie 上想：切换当天一切正常，**整整七天后**，
+    在切换那天重新登录的那一批人同一时刻集体 401 —— 看起来像「某次发版把大家踢了」。
+    """
+    if "cookie" not in request.headers:
+        return
+    data = read_session(request)
+    if not data:
+        return
+
+    headers = message.get("headers")
+    if headers is None:
+        headers = []
+        message["headers"] = headers
+
+    # 登录/登出自己已经在这次响应里写了会话 Cookie，覆盖它等于把登出写回成登录。
+    prefix = f"{SESSION_COOKIE_NAME}=".encode("latin-1")
+    for key, value in headers:
+        if key.lower() == b"set-cookie" and value.lstrip().startswith(prefix):
+            return
+
+    carrier = Response()
+    _set_cookie(carrier, SESSION_COOKIE_NAME, dump_session_cookie(data), _session_max_age())
+    for key, value in carrier.raw_headers:
+        if key.lower() == b"set-cookie":
+            headers.append((key, value))
+    _merge_vary_cookie(headers)
+
+
 class AuthContextMiddleware:
     """纯 ASGI 中间件。
 
     为什么不用 BaseHTTPMiddleware：它把下游跑在另一个 task 里，
     contextvars 的传播方向有坑（写回来不保证）。纯 ASGI 中间件里
     set 的值对下游一定可见，也一定能在同一个 context 里 reset。
+
+    它同时负责会话 Cookie 的滑动续期（见 _refresh_session_cookie）——
+    放这里是因为这是唯一一个「每个 HTTP 响应都一定经过、且已经解过会话」的地方，
+    等价于 Flask 的 save_session 所在的位置。
     """
 
     def __init__(self, app):
@@ -681,8 +738,19 @@ class AuthContextMiddleware:
             return
         request = Request(scope, receive=receive)
         await resolve_user(request)
+
+        async def send_wrapper(message):
+            # 只在响应头那一帧动手；body 帧原样放行，别影响 SSE / 大文件的流式。
+            if message["type"] == "http.response.start":
+                try:
+                    _refresh_session_cookie(request, message)
+                except Exception as exc:
+                    # 续期失败顶多让用户七天后重登一次，绝不能因此把整个响应搞挂。
+                    print(f"[会话] Cookie 续期失败: {exc}")
+            await send(message)
+
         try:
-            await self.app(scope, receive, send)
+            await self.app(scope, receive, send_wrapper)
         finally:
             release_auth_context(request)
 
@@ -938,13 +1006,23 @@ def _session_identifier(request) -> str:
     """
     if request is None:
         return ""
+    # ★ 下面这段「先 encode 成 bytes 再塞进 f-string」看着像写错了，但**必须这么写**。
+    # flask_login 0.6.3 的 _create_identifier / _get_remote_addr 就是这么干的：
+    # 两个值都先 .encode("utf-8") 变成 bytes，再 f"{addr}|{ua}" ——
+    # 于是真正参与 sha512 的字符串是 "b'1.2.3.4'|b'Mozilla/5.0...'"（带 b'' 字面量）。
+    # 按「正常」写法用 str 拼，算出来的 _id 与线上既有会话里的那个对不上，
+    # 回滚到 Flask 时 SESSION_PROTECTION=basic 会判定 _id 不符、把 _fresh 抹成 False，
+    # 这一条写进来的唯一理由就是保证回滚不出岔子，写成 str 等于白写。
     address = request.headers.get("x-forwarded-for")
-    if address:
-        address = address.split(",")[0].strip()
-    else:
+    if address is None:
         client = getattr(request, "client", None)
         address = getattr(client, "host", None)
+    if address is not None:
+        # XFF 是逗号分隔的链，第一个才是真实客户端；flask_login 在 bytes 上切。
+        address = address.encode("utf-8").split(b",")[0].strip()
     user_agent = request.headers.get("user-agent")
+    if user_agent is not None:
+        user_agent = user_agent.encode("utf-8")
     base = f"{address}|{user_agent}"
     return hashlib.sha512(base.encode("utf-8")).hexdigest()
 
