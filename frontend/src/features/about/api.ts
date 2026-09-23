@@ -16,6 +16,7 @@ export const aboutKeys = {
   aboutUs: () => [...aboutKeys.all, "about-us"] as const,
   history: () => [...aboutKeys.all, "history"] as const,
   treeHole: () => [...aboutKeys.all, "tree-hole"] as const,
+  members: () => [...aboutKeys.all, "members"] as const,
 };
 
 /** 这两条是**公开**的（后端没挂 login_required），未登录也能看。 */
@@ -24,6 +25,16 @@ export const fetchHistory = () => http.get<HistoryEntry[]>("/info/get_our_histor
 
 /** 树洞要 view_tree_hole 权限；没权限时后端回 403 + 中文文案，由 ErrorState 显示。 */
 export const fetchTreeHole = () => http.get<TreeHoleMessage[]>("/info/tree_hole/messages");
+
+/**
+ * 成员名录。走 /user_control/get_all_user_data —— 它**不要求登录**
+ * （实测匿名可调），回的是 {login, data:[{id,username,display_name}]}。
+ * 简介页的「成员」分节就是展示这一份。
+ */
+export const fetchMembers = () =>
+  http.get<{ login: boolean; data: Array<{ id: number; username: string; display_name: string | null }> }>(
+    "/user_control/get_all_user_data",
+  );
 
 export const createTreeHoleMessage = (content: string) =>
   http.post("/info/tree_hole/messages", { content });

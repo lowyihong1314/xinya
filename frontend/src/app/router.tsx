@@ -145,7 +145,9 @@ const routes: RouteObject[] = [
       { path: "/login", element: lazyBoundary(<LoginPage />) },
       { path: "/forbidden", element: lazyBoundary(<ForbiddenPage />) },
       // 关于我们是公开页：后端那两条接口没挂 login_required
+      // 简介分节（与旧版 /info/:section 对齐）。无分节时组件内部重定向到 history。
       { path: "/about", element: lazyBoundary(<AboutPage />) },
+      { path: "/about/:section", element: lazyBoundary(<AboutPage />) },
       // APK 下载是给外部链接/二维码用的，不要求登录
       { path: "/app-download", element: lazyBoundary(<AppDownloadPage />) },
       // 抢答参与者从大屏二维码扫进来，多数是没账号的访客
