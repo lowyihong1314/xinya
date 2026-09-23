@@ -28,6 +28,12 @@ class SongbookEntry(db.Model):
     source_doc = db.Column(db.String(255), nullable=True)
     published = db.Column(db.Boolean, nullable=False, default=True)
     sort_order = db.Column(db.Integer, nullable=False, default=0, index=True)
+    # ★ 关联音频（可空）。唱游房间投屏歌词的同时就能放原曲或伴奏 ——
+    #   这是伴奏功能真正用得上的场景。一首音频可以被多条歌本条目引用
+    #   （同一首歌的 C 调/G 调是两条 entry，共用一份音频），所以**不是**唯一。
+    music_id = db.Column(
+        db.Integer, db.ForeignKey('music.id', ondelete='SET NULL'), nullable=True, index=True
+    )
     created_at = db.Column(db.DateTime, default=datetime.utcnow, nullable=False)
     updated_at = db.Column(
         db.DateTime,

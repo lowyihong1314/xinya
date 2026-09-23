@@ -32,6 +32,32 @@ class Music(db.Model):
     play_minutes = db.Column(db.Float, nullable=False, default=0.0)
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
 
+    # ── 伴奏（instrumental / kala / minus one）────────────────────────────
+    # 自引用 + **唯一约束**，两条合起来正好卡死 1 对 1：
+    #   · unique  → 一首歌最多只有一个伴奏（同一个 parent 不能被两行引用）
+    #   · 单列    → 一个伴奏最多属于一首歌
+    # 指向谁：**本行是谁的伴奏**。所以伴奏行有值，原曲行为 NULL。
+    # ondelete SET NULL：原曲被删时伴奏不跟着删（它是一份独立的音频），
+    # 只是失去归属、退回普通曲目。
+    accompaniment_of_id = db.Column(
+        db.Integer,
+        db.ForeignKey('music.id', ondelete='SET NULL'),
+        nullable=True,
+        unique=True,
+        index=True,
+    )
+    # accompaniment_of → 我是谁的伴奏（我是伴奏时有值）
+    # accompaniment    → 我的伴奏是谁（我是原曲时有值，uselist=False 因为 1 对 1）
+    accompaniment_of = db.relationship(
+        'Music',
+        remote_side=[id],
+        backref=db.backref('accompaniment', uselist=False),
+    )
+
+    @property
+    def is_accompaniment(self):
+        return self.accompaniment_of_id is not None
+
     album = db.relationship('Album', back_populates='musics')
     artist = db.relationship('Artist', back_populates='musics')
     user_play_minutes = db.relationship(
@@ -173,10 +199,13 @@ class Artist(db.Model):
             "avatar_url": self.avatar_url
         }
 
+# ★ position：歌单是**有序**的。原来这张关联表没有排序列，
+#   `playlist.musics` 的顺序由 DB 返回顺序决定 —— 同一个歌单两次打开可能不一样。
 playlist_music = db.Table(
     'playlist_music',
-    db.Column('playlist_id', db.Integer, db.ForeignKey('playlist.id'), nullable=False),
-    db.Column('music_id', db.Integer, db.ForeignKey('music.id'), nullable=False)
+    db.Column('playlist_id', db.Integer, db.ForeignKey('playlist.id', ondelete='CASCADE'), nullable=False),
+    db.Column('music_id', db.Integer, db.ForeignKey('music.id', ondelete='CASCADE'), nullable=False),
+    db.Column('position', db.Integer, nullable=False, server_default='0'),
 )
 
 class Playlist(db.Model):
@@ -188,7 +217,13 @@ class Playlist(db.Model):
     description = db.Column(db.Text, nullable=True)
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
 
-    musics = db.relationship('Music', secondary=playlist_music, backref='playlists')
+    musics = db.relationship(
+        'Music',
+        secondary=playlist_music,
+        # 按 position 排序。不写的话顺序不确定，用户拖动排序后刷新就乱。
+        order_by=playlist_music.c.position,
+        backref='playlists',
+    )
 
     def to_dict(self):
         return {
