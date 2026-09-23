@@ -47,6 +47,9 @@ const EventsPage = lazy(() =>
 const EventDetailPage = lazy(() =>
   import("@/features/events/routes/EventDetailPage").then((m) => ({ default: m.EventDetailPage })),
 );
+const ClaimsPage = lazy(() =>
+  import("@/features/claims/routes/ClaimsPage").then((m) => ({ default: m.ClaimsPage })),
+);
 const UsersPage = lazy(() =>
   import("@/features/users/routes/UsersPage").then((m) => ({ default: m.UsersPage })),
 );
@@ -88,6 +91,14 @@ const routes: RouteObject[] = [
       { path: "/profile", element: lazyBoundary(<ProfilePage />) },
       { path: "/events", element: lazyBoundary(<EventsPage />) },
       { path: "/events/:eventId", element: lazyBoundary(<EventDetailPage />) },
+      {
+        path: "/claims",
+        element: (
+          <RequirePermission anyOf={["account_read", "account_edit", "account_submit_claim"]}>
+            {lazyBoundary(<ClaimsPage />)}
+          </RequirePermission>
+        ),
+      },
       {
         // 用户与权限：要部门或权限相关的任一权限才进得去
         path: "/users",
