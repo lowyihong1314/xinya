@@ -68,6 +68,13 @@ TODO(安全): 要收的话先确认 APK 端的播放器是不是在未登录状�
 
 · 把文件字段发成**普通文本字段**时：Flask 那边 ``request.files.get`` 直接返回 None
   → 400「没有选择文件」；FastAPI 会在参数校验阶段回 422。同样发不出去，不管。
+
+· **HEAD**：Flask 给每条 GET 规则自动加 HEAD，FastAPI 的 ``@router.get`` 不加。
+  本模块把两条二进制下发路由（download / album_cover）显式写成
+  ``api_route(methods=["GET","HEAD"])`` 补回来（理由见那两个函数的 docstring）；
+  其余 GET 路由回 JSON，丢了 HEAD 没有调用方在意，跟着 gl / songbook 的写法保持
+  ``@router.get``。⚠️ 这条差异是**全项目性**的，不只本模块 —— 要不要统一补，
+  归接线的人决定，别只在这里改一半。
 """
 
 from typing import List, Optional
@@ -210,12 +217,19 @@ def music_detail(music_id: int):
     return service.music_detail(music_id)
 
 
-@router.get("/download/{music_id:int}")
+@router.api_route("/download/{music_id:int}", methods=["GET", "HEAD"])
 def download_music(music_id: int):
     """音频本体。公开（无 @login_required），与 Flask 一致。
 
     下发走 storage.stream_music_file → starlette FileResponse，**原生支持 Range**，
     所以 <audio> 能拖进度条、iOS Safari 能播。别改成自己读 bytes 返回。
+
+    ★ 为什么这条写 ``api_route(methods=["GET","HEAD"])`` 而不是 ``@router.get``：
+      Flask/werkzeug 给每条 GET 规则**自动加 HEAD**，FastAPI 的 ``.get()`` 不加
+      （starlette 的 Route 加，但 FastAPI 的 APIRoute 覆盖掉了）。少了 HEAD 的话，
+      会先发 HEAD 探 Content-Length 再发 Range 的播放器（部分原生播放器 / 下载管理器）
+      会拿到 405 直接放弃。JSON 路由丢了 HEAD 没人在意，二进制下发这条不行。
+      FileResponse 认得 HEAD（只发头不发体），所以加上就是对的。
     """
     return service.download_music(music_id)
 
@@ -278,12 +292,13 @@ def get_last_played_music():
 # ─────────────────────────── 专辑封面图 ───────────────────────────
 
 
-@router.get("/album_cover/{filename:path}")
+@router.api_route("/album_cover/{filename:path}", methods=["GET", "HEAD"])
 def album_cover(filename: str):
     """公开（无 @login_required），与 Flask 一致 —— 封面是 <img> 直接引用的。
 
     用 ``:path`` 转换器对应 Flask 的 ``<path:filename>``：filename 可以带斜杠，
     storage 那边靠 ``os.path.basename()`` 砍掉目录部分防穿越。
+    HEAD 的理由同 download_music。
     """
     return serve_album_image(filename)
 

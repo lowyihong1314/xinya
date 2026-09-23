@@ -27,7 +27,7 @@ import zipfile
 import pillow_heif
 from PIL import Image, ImageOps
 
-from backend.api.media.constants import ALLOWED_EXTENSIONS, IMAGE_EXTS, VIDEO_EXTS
+from backend.api.media.constants import ALLOWED_EXTENSIONS, IMAGE_EXTS
 from backend.core.files import secure_filename
 
 # HEIC/HEIF 也能进 JPEG 缓存流水线，但它们走 pillow_heif 而不是 PIL.Image.open，

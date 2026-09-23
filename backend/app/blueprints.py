@@ -2,20 +2,12 @@ from importlib import import_module
 
 
 BLUEPRINT_SPECS = [
-    ("backend.app.account", "account_bp", "/account", "api"),
-    ("backend.app.account", "payment_voucher_bp", "/account/print_payment_voucher", "api"),
-    ("backend.app.asset", "asset_bp", "/asset", "api"),
     ("backend.app.user_control", "user_control_bp", "/user_control", "api"),
-    ("backend.app.media", "media_bp", "/media", "root"),
-    ("backend.app.media", "nginx_media_router", "/media_file", "root"),
     ("backend.app.fahui.common.payment_routes", "fahui_payment_bp", "/payment", "api"),
     ("backend.app.fahui.YLP.payment_routes", "payment_bp", "/payment", "api"),
     ("backend.app.fahui.YLP.board_routes", "board_router_bp", "/board_router", "api"),
     ("backend.app.fahui.YLP.print_routes", "print_paiwei_bp", "/print_paiwei", "api"),
     ("backend.app.fahui.YLP.diy_paiwei", "diy_paiwei_bp", "/diy_paiwei", "api"),
-    ("backend.app.event", "event_data_bp", "/event_data", "api"),
-    ("backend.app.filesystem", "files_bp", "/files", "api"),
-    ("backend.app.music", "music_bp", "/music", "api"),
     ("backend.app.quiz_game", "quiz_game_bp", "/quiz_game", "api"),
     ("backend.app.mirror", "mirror_bp", "/mirror", "api"),
     ("backend.app.form", "form_bp", "/form", "api"),

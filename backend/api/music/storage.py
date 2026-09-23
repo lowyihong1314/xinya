@@ -269,6 +269,13 @@ def delete_music_file(file_name):
 
 def serve_album_image(filename):
     safe_name = os.path.basename(filename)
+    # ★ Starlette 的 ``{filename:path}`` 转换器是 ``.*``，**会匹配空串**；Flask 的
+    #   ``<path:filename>`` 不会（它要求至少一个字符），所以 ``/music/album_cover/``
+    #   在 Flask 下根本不匹配路由 = 404。这里不补这一句的话，空串 join 出来就是
+    #   ALBUM_IMAGE_DIR 本身，``os.path.exists`` 为真 → FileResponse 拿到一个目录 → 500。
+    #   补一条把它拉回 404，与 Flask 的可观测结果一致（``/a/b/`` 同理，basename 是空串）。
+    if not safe_name:
+        return json_response({"error": "图片不存在"}, status_code=404)
     file_path = os.path.join(ALBUM_IMAGE_DIR, safe_name)
     if not os.path.exists(file_path):
         return json_response({"error": "图片不存在"}, status_code=404)

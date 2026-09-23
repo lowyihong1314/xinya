@@ -1,4 +1,4 @@
-"""multipart 表单的 Flask 垫片 —— 只给本模块的三条上传路由用。
+"""表单 / 上传文件的 Flask 垫片 —— 只给本模块的三条上传路由用。
 
 **搬迁时新增的文件，Flask 那边没有对应物。** 存在的唯一理由：
 service.py 里三个函数的参数长得就是 Flask 的 ``request.form`` / ``request.files``：
@@ -29,6 +29,12 @@ service.py 里三个函数的参数长得就是 Flask 的 ``request.form`` / ``r
 ④ **``save()`` 从流的当前位置开始拷**，werkzeug 也是这样（它不 seek(0)）。
    本模块的调用顺序里文件都还没被读过，所以位置就是 0；这里显式回 0 更稳，
    免得以后有人在保存前先 ``.read()`` 了一次、落盘变成 0 字节。
+
+⑤ **``application/x-www-form-urlencoded`` 也要认。** Flask 的 ``request.form``
+   同时吃 multipart 和 urlencoded 两种编码；只判 multipart 的话，一个用
+   urlencoded 发过来的 submit_new_claim 会变成「字段全空」→ 文案从
+   「缺少必要字段」漂成「请选择部门」。starlette 的 ``request.form()`` 本来就两种
+   都解析，所以这里无条件调它（其它 content-type 它会返回空 FormData 且**不读 body**）。
 
 ── 为什么依赖写成 async，路由仍是 sync ─────────────────────────────
 ``await request.form()`` 必须在事件循环里跑。写成 async 依赖（FastAPI 在循环里
@@ -115,26 +121,31 @@ def _split_form(form):
     return fields, FormFiles(files)
 
 
-async def multipart_form(request: Request):
-    """FastAPI 依赖：把 multipart 请求拆成 ``(form, files)``。
+# 非文件字段的单条上限。starlette 默认 1 MB，而 werkzeug/Flask **没有**这个概念
+# （那边只有 max_content_length，且真正拦大请求的是 nginx 的 client_max_body_size）。
+# 本模块的 sign_json_data 是一整张手写签名的坐标点集，line_items 是最多 100 行明细，
+# 极端情况下都可能顶到 1 MB —— 撞上了的表现是一条莫名其妙的
+# 「Part exceeded maximum size of 1024KB.」400，而不是业务错误。
+# 放宽到 16 MB：这是**新增**的限制（Flask 时代没有），但比默认值安全得多地远离业务量级。
+# ⚠️ 文件部分不受这个值影响（starlette 只对没有 filename 的部分计数），附件大小仍由 nginx 管。
+_MAX_PART_SIZE = 16 * 1024 * 1024
 
-    ★ 不用 ``= Form(...)`` / ``= File(...)`` 参数声明，是为了守住**非 multipart
-      请求**这条分支：Flask 那边 ``request.form`` / ``request.files`` 对一个
-      JSON body 就是两个空映射，于是请求会一路走到业务校验（「缺少必要字段」/
+
+async def form_and_files(request: Request):
+    """FastAPI 依赖：把请求体拆成 ``(form, files)``，对齐 Flask 的两个属性。
+
+    ★ 不用 ``= Form(...)`` / ``= File(...)`` 参数声明，是为了守住**非表单请求**
+      这条分支：Flask 那边 ``request.form`` / ``request.files`` 对一个 JSON body
+      就是两个空映射，于是请求会一路走到业务校验（「缺少必要字段」/
       「请先选择图片或 PDF 附件」，都是 400）。一旦声明了 Form 参数，FastAPI 会
       在进路由之前判 422，那些 400 分支就没了 —— 前端在按文案弹提示。
     """
-    content_type = request.headers.get("content-type") or ""
-    if "multipart/form-data" not in content_type:
-        yield {}, FormFiles([])
-        return
-
     try:
-        form = await request.form()
+        form = await request.form(max_part_size=_MAX_PART_SIZE)
     except Exception:  # noqa: BLE001
         # 畸形 multipart：werkzeug 默认是**静默**给一个空表单（不抛），照着来 ——
-        # 往下走会自然落到业务层的 400。不照办的话 starlette 的 MultiPartException
-        # 会冒成 500。
+        # 往下走会自然落到业务层的 400。不照办的话 starlette 会把它变成一个
+        # detail 是英文的 HTTPException(400)，和本模块的中文错误信封对不上。
         yield {}, FormFiles([])
         return
 

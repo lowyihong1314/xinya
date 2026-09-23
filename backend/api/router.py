@@ -26,8 +26,9 @@ Starlette 的路由表是**先注册先匹配**（第一条 path 正则匹配上
 
 from fastapi import APIRouter
 
-from backend.api import app_release, camera, changyou_room, content, email, gl
-from backend.api import mobile, permission_mgmt, quiz, songbook, twilio
+from backend.api import account, app_release, asset, camera, changyou_room, content
+from backend.api import email, event, filesystem, gl, media, mobile, music
+from backend.api import permission_mgmt, quiz, songbook, twilio
 from backend.api import public_api  # 根级路由，必须最后 include
 from backend.api import web  # SPA 兜底，catch-all，必须最最后
 
@@ -45,6 +46,15 @@ api_router.include_router(songbook.router)         # /songbook/*            歌�
 api_router.include_router(content.router)          # /info/*                关于我们 / 历史 / 手册
 api_router.include_router(quiz.router)             # /quiz/*                抢答（出向推送已走 SSE）
 api_router.include_router(changyou_room.router)    # /changyou_room/*       唱游房间（出向推送已走 SSE）
+api_router.include_router(account.router)          # /account/*             报销 / 收入 / 付款凭证
+api_router.include_router(asset.router)            # /asset/*               资产
+api_router.include_router(filesystem.router)       # /files/*               文件系统
+api_router.include_router(music.router)            # /music/*               音乐库
+api_router.include_router(media.router)            # /media/*               媒体上传 / 转码 / 爱心
+api_router.include_router(event.router)            # /event_data/*          活动与相册
+# ★ media_file_router 挂在**根上**（/media_file/<path>），不带 /media 前缀：
+#   nginx 那条 `location /media_file/ { alias …; }` 和库里存的相对路径都咬死了根路径。
+api_router.include_router(media.media_file_router)  # /media_file/<path>    nginx 找不到文件时的回落
 
 # ── 第二组：挂在根上的，最后 ────────────────────────────────────
 api_router.include_router(public_api.router)       # /ping /forms /members /payments /event_data/{id} …
