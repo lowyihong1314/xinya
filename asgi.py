@@ -5,7 +5,7 @@
     gunicorn -k uvicorn.workers.UvicornWorker -w 4 -b 127.0.0.1:5006 asgi:app
 
 这个文件只做**装配**：造 FastAPI 实例、按顺序装中间件、注册异常处理器、挂三样
-不属于任何业务模块的东西（/healthz、/api/time、SSE 端点），以及启停钩子。
+不属于任何业务模块的东西（/healthz、/time、SSE 端点），以及启停钩子。
 业务路由一律不在这里写 —— 见文件末尾的「业务路由注册位」。
 
 ── 为什么装配顺序值得逐条写注释 ────────────────────────────────────────
@@ -315,7 +315,7 @@ async def healthz():
     )
 
 
-@app.get("/api/time", include_in_schema=False)
+@app.get("/time", include_in_schema=False)
 async def api_time(request: Request):
     """服务器时钟，替掉 socket 的 ``quiz:time:ping`` / ``game:time:ping``（12 文档 §3.1）。
 

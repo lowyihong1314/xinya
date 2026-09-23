@@ -23,3 +23,6 @@ paiwei_template/
 system_config.env
 system_config.*.env
 !system_config.example.env
+
+# gen_frontend_env.sh 的产物（含构建期注入的前端可见配置），不入库
+frontend/.env.production

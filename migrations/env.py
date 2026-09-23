@@ -1,18 +1,16 @@
 import logging
 from logging.config import fileConfig
 
-from flask import current_app
-
 from alembic import context
 
-# 支持裸 alembic 命令（如项目根目录跑 `alembic upgrade head`）：
-# 没有 Flask app context 时自己创建一个；`flask db` 走原路不受影响。
-try:
-    current_app._get_current_object()
-except RuntimeError:
-    from app import create_app
+# v3：alembic 不再依赖 Flask。
+# 原来要先 create_app() 推一个 app context，再从 current_app.extensions['migrate']
+# 里掏引擎 —— Flask 下线后这条路断了，而且为了跑一条迁移去装配整个 web 应用
+# 本来就没必要。现在直接从配置中心取连接串、从垫片取 metadata。
+from core.config import settings
+from models import db, load_model_modules
 
-    create_app().app_context().push()
+load_model_modules()   # 必须先 import 全部模型，metadata 才是满的
 
 # this is the Alembic Config object, which provides
 # access to the values within the .ini file in use.
@@ -25,20 +23,12 @@ logger = logging.getLogger('alembic.env')
 
 
 def get_engine():
-    try:
-        # this works with Flask-SQLAlchemy<3 and Alchemical
-        return current_app.extensions['migrate'].db.get_engine()
-    except (TypeError, AttributeError):
-        # this works with Flask-SQLAlchemy>=3
-        return current_app.extensions['migrate'].db.engine
+    return db.engine
 
 
 def get_engine_url():
-    try:
-        return get_engine().url.render_as_string(hide_password=False).replace(
-            '%', '%%')
-    except AttributeError:
-        return str(get_engine().url).replace('%', '%%')
+    # 转义 % —— configparser 会把 %% 之外的 % 当插值语法，密码里有 % 就会炸。
+    return db.engine.url.render_as_string(hide_password=False).replace('%', '%%')
 
 
 # add your model's MetaData object here
@@ -46,7 +36,7 @@ def get_engine_url():
 # from myapp import mymodel
 # target_metadata = mymodel.Base.metadata
 config.set_main_option('sqlalchemy.url', get_engine_url())
-target_db = current_app.extensions['migrate'].db
+target_db = db
 
 # other values from the config, defined by the needs of env.py,
 # can be acquired:
@@ -55,8 +45,6 @@ target_db = current_app.extensions['migrate'].db
 
 
 def get_metadata():
-    if hasattr(target_db, 'metadatas'):
-        return target_db.metadatas[None]
     return target_db.metadata
 
 
@@ -108,7 +96,7 @@ def run_migrations_online():
                 directives[:] = []
                 logger.info('No changes in schema detected.')
 
-    conf_args = current_app.extensions['migrate'].configure_args
+    conf_args = {}
     if conf_args.get("process_revision_directives") is None:
         conf_args["process_revision_directives"] = process_revision_directives
     if conf_args.get("include_object") is None:

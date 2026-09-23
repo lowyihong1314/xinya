@@ -160,7 +160,12 @@ def _cookie_security():
     samesite = str(settings.session_cookie_samesite or "lax").lower()
     if not secure and samesite == "none":
         samesite = "lax"
-    return secure, bool(settings.session_cookie_httponly), samesite
+    # 大小写要还原成 Flask 发出去的那个写法（None / Lax / Strict）。
+    # 规范说属性值不分大小写，主流浏览器也确实不分，但历史上有几个旧 WebView
+    # 只认首字母大写的 "None"，不认的就退回 Strict —— 那正好就是「APK 跨站请求
+    # 不带 Cookie」这种最难复现的掉线。对齐零成本，不赌。
+    canonical = {"none": "None", "lax": "Lax", "strict": "Strict"}
+    return secure, bool(settings.session_cookie_httponly), canonical.get(samesite, "Lax")
 
 
 def _cookie_path() -> str:

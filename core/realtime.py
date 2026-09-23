@@ -89,6 +89,29 @@ MAX_ROOM_ID_LENGTH = 200
 # 而不是把请求卡死在这里。
 FANOUT_READY_TIMEOUT = 2.0
 
+# ── Redis 超时：**不给默认值就是没有上限** ────────────────────────────────
+# redis-py 的 socket_timeout / socket_connect_timeout 默认都是 None：
+#   · 连不上（对端主机掉电、安全组改了规则）→ 等内核的 TCP 重试，Linux 默认 ~130 秒；
+#   · 连上了但对端不再回包（半开连接、NAT 表被回收）→ 读操作**永远不返回**。
+# 后者在这个文件里是致命的：publish_sync() 是 ffmpeg 转码线程每 0.5 秒调一次的，
+# 那条线程会就这么挂死（上面那个 try/except 捕不到「挂住」，只能捕异常）；
+# publish() 则会把一个 HTTP 请求永远挂在那里，连接数只增不减。
+REDIS_CONNECT_TIMEOUT = 3.0
+REDIS_SOCKET_TIMEOUT = 5.0
+
+# 扇出循环的轮询间隔。为什么必须轮询而不是 pubsub.listen()，见 _fanout_loop。
+PUBSUB_POLL_SECONDS = 10.0
+
+# 订阅连接的健康检查间隔（发一个 PING）。见 _fanout_loop 的注释：
+# 它只在 **每次 parse_response 之前** 才有机会触发，所以必须配合轮询用。
+PUBSUB_HEALTH_CHECK_SECONDS = 30
+
+# 停机时等断连清理的上限。见 stop_fanout。
+CLEANUP_DRAIN_TIMEOUT = 3.0
+
+# publish 失败时完整堆栈的最小间隔（秒），见 _log_publish_failure。
+PUBLISH_ERROR_LOG_INTERVAL = 30.0
+
 _APP_NAME_RE = re.compile(r"^[a-z][a-z0-9_]*$")
 
 
@@ -212,8 +235,15 @@ def _async_redis() -> aioredis.Redis:
         _async_client = aioredis.from_url(
             settings.redis_url,
             decode_responses=True,
-            # 长时间没流量的订阅连接会被中间设备悄悄掐断，靠 PING 及早发现
-            health_check_interval=30,
+            # 长时间没流量的订阅连接会被中间设备悄悄掐断，靠 PING 及早发现。
+            # ⚠️ 光配这个没用：redis-py 只在 parse_response 的开头查一次「该 PING 了吗」，
+            #    而 pubsub.listen() 是**一直卡在** parse_response 里面的，永远查不到。
+            #    所以扇出循环必须改成 get_message(timeout=...) 轮询，见 _fanout_loop。
+            health_check_interval=PUBSUB_HEALTH_CHECK_SECONDS,
+            socket_connect_timeout=REDIS_CONNECT_TIMEOUT,
+            # socket_timeout 不会影响订阅的阻塞读：get_message(timeout=N) 会把 N
+            # 显式传给 read_response，显式值优先，超时只是返回 None、不断连接。
+            socket_timeout=REDIS_SOCKET_TIMEOUT,
         )
     return _async_client
 
@@ -223,7 +253,17 @@ def _sync_redis() -> redis.Redis:
     if _sync_client is None:
         # 懒建连接很重要：agent 那几个 worker 是 fork/spawn 出来的子进程，
         # 若在导入期就建好连接，父子共用同一个 socket 会互相踩。
-        _sync_client = redis.from_url(settings.redis_url, decode_responses=True)
+        # ★ 超时必须给：调用方是 ffmpeg 转码线程和 worker 子进程，
+        #   它们没有任何看门狗，一旦卡在 socket 读上就是一条永远不回来的线程。
+        _sync_client = redis.from_url(
+            settings.redis_url,
+            decode_responses=True,
+            socket_connect_timeout=REDIS_CONNECT_TIMEOUT,
+            socket_timeout=REDIS_SOCKET_TIMEOUT,
+            # 池子里的连接可能已经闲置很久（两次转码之间），取出来先探活，
+            # 免得第一条进度消息必定失败。
+            health_check_interval=PUBSUB_HEALTH_CHECK_SECONDS,
+        )
     return _sync_client
 
 
@@ -277,6 +317,31 @@ def _payload(app: str, room_id: str, event: str, data: Any, sender: str | None) 
     )
 
 
+# 上一次打完整堆栈的时间。多线程并发读写这个 float 不加锁是故意的：
+# 最坏结果只是同一秒多打一两份堆栈，为它上锁不划算。
+_last_publish_error_at = 0.0
+
+
+def _log_publish_failure(where: str, app: str, room_id: str, event: str) -> None:
+    """Redis 掉线时 publish 会 **每一条消息** 失败一次。
+
+    ffmpeg 转码线程每 0.5 秒一条、排位 job 也在推，原样 log.exception 就是
+    每秒往日志里拍好几份 traceback。这有两个实打实的代价：
+      ① 格式化 traceback 不便宜，而 logging 写文件是**同步 I/O** ——
+         publish() 在 async 路径上，这就是货真价实的事件循环停顿；
+      ② 一次 Redis 长时间不可用足以把磁盘刷满，那才是真的全站停摆。
+    所以窗口内只留一份完整堆栈，其余降成一行。
+    """
+    global _last_publish_error_at
+    now = time.monotonic()
+    if now - _last_publish_error_at >= PUBLISH_ERROR_LOG_INTERVAL:
+        _last_publish_error_at = now
+        log.exception("realtime %s 失败 app=%s room=%s event=%s", where, app, room_id, event)
+    else:
+        log.warning("realtime %s 失败 app=%s room=%s event=%s（堆栈已限流）",
+                    where, app, room_id, event)
+
+
 async def publish(app: str, room_id: str, event: str, data: Any = None,
                   sender: str | None = None) -> bool:
     """异步发送端，给 FastAPI 路由处理器用。"""
@@ -286,7 +351,7 @@ async def publish(app: str, room_id: str, event: str, data: Any = None,
     except Exception:  # noqa: BLE001
         # 实时推送是尽力而为：Redis 抽风不该让一笔已经写库成功的业务回滚。
         # 客户端下次重连会重新拉 snapshot，状态自愈。
-        log.exception("realtime publish 失败 app=%s room=%s event=%s", app, room_id, event)
+        _log_publish_failure("publish", app, room_id, event)
         return False
     _stats["published"] += 1
     return True
@@ -303,7 +368,7 @@ def publish_sync(app: str, room_id: str, event: str, data: Any = None,
     try:
         _sync_redis().publish(channel_of(app, room_id), payload)
     except Exception:  # noqa: BLE001
-        log.exception("realtime publish_sync 失败 app=%s room=%s event=%s", app, room_id, event)
+        _log_publish_failure("publish_sync", app, room_id, event)
         return False
     _stats["published"] += 1
     return True
@@ -378,7 +443,25 @@ def _close_all_subscribers() -> None:
 
 
 async def _fanout_loop() -> None:
-    """worker 级的唯一订阅循环：psubscribe rt:* 然后在进程内扇出。"""
+    """worker 级的唯一订阅循环：psubscribe rt:* 然后在进程内扇出。
+
+    ★ 为什么是 get_message(timeout=...) 轮询，不是 `async for msg in pubsub.listen()`：
+
+    listen() 会一直卡在 parse_response 的阻塞读里。而 redis-py 的健康检查
+    （health_check_interval 那个 PING）恰恰只在 **进入 parse_response 之前** 查一次
+    「该 PING 了吗」—— 一条一整天没消息的订阅连接，就一整天不会发 PING。
+    于是中间设备（运营商 NAT、云上的 LB、conntrack 超时）把这条 TCP 悄悄回收之后，
+    服务端这边什么都不知道：listen() 继续安静地等一个永远不会来的字节。
+
+    这正好是本模块 docstring 里点名最坏的那种故障 ——
+    **SSE 客户端全都好好连着、心跳照发，但再也收不到任何事件，页面永远停在过去。**
+    没有异常、没有日志、监控也是绿的。
+
+    改成轮询之后：每 PUBSUB_POLL_SECONDS 秒回到 parse_response 一次，健康检查就有机会
+    触发；PING 发不出去或者回不来会抛异常，下面的 except 接住，重连自愈。
+    轮询超时本身不是错误 —— redis-py 在「调用方显式给了 timeout」时只返回 None，
+    不会断连接、也不会丢缓冲区里的数据。
+    """
     delay = 1.0
     while not _stopping:
         pubsub = None
@@ -388,7 +471,12 @@ async def _fanout_loop() -> None:
             _fanout_ready.set()
             delay = 1.0
             log.info("realtime 扇出已就绪，pattern=%s", CHANNEL_PATTERN)
-            async for msg in pubsub.listen():
+            while not _stopping:
+                msg = await pubsub.get_message(
+                    ignore_subscribe_messages=True, timeout=PUBSUB_POLL_SECONDS
+                )
+                if msg is None:
+                    continue  # 轮询超时或被吃掉的订阅确认/PONG，都不是错误
                 if msg.get("type") != "pmessage":
                     continue
                 try:
@@ -455,6 +543,15 @@ async def stop_fanout() -> None:
             # 真异常要留痕，否则扇出循环是怎么死的永远查不出来。
             log.exception("realtime 扇出任务收尾时抛异常")
         _fanout_task = None
+    # 断连清理是游离任务，没人等它。停机时不等一下，最后一批 presence 就永远留在
+    # Redis 里（只能靠 TTL 过期），重启后前几分钟人数是虚高的。
+    # 给个上限：不能让一个卡住的回调把整个停机流程无限拖住 ——
+    # gunicorn 的 graceful timeout 一到会直接 SIGKILL，那才是真的什么都没清掉。
+    # 清理任务要用 Redis，所以必须排在下面 aclose() 之前。
+    if _cleanup_tasks:
+        _, pending = await asyncio.wait(set(_cleanup_tasks), timeout=CLEANUP_DRAIN_TIMEOUT)
+        if pending:
+            log.warning("realtime 停机时还有 %d 个断连清理没跑完", len(pending))
     if _async_client is not None:
         try:
             await _async_client.aclose()
@@ -576,18 +673,98 @@ async def _call(fn: Callable[..., Any] | None, *args: Any) -> Any:
     return result
 
 
+# ── 数据库连接：SSE 必须自己还，中间件还不了 ──────────────────────────────
+# core/middleware.py 的 DBSessionMiddleware 是纯 ASGI 中间件，它的 finally 要等
+# **响应体全部发完** 才跑 —— 对一条挂一小时的 SSE 连接，就是一小时。
+# 作用域本身是惰性的不占连接，但只要 authorize / snapshot 查过一次库，
+# 那条 PG 连接就被这个 Session 一直握着不放。
+# 池子是 pool_size=8 + max_overflow=4 = 12 条/worker：**十几条 SSE 就能占满**，
+# 之后这个 worker 的每一个请求（不只是 SSE）都堵在等连接上，表现是「整站转圈」。
+# 这一条 DBSessionMiddleware 的 docstring 里已经点名说「由 core/realtime.py 自己补」。
+
+_db_scope_factory: Any = _MISSING
+
+
+def _get_db_scope_factory():
+    """拿 core.db.db_session_scope。延迟导入，免得 realtime 硬依赖 db 层。"""
+    global _db_scope_factory
+    if _db_scope_factory is _MISSING:
+        try:
+            from core.db import db_session_scope
+        except Exception:  # noqa: BLE001
+            _db_scope_factory = None
+            log.warning("realtime 取不到 core.db，SSE 不再管数据库连接的归还")
+        else:
+            _db_scope_factory = db_session_scope
+    return _db_scope_factory
+
+
+def _release_db_connection() -> None:
+    """把本请求 Session 占着的 PG 连接还回池子。**必须在工作线程里调**（它会走网络）。
+
+    用 rollback 而不是 session.remove()：
+      · remove() 会 close 掉 Session，把 user 等 ORM 对象 **detach** 掉，
+        后面回调再碰属性就是 DetachedInstanceError；
+      · rollback() 只是结束事务、把连接交还池子，对象仍然挂在 Session 上
+        （属性被 expire，下次访问自动重查、自动再要一条连接）。
+    没提交的改动会被丢弃 —— 这和请求结束时 close_scope 的行为一致，不改变语义。
+    """
+    try:
+        from core.db import session as db_session
+    except Exception:  # noqa: BLE001
+        return
+    try:
+        db_session.rollback()
+    except RuntimeError:
+        # 当前上下文压根没开作用域（core.db 的 _scopefunc 会这么抛），没什么可还的。
+        pass
+    except Exception:  # noqa: BLE001
+        log.exception("realtime 归还数据库连接失败")
+
+
+def _call_sync_in_own_db_scope(fn: Callable[..., Any], *args: Any) -> Any:
+    """在**自己**的数据库会话作用域里跑一个同步回调。只给断连清理用。
+
+    ★ 不这么做会漏连接，而且是无声的：
+
+    断连清理是个游离任务，create_task 复制的是请求上下文的**快照**——
+    里面那个作用域键还在，可请求侧的中间件早就 close_scope 过了，
+    scoped_session 的 registry 里对应的 Session 已经被摘掉。
+    这时候回调一查库，scoped_session 会拿那个**已经作废的键**新建一个 Session
+    塞回 registry，而之后再没有任何人会为这个键调 remove()：
+      · registry 里多一条永不回收的记录（键是 uuid4，每条连接都不一样 → 无限增长）；
+      · 池子里少一条永不归还的 PG 连接。
+    12 条池子，十几次断连就干净了，整个 worker 卡死在等连接上。
+
+    所以这里先开一个属于自己的作用域，跑完立刻关掉。
+    （async 的 on_disconnect 套不上这个同步上下文管理器 —— 它要是碰同步 DB，
+      请自己 `with db_session_scope():`。）
+    """
+    factory = _get_db_scope_factory()
+    if factory is None:
+        return fn(*args)
+    with factory():
+        return fn(*args)
+
+
 def _spawn_cleanup(spec: RealtimeApp, conn: Connection) -> None:
     """把断连清理丢成一个游离任务。
 
     不能在生成器的 finally 里 await：客户端断线时 Starlette 是 **取消** 这个任务，
     finally 里再 await 会立刻又吃到 CancelledError，presence 就清不掉了。
     """
-    if spec.on_disconnect is None:
+    fn = spec.on_disconnect
+    if fn is None:
         return
 
     async def _run():
         try:
-            await _call(spec.on_disconnect, conn)
+            if inspect.iscoroutinefunction(fn):
+                await fn(conn)
+            else:
+                result = await run_in_threadpool(_call_sync_in_own_db_scope, fn, conn)
+                if inspect.isawaitable(result):
+                    await result
         except Exception:  # noqa: BLE001
             log.exception("realtime on_disconnect 失败 app=%s conn=%s", conn.app, conn.id)
 
@@ -653,11 +830,19 @@ def make_realtime_router(prefix: str = "") -> APIRouter:
         keys = [room_key(app, r) for r in rooms]
 
         async def gen():
+            # ★ 只有真的建起了订阅才算「连过」，也才需要清理。
+            # 不加这个标志的话有一条很容易踩的路径：Redis 挂着的时候
+            # subscribe() 里的 _ensure_fanout() 要等满 FANOUT_READY_TIMEOUT，
+            # 用户等不及一刷新，生成器在 __aenter__ 里就被取消 ——
+            # 什么都还没登记，却照样触发一次 on_disconnect。
+            # 对「进场登记 / 退场注销」成对的模块，这就是人数被减成负数。
+            established = False
             try:
                 # ★ 顺序是先订阅、后推 snapshot，和设计文档 §4.2 的示意相反。
                 # 反过来的话，snapshot 查询期间（可能几十毫秒）发生的事件会掉进
                 # 订阅还没建立的窗口里，客户端就会停在一个旧状态上直到下一次事件。
                 async with subscribe(keys) as queue:
+                    established = True
                     # 先告诉客户端它的 connection_id：
                     # ① POST 动作带上它，服务端广播时塞进信封的 sender，
                     #    客户端据此丢掉自己发出的回声（旧 skip_sid 的语义）；
@@ -693,6 +878,18 @@ def make_realtime_router(prefix: str = "") -> APIRouter:
                         if snap is not None:
                             yield sse_pack("snapshot", {"room": r, "ts": now_ms(), "data": snap})
 
+                    # ★★★ 进长等待之前，把 PG 连接还回池子。★★★
+                    # 见 _release_db_connection 的注释：不还的话，一条 SSE 挂多久就占多久，
+                    # 十几条就能把一个 worker 的 12 条连接池占干净，整站转圈。
+                    #
+                    # 位置必须在这里，不能塞进 _call 里「每个回调跑完就还」：
+                    # snapshot 返回的 dict 里可能带着 ORM 对象，rollback 会把属性 expire 掉，
+                    # 上面 sse_pack 序列化时就会触发 lazy 重查 —— 那是一次货真价实的
+                    # **同步 DB 查询落在事件循环上**，比不还连接更糟。等全部序列化完再还。
+                    #
+                    # 也是同步调用，所以要丢线程池：rollback 要往 PG 发一个包。
+                    await run_in_threadpool(_release_db_connection)
+
                     while True:
                         try:
                             item = await asyncio.wait_for(queue.get(), timeout=KEEPALIVE_SECONDS)
@@ -708,7 +905,8 @@ def make_realtime_router(prefix: str = "") -> APIRouter:
                             break  # 扇出断了，让客户端重连自愈
                         yield item
             finally:
-                _spawn_cleanup(spec, conn)
+                if established:
+                    _spawn_cleanup(spec, conn)
 
         return StreamingResponse(
             gen(),

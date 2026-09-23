@@ -26,7 +26,8 @@
 ── 与 Flask-SQLAlchemy 的已知行为差异（要进 07 文档的「允许差异」清单）────────
 
 * ``get_or_404`` / ``first_or_404`` / ``paginate(error_out=True)`` 越界时抛
-  ``fastapi.HTTPException(404)``，响应体从 werkzeug 的 **HTML 错误页变成 JSON**
+  404（见 ``_raise_404``：Flask 期间抛 werkzeug NotFound，FastAPI 下抛 HTTPException），
+  响应体在 FastAPI 下从 werkzeug 的 **HTML 错误页变成 JSON**
   ``{"detail": ...}``。86+ 个调用点的 404 响应体都会变，上线前要逐个确认前端不解析 HTML。
 * ``paginate()`` 不再在 page/per_page 为 None 时去读 ``request.args``：
   FastAPI 下没有「随处可取的当前请求」这种东西。现有 3 处调用全部显式传参，无影响。
@@ -84,7 +85,7 @@ class Pagination:
         items = query.limit(per_page).offset((page - 1) * per_page).all()
         # 翻过头了当 404，与 Flask-SQLAlchemy 一致（第 1 页空是正常的「没数据」，不算越界）。
         if not items and page != 1 and error_out:
-            raise HTTPException(status_code=404)
+            _raise_404()
         self.items = items
 
         # order_by(None) 是必须的：count 查询带着 ORDER BY 在 PG 下纯属浪费，
@@ -101,7 +102,7 @@ class Pagination:
             per_page = 20 if per_page is None else int(per_page)
         except (TypeError, ValueError):
             if error_out:
-                raise HTTPException(status_code=404) from None
+                _raise_404()  # noqa: B904
             page, per_page = 1, 20
 
         # ★ max_per_page 默认是 None，不是 100。Pagination 文档里的 100 只对
@@ -113,11 +114,11 @@ class Pagination:
 
         if page < 1:
             if error_out:
-                raise HTTPException(status_code=404)
+                _raise_404()
             page = 1
         if per_page < 1:
             if error_out:
-                raise HTTPException(status_code=404)
+                _raise_404()
             per_page = 20
         return page, per_page
 
@@ -164,6 +165,31 @@ class Pagination:
 # ─────────────────────────── Query ───────────────────────────
 
 
+def _raise_404(description=None):
+    """抛 404 —— **迁移期必须对 Flask 和 FastAPI 都正确**。
+
+    ``fastapi.HTTPException`` 不是 werkzeug ``HTTPException`` 的子类
+    （实测 issubclass 为 False），所以在还跑 Flask 的时候直接抛它，
+    95 处 ``get_or_404`` 会变成 **500 + 堆栈**而不是 404 —— 而且是静默的行为退化：
+    接口"还能用"，只是把"没找到"报成了"服务器炸了"。
+
+    迁移分两次切机（先 PG 后 FastAPI，见 09 文档 D12），中间必然有一段
+    "已经用 core.db 垫片、但还是 Flask" 的时期，所以这里按运行时实际框架分流。
+    FastAPI 接管后 flask 不再安装，第一个分支自然失效，不需要回头清理。
+    """
+    detail = description or "Not Found"
+    try:
+        from flask import has_request_context
+        from werkzeug.exceptions import NotFound
+
+        if has_request_context():
+            raise NotFound(detail)
+    except ImportError:
+        pass  # 已经没有 Flask 了，走下面的 FastAPI 分支
+
+    raise HTTPException(status_code=404, detail=detail)
+
+
 class _Query(orm.Query):
     """带 Flask-SQLAlchemy 那几个便利方法的 Query。
 
@@ -184,13 +210,13 @@ class _Query(orm.Query):
         rv = self.get(ident)
         if rv is None:
             # 与 werkzeug 的 abort(404) 行为等价，但响应体从 HTML 变 JSON（见模块头）。
-            raise HTTPException(status_code=404, detail=description or "Not Found")
+            _raise_404(description)
         return rv
 
     def first_or_404(self, description=None):
         rv = self.first()
         if rv is None:
-            raise HTTPException(status_code=404, detail=description or "Not Found")
+            _raise_404(description)
         return rv
 
     def one_or_404(self, description=None):
@@ -198,7 +224,7 @@ class _Query(orm.Query):
         try:
             return self.one()
         except (sa.exc.NoResultFound, sa.exc.MultipleResultsFound):
-            raise HTTPException(status_code=404, detail=description or "Not Found") from None
+            _raise_404(description)  # noqa: B904
 
     def paginate(self, *, page=None, per_page=None, max_per_page=None,
                  error_out=True, count=True):
@@ -231,13 +257,11 @@ class _Query(orm.Query):
 #     —— 这一条才是关键：它证明「换成按线程分作用域就会串场」的那个坑真的被绕开了
 #   · 中间件 finally 里读回自己设的 scope，没有被并发的别人改掉
 #
-# default 为什么是 None 而不是 "global"：
-#   给一个「能用」的默认值（如 "global"）会让所有没进过中间件的代码路径
-#   —— 后台线程、CLI 脚本、alembic、定时任务 —— **静默共用同一个 Session**，
-#   连报错都没有。宁可让漏网的调用点当场炸掉，也不要它安静地共享。
-#   所以 scopefunc 在没开作用域时直接抛 RuntimeError，异常信息里写清怎么修。
-#   ⚠️ 已知有这么一处：app/fahui/YLP/paiwei_job.py 的 threading.Thread 里会查库，
-#      那里必须改成 `with db_session_scope():`（那是别人的文件，已在交接里点名）。
+# ⚠️ ContextVar 只挡住了「串场」，没挡住「活得比请求久」：线程池任务和
+#   asyncio.create_task() 起的游离任务拿到的是**同一份上下文的副本**，
+#   请求结束后它们手里那个作用域键还在。这就是下面 _Scope 要解决的问题。
+
+
 class _Scope:
     """一次请求（或一次 ``with db_session_scope()``）的作用域标识。
 
@@ -563,6 +587,11 @@ class _SQLAlchemyShim:
             return sa.Table(name, *args, **kwargs)
         return sa.Table(name, self.metadata, *args, **kwargs)
 
+
+    def get_engine(self, *args, **kwargs):
+        """Flask-Migrate 会调这个（migrations/env.py:30）。"""
+        return self.engine
+
     def create_all(self, bind=None):
         """只给测试和一次性脚本用。生产环境建表一律走 alembic。"""
         self.metadata.create_all(bind or self.engine)
@@ -571,14 +600,8 @@ class _SQLAlchemyShim:
         self.metadata.drop_all(bind or self.engine)
 
     def get_engine(self, *args, **kwargs):
-        """兼容 migrations/env.py:30 的 db.get_engine()。参数一律忽略（本项目无多库绑定）。"""
+        """alembic 与少数工具会问引擎。参数一律忽略（本项目无多库绑定）。"""
         return self.engine
-
-    def init_app(self, app=None):
-        """Flask 时代的入口（app/factory.py:34）。FastAPI 下引擎在 import 时就建好了，
-        这里留个 no-op 只为让漏改的调用点不至于 AttributeError —— 迁移完成后应当删掉调用方。
-        """
-        return None
 
     def __getattr__(self, name):
         # 兜底：sa 顶层 → sqlalchemy.orm 顶层。冷门类型（LONGTEXT 之类的方言类型除外）
