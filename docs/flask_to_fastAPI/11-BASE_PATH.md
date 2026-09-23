@@ -7,10 +7,14 @@
 现在每个项目一个域名，加项目就要加 CNAME。目标改成：
 
 ```
-utbabuddha.com/xinya/...      → 127.0.0.1:5006   （本项目）
+utbabuddha.com/UTBA_DEMO/...  → 127.0.0.1:5102   （本项目 · 开发环境，已定）
+utbabuddha.com/<生产值>/...    → 127.0.0.1:5006   （本项目 · 生产，待定见 09 D10）
 utbabuddha.com/fahui/...      → 127.0.0.1:5009
 utbabuddha.com/aci/...        → 127.0.0.1:5012
 ```
+
+> `APP_BASE_PATH` 是 `system_config.env` 里的**每环境配置**，代码里不写死。
+> 本地开发留空（`""`）时行为与现在完全一致，不用起 nginx 也能跑（见 §7）。
 
 只改 nginx 的 `location`，不碰 DNS。
 
@@ -38,7 +42,7 @@ utbabuddha.com/aci/...        → 127.0.0.1:5012
 | `frontend/vite.config.js` `base` | 1 | `` `${BASE}/static/vite/` ``（APK 仍是 `./`） |
 | `apiFetch()` 里拼 URL | 1 处（覆盖 400 个调用点） | `API_BASE + BASE_PATH + path` |
 | `window.location.origin + "/..."` | **41 处** | 统一走新助手 `publicUrl(path)` |
-| socket `io(origin)` | 5+ 处 | 传 `path: \`${BASE}/socket.io\`` |
+| socket `io(origin)` | 5+ 处 | **整体删除**，改订阅 `{BASE}/api/{app}/realtime`（见 [12](12-SSE改造方案.md)） |
 | `static/index.html` 与 `frontend/index.html` | 2 份 | `/static/vite/init.js`、`/favicon.ico` 要带前缀 |
 | 短链构造（二维码） | `buildMirrorPlayerUrl` / `buildGamePlayerUrl` 等 | 带上前缀 |
 
@@ -49,7 +53,7 @@ utbabuddha.com/aci/...        → 127.0.0.1:5012
 
 | 位置 | 要改 |
 |---|---|
-| nginx | `location /xinya/` + `location /xinya/socket.io/` + `location /xinya/media_file/` + `cctv_authz` |
+| nginx | `location /UTBA_DEMO/` + `location ~ /realtime$` + `location /UTBA_DEMO/media_file/` + `cctv_authz` |
 | systemd | 传入 `APP_BASE_PATH`（或由 `system_config.env` 提供） |
 
 ## 3. 设计：前缀由外层注入，应用内部只认相对路径
@@ -59,17 +63,19 @@ utbabuddha.com/aci/...        → 127.0.0.1:5012
 ### (A) nginx 剥掉前缀 + 应用知道自己的"公开前缀"
 
 ```nginx
-location /xinya/ {
+location /UTBA_DEMO/ {
     proxy_pass http://127.0.0.1:5006/;      # 末尾斜杠 = 剥掉 /xinya
-    proxy_set_header X-Forwarded-Prefix /xinya;
+    proxy_set_header X-Forwarded-Prefix /UTBA_DEMO;
     proxy_set_header X-Forwarded-Proto $scheme;
     proxy_set_header Host $host;
 }
-location /xinya/socket.io/ {
-    proxy_pass http://127.0.0.1:8000/socket.io/;
+# Socket.IO 本次全面下线，改 SSE；实时走统一路径（见 12 文档）
+location ~ /realtime$ {
+    proxy_pass http://127.0.0.1:5102;
     proxy_http_version 1.1;
-    proxy_set_header Upgrade $http_upgrade;
-    proxy_set_header Connection "upgrade";
+    proxy_buffering off;              # ★ 不关缓冲，SSE 消息会被攒住
+    proxy_read_timeout 3600s;
+    proxy_set_header X-Forwarded-Prefix /UTBA_DEMO;
 }
 ```
 
@@ -157,18 +163,21 @@ if (typeof input === "string" && input.startsWith("/")) {
 41 处 `window.location.origin + ...` 逐个换成 `publicUrl(...)` —— 这是本阶段
 **最琐碎但最容易漏**的部分，漏掉的表现是「二维码扫出来 404」。
 
-### Socket.IO
+### 实时订阅（SSE）
+
+Socket.IO 本次全面下线，前端改用统一入口：
 
 ```ts
-io(origin, { path: `${BASE_PATH}/socket.io`, withCredentials: true, transports: ["websocket", "polling"] })
+new EventSource(`${API_BASE}${BASE_PATH}/api/${app}/realtime?room=${id}`, { withCredentials: true })
 ```
 
-5+ 处连接点（`mediaRealtime.ts`、`CRM/fahui/socket.ts`、`useFormRealtime.ts`、
-`changyou/room/socket.ts`、`quizSocket.ts`）统一抽成一个 `connectSocket()` 助手再改。
+`BASE_PATH` 由 `VITE_BASE_PATH` 注入，与 REST 请求走同一套前缀逻辑。
+5 个原 socket 连接点（`mediaRealtime.ts`、`CRM/fahui/socket.ts`、`useFormRealtime.ts`、
+`changyou/room/socket.ts`、`quizSocket.ts`）统一收敛成一个 `subscribeRealtime()` 助手。
 
 ## 5. Cookie 的坑（多项目共域名时必炸）
 
-同一域名下 `/xinya` 和 `/fahui` 两个项目，如果 Cookie 都写 `path=/`：
+同一域名下 `/UTBA_DEMO` 和 `/fahui` 两个项目，如果 Cookie 都写 `path=/`：
 
 - 两个项目的会话 Cookie **同名**（Flask 默认都叫 `session`）→ 互相覆盖 → 用户在
   A 项目登录会把 B 项目踢下线。
@@ -177,7 +186,7 @@ io(origin, { path: `${BASE_PATH}/socket.io`, withCredentials: true, transports: 
 
 ```dotenv
 SESSION_COOKIE_NAME=xinya_session      # 每个项目不同名
-SESSION_COOKIE_PATH=/xinya             # = APP_BASE_PATH
+SESSION_COOKIE_PATH=/UTBA_DEMO             # = APP_BASE_PATH
 ```
 
 ⚠️ **改 Cookie 名/路径 = 所有在线用户掉线一次**。安排在低峰期，并提前通知。
@@ -186,7 +195,7 @@ SESSION_COOKIE_PATH=/xinya             # = APP_BASE_PATH
 ## 6. APK 怎么办
 
 APK 走 `VITE_API_BASE=https://utbabuddha.com`，加前缀后变成
-`VITE_API_BASE=https://utbabuddha.com` + `VITE_BASE_PATH=/xinya`。
+`VITE_API_BASE=https://utbabuddha.com` + `VITE_BASE_PATH=/UTBA_DEMO`。
 
 已确认**不需要为旧链接保留兼容入口**，所以 nginx 不必长期保留根路径 location。
 但这把风险转移到了 APK 上：
@@ -205,7 +214,7 @@ APK 走 `VITE_API_BASE=https://utbabuddha.com`，加前缀后变成
 ## 8. 验收
 
 - [ ] `APP_BASE_PATH=/` 时，所有行为与迁移前逐字节一致（回归对拍）
-- [ ] `APP_BASE_PATH=/xinya` 时：
+- [ ] `APP_BASE_PATH=/UTBA_DEMO` 时：
   - [ ] SPA 能打开，静态资源 200（两份 index.html 都验）
   - [ ] 登录 → 刷新仍在线（Cookie path 正确）
   - [ ] Socket.IO 连上（活动相册实时、表单实时、唱游房间任选其一验证）
