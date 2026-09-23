@@ -41,6 +41,12 @@ const AboutPage = lazy(() =>
 const EmailPage = lazy(() =>
   import("@/features/email/routes/EmailPage").then((m) => ({ default: m.EmailPage })),
 );
+const SongbookPage = lazy(() =>
+  import("@/features/songbook/routes/SongbookPage").then((m) => ({ default: m.SongbookPage })),
+);
+const SongDetailPage = lazy(() =>
+  import("@/features/songbook/routes/SongDetailPage").then((m) => ({ default: m.SongDetailPage })),
+);
 
 /** 懒加载的分块在下载期间要有占位，否则切页面会闪一下空白。 */
 function lazyBoundary(node: React.ReactNode) {
@@ -68,6 +74,8 @@ const routes: RouteObject[] = [
     children: [
       { index: true, element: lazyBoundary(<HomePage />) },
       { path: "/email", element: lazyBoundary(<EmailPage />) },
+      { path: "/songbook", element: lazyBoundary(<SongbookPage />) },
+      { path: "/songbook/:songId", element: lazyBoundary(<SongDetailPage />) },
     ],
   },
   {
