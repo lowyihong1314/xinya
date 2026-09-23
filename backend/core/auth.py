@@ -838,6 +838,7 @@ def _make_wrapper(func, guard):
                 return denied
             return await func(*args, **kwargs)
 
+        async_wrapper.__xinya_auth_guard__ = guard
         return async_wrapper
 
     @wraps(func)
@@ -847,6 +848,15 @@ def _make_wrapper(func, guard):
             return denied
         return func(*args, **kwargs)
 
+    # ★ 把 guard 挂在包装函数上，给 backend/main.py 的 422 处理器用。
+    #   原因：Flask 里装饰器**先于**请求体解析执行，未登录一律先拿 401；
+    #   FastAPI 反过来 —— 请求体校验发生在调用被装饰函数之前，于是
+    #   「会话过期 + body 不合法」会得到 422 而不是 401，前端按 401 做的
+    #   重新登录跳转就不触发了（用户卡在一个看不懂的报错上）。
+    #   422 处理器拿到这个 guard 就能补回「鉴权优先」的顺序。
+    #   注意不能用 functools.wraps 传递：wraps 只拷 __dict__ 里已有的键，
+    #   而这里是在 wraps 之后才赋值的，不会污染原函数。
+    sync_wrapper.__xinya_auth_guard__ = guard
     return sync_wrapper
 
 

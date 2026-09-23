@@ -174,7 +174,11 @@ def _raise_404(description=None):
     Flask 已经下线，分流去掉；注意 flask 包**还装在 venv 里**，留着
     ``from flask import ...`` 会在第一次 404 时把整个 Flask 拉回进程。
     """
-    raise HTTPException(status_code=404, detail=description or "Not Found")
+    # 默认文案用中文：Flask 时代这里是一张 **HTML 404 页**，前端的 parseJson
+    # 在 res.json() 那步抛错被吞掉，用户看到的是「请求失败」。改 JSON 之后若留
+    # "Not Found"，用户会看到一句英文 —— 比原来更糟。给中文默认值最接近原观感；
+    # 调用方传了自己的 description 就用它的（各模块大多传了具体文案）。
+    raise HTTPException(status_code=404, detail=description or "未找到")
 
 
 class _Query(orm.Query):

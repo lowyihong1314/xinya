@@ -26,7 +26,8 @@ Starlette 的路由表是**先注册先匹配**（第一条 path 正则匹配上
 
 from fastapi import APIRouter
 
-from backend.api import app_release, camera, email, mobile, permission_mgmt, twilio
+from backend.api import app_release, camera, changyou_room, content, email, gl
+from backend.api import mobile, permission_mgmt, quiz, songbook, twilio
 from backend.api import public_api  # 根级路由，必须最后 include
 
 api_router = APIRouter()
@@ -38,6 +39,11 @@ api_router.include_router(permission_mgmt.router)  # /permission/*          部�
 api_router.include_router(camera.router)           # /move_camera/*         CCTV（含 nginx authz）
 api_router.include_router(app_release.router)      # /app/releases|download APK 分发
 api_router.include_router(email.router)            # /email/*               公司邮箱收发 + 验证
+api_router.include_router(gl.router)               # /gl/*                  总账（科目/凭证/过账）
+api_router.include_router(songbook.router)         # /songbook/*            歌本
+api_router.include_router(content.router)          # /info/*                关于我们 / 历史 / 手册
+api_router.include_router(quiz.router)             # /quiz/*                抢答（出向推送已走 SSE）
+api_router.include_router(changyou_room.router)    # /changyou_room/*       唱游房间（出向推送已走 SSE）
 
 # ── 第二组：挂在根上的，最后 ────────────────────────────────────
 api_router.include_router(public_api.router)       # /ping /forms /members /payments /event_data/{id} …

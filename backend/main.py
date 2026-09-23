@@ -141,6 +141,12 @@ async def lifespan(app: FastAPI):
 _DOCS_ENABLED = not settings.is_production
 
 app = FastAPI(
+    # ★ 关掉尾斜杠自动重定向，还原 Flask 行为。
+    #   Starlette 默认 redirect_slashes=True：请求 /songbook/list/ 会 307 跳到
+    #   /songbook/list；Werkzeug 对**不带**尾斜杠的规则是直接 404。
+    #   全项目（新旧两边都查过）没有任何带尾斜杠的路由，所以关掉是纯粹的行为还原。
+    #   留着的话，307 会让浏览器把 POST 重发一次到新地址 —— 带副作用的接口就是重复提交。
+    redirect_slashes=False,
     title=settings.app_name,
     # ★ root_path = 本项目挂在域名下的哪一段（/UTBA_DEMO）。
     #   nginx 用 `proxy_pass http://127.0.0.1:5006/;`（末尾斜杠）把前缀剥掉再转进来，
@@ -254,6 +260,24 @@ async def _validation_error_handler(request: Request, exc: RequestValidationErro
     ⚠️ 老路由还没上 pydantic 模型之前基本不会走到这里；一旦某个老接口开始 422，
       多半是新写的依赖注入漏了默认值，去看日志里的 errors。
     """
+    # ★ 先补回「鉴权优先」——Flask 里 @login_required / @permission_required 是
+    #   **先于**请求体解析执行的，未登录一律先拿 401；FastAPI 反过来：请求体校验
+    #   发生在调用被装饰函数之前，所以「会话过期 + body 不合法」会返回 422，
+    #   前端按 401 做的重新登录跳转就不触发，用户卡在看不懂的「请求参数不合法」上。
+    #   core/auth.py 的 _make_wrapper 把 guard 挂在了包装函数上，这里取出来先跑一遍：
+    #   未登录/无权限就返回它的响应（401/403/500），身份没问题才继续报 422。
+    #   scope["endpoint"] 由 Starlette 的 Router 在匹配成功时写入，异常处理器里可读；
+    #   current_user 由 AuthContextMiddleware 在更外层设好，ContextVar 此刻仍然有效。
+    guard = getattr(request.scope.get("endpoint"), "__xinya_auth_guard__", None)
+    if guard is not None:
+        try:
+            denied = guard()
+        except Exception:  # noqa: BLE001 —— guard 自己炸了不能盖掉原始的 422
+            log.exception("422 处理器里跑鉴权 guard 失败，退回 422")
+            denied = None
+        if denied is not None:
+            return denied
+
     if _uses_new_envelope(request):
         return fail(
             "unprocessable_entity",
