@@ -132,7 +132,8 @@ export const CRM_MODULES: readonly CrmModule[] = [
     title: "报名表格",
     description: "特别活动报名、注册与记录查询。",
     icon: IdCard,
-    to: "/forms",
+    // 不能叫 /forms —— 后端 public_api 占着这条完整路径
+    to: "/registrations",
     anyOf: ["form_read", "form_edit"],
   },
   {
@@ -149,6 +150,22 @@ export const CRM_MODULES: readonly CrmModule[] = [
     description: "文件浏览、上传、权限和回收站管理。",
     icon: FolderTree,
     to: "/files",
+  },
+  {
+    key: "fahui_payments",
+    title: "法会收款",
+    description: "法会订单的收款记录与审核。",
+    icon: Coins,
+    to: "/fahui/payments",
+    anyOf: ["fahui_read"],
+  },
+  {
+    key: "asset_documents",
+    title: "出入库单据",
+    description: "入库、出库、盘点单据与过账。",
+    icon: Boxes,
+    to: "/assets/documents",
+    anyOf: ["asset_read", "asset_edit"],
   },
   {
     key: "songbook",

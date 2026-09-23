@@ -86,6 +86,33 @@ const ChangyouPlayerPage = lazy(() =>
 const AppDownloadPage = lazy(() =>
   import("@/features/app-releases/routes/AppDownloadPage").then((m) => ({ default: m.AppDownloadPage })),
 );
+const FormsPage = lazy(() =>
+  import("@/features/forms/routes/FormsPage").then((m) => ({ default: m.FormsPage })),
+);
+const FormDetailPage = lazy(() =>
+  import("@/features/forms/routes/FormDetailPage").then((m) => ({ default: m.FormDetailPage })),
+);
+const FahuiOrdersPage = lazy(() =>
+  import("@/features/fahui/routes/FahuiOrdersPage").then((m) => ({ default: m.FahuiOrdersPage })),
+);
+const FahuiOrderDetailPage = lazy(() =>
+  import("@/features/fahui/routes/FahuiOrderDetailPage").then((m) => ({ default: m.FahuiOrderDetailPage })),
+);
+const FahuiPaymentsPage = lazy(() =>
+  import("@/features/fahui/routes/FahuiPaymentsPage").then((m) => ({ default: m.FahuiPaymentsPage })),
+);
+const AssetsPage = lazy(() =>
+  import("@/features/assets/routes/AssetsPage").then((m) => ({ default: m.AssetsPage })),
+);
+const StockDocumentsPage = lazy(() =>
+  import("@/features/assets/routes/StockDocumentsPage").then((m) => ({ default: m.StockDocumentsPage })),
+);
+const FilesPage = lazy(() =>
+  import("@/features/files/routes/FilesPage").then((m) => ({ default: m.FilesPage })),
+);
+const FileTrashPage = lazy(() =>
+  import("@/features/files/routes/FileTrashPage").then((m) => ({ default: m.FileTrashPage })),
+);
 const CrmHomePage = lazy(() =>
   import("@/features/crm/routes/CrmHomePage").then((m) => ({ default: m.CrmHomePage })),
 );
@@ -148,6 +175,69 @@ const routes: RouteObject[] = [
         element: <RequireAuth>{lazyBoundary(<CrmHomePage />)}</RequireAuth>,
       },
       { path: "/events", element: lazyBoundary(<EventsPage />) },
+      {
+        // ★ 不能叫 /forms —— 后端 public_api 有一条 GET /forms（报名表全量导出），
+        //   前端用这个地址的话请求会被后端接走，点菜单只会下载一坨 JSON。
+        //   见 src/features/forms/api.ts 的说明。
+        path: "/registrations",
+        element: (
+          <RequirePermission anyOf={["form_read", "form_edit"]}>
+            {lazyBoundary(<FormsPage />)}
+          </RequirePermission>
+        ),
+      },
+      {
+        path: "/registrations/:formId",
+        element: (
+          <RequirePermission anyOf={["form_read", "form_edit"]}>
+            {lazyBoundary(<FormDetailPage />)}
+          </RequirePermission>
+        ),
+      },
+      {
+        path: "/fahui",
+        element: (
+          <RequirePermission anyOf={["fahui_read"]}>
+            {lazyBoundary(<FahuiOrdersPage />)}
+          </RequirePermission>
+        ),
+      },
+      {
+        path: "/fahui/orders/:orderId",
+        element: (
+          <RequirePermission anyOf={["fahui_read"]}>
+            {lazyBoundary(<FahuiOrderDetailPage />)}
+          </RequirePermission>
+        ),
+      },
+      {
+        path: "/fahui/payments",
+        element: (
+          <RequirePermission anyOf={["fahui_read"]}>
+            {lazyBoundary(<FahuiPaymentsPage />)}
+          </RequirePermission>
+        ),
+      },
+      {
+        path: "/assets",
+        element: (
+          <RequirePermission anyOf={["asset_read", "asset_edit"]}>
+            {lazyBoundary(<AssetsPage />)}
+          </RequirePermission>
+        ),
+      },
+      {
+        path: "/assets/documents",
+        element: (
+          <RequirePermission anyOf={["asset_read", "asset_edit"]}>
+            {lazyBoundary(<StockDocumentsPage />)}
+          </RequirePermission>
+        ),
+      },
+      { path: "/files", element: <RequireAuth>{lazyBoundary(<FilesPage />)}</RequireAuth> },
+      // ★ 不能叫 /files/trash —— 后端有 GET /files/trash。改叫 /files/recycle。
+      { path: "/files/recycle", element: <RequireAuth>{lazyBoundary(<FileTrashPage />)}</RequireAuth> },
+
       { path: "/events/:eventId", element: lazyBoundary(<EventDetailPage />) },
       {
         path: "/claims",
