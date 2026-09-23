@@ -126,17 +126,27 @@ const routes: RouteObject[] = [
     ],
   },
   {
-    // 应用区：整块要求登录。守卫放在路由层，页面组件里不再各自判断。
-    element: (
-      <RequireAuth>
-        <AppShell />
-      </RequireAuth>
-    ),
+    // 应用区。
+    //
+    // ★ **外壳本身不守卫** —— 与旧版一致（旧路由表一层 RequireAuth 都没有）。
+    //   首页是活动相册，公开可看；简介、分享进来的活动详情同理。
+    //   把整块套进 RequireAuth 的后果是「一打开网站就被弹去登录页」，
+    //   而这个站的大部分访客是从分享链接进来的、根本没有账号。
+    //
+    //   需要登录的页面**自己**包 RequireAuth / RequirePermission（见下）。
+    element: <AppShell />,
     children: [
+      // 首页：活动相册，**公开**
       { index: true, element: lazyBoundary(<HomePage />) },
-      { path: "/profile", element: lazyBoundary(<ProfilePage />) },
+      {
+        path: "/profile",
+        element: <RequireAuth>{lazyBoundary(<ProfilePage />)}</RequireAuth>,
+      },
       // CRM 聚合页：一页磁贴，点进去是各个子模块（与旧版一致）
-      { path: "/crm", element: lazyBoundary(<CrmHomePage />) },
+      {
+        path: "/crm",
+        element: <RequireAuth>{lazyBoundary(<CrmHomePage />)}</RequireAuth>,
+      },
       { path: "/events", element: lazyBoundary(<EventsPage />) },
       { path: "/events/:eventId", element: lazyBoundary(<EventDetailPage />) },
       {
@@ -156,15 +166,36 @@ const routes: RouteObject[] = [
           </RequirePermission>
         ),
       },
-      { path: "/email", element: lazyBoundary(<EmailPage />) },
-      { path: "/music/songbook", element: lazyBoundary(<SongbookPage />) },
-      { path: "/music", element: lazyBoundary(<MusicPage />) },
+      {
+        path: "/email",
+        element: <RequireAuth>{lazyBoundary(<EmailPage />)}</RequireAuth>,
+      },
+      {
+        path: "/music/songbook",
+        element: <RequireAuth>{lazyBoundary(<SongbookPage />)}</RequireAuth>,
+      },
+      {
+        path: "/music",
+        element: <RequireAuth>{lazyBoundary(<MusicPage />)}</RequireAuth>,
+      },
       // 唱游房间（music 域）
-      { path: "/music/rooms", element: lazyBoundary(<ChangyouRoomsPage />) },
-      { path: "/music/rooms/:roomId", element: lazyBoundary(<ChangyouRoomPage />) },
-      { path: "/music/rooms/:roomId/player", element: lazyBoundary(<ChangyouPlayerPage />) },
+      {
+        path: "/music/rooms",
+        element: <RequireAuth>{lazyBoundary(<ChangyouRoomsPage />)}</RequireAuth>,
+      },
+      {
+        path: "/music/rooms/:roomId",
+        element: <RequireAuth>{lazyBoundary(<ChangyouRoomPage />)}</RequireAuth>,
+      },
+      {
+        path: "/music/rooms/:roomId/player",
+        element: <RequireAuth>{lazyBoundary(<ChangyouPlayerPage />)}</RequireAuth>,
+      },
       // 抢答主持台
-      { path: "/quiz", element: lazyBoundary(<QuizHostPage />) },
+      {
+        path: "/quiz",
+        element: <RequireAuth>{lazyBoundary(<QuizHostPage />)}</RequireAuth>,
+      },
       {
         path: "/ledger",
         element: (
@@ -205,7 +236,10 @@ const routes: RouteObject[] = [
         path: "/cctv/playback",
         element: <RequirePermission anyOf={["cctv"]}>{lazyBoundary(<CctvPlaybackPage />)}</RequirePermission>,
       },
-      { path: "/music/songbook/:songId", element: lazyBoundary(<SongDetailPage />) },
+      {
+        path: "/music/songbook/:songId",
+        element: <RequireAuth>{lazyBoundary(<SongDetailPage />)}</RequireAuth>,
+      },
     ],
   },
   {
