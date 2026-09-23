@@ -1,3 +1,11 @@
+"""YLP 内部共用的小工具：版本号归一、金额计算、付款状态汇总、日期格式化。
+
+原 backend/app/fahui/YLP/shared.py，**一个字没改**（本来就不依赖 Flask）。
+
+★ ``ACTIVE_ORDER_VERSION`` 是**模块加载时**算一次的常量，跨年那一刻不会自己更新 ——
+  要当前版本请调 ``active_order_version()``。看着像 bug，但已有调用点两种都在用，
+  照搬（进程每天都会重启，实际影响是跨年当晚那一小段）。
+"""
 from datetime import datetime
 from decimal import Decimal, InvalidOperation
 

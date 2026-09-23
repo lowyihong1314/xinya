@@ -1,3 +1,8 @@
+"""DATA_ROOT 下法会资源路径的三个小助手。
+
+原 backend/app/fahui/common/ylp_storage.py，**一个字没改**（本来就不依赖 Flask）。
+名字里的 ylp 是历史遗留：print / diy / raw_docs 都在用它，不只是 YLP。
+"""
 from pathlib import Path
 
 from backend.core.paths import DATA_ROOT

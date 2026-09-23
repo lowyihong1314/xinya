@@ -80,7 +80,10 @@ from backend.models.user_data import User
 
 # prefix 用 settings.api_prefix 拼而不是写死：api_prefix 今天是空串（BASE_PATH 已经区分了
 # 项目，再套一层 /api 不带信息量），但配置项留着就是为了需要时还能整体加回来。
-router = APIRouter(prefix=f"{settings.api_prefix}/songbook", tags=["songbook"])
+# ★ 挂在 /music 下：歌本、音频库、唱游房间是同一个域的三块
+#   （房间推的就是 SongbookEntry，歌本条目现在也能关联 Music）。
+#   原地址是 /songbook/*，v3 起是 /music/songbook/*。
+router = APIRouter(prefix=f"{settings.api_prefix}/music/songbook", tags=["music:songbook"])
 
 DOCX_NS = {"w": "http://schemas.openxmlformats.org/wordprocessingml/2006/main"}
 TITLE_RE = re.compile(r"^(?P<number>\d+)\.\s*(?P<title>.+?)\s*$")

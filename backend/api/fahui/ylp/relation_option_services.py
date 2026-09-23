@@ -1,3 +1,8 @@
+"""牌位「关系」下拉选项的增删查与历史导入。
+
+原 backend/app/fahui/YLP/relation_option_services.py，**一个字没改**
+（本来就不依赖 Flask；对外返回 ``(dict, status_code)`` 元组，由路由转成 json_response）。
+"""
 from sqlalchemy import func
 
 from backend.models import db

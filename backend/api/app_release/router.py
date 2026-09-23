@@ -111,7 +111,7 @@ def list_releases(request: Request):
     return json_response({"releases": releases})
 
 
-@router.get("/download/{filename}")
+@router.api_route("/download/{filename}", methods=["GET", "HEAD"])
 def download_apk(filename: str):
     """按文件名下发单个 APK（附件下载）。
 

@@ -229,8 +229,22 @@ def delete_album(album_id):
 # ─────────────────────────── 歌曲 ───────────────────────────
 
 
-def list_music(page, per_page):
-    pagination = Music.query.order_by(Music.created_at.desc()).paginate(
+def list_music(page, per_page, search="", include_accompaniments=False):
+    """曲目列表。
+
+    ★ **默认排除伴奏**（``accompaniment_of_id IS NULL``）。
+      伴奏不是独立作品，混在「全部歌曲」里会让列表凭空多出一批重复歌名，
+      加入歌单/队列时也容易误选。要看伴奏就传 ``include_accompaniments=1``
+      （伴奏管理界面用）。
+    """
+    query = Music.query
+    if not include_accompaniments:
+        query = query.filter(Music.accompaniment_of_id.is_(None))
+    if search:
+        # ilike 而不是 like：PG 的 like 区分大小写，搜 "kala" 找不到 "Kala"
+        query = query.filter(Music.title.ilike(f"%{search}%"))
+
+    pagination = query.order_by(Music.created_at.desc()).paginate(
         page=page,
         per_page=per_page,
     )

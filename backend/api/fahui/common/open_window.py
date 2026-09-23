@@ -1,4 +1,7 @@
-"""法会报名开放时间：按「每年 MM-DD 至 MM-DD」循环窗口判断是否开放。"""
+"""法会报名开放时间：按「每年 MM-DD 至 MM-DD」循环窗口判断是否开放。
+
+原 backend/app/fahui/common/open_window.py，**一个字没改**（本来就不依赖 Flask）。
+"""
 
 import re
 from datetime import datetime, timedelta

@@ -1096,12 +1096,12 @@ def _profile_image_response(username, size):
     return FileResponse(os.path.join(PROFILE_PATH, "user.jpg"))
 
 
-@router.get("/get_profile_image/{username}")
+@router.api_route("/get_profile_image/{username}", methods=["GET", "HEAD"])
 def get_profile_image(username: str):
     return _profile_image_response(username, "M")
 
 
-@router.get("/get_profile_image/{username}/{size}")
+@router.api_route("/get_profile_image/{username}/{size}", methods=["GET", "HEAD"])
 def get_profile_image_sized(username: str, size: str):
     return _profile_image_response(username, size)
 

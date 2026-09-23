@@ -495,7 +495,7 @@ def update_claim_event_route(request_id: int, payload: Optional[dict] = _JSON_BO
 # 下面 5 条的路径里自带 "/print_payment_voucher" 这一段，拼上 router 的 prefix
 # 之后与原来的两层蓝图前缀**逐字一致**。改这里的任何一段路径 = 改前端。
 # --------------------------------------------------------------------------- #
-@router.get("/print_payment_voucher/download_payment_voucher/{request_id:int}")
+@router.api_route("/print_payment_voucher/download_payment_voucher/{request_id:int}", methods=["GET", "HEAD"])
 def download_payment_voucher(request_id: int):
     try:
         user = require_authenticated_user()
@@ -553,7 +553,7 @@ def sign_public_payment_voucher(token: str, payload: Optional[dict] = _JSON_BODY
         return json_response({"status": "error", "message": str(exc)}, 500)
 
 
-@router.get("/print_payment_voucher/public/{token}/download")
+@router.api_route("/print_payment_voucher/public/{token}/download", methods=["GET", "HEAD"])
 def download_public_payment_voucher(token: str):
     try:
         data, approver_list = build_public_payment_voucher_context(token)

@@ -11,15 +11,36 @@
 
     竖排：y 是第一个字的顶边，往下逐字排。
     横排：y 是这一行文字的顶边。
+
+── 搬迁说明（原 backend/app/fahui/YLP/diy_paiwei.py）────────────────────
+挂在 ``/diy_paiwei/*``（原 ``{API_PREFIX}/diy_paiwei``，只去掉了 ``/api`` 这一段），
+16 条路由一条不少。排版、坐标换算、字体注册、归一化那些逻辑一个字没动，
+只换了框架的四样东西：Blueprint → APIRouter、``jsonify(x), N`` → ``json_response(x, N)``、
+``flask.send_file`` → api/fahui/downloads.py 的同名复刻、
+``flask_login.current_user`` → ``core.auth`` 的 ContextVar 代理。
+
+★ 路由排布：``/templates`` ``/fonts`` ``/preview`` 这些具名路径和 ``/{diy_id:int}``
+  共处一个命名空间，靠 ``:int`` 转换器在匹配阶段就分家（"templates" 不是数字）。
+  声明顺序也照抄了原文件。
+★ ``""`` 与 ``"/"`` 两条并存（列表和新建各两条），是 Flask 那边就有的 —— 带不带
+  尾斜杠都要能用。照搬，别只留一条。
+★ 鉴权：**全部**是 ``@permission_required_any(*FAHUI_READ_PERMISSION_NAMES)``，
+  包括增删改。也就是说「有法会读权限就能改 D.I.Y 牌位」——
+  看着像权限配错了，但这是现状，不要顺手收紧成 account_edit。
+★ ``/{diy_id:int}`` 同时接 PUT 和 POST（Flask 那条规则写的就是两个方法），
+  这里叠两个装饰器。
 """
 
 import io
+from typing import Optional
 
-from flask import Blueprint, jsonify, request, send_file
-from flask_login import current_user
+from fastapi import APIRouter, Body
 
-from backend.app.form.permissions import permission_required_any
+from backend.api.fahui.downloads import send_file
+from backend.core.auth import current_user, permission_required_any
+from backend.core.config import settings
 from backend.core.paths import STATIC_ROOT
+from backend.core.responses import json_response
 from backend.models import db
 from backend.models.fahui import FahuiDiyPaiwei
 
@@ -28,7 +49,11 @@ from ..common.ylp_storage import preferred_dir
 from .print_generator import _compress_pdf, _merge_overlay_with_background
 from .print_points import load_location_points, resolve_paiwei_pdf_template
 
-diy_paiwei_bp = Blueprint("diy_paiwei", __name__)
+# prefix 用 settings.api_prefix 拼而不是写死 "/diy_paiwei"：api_prefix 今天是空串。
+router = APIRouter(prefix=f"{settings.api_prefix}/diy_paiwei", tags=["fahui-diy"])
+
+# 对应 Flask 的 ``request.get_json(silent=True) or {}``。
+_JSON_BODY = Body(default=None)
 
 # 模板底图的页面尺寸（PDF 点）。和 database/paiwei_template/pdf/*.pdf 对应，
 # 前端画布按这个比例铺背景图，所见即所得。
@@ -374,26 +399,26 @@ def render_diy_pdf(source_name: str, elements: list[dict]) -> io.BytesIO:
     return io.BytesIO(_compress_pdf(merged.getvalue()))
 
 
-@diy_paiwei_bp.route("/templates", methods=["GET"])
+@router.get("/templates")
 @permission_required_any(*FAHUI_READ_PERMISSION_NAMES)
 def list_templates_route():
     data = [{**entry, "offset_y": round(template_offset_y(entry["source_name"]), 2)} for entry in TEMPLATES]
-    return jsonify({"status": "success", "data": data})
+    return json_response({"status": "success", "data": data})
 
 
-@diy_paiwei_bp.route("/templates/<source_name>/anchors", methods=["GET"])
+@router.get("/templates/{source_name}/anchors")
 @permission_required_any(*FAHUI_READ_PERMISSION_NAMES)
 def template_anchors_route(source_name: str):
-    return jsonify({"status": "success", "data": build_anchors(_normalize_source(source_name))})
+    return json_response({"status": "success", "data": build_anchors(_normalize_source(source_name))})
 
 
-@diy_paiwei_bp.route("/templates/<source_name>/defaults", methods=["GET"])
+@router.get("/templates/{source_name}/defaults")
 @permission_required_any(*FAHUI_READ_PERMISSION_NAMES)
 def template_defaults_route(source_name: str):
-    return jsonify({"status": "success", "data": build_default_elements(_normalize_source(source_name))})
+    return json_response({"status": "success", "data": build_default_elements(_normalize_source(source_name))})
 
 
-@diy_paiwei_bp.route("/fonts", methods=["GET"])
+@router.get("/fonts")
 @permission_required_any(*FAHUI_READ_PERMISSION_NAMES)
 def list_fonts_route():
     """字体清单。web=True 的可以让浏览器下载同一个字体文件做 @font-face，编辑器所见即所得。"""
@@ -409,21 +434,23 @@ def list_fonts_route():
                 "size_kb": int(path.stat().st_size / 1024) if path is not None else 0,
             }
         )
-    return jsonify({"status": "success", "data": data, "default": DEFAULT_FONT_ID, "colors": sorted(ALLOWED_COLORS)})
+    return json_response(
+        {"status": "success", "data": data, "default": DEFAULT_FONT_ID, "colors": sorted(ALLOWED_COLORS)}
+    )
 
 
-@diy_paiwei_bp.route("/fonts/<font_id>/file", methods=["GET"])
+@router.get("/fonts/{font_id}/file")
 @permission_required_any(*FAHUI_READ_PERMISSION_NAMES)
 def font_file_route(font_id: str):
     entry = FONT_BY_ID.get(str(font_id or ""))
     path = _font_path(entry)
     if path is None:
-        return jsonify({"status": "error", "message": "这个字体没有可下载的文件"}), 404
+        return json_response({"status": "error", "message": "这个字体没有可下载的文件"}, 404)
     # 字体文件不会变，缓存 30 天；22MB 的楷体只有第一次要等
     return send_file(path, mimetype="font/ttf", max_age=2592000)
 
 
-@diy_paiwei_bp.route("/templates/<source_name>/image", methods=["GET"])
+@router.get("/templates/{source_name}/image")
 @permission_required_any(*FAHUI_READ_PERMISSION_NAMES)
 def template_image_route(source_name: str):
     """编辑器画布用的底图。渲一次缓存到磁盘，之后直接走静态文件 + 浏览器缓存。"""
@@ -435,34 +462,34 @@ def template_image_route(source_name: str):
 
     background = resolve_paiwei_pdf_template(source_name)
     if not background or not background.exists():
-        return jsonify({"status": "error", "message": f"缺少模板底图 {source_name}.pdf"}), 404
+        return json_response({"status": "error", "message": f"缺少模板底图 {source_name}.pdf"}, 404)
 
     try:
         import fitz  # PyMuPDF
 
         doc = fitz.open(str(background))
         if doc.page_count == 0:
-            return jsonify({"status": "error", "message": "模板 PDF 没有内容"}), 500
+            return json_response({"status": "error", "message": "模板 PDF 没有内容"}, 500)
         # 110 dpi：编辑器上够清楚，文件也不至于几 MB
         doc.load_page(0).get_pixmap(dpi=110).save(str(cache_file))
         doc.close()
     except Exception as exc:  # noqa: BLE001
-        return jsonify({"status": "error", "message": str(exc)}), 500
+        return json_response({"status": "error", "message": str(exc)}, 500)
 
     return send_file(cache_file, mimetype="image/png", max_age=2592000)
 
 
-@diy_paiwei_bp.route("", methods=["GET"])
-@diy_paiwei_bp.route("/", methods=["GET"])
+@router.get("")
+@router.get("/")
 @permission_required_any(*FAHUI_READ_PERMISSION_NAMES)
-def list_diy_route():
-    keyword = (request.args.get("value") or "").strip()
+def list_diy_route(value: str = ""):
+    keyword = (value or "").strip()
     query = FahuiDiyPaiwei.query
     if keyword:
         like = f"%{keyword}%"
         query = query.filter(db.or_(FahuiDiyPaiwei.title.like(like), FahuiDiyPaiwei.note.like(like)))
     rows = query.order_by(FahuiDiyPaiwei.updated_at.desc(), FahuiDiyPaiwei.id.desc()).all()
-    return jsonify(
+    return json_response(
         {
             "status": "success",
             "data": {"items": [row.to_dict(with_elements=False) for row in rows], "total": len(rows)},
@@ -470,20 +497,20 @@ def list_diy_route():
     )
 
 
-@diy_paiwei_bp.route("/<int:diy_id>", methods=["GET"])
+@router.get("/{diy_id:int}")
 @permission_required_any(*FAHUI_READ_PERMISSION_NAMES)
 def get_diy_route(diy_id: int):
     row = FahuiDiyPaiwei.query.get(diy_id)
     if not row:
-        return jsonify({"status": "error", "message": "找不到这张 D.I.Y 牌位"}), 404
-    return jsonify({"status": "success", "data": row.to_dict()})
+        return json_response({"status": "error", "message": "找不到这张 D.I.Y 牌位"}, 404)
+    return json_response({"status": "success", "data": row.to_dict()})
 
 
-@diy_paiwei_bp.route("", methods=["POST"])
-@diy_paiwei_bp.route("/", methods=["POST"])
+@router.post("")
+@router.post("/")
 @permission_required_any(*FAHUI_READ_PERMISSION_NAMES)
-def create_diy_route():
-    data = request.get_json(silent=True) or {}
+def create_diy_route(payload: Optional[dict] = _JSON_BODY):
+    data = payload or {}
     row = FahuiDiyPaiwei(
         title=str(data.get("title") or "未命名牌位")[:255],
         source_name=_normalize_source(data.get("source_name")),
@@ -493,17 +520,20 @@ def create_diy_route():
     )
     db.session.add(row)
     db.session.commit()
-    return jsonify({"status": "success", "data": row.to_dict()})
+    return json_response({"status": "success", "data": row.to_dict()})
 
 
-@diy_paiwei_bp.route("/<int:diy_id>", methods=["PUT", "POST"])
+@router.put("/{diy_id:int}")
+@router.post("/{diy_id:int}")
 @permission_required_any(*FAHUI_READ_PERMISSION_NAMES)
-def update_diy_route(diy_id: int):
+def update_diy_route(diy_id: int, payload: Optional[dict] = _JSON_BODY):
     row = FahuiDiyPaiwei.query.get(diy_id)
     if not row:
-        return jsonify({"status": "error", "message": "找不到这张 D.I.Y 牌位"}), 404
+        return json_response({"status": "error", "message": "找不到这张 D.I.Y 牌位"}, 404)
 
-    data = request.get_json(silent=True) or {}
+    data = payload or {}
+    # ★ 用 ``in`` 判「这个键有没有出现」而不是判真值：传 title="" 要能把标题清成
+    #   「未命名牌位」，不传则保持原样。别改成 ``data.get("title")``。
     if "title" in data:
         row.title = str(data.get("title") or "未命名牌位")[:255]
     if "source_name" in data:
@@ -514,26 +544,26 @@ def update_diy_route(diy_id: int):
         row.elements = _normalize_elements(data.get("elements"))
 
     db.session.commit()
-    return jsonify({"status": "success", "data": row.to_dict()})
+    return json_response({"status": "success", "data": row.to_dict()})
 
 
-@diy_paiwei_bp.route("/<int:diy_id>", methods=["DELETE"])
+@router.delete("/{diy_id:int}")
 @permission_required_any(*FAHUI_READ_PERMISSION_NAMES)
 def delete_diy_route(diy_id: int):
     row = FahuiDiyPaiwei.query.get(diy_id)
     if not row:
-        return jsonify({"status": "error", "message": "找不到这张 D.I.Y 牌位"}), 404
+        return json_response({"status": "error", "message": "找不到这张 D.I.Y 牌位"}, 404)
     db.session.delete(row)
     db.session.commit()
-    return jsonify({"status": "success"})
+    return json_response({"status": "success"})
 
 
-@diy_paiwei_bp.route("/<int:diy_id>/copy", methods=["POST"])
+@router.post("/{diy_id:int}/copy")
 @permission_required_any(*FAHUI_READ_PERMISSION_NAMES)
 def copy_diy_route(diy_id: int):
     row = FahuiDiyPaiwei.query.get(diy_id)
     if not row:
-        return jsonify({"status": "error", "message": "找不到这张 D.I.Y 牌位"}), 404
+        return json_response({"status": "error", "message": "找不到这张 D.I.Y 牌位"}, 404)
     clone = FahuiDiyPaiwei(
         title=f"{row.title or '未命名牌位'} 副本"[:255],
         source_name=row.source_name,
@@ -543,18 +573,20 @@ def copy_diy_route(diy_id: int):
     )
     db.session.add(clone)
     db.session.commit()
-    return jsonify({"status": "success", "data": clone.to_dict()})
+    return json_response({"status": "success", "data": clone.to_dict()})
 
 
-@diy_paiwei_bp.route("/<int:diy_id>/pdf", methods=["GET"])
+@router.get("/{diy_id:int}/pdf")
 @permission_required_any(*FAHUI_READ_PERMISSION_NAMES)
 def diy_pdf_route(diy_id: int):
     row = FahuiDiyPaiwei.query.get(diy_id)
     if not row:
-        return jsonify({"status": "error", "message": "找不到这张 D.I.Y 牌位"}), 404
+        return json_response({"status": "error", "message": "找不到这张 D.I.Y 牌位"}, 404)
 
     output = render_diy_pdf(row.source_name or "paiwei_1", row.elements or [])
     title = (row.title or "diy_paiwei").replace("/", "_").replace("\\", "_")
+    # 标题常常是中文，downloads.send_file 会按 werkzeug 的规则同时给出
+    # ASCII 兜底和 ``filename*=UTF-8''…`` 两段。
     return send_file(
         output,
         mimetype="application/pdf",
@@ -563,10 +595,10 @@ def diy_pdf_route(diy_id: int):
     )
 
 
-@diy_paiwei_bp.route("/preview", methods=["POST"])
+@router.post("/preview")
 @permission_required_any(*FAHUI_READ_PERMISSION_NAMES)
-def diy_preview_route():
+def diy_preview_route(payload: Optional[dict] = _JSON_BODY):
     """编辑中直接预览，不用先存。前端把当前画布内容原样发过来。"""
-    data = request.get_json(silent=True) or {}
+    data = payload or {}
     output = render_diy_pdf(_normalize_source(data.get("source_name")), _normalize_elements(data.get("elements")))
     return send_file(output, mimetype="application/pdf", as_attachment=False, download_name="diy_preview.pdf")

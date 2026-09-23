@@ -1,3 +1,9 @@
+"""收据：热敏打印机的 ESC/POS 字节流，以及给人下载的收据 PNG。
+
+原 backend/app/fahui/YLP/receipt.py，**一个字没改**（本来就不依赖 Flask）。
+``send_raw_to_printer`` 是直接往打印机的 9100 端口写 socket —— 同步阻塞，
+所以调它的路由必须是 ``def``（见 payment_routes.py 的硬约束 ②）。
+"""
 import os
 import socket
 

@@ -1,6 +1,6 @@
 """唱游房间：建房、列房、推歌、投屏、标记行、全场通知。
 
-原 app/changyou_room/routes.py（Flask Blueprint，挂在 /api/changyou_room）。
+原 app/music/rooms/routes.py（Flask Blueprint，挂在 /api/changyou_room）。
 只做框架适配：装饰器、参数提取、响应构造。校验顺序、状态码、错误文案、
 响应体的键名与嵌套形状全部逐字照搬 —— 前端
 frontend/src/music/changyou/react/room/api.ts 的 parseJson 按 ``data.error``
@@ -10,14 +10,14 @@ frontend/src/music/changyou/react/room/api.ts 的 parseJson 按 ``data.error``
 
 URL 变化（/api 这一段没了；BASE_PATH 由 nginx 剥掉，应用内一律写裸路径）：
 
-    /api/changyou_room/list                     → /changyou_room/list
-    /api/changyou_room/create                   → /changyou_room/create
-    /api/changyou_room/room/<room_id>           → /changyou_room/room/{room_id}
-    /api/changyou_room/room/<room_id>/push      → /changyou_room/room/{room_id}/push
-    /api/changyou_room/room/<room_id>/project   → /changyou_room/room/{room_id}/project
-    /api/changyou_room/room/<room_id>/marker    → /changyou_room/room/{room_id}/marker
-    /api/changyou_room/room/<room_id>/notify    → /changyou_room/room/{room_id}/notify
-    /api/changyou_room/room/<room_id>/current   → /changyou_room/room/{room_id}/current
+    /api/music/rooms/list                     → /music/rooms/list
+    /api/music/rooms/create                   → /music/rooms/create
+    /api/music/rooms/{room_id}           → /music/rooms/room/{room_id}
+    /api/music/rooms/{room_id}/push      → /music/rooms/room/{room_id}/push
+    /api/music/rooms/{room_id}/project   → /music/rooms/room/{room_id}/project
+    /api/music/rooms/{room_id}/marker    → /music/rooms/room/{room_id}/marker
+    /api/music/rooms/{room_id}/notify    → /music/rooms/room/{room_id}/notify
+    /api/music/rooms/{room_id}/current   → /music/rooms/room/{room_id}/current
 
 ── ★ Socket.IO 这次只搬了一半 ─────────────────────────────────────────────
 
@@ -25,7 +25,7 @@ URL 变化（/api 这一段没了；BASE_PATH 由 nginx 剥掉，应用内一律
 **入向事件**（app/socket_events.py）本次**没动**，两个都还挂在 Flask-SocketIO 上：
 
   · ``changyou_join_room`` —— 客户端进房。SSE 没有"加入房间"这个动作，
-    订阅本身就是加入：GET /changyou_room/realtime?room={room_id}。
+    订阅本身就是加入：GET /music/rooms/realtime?room={room_id}。
     对应的 ``changyou_room_joined`` 回执也随之消失（EventSource 的 onopen 即回执）。
   · ``changyou_push_song`` —— 客户端直接广播一份 payload 给同房间其他人，
     **绕过了服务端的任何校验和 Redis 落盘**（连是不是房主都不看）。
@@ -41,7 +41,7 @@ URL 变化（/api 这一段没了；BASE_PATH 由 nginx 剥掉，应用内一律
   播放端只能靠自己刷新 /room/{id}/current。上线排期要知道这件事。
 
   ⚠️ 本模块还**没有** core.realtime.register(RealtimeApp(...))，所以
-  GET /changyou_room/realtime 现在会 404。补注册要一并定 authorize
+  GET /music/rooms/realtime 现在会 404。补注册要一并定 authorize
   （房间是公开可看的，见下面 get_room_current 的注释）和 snapshot 回调，
   那是前端改造那一步的事。
 
@@ -98,7 +98,17 @@ from backend.models.songbook import SongbookEntry
 
 # prefix 用 settings.api_prefix 拼而不是写死：api_prefix 今天是空串
 # （BASE_PATH 已经区分了项目），但配置项留着就是为了需要时能整体加回来。
-router = APIRouter(prefix=f"{settings.api_prefix}/changyou_room", tags=["changyou_room"])
+# ★ 挂在 /music 下：唱游房间推的就是歌本条目（song_entry_id），
+#   而歌本条目现在能关联音频 —— 三者是同一个域。
+#   原地址是 /music/rooms/*，v3 起是 /music/rooms/*。
+router = APIRouter(prefix=f"{settings.api_prefix}/music/rooms", tags=["music:rooms"])
+
+# ⚠️ **路由顺序有约束**：``/list`` 和 ``/create`` 这两条具名路径必须注册在
+#    ``/{room_id}`` **之前**。Starlette 是先注册先匹配、不回溯找更精确的，
+#    反过来的话 GET /music/rooms/list 会被当成 room_id="list" 去查 Redis，
+#    返回 404「房间不存在或已过期」—— 而列表页只会显示一句莫名其妙的报错。
+#    （原来挂在 /changyou_room/room/<id> 下时多了一段 room/，天然不会撞；
+#     v3 把那段去掉之后，这个约束才变成必须靠顺序保证。）
 
 # 对应 Flask 的 ``request.get_json() or {}``：没有 body 时落到 None，
 # 路由里 ``payload or {}`` 补成空字典，后面的校验分支自然走原来那条路。
@@ -214,7 +224,7 @@ def create_room(payload: Optional[dict] = _JSON_BODY):
     return json_response({"success": True, "room": serialize_room(room_id, room_fields)})
 
 
-@router.get("/room/{room_id}")
+@router.get("/{room_id}")
 @login_required
 def get_room(room_id: str):
     room, denied = _room_or_404(room_id)
@@ -227,7 +237,7 @@ def get_room(room_id: str):
     return json_response({"room": room})
 
 
-@router.post("/room/{room_id}/push")
+@router.post("/{room_id}/push")
 @login_required
 def push_room_song(room_id: str, payload: Optional[dict] = _JSON_BODY):
     """推一首歌到房间，并清空上一首留下的投屏状态。"""
@@ -268,7 +278,7 @@ def push_room_song(room_id: str, payload: Optional[dict] = _JSON_BODY):
     return json_response({"success": True, **current_payload})
 
 
-@router.post("/room/{room_id}/project")
+@router.post("/{room_id}/project")
 @login_required
 def project_room_page(room_id: str, payload: Optional[dict] = _JSON_BODY):
     """投屏某一页（歌词块 + 当前高亮行）。"""
@@ -320,7 +330,7 @@ def project_room_page(room_id: str, payload: Optional[dict] = _JSON_BODY):
     return json_response({"success": True, **current_payload})
 
 
-@router.post("/room/{room_id}/marker")
+@router.post("/{room_id}/marker")
 @login_required
 def update_room_marker(room_id: str, payload: Optional[dict] = _JSON_BODY):
     """只挪高亮行，不动投屏内容（演出时点得最频繁的一条）。"""
@@ -343,7 +353,7 @@ def update_room_marker(room_id: str, payload: Optional[dict] = _JSON_BODY):
     return json_response({"success": True, **current_payload})
 
 
-@router.post("/room/{room_id}/notify")
+@router.post("/{room_id}/notify")
 @login_required
 def notify_room(room_id: str, payload: Optional[dict] = _JSON_BODY):
     """全场通知：一行字或一个二维码。**纯广播，不落 Redis**。"""
@@ -379,7 +389,7 @@ def notify_room(room_id: str, payload: Optional[dict] = _JSON_BODY):
     return json_response({"success": True, "notification": notification})
 
 
-@router.get("/room/{room_id}/current")
+@router.get("/{room_id}/current")
 def get_room_current(room_id: str):
     """播放端拉当前状态。
 

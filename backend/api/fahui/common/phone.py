@@ -7,6 +7,8 @@
 
 规范化规则和前端 frontend/src/js/phone.ts 的 normalizePhoneMY 对齐，
 额外多认一种新加坡号（65 + 8 位）和已经带 + 的国际号。
+
+原 backend/app/fahui/common/phone.py，**一个字没改**（本来就不依赖 Flask）。
 """
 
 import re

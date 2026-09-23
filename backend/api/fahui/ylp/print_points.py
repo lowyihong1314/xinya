@@ -1,3 +1,7 @@
+"""牌位模板的底图路径与格子坐标（DB 优先，表为空时退回读 json 文件）。
+
+原 backend/app/fahui/YLP/print_points.py，**一个字没改**（本来就不依赖 Flask）。
+"""
 import json
 from pathlib import Path
 

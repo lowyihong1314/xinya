@@ -43,10 +43,10 @@ api_router.include_router(camera.router)           # /move_camera/*         CCTV
 api_router.include_router(app_release.router)      # /app/releases|download APK 分发
 api_router.include_router(email.router)            # /email/*               公司邮箱收发 + 验证
 api_router.include_router(gl.router)               # /gl/*                  总账（科目/凭证/过账）
-api_router.include_router(songbook.router)         # /songbook/*            歌本
+api_router.include_router(songbook.router)         # /music/songbook/*      歌本（music 域）
 api_router.include_router(content.router)          # /info/*                关于我们 / 历史 / 手册
 api_router.include_router(quiz.router)             # /quiz/*                抢答（出向推送已走 SSE）
-api_router.include_router(changyou_room.router)    # /changyou_room/*       唱游房间（出向推送已走 SSE）
+api_router.include_router(changyou_room.router)    # /music/rooms/*         唱游房间（music 域，出向走 SSE）
 api_router.include_router(account.router)          # /account/*             报销 / 收入 / 付款凭证
 api_router.include_router(asset.router)            # /asset/*               资产
 api_router.include_router(filesystem.router)       # /files/*               文件系统

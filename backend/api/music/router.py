@@ -203,13 +203,22 @@ def edit_album(album_id: int, payload: Optional[dict] = _JSON_BODY):
 
 
 @router.get("/list")
-def list_music(page: str = "1", per_page: str = "20"):
+def list_music(
+    page: str = "1",
+    per_page: str = "20",
+    search: str = "",
+    include_accompaniments: str = "",
+):
     # 原式是 ``int(request.args.get("page", 1))`` —— **没有** type=int，也没有 try。
     # 所以 ``?page=abc`` / ``?page=`` 在 Flask 下是 ValueError → 500，不是 400。
     # 这里把默认值写成字符串 "1"/"20" 再原样 int()，两种情况都与 Flask 一致
     # （backend/main.py 注册了兜底的 Exception 处理器，同样出 500）。
     # ⚠️ 别"顺手"换成 _int_arg：那会把 500 变成 200，是行为变更。
-    return service.list_music(int(page), int(per_page))
+    # ★ 默认**不含伴奏**。伴奏不是独立作品，混进「全部歌曲」会让列表凭空多出
+    #   一批重复歌名，加入歌单/队列时也容易误选。伴奏管理界面传 =1 才拿得到。
+    #   只认字面量 "1"/"true"/"yes"，与本项目其它布尔查询参数口径一致。
+    want_acc = str(include_accompaniments).strip().lower() in ("1", "true", "yes")
+    return service.list_music(int(page), int(per_page), search.strip(), want_acc)
 
 
 @router.get("/detail/{music_id:int}")
@@ -362,3 +371,72 @@ def get_playlist_state():
 @login_required
 def save_playlist_state(payload: Optional[dict] = _JSON_BODY):
     return service.save_playlist_state(payload or {})
+
+
+# ═══════════════════ 播放队列（增量操作）═══════════════════
+#
+# 原来只有 GET/POST /queue 两条「整份读 / 整份写」。前端要「加入队列」就得
+# 先拉全量、本地拼好、再整份写回 —— 两个人同时操作会互相覆盖，
+# 而且一次加一首要传整个队列。下面是增量版本。
+
+from backend.api.music import accompaniment_service, queue_service  # noqa: E402
+
+
+@router.get("/queue/detail")
+@login_required
+def get_queue_detail():
+    """队列 + 每首歌的完整信息。
+
+    前端渲染队列要显示歌名/专辑，只有 id 列表不够；让它按 id 一首首去查
+    会产生 N 次请求，所以这里一次给全。
+    """
+    return queue_service.queue_detail()
+
+
+@router.post("/queue/add")
+@login_required
+def add_to_queue(payload: Optional[dict] = _JSON_BODY):
+    """加入队列。position="next" 插到当前播放的下一首，默认追加到队尾。"""
+    return queue_service.add_to_queue(payload or {})
+
+
+@router.post("/queue/remove")
+@login_required
+def remove_from_queue(payload: Optional[dict] = _JSON_BODY):
+    """按**下标**移除（不是按 music_id）——同一首歌可以在队列里出现多次。"""
+    return queue_service.remove_from_queue(payload or {})
+
+
+@router.post("/queue/clear")
+@login_required
+def clear_queue():
+    return queue_service.clear_queue()
+
+
+@router.post("/queue/reorder")
+@login_required
+def reorder_queue(payload: Optional[dict] = _JSON_BODY):
+    """拖动排序后整份重排。只接受与原队列同一批 id 的新顺序，否则 409。"""
+    return queue_service.reorder_queue(payload or {})
+
+
+# ═══════════════════ 伴奏（1 对 1）═══════════════════
+#
+# 数据层是 music.accompaniment_of_id（自引用 + 唯一约束，DB 强制 1 对 1）。
+# 这两条只做业务规则校验，把 DB 会拒绝的情况提前翻成看得懂的中文。
+
+
+@router.post("/tracks/{music_id:int}/accompaniment")
+@login_required
+@permission_required("music_edit")
+def set_accompaniment(music_id: int, payload: Optional[dict] = _JSON_BODY):
+    """把某首曲目指定为 music_id 的伴奏。"""
+    return accompaniment_service.set_accompaniment(music_id, payload or {})
+
+
+@router.delete("/tracks/{music_id:int}/accompaniment")
+@login_required
+@permission_required("music_edit")
+def clear_accompaniment(music_id: int):
+    """解除伴奏关系。伴奏本身不删，退回普通曲目。"""
+    return accompaniment_service.clear_accompaniment(music_id)

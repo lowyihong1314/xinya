@@ -31,8 +31,11 @@ message 分支，有些甚至在匹配整句中文。
      —— absolute_url 优先用配置里的 APP_PUBLIC_ORIGIN，见 core/urls.py。
 
   ⑥ ``werkzeug.utils.secure_filename`` → ``core.files.secure_filename``
-     （逐字节复刻，不能 import werkzeug）；
+     （逐字节复刻、已对拍，不能 import werkzeug）；
      ``flask_login.current_user`` → ``core.auth.current_user``（ContextVar 代理，同接口）。
+
+  另：原文件 import 了 ``STATIC_ROOT`` 和 ``get_current_user_permissions`` 但全文没用到，
+  跟着 Flask 那几行一起删掉（纯死 import，删了不改变任何行为）。
 
 ── 签名变了的四个函数（Flask 的 request 是隐式入参，FastAPI 没有）─────────
 
@@ -60,12 +63,18 @@ message 分支，有些甚至在匹配整句中文。
   的产物，属于同一批待重写的页面。TODO(前端重写 form 页时)：模板和这两处一起收掉。
 
 ── 「看着像 bug、故意保留」────────────────────────────────────────────
-  · ``form_index_response`` 的 ``form_id`` 是**字符串**路径参数（Flask 那边是
-    ``<form_id>`` 不带 ``int:``），它直接被拼进 ``templates/form/custom_template/{form_id}.html``。
-    看着像路径穿越，但 ``RegisForm.query.get_or_404(form_id)`` 先跑，非法 id 在那里
-    就 404 了；而且 ``custom_template/`` 这个目录今天根本不存在，那一支是死代码。
-    TODO(form): 想收紧的话应该给路由加 ``:int``，但那会把「非整数 → 404」变成
-    「非整数 → 404（更早）」之外还顺带改掉 ``get_or_404`` 抛错的时机，另行评估。
+  · ``form_index_response`` / ``pay_register_page_response`` 的 ``form_id`` 是**字符串**
+    路径参数（Flask 那边是 ``<form_id>``，不带 ``int:``），而前者还把它直接拼进
+    ``templates/form/custom_template/{form_id}.html``。看着像路径穿越，但
+    ``RegisForm.query.get_or_404(form_id)`` 先跑：
+      · 非整数 id（``/index/abc``）→ PostgreSQL 抛 DataError → **500**。
+        这是**既有行为**，不是搬迁改出来的（Flask + PG 走的是同一条路；
+        MySQL 时代才是 404）。已实测。
+      · 整数但不存在 → 404「未找到」。
+    所以那一行拼接永远到不了 ``os.path.exists``，何况 ``templates/form/custom_template/``
+    这个目录今天根本不存在 —— 整条自定义模板分支是死代码。
+    TODO(form): 想收紧的话给路由加 ``:int``（500 → 404，是行为变更，要先确认
+    前端没在按 500 分支），别在这里加字符串校验。
   · ``_calc_age_from_nric`` 只按出生**年份**算（不看月份/生日），且用
     ``datetime.utcnow()`` 而不是马来西亚时间。全局年龄规则就是这样，跨时区那几个小时
     的偏差在「按年算」的口径下看不出来。照搬。

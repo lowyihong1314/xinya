@@ -308,12 +308,12 @@ def _send_resolved_media_file(request, filepath):
     return _send_file_conditional(request, real_path)
 
 
-@media_file_router.get("/media_file/{filepath:path}")
+@media_file_router.api_route("/media_file/{filepath:path}", methods=["GET", "HEAD"])
 def send_file_py_path(request: Request, filepath: str):
     return _send_resolved_media_file(request, filepath)
 
 
-@router.get("/file/{filepath:path}")
+@router.api_route("/file/{filepath:path}", methods=["GET", "HEAD"])
 def send_media_file(request: Request, filepath: str):
     return _send_resolved_media_file(request, filepath)
 

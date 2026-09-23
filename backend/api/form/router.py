@@ -20,9 +20,11 @@
 
 ★ ``/index/<form_id>`` 和 ``/pay_register/<form_id>`` 在 Flask 里就**没有** ``int:``
   转换器（是 ``<form_id>``，即 string 转换器）。这里照抄成 ``{form_id}``，
-  **不要顺手加 ``:int``** —— 加了之后「非整数 id」从「进函数体 → get_or_404 → 404」
-  变成「路由不匹配 → 落到 web 模块的 SPA catch-all → 返回一坨 HTML」，
-  而调用方会把那坨 HTML 当 JSON 解析。详见 service.form_index_response 的注释。
+  **不要顺手加 ``:int``** —— 加了之后「非整数 id」会从「进函数体 → get_or_404 →
+  PostgreSQL DataError → 500」变成「路由不匹配 → 落到 web 模块的 SPA catch-all →
+  返回一坨 HTML」，而调用方会把那坨 HTML 当 JSON 解析。
+  （那个 500 是既有行为，Flask + PG 也是它，已实测；详见 service.py 模块头
+   「看着像 bug、故意保留」第一条。真要改成 404 是另一件事，别顺手做。）
 
 ── 五条搬迁硬约束（违反会启动即失败或线上事故）────────────────────────
 
@@ -52,7 +54,7 @@
   ⑤ prefix 用 ``f"{settings.api_prefix}/form"`` 拼，不写死。
 
 ── 权限：为什么不用 core.auth 的 @permission_required ─────────────────
-本模块 62 条受保护路由走的全是 ``@permission_required_any(*一组名字)``：
+本模块 55 条受保护路由走的全是 ``@permission_required_any(*一组名字)``：
 403 文案是「缺少权限，需要以下任一权限：a / b」，**未登录是 401 unauthorized**。
 ``@permission_required``（单数）的 403 文案是「用户 X 没有权限: Y」、**未登录是 500**
 （core.auth 契约 2）。两套不是一回事，换过去就是行为变更。

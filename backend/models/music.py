@@ -78,7 +78,16 @@ class Music(db.Model):
             "duration": self.duration,
             "cover_url": self.cover_url,
             "play_minutes": self.play_minutes,
-            "created_at": self.created_at.isoformat()
+            "created_at": self.created_at.isoformat(),
+            # ── 伴奏（1 对 1）────────────────────────────────────────
+            # 两个字段方向相反，前端两处都要用，所以都给：
+            #   accompaniment_of_id  我是谁的伴奏（我是伴奏时有值）
+            #   accompaniment_id     我的伴奏是谁（我是原曲时有值）
+            # 播放器靠后者决定要不要显示「切伴奏」按钮；
+            # 列表靠前者把伴奏过滤掉（默认不把伴奏混进全部歌曲）。
+            "accompaniment_of_id": self.accompaniment_of_id,
+            "accompaniment_id": self.accompaniment.id if self.accompaniment else None,
+            "is_accompaniment": self.accompaniment_of_id is not None,
         }
 
     def to_dict_full(self):

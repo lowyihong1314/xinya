@@ -16,7 +16,6 @@ from backend.app.extensions import (
 )
 from backend.core.paths import STATIC_ROOT, TEMPLATE_ROOT
 from backend.app.settings import DefaultConfig
-from backend.app.web import register_web_routes
 from backend.models import db, load_model_modules
 
 
@@ -48,7 +47,9 @@ def create_app(socket=False):
         import_module("backend.app.socket_events")
 
     register_blueprints(app)
-    register_web_routes(app)
+    # backend/app/web.py 已删除：SPA 外壳 / favicon / 分享页（/event、/image）
+    # 全部搬到 backend/api/web/（FastAPI）。这个 Flask 工厂只剩历史包袱，
+    # 已经没有任何入口在跑它。
     with app.app_context():
         ensure_known_permissions()
     return app
