@@ -52,7 +52,7 @@ from typing import Optional
 from fastapi import APIRouter, Body, Depends
 
 from backend.api.fahui.realtime import REALTIME_APP
-from backend.api.fahui.uploads import form_and_files
+from backend.core.uploads import form_and_files
 from backend.core.auth import current_user, permission_required_any
 from backend.core.config import settings
 from backend.core.realtime import publish_sync

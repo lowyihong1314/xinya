@@ -55,7 +55,7 @@
 
 from fastapi import APIRouter, Depends
 
-from backend.api.fahui.uploads import form_files_and_json
+from backend.core.uploads import form_files_and_json
 from backend.core.auth import permission_required_any
 from backend.core.config import settings
 

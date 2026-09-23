@@ -68,7 +68,7 @@ from typing import Optional
 from fastapi import APIRouter, Body, Depends, Query, Request
 
 from backend.api.fahui.downloads import send_file
-from backend.api.fahui.uploads import form_and_files
+from backend.core.uploads import form_and_files
 from backend.core.auth import current_user, login_required, permission_required_any
 from backend.core.config import settings
 from backend.core.responses import json_response

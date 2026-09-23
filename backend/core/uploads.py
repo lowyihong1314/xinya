@@ -1,13 +1,14 @@
-"""表单 / 上传文件的 Flask 垫片 —— 只给本包那几条 multipart 路由用。
+"""表单 / 上传文件的 Flask 垫片 —— **全仓公用**。
 
-**搬迁时新增的文件，Flask 那边没有对应物。** 存在的理由和 api/account/uploads.py
-一样：业务函数的参数长得就是 Flask 的 ``request.form`` / ``request.files``，
+**搬迁时新增的文件，Flask 那边没有对应物。** 存在的理由：业务函数的参数长得就是
+Flask 的 ``request.form`` / ``request.files``，
+
 
     payment_services.create_payment_record   payload.get("payment_mode") / payload.getlist("order_ids")
     payment_channel_services._apply_fields   form.get("bank_name") / files.get("qr_image")
     raw_docs.save_uploaded_raw_docs          uploaded.filename / uploaded.read()
 
-而 ``_save_channel_qr`` / ``save_payment_upload`` 又在用 werkzeug ``FileStorage``
+而这些函数又在用 werkzeug ``FileStorage``
 的四个成员（``.filename`` / ``.read()`` / ``.save(path)`` / 真值判断）。把这些调用点
 一个个改成 starlette 的写法，等于在服务层里散布几十处框架细节；在这里补一层薄垫片，
 service 那边就能**逐字照搬**，日后跟旧文件对拍也容易。
@@ -18,23 +19,28 @@ service 那边就能**逐字照搬**，日后跟旧文件对拍也容易。
   ① **``FileStorage.__bool__`` 就是 ``bool(self.filename)``。**
      浏览器在「没选文件」时仍会发一个 filename 为空的 part，Flask 那边
      ``request.files.get("file")`` 拿到的是一个**假值**对象，于是
-     print_routes 的 ``if not uploaded_file: return 400 No file uploaded`` 命中。
-     不复刻这条，空文件会一路走到「Only PDF files are allowed」，文案就漂了。
+     调用方的 ``if not uploaded_file: return 400 …`` 命中。
+     不复刻这条，空文件会一路走到下一个分支，**错误文案就漂了**
+     （fahui 会变成「Only PDF files are allowed」、form 会落盘一个空名文件）。
 
   ② **文件部分不能出现在 form 里。** Flask 把文件放 request.files、文本放
      request.form，两者不相交；starlette 的 FormData 把它们混在同一个多值映射里。
 
   ③ **同名字段取第一个。** werkzeug ``MultiDict.get`` 取**第一个**，
      starlette ``ImmutableMultiDict.get`` 取**最后一个**。前端不会发重名文本字段，
-     但 ``order_ids`` 这种就是靠 ``getlist`` 收多值的，顺序必须是原始顺序。
+     但 ``order_ids`` / ``file_ids`` 这种就是靠 ``getlist`` 收多值的，顺序必须是原始顺序。
 
   ④ **``MultiDict`` 空时是假值。** payment_services 的
      ``payload = request.form if request.form else (request.get_json(...) or {})``
      整条分支全靠这个真值判断 —— 见 ``form_files_and_json``。
 
   ⑤ **``MultiDict.get(key, type=int)`` 转不动时静默回 default**（只吞
-     ValueError / TypeError），不是抛。本包目前没有调用点传 type=，
-     但接口照 werkzeug 留着，免得以后有人加一处就踩坑。
+     ValueError / TypeError），不是抛。照 werkzeug 留着接口。
+
+★ 本文件由 api/{form,account,event,fahui}/uploads.py 四份近乎相同的实现合并而来。
+  合并时统一了一处**实质差异**：``filename`` 原来 account 版直接透出（可能是 None），
+  其余三版 ``or ""``。核过 account 的全部调用点都是 ``if not (f and f.filename)``，
+  两者等价，所以统一成 ``or ""`` —— 免得 ``os.path.splitext(None)`` 炸。
 
 ── 为什么依赖写成 async，路由仍是 sync ─────────────────────────────
 ``await request.form()`` 必须在事件循环里跑。写成 async 依赖（FastAPI 在循环里
@@ -246,3 +252,12 @@ async def form_files_and_json(request: Request):
     finally:
         if form is not None:
             await form.close()
+
+
+def wrap_upload(upload):
+    """``UploadFile | None`` → ``UploadedFile | None``，对应 ``request.files.get(k)``。
+
+    给用 ``= File(None)`` 声明参数的路由用：那种写法拿到的是 starlette 的
+    ``UploadFile``，业务函数要的是带 werkzeug 语义的 ``UploadedFile``。
+    """
+    return UploadedFile(upload) if upload is not None else None

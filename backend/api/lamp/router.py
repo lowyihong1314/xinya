@@ -89,7 +89,7 @@ from starlette.responses import PlainTextResponse
 
 from backend.api.lamp import service
 from backend.api.lamp.fahui_common import FAHUI_READ_PERMISSION_NAMES, has_fahui_read
-from backend.api.lamp.uploads import wrap_upload
+from backend.core.uploads import wrap_upload
 from backend.core.auth import permission_required_any
 from backend.core.config import settings
 

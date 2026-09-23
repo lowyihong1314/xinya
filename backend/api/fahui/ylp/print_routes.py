@@ -50,7 +50,7 @@ from fastapi import APIRouter, Body, Depends
 from starlette.responses import HTMLResponse
 
 from backend.api.fahui.downloads import send_file
-from backend.api.fahui.uploads import form_and_files
+from backend.core.uploads import form_and_files
 from backend.core.auth import login_required, permission_required_any
 from backend.core.config import settings
 from backend.core.files import secure_filename

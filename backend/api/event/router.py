@@ -100,7 +100,7 @@ from backend.core.config import settings
 from backend.core.responses import json_response
 
 from . import agent, service
-from .uploads import FormValues, wrap_upload
+from backend.core.uploads import FormValues, wrap_upload
 
 # prefix 用 settings.api_prefix 拼而不是写死 "/event_data"：api_prefix 今天是空串
 # （BASE_PATH 已经区分了项目），但配置项留着是为了需要时还能整体把 /api 加回来 ——

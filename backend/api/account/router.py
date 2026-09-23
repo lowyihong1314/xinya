@@ -133,7 +133,7 @@ from backend.api.account.service import (
     update_finance_payment_status,
     withdraw_claim_decision,
 )
-from backend.api.account.uploads import form_and_files
+from backend.core.uploads import form_and_files
 from backend.core.config import settings
 # 原来每个 except 分支里都写着 ``from backend.models import db``（Flask 时代为了绕
 # 循环 import）。core.db 没有这个问题，提到模块顶上，rollback 的时机一字未变。

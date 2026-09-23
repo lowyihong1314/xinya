@@ -126,7 +126,7 @@ from .permissions import (
     YOUTH_CLASS_READ_PERMISSION_NAMES,
     current_user_has_any_permission,
 )
-from .uploads import form_and_files
+from backend.core.uploads import form_and_files
 
 # prefix 用 settings.api_prefix 拼而不是写死 "/form"：api_prefix 今天是空串
 # （BASE_PATH 已经区分了项目），但配置项留着是为了需要时还能整体把 /api 加回来 ——
