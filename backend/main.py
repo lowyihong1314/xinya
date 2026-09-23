@@ -27,7 +27,6 @@ import logging
 from contextlib import asynccontextmanager
 
 from fastapi import FastAPI, Request
-from fastapi.encoders import jsonable_encoder
 from fastapi.exceptions import RequestValidationError
 from starlette.middleware.cors import CORSMiddleware
 
@@ -49,7 +48,6 @@ from backend.core.realtime import (
 )
 from backend.core.responses import (
     StarletteHTTPException,
-    fail,
     json_response,
     make_http_exception_handler,
 )
@@ -218,23 +216,15 @@ app.add_middleware(ProxyHeadersMiddleware)
 # ═══════════════════════════ 5. 异常处理器 ═══════════════════════════
 
 
-def _uses_new_envelope(request: Request) -> bool:
-    """这条请求该用新信封 ``{"error": {...}}`` 还是旧形状 ``{"status","message"}``？
+# 信封只有一套。
+#
+# 这里原本有个 _uses_new_envelope(request)：/v1/... 下的新接口发 {"error":{code,message}}，
+# 老路由继续发 {"status":"error","message":...}，好让信封按模块分批切换。
+# v3 决定**不要 /v1 这条轨道** —— 路径一律扁平 {BASE}/{资源}，信封也只保留一套
+# （就是现在这套 {"status","message"}，73 条已搬路由的响应体都是它）。
+# 两套信封并存的代价是每个前端调用点都要判断"我这条是哪一套"，
+# 而这正是旧前端里 21 份各写各的 parseJson 的由来。
 
-    规则：只有 ``/v1/...`` 下的新接口用新信封（13 文档 §2 定的新路径形状）。
-    老路由继续发旧形状 —— 前端 400 个调用点还在按 message 分支，
-    在 R1 还没推到的模块上换形状，表现是「转圈不停」或「错误提示是空白」。
-
-    ⚠️ 这里**不能**用 core.urls.base_path() 去拼前缀再比。nginx 是剥掉前缀再转进来的，
-      应用看到的 path 本来就是 ``/v1/claims``；拼上 /UTBA_DEMO 去比会永远不匹配，
-      于是新接口悄悄发着旧形状，没人会注意到。
-      这里改为：把 scope 里的 root_path 剥掉（万一哪条 location 没剥前缀），再判断。
-    """
-    path = request.url.path
-    root = request.scope.get("root_path") or ""
-    if root and path.startswith(root):
-        path = path[len(root):] or "/"
-    return path == "/v1" or path.startswith("/v1/")
 
 
 # ★ 一定注册在 starlette 的 HTTPException 上，不是 fastapi 的。
@@ -242,7 +232,7 @@ def _uses_new_envelope(request: Request) -> bool:
 #   fastapi.HTTPException 是它的子类，注册父类两边都覆盖得到，反过来会漏掉 404/405。
 app.add_exception_handler(
     StarletteHTTPException,
-    make_http_exception_handler(_uses_new_envelope),
+    make_http_exception_handler(),
 )
 
 # AuthError 是 fastapi.HTTPException 的子类，本该被上面那条覆盖；但它自带 payload，
@@ -278,14 +268,6 @@ async def _validation_error_handler(request: Request, exc: RequestValidationErro
         if denied is not None:
             return denied
 
-    if _uses_new_envelope(request):
-        return fail(
-            "unprocessable_entity",
-            "请求参数不合法",
-            status=422,
-            # errors() 里可能夹着 ValueError 实例，直接 json.dumps 会炸，先过一遍编码器。
-            detail=jsonable_encoder(exc.errors()),
-        )
     log.info("参数校验失败 %s %s: %s", request.method, request.url.path, exc.errors())
     return json_response({"status": "error", "message": "请求参数不合法"}, status_code=422)
 
