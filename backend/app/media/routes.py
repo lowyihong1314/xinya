@@ -3,7 +3,7 @@ import os
 from flask import Blueprint, abort, jsonify, request, send_file
 from flask_login import current_user, login_required
 
-from backend.app.auth import permission_required
+from backend.core.auth import permission_required
 from backend.app.media.paths import BROKEN_IMAGE_PATH, event_photo_base_dir
 from backend.app.media.services import (
     album_file_heart_count,

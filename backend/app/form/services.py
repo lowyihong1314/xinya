@@ -12,7 +12,7 @@ from flask_login import current_user
 from sqlalchemy.orm.attributes import flag_modified
 from werkzeug.utils import secure_filename
 
-from backend.app.timezone import malaysia_now, malaysia_now_naive
+from backend.core.timezone import malaysia_now, malaysia_now_naive
 from backend.core.paths import DATA_ROOT, PROJECT_ROOT, STATIC_ROOT, data_media_url
 from backend.core.redis import redis_client
 from .pdf import merge_html_files_to_pdf
@@ -38,8 +38,8 @@ from backend.models.youth_class_registration import (
     YouthClassRegistration,
 )
 from backend.models.membership_registration import MembershipRegistration
-from backend.app.auth import get_current_user_permissions
-from backend.app.common import council_sign
+from backend.core.auth import get_current_user_permissions
+from backend.core import council_sign
 
 PARENTAL_SHARE_PREFIX = "parental_sign_share"
 PARENTAL_SHARE_TTL = 60 * 60 * 12

@@ -65,3 +65,13 @@ permission_descriptions = {
     "cctv": "查看/控制 CCTV 监控：直播、录像回放、云台控制（nginx 网关鉴权）",
     CHANGYOU_ROOM_CONTROL_PERMISSION: "唱游房间控制：投影、点歌与房间管理",
 }
+
+
+def ensure_known_permissions():
+    """历史遗留的空操作，保留是为了调用点不用改。
+
+    早年权限清单存在库里，启动时要把代码里新增的权限写进去。现在清单**完全代码化**
+    （就是本文件的 permission_names），DB 只存「部门 ↔ 权限名」的分配关系，
+    没有需要同步的东西了。原实现（app/auth.py:107）也已经是 `return []`。
+    """
+    return []

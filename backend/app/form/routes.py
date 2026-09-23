@@ -3,7 +3,7 @@ from flask_login import login_required
 
 from backend.models.form import RegisForm
 
-from backend.app.common import council_sign
+from backend.core import council_sign
 from . import ai_grouping, form_agent, score_panel, services
 from .permissions import (
     FORM_EDIT_PERMISSION_NAMES,

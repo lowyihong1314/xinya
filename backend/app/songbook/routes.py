@@ -8,7 +8,7 @@ from flask import Blueprint, jsonify, request
 from flask_login import current_user, login_required
 from sqlalchemy import or_
 
-from backend.app.auth import get_current_user_permissions, permission_required
+from backend.core.auth import get_current_user_permissions, permission_required
 from backend.models import db
 from backend.models.songbook import SongbookEntry, normalize_song_text
 from backend.models.songbook_user_edit import SongbookUserEdit

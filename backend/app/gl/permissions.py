@@ -1,6 +1,6 @@
 from flask_login import current_user
 
-from backend.app.auth import get_current_user_permissions
+from backend.core.auth import get_current_user_permissions
 from backend.app.gl.exceptions import AuthenticationRequired, PermissionDenied
 
 

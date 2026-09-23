@@ -427,7 +427,7 @@ def _can_edit_event_flow(event):
     if event is None:
         return False
     try:
-        from backend.app.auth import get_current_user_permissions
+        from backend.core.auth import get_current_user_permissions
         if "event_edit" in (get_current_user_permissions(current_user) or set()):
             return True
     except Exception:  # noqa: BLE001

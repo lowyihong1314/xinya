@@ -3,7 +3,7 @@ from functools import wraps
 from flask import jsonify
 from flask_login import current_user, login_required
 
-from backend.app.auth import get_current_user_permissions
+from backend.core.auth import get_current_user_permissions
 
 
 FORM_READ_PERMISSION_NAMES = {"form_read", "form_edit", "member_detail"}

@@ -7,7 +7,7 @@ from flask import Blueprint, jsonify, request
 from flask_login import current_user
 from werkzeug.utils import secure_filename
 
-from backend.app.auth import get_current_user_permissions, permission_required
+from backend.core.auth import get_current_user_permissions, permission_required
 from backend.core.paths import DATA_ROOT, data_media_url
 
 from backend.models import db

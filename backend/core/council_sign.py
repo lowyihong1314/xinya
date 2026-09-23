@@ -11,13 +11,18 @@ from dataclasses import dataclass
 from datetime import datetime
 from typing import Any, Callable
 
-from backend.core.urls import absolute_url
-from flask import current_app, jsonify, request
-from flask_login import current_user
 from itsdangerous import BadSignature, URLSafeSerializer
 from sqlalchemy.exc import IntegrityError
 
-from backend.app.auth import get_current_user_permissions
+# v3：这三行是本文件脱离 Flask 的全部改动来源（原来是 flask / flask_login）。
+#   flask.jsonify(x), code   → core.responses.json_response(x, code)
+#   flask.current_app.config → core.config.settings
+#   flask.request.host_url   → core.urls.absolute_url()（自己读 ContextVar 里的请求）
+#   flask_login.current_user → core.auth.current_user（ContextVar 代理，同接口）
+from backend.core.auth import current_user, get_current_user_permissions
+from backend.core.config import settings
+from backend.core.responses import json_response
+from backend.core.urls import absolute_url
 from backend.models import db
 
 COUNCIL_SIGN_SALT = "council-sign"
@@ -56,23 +61,23 @@ def _clean_text(value):
 
 
 def _serializer():
-    return URLSafeSerializer(current_app.config["SECRET_KEY"], salt=COUNCIL_SIGN_SALT)
+    return URLSafeSerializer(settings.secret_key, salt=COUNCIL_SIGN_SALT)
 
 
 def build_council_sign_url(scope, registration):
     token = _serializer().dumps({"scope": scope, "registration_id": registration.id})
     # 走 core.urls：host_url 在反代下既缺项目前缀、又可能拿到 127.0.0.1
-    return absolute_url(f"/template/council-sign?t={token}", request=request)
+    return absolute_url(f"/template/council-sign?t={token}")
 
 
 def load_token(token):
     token = _clean_text(token)
     if not token:
-        return None, (jsonify({"status": "error", "message": "缺少签名链接参数。"}), 400)
+        return None, json_response({"status": "error", "message": "缺少签名链接参数。"}, 400)
     try:
         payload = _serializer().loads(token)
     except BadSignature:
-        return None, (jsonify({"status": "error", "message": "签名链接无效。"}), 400)
+        return None, json_response({"status": "error", "message": "签名链接无效。"}, 400)
     return payload, None
 
 
@@ -190,10 +195,10 @@ def add_council_signature(scope, registration_id, data):
     """工作台内直接签名（当前登录用户）。"""
     cfg = get_scope(scope)
     if cfg is None:
-        return jsonify({"status": "error", "message": "未知的签名类型。"}), 400
+        return json_response({"status": "error", "message": "未知的签名类型。"}, 400)
     registration = cfg.get_registration(registration_id)
     if not registration:
-        return jsonify({"status": "error", "message": "记录不存在"}), 404
+        return json_response({"status": "error", "message": "记录不存在"}, 404)
 
     try:
         signature = extract_signature_payload(data)
@@ -208,7 +213,7 @@ def add_council_signature(scope, registration_id, data):
             message = "已记录你的理事会签名（签名后不可撤回）。"
         else:
             message = "你之前已经签过名了。"
-        return jsonify(
+        return json_response(
             {
                 "status": "success",
                 "message": message,
@@ -217,13 +222,13 @@ def add_council_signature(scope, registration_id, data):
         )
     except ValueError as exc:
         db.session.rollback()
-        return jsonify({"status": "error", "message": str(exc)}), 400
+        return json_response({"status": "error", "message": str(exc)}, 400)
     except IntegrityError:
         db.session.rollback()
-        return jsonify({"status": "error", "message": "你之前已经签过名了。"}), 400
+        return json_response({"status": "error", "message": "你之前已经签过名了。"}, 400)
     except Exception as exc:
         db.session.rollback()
-        return jsonify({"status": "error", "message": str(exc)}), 500
+        return json_response({"status": "error", "message": str(exc)}, 500)
 
 
 def get_sign_mobile_context(token):
@@ -232,10 +237,10 @@ def get_sign_mobile_context(token):
         return error
     cfg = get_scope(payload.get("scope"))
     if cfg is None:
-        return jsonify({"status": "error", "message": "签名链接无效。"}), 400
+        return json_response({"status": "error", "message": "签名链接无效。"}, 400)
     registration = cfg.get_registration(payload.get("registration_id"))
     if not registration:
-        return jsonify({"status": "error", "message": "签名链接对应的资料不存在。"}), 404
+        return json_response({"status": "error", "message": "签名链接对应的资料不存在。"}, 404)
 
     signer = current_user
     try:
@@ -250,7 +255,7 @@ def get_sign_mobile_context(token):
     applicant_name = cfg.applicant_name(registration) or "该申请人"
     consent_text = f"我 {signer_name} 同意 {applicant_name} 加入{cfg.org_name}{cfg.consent_object}。"
 
-    return jsonify(
+    return json_response(
         {
             "status": "success",
             "scope": cfg.scope,
@@ -278,10 +283,10 @@ def submit_sign_mobile(token, data):
         return error
     cfg = get_scope(payload.get("scope"))
     if cfg is None:
-        return jsonify({"status": "error", "message": "签名链接无效。"}), 400
+        return json_response({"status": "error", "message": "签名链接无效。"}, 400)
     registration = cfg.get_registration(payload.get("registration_id"))
     if not registration:
-        return jsonify({"status": "error", "message": "签名链接对应的资料不存在。"}), 404
+        return json_response({"status": "error", "message": "签名链接对应的资料不存在。"}, 404)
 
     signer = current_user
     try:
@@ -289,7 +294,7 @@ def submit_sign_mobile(token, data):
     except Exception:
         signer_permissions = set()
     if COUNCIL_PERMISSION not in signer_permissions:
-        return jsonify({"status": "error", "message": "你没有理事会审批（council_approve）权限，无法签名。"}), 403
+        return json_response({"status": "error", "message": "你没有理事会审批（council_approve）权限，无法签名。"}, 403)
 
     try:
         signature = extract_signature_payload(data)
@@ -298,16 +303,16 @@ def submit_sign_mobile(token, data):
         cfg.activate(registration)
         db.session.commit()
         message = "签名已提交，感谢！" if newly_signed else "你之前已经签过名了。"
-        return jsonify({"status": "success", "message": message, "already_signed": not newly_signed})
+        return json_response({"status": "success", "message": message, "already_signed": not newly_signed})
     except ValueError as exc:
         db.session.rollback()
-        return jsonify({"status": "error", "message": str(exc)}), 400
+        return json_response({"status": "error", "message": str(exc)}, 400)
     except IntegrityError:
         db.session.rollback()
-        return jsonify({"status": "success", "message": "你之前已经签过名了。", "already_signed": True})
+        return json_response({"status": "success", "message": "你之前已经签过名了。", "already_signed": True})
     except Exception as exc:
         db.session.rollback()
-        return jsonify({"status": "error", "message": str(exc)}), 500
+        return json_response({"status": "error", "message": str(exc)}, 500)
 
 
 # ---------------------------------------------------------------------------
@@ -320,13 +325,13 @@ BATCH_MAX = 200
 def build_batch_sign_url(scope, registration_ids):
     token = _serializer().dumps({"scope": scope, "registration_ids": list(registration_ids)})
     # 走 core.urls：host_url 在反代下既缺项目前缀、又可能拿到 127.0.0.1
-    return absolute_url(f"/template/council-sign-batch?t={token}", request=request)
+    return absolute_url(f"/template/council-sign-batch?t={token}")
 
 
 def batch_sign_url_response(scope, registration_ids):
     cfg = get_scope(scope)
     if cfg is None:
-        return jsonify({"status": "error", "message": "未知的签名类型。"}), 400
+        return json_response({"status": "error", "message": "未知的签名类型。"}, 400)
 
     ids = []
     for raw in registration_ids or []:
@@ -338,11 +343,11 @@ def batch_sign_url_response(scope, registration_ids):
             ids.append(value)
 
     if not ids:
-        return jsonify({"status": "error", "message": "请先选择至少一份申请。"}), 400
+        return json_response({"status": "error", "message": "请先选择至少一份申请。"}, 400)
     if len(ids) > BATCH_MAX:
-        return jsonify({"status": "error", "message": f"一次最多批量 {BATCH_MAX} 份。"}), 400
+        return json_response({"status": "error", "message": f"一次最多批量 {BATCH_MAX} 份。"}, 400)
 
-    return jsonify({"status": "success", "url": build_batch_sign_url(scope, ids), "count": len(ids)})
+    return json_response({"status": "success", "url": build_batch_sign_url(scope, ids), "count": len(ids)})
 
 
 def _batch_registration_item(cfg, registration_id, signer):
@@ -370,7 +375,7 @@ def get_batch_sign_context(token):
         return error
     cfg = get_scope(payload.get("scope"))
     if cfg is None:
-        return jsonify({"status": "error", "message": "签名链接无效。"}), 400
+        return json_response({"status": "error", "message": "签名链接无效。"}, 400)
 
     ids = payload.get("registration_ids") or []
     signer = current_user
@@ -388,7 +393,7 @@ def get_batch_sign_context(token):
     ]
     signer_name = getattr(signer, "display_name", None) or getattr(signer, "username", None) or "本人"
 
-    return jsonify(
+    return json_response(
         {
             "status": "success",
             "scope": cfg.scope,
@@ -410,7 +415,7 @@ def submit_batch_sign(token, data):
         return error
     cfg = get_scope(payload.get("scope"))
     if cfg is None:
-        return jsonify({"status": "error", "message": "签名链接无效。"}), 400
+        return json_response({"status": "error", "message": "签名链接无效。"}, 400)
 
     signer = current_user
     try:
@@ -418,12 +423,12 @@ def submit_batch_sign(token, data):
     except Exception:
         signer_permissions = set()
     if COUNCIL_PERMISSION not in signer_permissions:
-        return jsonify({"status": "error", "message": "你没有理事会审批（council_approve）权限，无法签名。"}), 403
+        return json_response({"status": "error", "message": "你没有理事会审批（council_approve）权限，无法签名。"}, 403)
 
     try:
         signature = extract_signature_payload(data)
     except ValueError as exc:
-        return jsonify({"status": "error", "message": str(exc)}), 400
+        return json_response({"status": "error", "message": str(exc)}, 400)
 
     ids = payload.get("registration_ids") or []
     signed = 0
@@ -452,7 +457,7 @@ def submit_batch_sign(token, data):
             parts.append(f"其中 {activated} 份已生效")
         if skipped:
             parts.append(f"跳过 {skipped} 份（已签或已满）")
-        return jsonify(
+        return json_response(
             {
                 "status": "success",
                 "signed": signed,
@@ -463,4 +468,4 @@ def submit_batch_sign(token, data):
         )
     except Exception as exc:
         db.session.rollback()
-        return jsonify({"status": "error", "message": str(exc)}), 500
+        return json_response({"status": "error", "message": str(exc)}, 500)

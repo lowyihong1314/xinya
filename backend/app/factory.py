@@ -3,7 +3,7 @@ from importlib import import_module
 from flask import Flask
 from flask_cors import CORS
 
-from backend.app.auth import ensure_known_permissions
+from backend.core.permissions import ensure_known_permissions
 from backend.app.blueprints import register_blueprints
 from backend.app.cli import register_cli
 from backend.app.extensions import (

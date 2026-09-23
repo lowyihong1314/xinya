@@ -1,7 +1,7 @@
 import json
 from datetime import datetime
 
-from backend.app.timezone import malaysia_now_naive
+from backend.core.timezone import malaysia_now_naive
 from backend.models import db
 
 

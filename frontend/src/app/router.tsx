@@ -35,6 +35,12 @@ const NotFoundPage = lazy(() =>
 const ForbiddenPage = lazy(() =>
   import("@/features/system/routes/ForbiddenPage").then((m) => ({ default: m.ForbiddenPage })),
 );
+const AboutPage = lazy(() =>
+  import("@/features/about/routes/AboutPage").then((m) => ({ default: m.AboutPage })),
+);
+const EmailPage = lazy(() =>
+  import("@/features/email/routes/EmailPage").then((m) => ({ default: m.EmailPage })),
+);
 
 /** 懒加载的分块在下载期间要有占位，否则切页面会闪一下空白。 */
 function lazyBoundary(node: React.ReactNode) {
@@ -48,6 +54,8 @@ const routes: RouteObject[] = [
     children: [
       { path: "/login", element: lazyBoundary(<LoginPage />) },
       { path: "/forbidden", element: lazyBoundary(<ForbiddenPage />) },
+      // 关于我们是公开页：后端那两条接口没挂 login_required
+      { path: "/about", element: lazyBoundary(<AboutPage />) },
     ],
   },
   {
@@ -57,7 +65,10 @@ const routes: RouteObject[] = [
         <AppShell />
       </RequireAuth>
     ),
-    children: [{ index: true, element: lazyBoundary(<HomePage />) }],
+    children: [
+      { index: true, element: lazyBoundary(<HomePage />) },
+      { path: "/email", element: lazyBoundary(<EmailPage />) },
+    ],
   },
   {
     // 兜底 404 —— 放在最后，否则会吃掉后面所有路由。

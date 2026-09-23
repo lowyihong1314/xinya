@@ -6,7 +6,8 @@ from urllib.parse import quote
 from flask import Blueprint, jsonify, request
 from flask_login import current_user, login_required
 
-from backend.app.auth import CHANGYOU_ROOM_CONTROL_PERMISSION, get_current_user_permissions
+from backend.core.auth import get_current_user_permissions
+from backend.core.permissions import CHANGYOU_ROOM_CONTROL_PERMISSION
 from backend.app.extensions import socket_broker
 from backend.core.redis import redis_client
 from backend.models.songbook import SongbookEntry

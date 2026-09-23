@@ -1,7 +1,7 @@
 from flask import Blueprint, request
 from flask_login import login_required
 
-from backend.app.auth import permission_required
+from backend.core.auth import permission_required
 from . import services
 from .storage import serve_album_image
 

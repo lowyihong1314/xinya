@@ -5,8 +5,8 @@ from decimal import Decimal
 from flask import jsonify, request, send_file
 from flask_login import current_user
 
-from backend.app.auth import get_current_user_permissions
-from backend.app.common import council_sign
+from backend.core.auth import get_current_user_permissions
+from backend.core import council_sign
 from backend.app.form.services import (
     MEMBERSHIP_FEE_SCOPE,
     _calc_age_from_nric,

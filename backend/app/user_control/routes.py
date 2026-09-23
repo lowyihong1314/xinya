@@ -7,11 +7,11 @@ from flask import Blueprint, jsonify, request, send_file, session
 from flask_login import current_user, login_required, login_user, logout_user
 from sqlalchemy.exc import IntegrityError
 
-from backend.app.auth import get_current_user_permissions, permission_required
+from backend.core.auth import get_current_user_permissions, permission_required
 from backend.app.form.services import _apply_member_nric_change, _calc_age_from_nric
 from backend.app.media.paths import DATA_PATH, to_short_data_path
 from . import membership
-from backend.app.common import council_sign
+from backend.core import council_sign
 from backend.app.user_control.utils import PROFILE_PATH, generate_resized_image
 from backend.models.file_manager import FilePermission
 from backend.models.form import NRIC_Asset

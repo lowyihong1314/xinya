@@ -4,7 +4,7 @@ from flask import jsonify
 from flask_login import current_user
 from sqlalchemy.orm import joinedload
 
-from backend.app.timezone import malaysia_now_naive
+from backend.core.timezone import malaysia_now_naive
 from backend.models import db
 from backend.models.music import (
     Album,
