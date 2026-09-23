@@ -109,6 +109,7 @@ from fastapi import APIRouter, Body, Depends
 from backend.core import council_sign
 from backend.core.auth import login_required, permission_required_any
 from backend.core.config import settings
+from backend.api.form import realtime
 from backend.core.responses import json_response
 from backend.models.form import RegisForm
 
@@ -721,3 +722,21 @@ def remove_youth_class_registration_route(entry_id: int):
 @permission_required_any(*YOUTH_CLASS_EDIT_PERMISSION_NAMES)
 def upgrade_youth_to_membership_route(entry_id: int):
     return service.upgrade_youth_to_membership(entry_id)
+
+
+# ═══════════════ 入向动作（原 Socket.IO 事件）═══════════════
+#
+# form 模块只有一个：parental_sign_sync（家长签名页的实时同步）。
+# 它在第一轮搬迁里被漏掉了 —— 当时判断"本模块没有入向事件"，
+# 而那个 handler 注册在 backend/app/socket_events.py 里、不在 form 包内，
+# 所以按模块目录搜是搜不到的。
+
+
+@router.post("/parental_sign/sync")
+def sync_parental_sign(payload: Optional[dict] = _JSON_BODY):
+    """家长在手机上签完 → 电脑端的表单页立刻看到笔画，不用刷新。
+
+    **不要求登录**：签名链接是发给家长的，家长多数没有账号
+    （原 socket 事件同样不校验身份，房间 token 本身就是凭据）。
+    """
+    return realtime.sync_parental_sign(payload)

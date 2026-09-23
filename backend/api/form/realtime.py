@@ -12,6 +12,8 @@ message queue 客户端）。这里换成 ``core.realtime.publish_sync`` ——
   的响应体里让前端订阅。要改就得前后端一起改，不在本次搬迁范围内。
   于是 Redis 频道是 ``rt:form:wait_register_12`` 这种形状 —— 能用，只是多一层前缀。
 
+★ 入向事件：本模块有**一个** —— parental_sign_sync，已转成 POST（见文件末尾）。
+
 ★ ⚠️ 前端还没切到 SSE 之前，这些消息**没有订阅者**（与 quiz / changyou_room /
   event 模块当前的处境一样）：推送发出去，没人收，业务本身不受影响。
 
@@ -65,3 +67,57 @@ def emit_youth_class_event(event, payload=None):
     except Exception as exc:
         # 见模块头：publish_sync 不抛，这一支走不到了。逐字保留。
         print(f"[WS-DISCONNECTED] Youth class emit skipped: {exc}")
+
+
+# ═══════════════ 入向动作：parental_sign_sync → POST ═══════════════
+#
+# ⚠️ 本文件模块头原先断言「form 模块一个入向 Socket.IO handler 都没有」——
+#    **那句是错的**，漏了 backend/app/socket_events.py 的 ``parental_sign_sync``。
+#    它是家长签名页的实时同步：家长在手机上签完，电脑端的表单页立刻看到笔画，
+#    不用刷新。漏搬的症状是「手机签了、电脑那边一直空着」，而两边都不报错。
+#
+# 转换规则见 docs/flask_to_fastAPI/16-入向事件转POST.md。
+# 原 handler 的三个特点都要保留：
+#   · ``skip_sid=request.sid`` —— 不发给自己。SSE 侧对应 publish_sync 的
+#     ``sender``，前端默认丢弃 sender == 自己连接 id 的帧。
+#   · ``if not room: return`` —— 缺 room 直接静默返回，不报错也不广播。
+#   · parent 不是 dict 时置 None，然后**仍然广播**（带着 sign_json_data）。
+
+from typing import Optional  # noqa: E402
+
+from backend.core.responses import json_response  # noqa: E402
+
+
+def sync_parental_sign(data: Optional[dict]):
+    """家长签名同步。原 socket 事件 ``parental_sign_sync``。
+
+    返回什么：原事件是纯广播、不回发送者任何东西。这里回一个
+    ``{"status":"success"}`` 让调用方知道发出去了 —— HTTP 总要有个响应体，
+    而且发送者需要区分「发成功了」和「room 不对被丢弃了」。
+    """
+    payload = data or {}
+    room = payload.get("room")
+    parent = payload.get("parent")
+    sign_json_data = payload.get("sign_json_data")
+
+    if not room:
+        # 照搬原行为：缺 room 静默返回。不报 400 是因为原实现就不报，
+        # 而且这条是「尽力而为」的同步，缺参数时让签名流程继续走比打断它好。
+        return json_response({"status": "ignored", "reason": "missing_room"})
+
+    # 原实现：parent 不是 dict 就置 None，但**仍然广播** —— 接收端靠
+    # sign_json_data 也能更新。别"顺手"改成缺 parent 就不发。
+    if not isinstance(parent, dict):
+        parent = None
+    if parent is not None and sign_json_data is not None:
+        parent["sign_json_data"] = sign_json_data
+
+    publish_sync(
+        REALTIME_APP,
+        str(room),
+        "parental_sign_data",
+        {"room": room, "parent": parent, "sign_json_data": sign_json_data},
+        # 对应原来的 skip_sid：不发回给发起的那条连接
+        sender=payload.get("connection_id") or None,
+    )
+    return json_response({"status": "success"})
