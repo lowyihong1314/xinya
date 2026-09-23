@@ -2,7 +2,6 @@ from importlib import import_module
 
 
 BLUEPRINT_SPECS = [
-    ("backend.app.user_control", "user_control_bp", "/user_control", "api"),
     ("backend.app.fahui.common.payment_routes", "fahui_payment_bp", "/payment", "api"),
     ("backend.app.fahui.YLP.payment_routes", "payment_bp", "/payment", "api"),
     ("backend.app.fahui.YLP.board_routes", "board_router_bp", "/board_router", "api"),

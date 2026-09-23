@@ -28,7 +28,7 @@ from fastapi import APIRouter
 
 from backend.api import account, app_release, asset, camera, changyou_room, content
 from backend.api import email, event, filesystem, gl, media, mobile, music
-from backend.api import permission_mgmt, quiz, songbook, twilio
+from backend.api import permission_mgmt, quiz, songbook, twilio, user_control
 from backend.api import public_api  # 根级路由，必须最后 include
 from backend.api import web  # SPA 兜底，catch-all，必须最最后
 
@@ -52,6 +52,7 @@ api_router.include_router(filesystem.router)       # /files/*               文�
 api_router.include_router(music.router)            # /music/*               音乐库
 api_router.include_router(media.router)            # /media/*               媒体上传 / 转码 / 爱心
 api_router.include_router(event.router)            # /event_data/*          活动与相册
+api_router.include_router(user_control.router)     # /user_control/*        登录 / 用户 / 会员
 # ★ media_file_router 挂在**根上**（/media_file/<path>），不带 /media 前缀：
 #   nginx 那条 `location /media_file/ { alias …; }` 和库里存的相对路径都咬死了根路径。
 api_router.include_router(media.media_file_router)  # /media_file/<path>    nginx 找不到文件时的回落

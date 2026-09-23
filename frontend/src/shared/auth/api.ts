@@ -31,7 +31,11 @@ export async function loginWithPassword(username: string, password: string): Pro
 }
 
 export async function logout(): Promise<void> {
-  await http.post("/user_control/logout");
+  // ⚠️ 是 **GET** 不是 POST —— 后端 backend/api/user_control/router.py 就是这么定义的
+  //    （沿袭 Flask 时代的 @user_control_bp.get("/logout")）。
+  //    写成 POST 会 405，而 AuthProvider 的 finally 仍然会清空本地会话，
+  //    于是表现成「点退出看着成功了，但服务端会话还在」—— 换个标签页刷新又登录着。
+  await http.get("/user_control/logout");
 }
 
 export interface MobileSession {
