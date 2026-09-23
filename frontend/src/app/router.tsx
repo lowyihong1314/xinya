@@ -86,6 +86,9 @@ const ChangyouPlayerPage = lazy(() =>
 const AppDownloadPage = lazy(() =>
   import("@/features/app-releases/routes/AppDownloadPage").then((m) => ({ default: m.AppDownloadPage })),
 );
+const CrmHomePage = lazy(() =>
+  import("@/features/crm/routes/CrmHomePage").then((m) => ({ default: m.CrmHomePage })),
+);
 const ClaimsPage = lazy(() =>
   import("@/features/claims/routes/ClaimsPage").then((m) => ({ default: m.ClaimsPage })),
 );
@@ -132,6 +135,8 @@ const routes: RouteObject[] = [
     children: [
       { index: true, element: lazyBoundary(<HomePage />) },
       { path: "/profile", element: lazyBoundary(<ProfilePage />) },
+      // CRM 聚合页：一页磁贴，点进去是各个子模块（与旧版一致）
+      { path: "/crm", element: lazyBoundary(<CrmHomePage />) },
       { path: "/events", element: lazyBoundary(<EventsPage />) },
       { path: "/events/:eventId", element: lazyBoundary(<EventDetailPage />) },
       {
