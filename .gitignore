@@ -18,3 +18,7 @@ paiwei_template/
 
 # 财务附件本地备份（收据/账单，不进版本库）
 /TNB/
+
+# 本机专用：Google Play 审核账号脚本（含明文密码）与审核录屏，不进仓库
+create_reviewer_account.py
+static/play_review/
