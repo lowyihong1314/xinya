@@ -16,13 +16,20 @@ cd /home/keyin/flaskapp
 
 这个脚本会自动做下面这些事：
 
-- 确保 `venv` 存在
-- 激活 `venv`
-- 安装 `requirements.txt` 里的 Python 依赖
-- 进入 `frontend`
-- 如果没有 `node_modules`，自动执行 `npm install`
-- 执行 `npx vite build`
+- 检查 node >= 22（nvm 默认是 20 时自动切到 /usr/bin 的 22）
+- 确保 `venv` 存在并激活，安装 `requirements.txt`
+- `frontend/` 没有 `node_modules` 或 lockfile 更新过时执行 `npm ci`
+- 有 `_token.py` 时执行 `flask db upgrade`（已是最新会跳过）
+- 执行 `npm run build`
 - 回到根目录运行 `python3 run.py`
+
+常用参数：
+
+```bash
+./devSetup.sh --dev            # 用 vite dev server 热更新，后端另开终端跑 python3 run.py
+./devSetup.sh --skip-build     # 不打前端包
+./devSetup.sh --skip-migrate   # 不跑数据库迁移
+```
 
 启动成功后，测试地址是：
 
@@ -30,17 +37,20 @@ cd /home/keyin/flaskapp
 http://127.0.0.1:5202
 ```
 
-如果只是想手动启动，也可以这样：
+## 线上部署（/srv/flaskapp/xinya）
+
+同一个脚本放在 `/srv/flaskapp/` 下就是部署模式，**不要加 sudo**（root 写出的 `static/vite` 文件普通用户删不掉）：
 
 ```bash
-cd /home/keyin/flaskapp
-source venv/bin/activate
-pip install -r requirements.txt
-cd frontend
-npx vite build
-cd ..
-python3 run.py
+./devSetup.sh              # 迁移数据库 -> npm run build -> 重启 xinya_flask + xinya_socket -> 健康检查
+./devSetup.sh --apk        # 再多打一个 APK/AAB（版本号取 frontend/mobile_version.env）
+./devSetup.sh --skip-build # 只改了后端
+./devSetup.sh --no-restart # 只打包不重启
+./devSetup.sh --dry-run    # 只打印步骤
 ```
+
+健康检查打 `http://127.0.0.1:5006/api/music/albums` 和 `http://127.0.0.1:8000/socket.io/`，失败会直接报错并提示看 `journalctl -u xinya_flask` / `xinya_socket`。
+两个服务都要重启，因为 socket 服务（抢答广播、唱游房间、播放设备同步）是独立进程。
 
 ## 改完代码后 Git 怎么推
 

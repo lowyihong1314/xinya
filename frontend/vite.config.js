@@ -2,6 +2,11 @@ import { defineConfig } from "vite";
 import react from "@vitejs/plugin-react";
 import path from "path";
 
+// 不允许用 root 跑 build：root 写出的 static/vite 文件普通用户删不掉，下次 build 会 EACCES。
+if (typeof process.getuid === "function" && process.getuid() === 0) {
+  throw new Error("请不要用 sudo / root 运行 vite build，改用普通用户（例如 yukang）。只有 systemctl restart 才需要 sudo。");
+}
+
 export default defineConfig(({ command, mode }) => {
   const isBuild = command === "build";
   const isApk = mode === "apk";
