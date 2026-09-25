@@ -10,7 +10,11 @@ export type MusicAudioCacheTrackLike = {
   file_size?: number;
   duration?: number | null;
   created_at?: string;
+  accompaniment_file_name?: string | null;
+  accompaniment_file_size?: number | null;
 };
+
+export type MusicAudioVariant = "vocal" | "accompaniment";
 
 type WebAudioCacheEntry = {
   sourceUrl: string;
@@ -21,11 +25,22 @@ const MUSIC_AUDIO_CACHE_VERSION = "v1";
 const webAudioCache = new Map<string, WebAudioCacheEntry>();
 const pendingWebAudioCache = new Map<string, Promise<string>>();
 
-export function buildMusicDownloadUrl(musicId: number) {
+export function buildMusicDownloadUrl(musicId: number, variant: MusicAudioVariant = "vocal") {
+  if (variant === "accompaniment") {
+    return `${API_BASE}/api/music/accompaniment/${musicId}`;
+  }
   return `${API_BASE}/api/music/download/${musicId}`;
 }
 
-export function buildMusicAudioRevision(track: MusicAudioCacheTrackLike) {
+export function buildMusicAudioRevision(track: MusicAudioCacheTrackLike, variant: MusicAudioVariant = "vocal") {
+  if (variant === "accompaniment") {
+    return [
+      track.id,
+      "acc",
+      track.accompaniment_file_name || "",
+      String(track.accompaniment_file_size ?? ""),
+    ].join(":");
+  }
   return [
     track.id,
     track.file_name || "",
@@ -38,32 +53,36 @@ export function buildMusicAudioRevision(track: MusicAudioCacheTrackLike) {
 export function buildMusicAudioCacheKey(
   scope: string,
   track: MusicAudioCacheTrackLike,
+  variant: MusicAudioVariant = "vocal",
 ) {
   // Track cache is shared across stages so top-10 prewarm and queue-next
   // prewarm can reuse the same local file / blob instead of downloading twice.
   void scope;
-  return `music-audio:${MUSIC_AUDIO_CACHE_VERSION}:${buildMusicAudioRevision(track)}`;
+  return `music-audio:${MUSIC_AUDIO_CACHE_VERSION}:${buildMusicAudioRevision(track, variant)}`;
 }
 
 export function getCachedMusicAudioUrl(
   track: MusicAudioCacheTrackLike,
-  options: { scope?: string } = {},
+  options: { scope?: string; variant?: MusicAudioVariant } = {},
 ) {
   const cacheKey = buildMusicAudioCacheKey(
     options.scope ?? PINNED_ALL_SONGS_AUDIO_CACHE_SCOPE,
     track,
+    options.variant ?? "vocal",
   );
   return webAudioCache.get(cacheKey)?.playableUrl ?? null;
 }
 
 export async function warmMusicAudioTrack(
   track: MusicAudioCacheTrackLike,
-  options: { scope?: string } = {},
+  options: { scope?: string; variant?: MusicAudioVariant } = {},
 ) {
-  const sourceUrl = buildMusicDownloadUrl(track.id);
+  const variant = options.variant ?? "vocal";
+  const sourceUrl = buildMusicDownloadUrl(track.id, variant);
   const cacheKey = buildMusicAudioCacheKey(
     options.scope ?? PINNED_ALL_SONGS_AUDIO_CACHE_SCOPE,
     track,
+    variant,
   );
   const cached = webAudioCache.get(cacheKey);
   if (cached && cached.sourceUrl === sourceUrl) {

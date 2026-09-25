@@ -27,6 +27,9 @@ export function MusicPlaybackWorkspace({
   activeSection,
   onSectionChange,
   browsePane,
+  canUsePlaylists,
+  onAddCurrentToPlaylist,
+  onUploadAccompaniment,
   viewportHeight,
   stickyTop,
   pinnedAllSongsCacheIds,
@@ -41,6 +44,10 @@ export function MusicPlaybackWorkspace({
   activeSection: MusicPlaybackSection;
   onSectionChange: (section: MusicPlaybackSection) => void;
   browsePane: ReactNode;
+  canUsePlaylists?: boolean;
+  onAddCurrentToPlaylist?: (musicId: number) => void;
+  /** 管理员：当前曲没有伴奏时的「上传伴奏」。 */
+  onUploadAccompaniment?: (musicId: number) => void;
   viewportHeight: number | null;
   stickyTop: number;
   pinnedAllSongsCacheIds: number[];
@@ -64,6 +71,21 @@ export function MusicPlaybackWorkspace({
     shuffleEnabled,
     repeatMode,
     autoplayKey,
+    accompanimentMode,
+    toggleAccompanimentMode,
+    pauseSignal,
+    notifyLocalPlay,
+    reportPlaybackPosition,
+    remoteDeviceName,
+    remoteControl,
+    devices,
+    activeDeviceId,
+    thisDeviceId,
+    transferTo,
+    sendRemoteCommand,
+    reportSeek,
+    resumePositionMs,
+    consumeResumePosition,
     toggleShuffle,
     cycleRepeatMode,
     playRelative,
@@ -77,14 +99,30 @@ export function MusicPlaybackWorkspace({
   const audioRef = useRef<HTMLAudioElement | null>(null);
   const lastAutoplayKeyRef = useRef(autoplayKey);
   const lastSourceRef = useRef<string | null>(null);
+  const lastSourceTrackIdRef = useRef<number | null>(null);
   const playAttemptRef = useRef(0);
   const setIsPlayingStateRef = useRef(setIsPlayingState);
+  const notifyLocalPlayRef = useRef(notifyLocalPlay);
+  const reportPlaybackPositionRef = useRef(reportPlaybackPosition);
+  const consumeResumePositionRef = useRef(consumeResumePosition);
   const pinnedAllSongsCacheSet = useMemo(
     () => new Set(pinnedAllSongsCacheIds),
     [pinnedAllSongsCacheIds],
   );
   const [currentTime, setCurrentTime] = useState(0);
   const [duration, setDuration] = useState(0);
+  // 遥控模式：远端播放中时每 500ms 刷新一次外推的进度。
+  const [remoteTick, setRemoteTick] = useState(0);
+  useEffect(() => {
+    if (!remoteControl?.isPlaying) return;
+    const timer = window.setInterval(() => setRemoteTick((value) => value + 1), 500);
+    return () => window.clearInterval(timer);
+  }, [remoteControl?.isPlaying, remoteControl?.deviceId]);
+  const remoteMusic = useMemo(() => {
+    if (!remoteControl || remoteControl.musicId == null) return null;
+    return libraryMusics.find((music) => music.id === remoteControl.musicId) ?? null;
+  }, [remoteControl, libraryMusics]);
+  void remoteTick;
   const [audioSource, setAudioSource] = useState<{
     trackId: number | null;
     src: string | null;
@@ -101,19 +139,60 @@ export function MusicPlaybackWorkspace({
     [visibleQueue, currentMusicId, repeatMode],
   );
   const audioSrc = audioSource.src;
+  // 歌曲自带的 album 字段优先，找不到再去专辑列表里查。
   const currentAlbumName = currentMusic
-    ? resolveTrackAlbumName(currentMusic.id, libraryMusics, albums) || "未分配专辑"
+    ? currentMusic.album?.name || resolveTrackAlbumName(currentMusic.id, libraryMusics, albums) || "未分配专辑"
     : "从左侧进入找歌后开始播放";
+  const currentHasAccompaniment = Boolean(currentMusic?.has_accompaniment);
+  const useAccompaniment = accompanimentMode && currentHasAccompaniment;
 
   useEffect(() => {
     setIsPlayingStateRef.current = setIsPlayingState;
-  }, [setIsPlayingState]);
+    notifyLocalPlayRef.current = notifyLocalPlay;
+    reportPlaybackPositionRef.current = reportPlaybackPosition;
+    consumeResumePositionRef.current = consumeResumePosition;
+  }, [setIsPlayingState, notifyLocalPlay, reportPlaybackPosition, consumeResumePosition]);
+
+  // 其他设备接管：本地 <audio> 立刻暂停。
+  useEffect(() => {
+    if (!pauseSignal) return;
+    const audio = audioRef.current;
+    if (audio && !audio.paused) {
+      audio.pause();
+    }
+  }, [pauseSignal]);
+
+  // 「在此设备播放」接管后跳到远端的进度。
+  useEffect(() => {
+    if (resumePositionMs == null) return;
+    const audio = audioRef.current;
+    if (!audio || !audioSrc || audioSource.trackId !== (currentMusic?.id ?? null)) return;
+    const apply = () => {
+      const target = Math.max(0, resumePositionMs / 1000);
+      if (Number.isFinite(audio.duration) && audio.duration > 0) {
+        audio.currentTime = Math.min(target, Math.max(0, audio.duration - 0.25));
+      } else {
+        audio.currentTime = target;
+      }
+      consumeResumePositionRef.current();
+    };
+    if (audio.readyState >= 1) {
+      apply();
+      return;
+    }
+    audio.addEventListener("loadedmetadata", apply, { once: true });
+    return () => audio.removeEventListener("loadedmetadata", apply);
+  }, [resumePositionMs, audioSrc, audioSource.trackId, currentMusic?.id]);
 
   useEffect(() => {
     const audio = audioRef.current;
     if (!audio) return;
 
-    const handlePlay = () => setIsPlayingStateRef.current(true);
+    const handlePlay = () => {
+      setIsPlayingStateRef.current(true);
+      // 本设备开始播放：抢占为活动设备，其他设备会收到通知并暂停。
+      notifyLocalPlayRef.current();
+    };
     const handlePause = () => setIsPlayingStateRef.current(false);
 
     audio.addEventListener("play", handlePlay);
@@ -138,16 +217,19 @@ export function MusicPlaybackWorkspace({
       return;
     }
 
-    const directUrl = `${API_BASE}/api/music/download/${currentMusic.id}`;
+    const variant = useAccompaniment ? "accompaniment" : "vocal";
+    const directUrl = useAccompaniment
+      ? `${API_BASE}/api/music/accompaniment/${currentMusic.id}`
+      : `${API_BASE}/api/music/download/${currentMusic.id}`;
     const isPinnedTrack = pinnedAllSongsCacheSet.has(currentMusic.id);
-    const cachedUrl = getCachedMusicAudioUrl(currentMusic);
+    const cachedUrl = getCachedMusicAudioUrl(currentMusic, { variant });
 
     setAudioSource({
       trackId: currentMusic.id,
       src: cachedUrl || directUrl,
     });
 
-    if (!isPinnedTrack || cachedUrl) {
+    if (!isPinnedTrack || cachedUrl || useAccompaniment) {
       return;
     }
 
@@ -157,7 +239,7 @@ export function MusicPlaybackWorkspace({
       .catch((error) => {
         console.warn("Pinned all-songs playback cache warmup failed", error);
       });
-  }, [currentMusic, pinnedAllSongsCacheSet]);
+  }, [currentMusic, pinnedAllSongsCacheSet, useAccompaniment]);
 
   useEffect(() => {
     if (!nextQueuedTrack) {
@@ -178,8 +260,11 @@ export function MusicPlaybackWorkspace({
     }
 
     const syncState = () => {
-      setCurrentTime(Number.isFinite(audio.currentTime) ? audio.currentTime : 0);
-      setDuration(Number.isFinite(audio.duration) ? audio.duration : 0);
+      const position = Number.isFinite(audio.currentTime) ? audio.currentTime : 0;
+      const length = Number.isFinite(audio.duration) ? audio.duration : 0;
+      setCurrentTime(position);
+      setDuration(length);
+      reportPlaybackPositionRef.current(position * 1000, length * 1000);
     };
 
     syncState();
@@ -216,17 +301,34 @@ export function MusicPlaybackWorkspace({
     }
 
     const sourceChanged = audioSrc !== lastSourceRef.current;
+    // 同一首歌只是在原唱 / 伴奏之间切换：保留进度和播放状态，不从头开始。
+    const sameTrackVariantSwitch =
+      sourceChanged && lastSourceRef.current != null && lastSourceTrackIdRef.current === audioSource.trackId;
+    let resumeAfterSwitch = false;
     if (sourceChanged) {
+      const resumeAt = sameTrackVariantSwitch && Number.isFinite(audio.currentTime) ? audio.currentTime : 0;
+      const wasPlaying = sameTrackVariantSwitch && !audio.paused && !audio.ended;
       playAttemptRef.current += 1;
       lastSourceRef.current = audioSrc;
+      lastSourceTrackIdRef.current = audioSource.trackId;
       audio.pause();
       audio.src = audioSrc;
       audio.currentTime = 0;
       audio.load();
       setIsPlayingStateRef.current(false);
+      if (sameTrackVariantSwitch && resumeAt > 0) {
+        const restorePosition = () => {
+          audio.removeEventListener("loadedmetadata", restorePosition);
+          if (lastSourceRef.current !== audioSrc) return;
+          const safeTime = Number.isFinite(audio.duration) && audio.duration > 0 ? Math.min(resumeAt, audio.duration - 0.25) : resumeAt;
+          audio.currentTime = Math.max(0, safeTime);
+        };
+        audio.addEventListener("loadedmetadata", restorePosition);
+      }
+      resumeAfterSwitch = wasPlaying;
     }
 
-    if (autoplayKey <= lastAutoplayKeyRef.current) {
+    if (autoplayKey <= lastAutoplayKeyRef.current && !resumeAfterSwitch) {
       return;
     }
 
@@ -308,23 +410,44 @@ export function MusicPlaybackWorkspace({
   ];
 
   const playerPane = (
-    <section style={playerStageStyle(isMobile)}>
+    <section style={playerStageStyle(isMobile, viewportHeight)}>
       <MusicPlayerPanel
         isMobile={isMobile}
-        currentMusic={currentMusic}
-        albumName={currentAlbumName}
+        fill={isMobile}
+        currentMusic={remoteControl ? remoteMusic ?? currentMusic : currentMusic}
+        albumName={remoteControl && remoteMusic ? remoteMusic.album?.name || "未分配专辑" : currentAlbumName}
         audioRef={audioRef}
-        isPlaying={isPlaying}
-        currentTime={currentTime}
-        duration={duration}
+        isPlaying={remoteControl ? remoteControl.isPlaying : isPlaying}
+        currentTime={remoteControl ? remoteControl.getPositionMs() / 1000 : currentTime}
+        duration={remoteControl ? remoteControl.durationMs / 1000 : duration}
+        devices={devices}
+        activeDeviceId={activeDeviceId}
+        thisDeviceId={thisDeviceId}
+        onSelectDevice={transferTo}
         shuffleEnabled={shuffleEnabled}
         repeatMode={repeatMode}
         hasQueue={visibleQueue.length > 0}
+        accompanimentMode={accompanimentMode}
+        hasAccompaniment={currentHasAccompaniment}
+        onToggleAccompaniment={toggleAccompanimentMode}
+        onUploadAccompaniment={onUploadAccompaniment && currentMusic ? () => onUploadAccompaniment(currentMusic.id) : undefined}
+        remoteDeviceName={remoteDeviceName}
+        onTakeOver={() => transferTo(thisDeviceId)}
+        onAddToPlaylist={
+          canUsePlaylists && onAddCurrentToPlaylist && currentMusic
+            ? () => onAddCurrentToPlaylist(currentMusic.id)
+            : undefined
+        }
         onToggleShuffle={toggleShuffle}
         onCycleRepeat={cycleRepeatMode}
-        onPlayPrevious={() => playRelative(-1)}
-        onPlayNext={() => playRelative(1)}
+        onPlayPrevious={() => (remoteControl ? sendRemoteCommand("previous") : playRelative(-1))}
+        onPlayNext={() => (remoteControl ? sendRemoteCommand("next") : playRelative(1))}
         onTogglePlay={() => {
+          if (remoteControl) {
+            // 本机是遥控器：指令发给出声的设备。
+            sendRemoteCommand("toggle");
+            return;
+          }
           const audio = audioRef.current;
           if (!audio || !currentMusic) {
             return;
@@ -338,12 +461,17 @@ export function MusicPlaybackWorkspace({
           });
         }}
         onSeek={(nextTime) => {
+          if (remoteControl) {
+            sendRemoteCommand("seek", { position_ms: Math.round(nextTime * 1000) });
+            return;
+          }
           const audio = audioRef.current;
           if (!audio || !currentMusic) {
             return;
           }
           audio.currentTime = nextTime;
           setCurrentTime(nextTime);
+          reportSeek();
         }}
         onTrackEnded={handleTrackEnded}
       />
@@ -438,12 +566,15 @@ function panelMountStyle(active: boolean, isMobile: boolean): CSSProperties {
   };
 }
 
-function playerStageStyle(isMobile: boolean): CSSProperties {
+function playerStageStyle(isMobile: boolean, viewportHeight: number | null): CSSProperties {
   return {
     width: "100%",
     maxWidth: isMobile ? "100%" : "980px",
     margin: "0 auto",
     padding: 0,
+    // 手机：播放器整页钉在可用高度里（已扣掉顶栏和底部导航），不滚动。
+    height: isMobile && viewportHeight ? `${viewportHeight}px` : undefined,
+    overflow: isMobile ? "hidden" : undefined,
   };
 }
 

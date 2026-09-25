@@ -9,6 +9,7 @@ export function MobileMusicShell({
   browsePane,
   playerPane,
   queuePane,
+  playlistsPane,
   historyPane,
 }: {
   activeSection: MusicPlaybackSection;
@@ -17,6 +18,7 @@ export function MobileMusicShell({
   browsePane: ReactNode;
   playerPane: ReactNode;
   queuePane: ReactNode;
+  playlistsPane?: ReactNode;
   historyPane?: ReactNode;
 }) {
   return (
@@ -25,6 +27,7 @@ export function MobileMusicShell({
         <div style={panelMountStyle(activeSection === "browse")}>{browsePane}</div>
         <div style={panelMountStyle(activeSection === "player")}>{playerPane}</div>
         <div style={panelMountStyle(activeSection === "queue")}>{queuePane}</div>
+        {playlistsPane ? <div style={panelMountStyle(activeSection === "playlists")}>{playlistsPane}</div> : null}
         {historyPane ? <div style={panelMountStyle(activeSection === "history")}>{historyPane}</div> : null}
       </div>
 
@@ -45,7 +48,7 @@ const mobileShellStyle: CSSProperties = {
 
 const mobileViewportStyle: CSSProperties = {
   minWidth: 0,
-  paddingBottom: "calc(78px + env(safe-area-inset-bottom, 0px))",
+  minHeight: 0,
 };
 
 function panelMountStyle(active: boolean): CSSProperties {

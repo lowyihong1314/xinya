@@ -1,4 +1,4 @@
-import type { CSSProperties, RefObject } from "react";
+import type { CSSProperties, ReactNode, RefObject } from "react";
 
 import { showPromptDialog } from "../../../../js/dialogs";
 import type { AlbumRecord, MusicRecord } from "../../logic/types";
@@ -11,8 +11,16 @@ import { MobileEditorScreen } from "../mobile/MobileEditorScreen";
 import { MobileTracksScreen } from "../mobile/MobileTracksScreen";
 import { MusicSearchInput } from "../shared/MusicSearchInput";
 
+export type MusicLibraryTab = "library" | "playlists";
+
 type MusicWorkspacePanelProps = {
   isMobile: boolean;
+  /** 顶部「资料库 / 我的歌单」页签。 */
+  libraryTab: MusicLibraryTab;
+  onChangeLibraryTab: (tab: MusicLibraryTab) => void;
+  /** 登录后才显示「我的歌单」页签。 */
+  showPlaylistsTab: boolean;
+  playlistsPane?: ReactNode;
   screen: WorkspaceScreen;
   editorMode: EditorMode;
   loading: boolean;
@@ -45,9 +53,11 @@ type MusicWorkspacePanelProps = {
   savingTrack: boolean;
   uploadingMusic: boolean;
   replacingFile: boolean;
+  savingAccompaniment: boolean;
   canManage: boolean;
   coverInputRef: RefObject<HTMLInputElement | null>;
   replaceInputRef: RefObject<HTMLInputElement | null>;
+  accompanimentInputRef: RefObject<HTMLInputElement | null>;
   onChangeSearch: (value: string) => void;
   onChangeAlbumDraft: (draft: AlbumDraft) => void;
   onChangeTrackDraft: (draft: TrackDraft) => void;
@@ -65,10 +75,17 @@ type MusicWorkspacePanelProps = {
   onUploadMusic: (upload: MusicUploadDraft | null) => Promise<void>;
   onSelectTrack: (musicId: number) => void;
   onQueueTrack: (musicId: number) => void;
+  /** 传了就在每首歌旁显示「+歌单」。 */
+  onAddToPlaylist?: (musicId: number) => void;
+  /** 管理员：每首歌旁的「上传伴奏 / 换伴奏」。 */
+  onPickAccompanimentForTrack?: (musicId: number) => void;
   onSaveTrack: () => Promise<void>;
   onDeleteTrack: () => Promise<void>;
   onPickReplaceFile: () => void;
   onReplaceSelected: (file: File | null) => Promise<void>;
+  onPickAccompanimentFile: () => void;
+  onAccompanimentSelected: (file: File | null) => Promise<void>;
+  onDeleteAccompaniment: () => Promise<void>;
   onAlbumPageChange: (page: number) => void;
   onTrackPageChange: (page: number) => void;
   albumTrackCount: (albumId: number) => number;
@@ -77,6 +94,10 @@ type MusicWorkspacePanelProps = {
 export function MusicWorkspacePanel(props: MusicWorkspacePanelProps) {
   const {
     isMobile,
+    libraryTab,
+    onChangeLibraryTab,
+    showPlaylistsTab,
+    playlistsPane,
     screen,
     editorMode,
     loading,
@@ -106,9 +127,11 @@ export function MusicWorkspacePanel(props: MusicWorkspacePanelProps) {
     savingTrack,
     uploadingMusic,
     replacingFile,
+    savingAccompaniment,
     canManage,
     coverInputRef,
     replaceInputRef,
+    accompanimentInputRef,
     onChangeSearch,
     onChangeAlbumDraft,
     onChangeTrackDraft,
@@ -126,23 +149,54 @@ export function MusicWorkspacePanel(props: MusicWorkspacePanelProps) {
     onUploadMusic,
     onSelectTrack,
     onQueueTrack,
+    onAddToPlaylist,
+    onPickAccompanimentForTrack,
     onSaveTrack,
     onDeleteTrack,
     onPickReplaceFile,
     onReplaceSelected,
+    onPickAccompanimentFile,
+    onAccompanimentSelected,
+    onDeleteAccompaniment,
     onAlbumPageChange,
     onTrackPageChange,
     albumTrackCount,
   } = props;
 
+  const activeTab: MusicLibraryTab = showPlaylistsTab ? libraryTab : "library";
+
   return (
     <section style={workspaceStyle(isMobile)}>
       <header style={workspaceHeaderStyle(isMobile)}>
-        <div style={headerCopyStyle}>
-          {!isMobile ? <div style={eyebrowStyle}>Music Workspace</div> : null}
-          <h1 style={titleStyle(isMobile)}>佛曲资料库</h1>
-          {!isMobile ? <p style={subtitleStyle}>音乐库、歌曲编辑和专辑管理都集中在这里。</p> : null}
+        <div style={libraryTabsStyle} role="tablist">
+          <button
+            type="button"
+            role="tab"
+            aria-selected={activeTab === "library"}
+            style={libraryTabButtonStyle(activeTab === "library")}
+            onClick={() => onChangeLibraryTab("library")}
+          >
+            资料库
+          </button>
+          {showPlaylistsTab ? (
+            <button
+              type="button"
+              role="tab"
+              aria-selected={activeTab === "playlists"}
+              style={libraryTabButtonStyle(activeTab === "playlists")}
+              onClick={() => onChangeLibraryTab("playlists")}
+            >
+              我的歌单
+            </button>
+          ) : null}
         </div>
+        {activeTab === "library" ? (
+          <div style={headerSearchStyle}>
+            <MusicSearchInput value={search} onChange={onChangeSearch} />
+          </div>
+        ) : (
+          <div />
+        )}
         {!isMobile ? (
           <div style={headerMetaStyle}>
             {refreshing ? <span style={chipStyle("info")}>同步中</span> : null}
@@ -160,7 +214,9 @@ export function MusicWorkspacePanel(props: MusicWorkspacePanelProps) {
 
       {toast ? <div style={toastStyle(toast.type)}>{toast.text}</div> : null}
 
-      {screen === "albums" ? (
+      {activeTab === "playlists" ? playlistsPane ?? null : null}
+
+      {activeTab === "library" && screen === "albums" ? (
         <AlbumsScreen
           isMobile={isMobile}
           loading={loading}
@@ -183,7 +239,7 @@ export function MusicWorkspacePanel(props: MusicWorkspacePanelProps) {
         />
       ) : null}
 
-      {screen === "tracks"
+      {activeTab === "library" && screen === "tracks"
         ? isMobile
           ? (
             <MobileTracksScreen
@@ -207,6 +263,8 @@ export function MusicWorkspacePanel(props: MusicWorkspacePanelProps) {
               uploadingMusic={uploadingMusic}
               hasSelectedAlbum={Boolean(selectedAlbumId)}
               onQueueTrack={onQueueTrack}
+              onAddToPlaylist={onAddToPlaylist}
+              onPickAccompanimentForTrack={onPickAccompanimentForTrack}
             />
           )
           : (
@@ -231,11 +289,13 @@ export function MusicWorkspacePanel(props: MusicWorkspacePanelProps) {
               uploadingMusic={uploadingMusic}
               hasSelectedAlbum={Boolean(selectedAlbumId)}
               onQueueTrack={onQueueTrack}
+              onAddToPlaylist={onAddToPlaylist}
+              onPickAccompanimentForTrack={onPickAccompanimentForTrack}
             />
           )
         : null}
 
-      {screen === "editor"
+      {activeTab === "library" && screen === "editor"
         ? isMobile
           ? (
             <MobileEditorScreen
@@ -249,8 +309,10 @@ export function MusicWorkspacePanel(props: MusicWorkspacePanelProps) {
               savingAlbum={savingAlbum}
               savingTrack={savingTrack}
               replacingFile={replacingFile}
+              savingAccompaniment={savingAccompaniment}
               coverInputRef={coverInputRef}
               replaceInputRef={replaceInputRef}
+              accompanimentInputRef={accompanimentInputRef}
               onBackFromEditor={onBackFromEditor}
               onChangeAlbumDraft={onChangeAlbumDraft}
               onChangeTrackDraft={onChangeTrackDraft}
@@ -262,6 +324,9 @@ export function MusicWorkspacePanel(props: MusicWorkspacePanelProps) {
               onDeleteTrack={onDeleteTrack}
               onPickReplaceFile={onPickReplaceFile}
               onReplaceSelected={onReplaceSelected}
+              onPickAccompanimentFile={onPickAccompanimentFile}
+              onAccompanimentSelected={onAccompanimentSelected}
+              onDeleteAccompaniment={onDeleteAccompaniment}
             />
           )
           : (
@@ -276,8 +341,10 @@ export function MusicWorkspacePanel(props: MusicWorkspacePanelProps) {
               savingAlbum={savingAlbum}
               savingTrack={savingTrack}
               replacingFile={replacingFile}
+              savingAccompaniment={savingAccompaniment}
               coverInputRef={coverInputRef}
               replaceInputRef={replaceInputRef}
+              accompanimentInputRef={accompanimentInputRef}
               onBackFromEditor={onBackFromEditor}
               onChangeAlbumDraft={onChangeAlbumDraft}
               onChangeTrackDraft={onChangeTrackDraft}
@@ -289,6 +356,9 @@ export function MusicWorkspacePanel(props: MusicWorkspacePanelProps) {
               onDeleteTrack={onDeleteTrack}
               onPickReplaceFile={onPickReplaceFile}
               onReplaceSelected={onReplaceSelected}
+              onPickAccompanimentFile={onPickAccompanimentFile}
+              onAccompanimentSelected={onAccompanimentSelected}
+              onDeleteAccompaniment={onDeleteAccompaniment}
             />
           )
         : null}
@@ -368,14 +438,13 @@ function AlbumsScreen({
           </div>
         ) : null}
 
-        <div style={searchRowStyle(canManage)}>
-          <MusicSearchInput value={search} onChange={onChangeSearch} />
-          {canManage ? (
+        {canManage ? (
+          <div style={searchRowStyle(false)}>
             <button type="button" style={primaryButtonStyle} onClick={handleCreateAlbumClick}>
               创建专辑
             </button>
-          ) : null}
-        </div>
+          </div>
+        ) : null}
 
         {totalAlbumPages > 1 ? (
           <div style={paginationStyle}>
@@ -452,37 +521,42 @@ const screenStackStyle: CSSProperties = {
   gap: "20px",
 };
 
+// 顶栏一行：左边「资料库 / 我的歌单」页签，右边搜索框；桌面端再带一排统计小标签。
 const workspaceHeaderStyle = (isMobile: boolean): CSSProperties => ({
   display: "grid",
-  gap: "16px",
-  gridTemplateColumns: isMobile ? "1fr" : "minmax(0, 1fr) auto",
-  alignItems: "end",
+  gap: isMobile ? "10px" : "14px",
+  gridTemplateColumns: isMobile ? "auto minmax(0, 1fr)" : "auto minmax(0, 1fr) auto",
+  alignItems: "center",
 });
 
-const headerCopyStyle: CSSProperties = {
-  display: "grid",
-  gap: "8px",
+const libraryTabsStyle: CSSProperties = {
+  display: "inline-flex",
+  padding: "4px",
+  borderRadius: "14px",
+  background: "var(--x-color-panel-alt)",
+  border: "1px solid var(--x-color-line)",
+  gap: "4px",
+  flexShrink: 0,
 };
 
-const eyebrowStyle: CSSProperties = {
-  fontSize: "12px",
-  fontWeight: 700,
-  letterSpacing: "0.18em",
-  textTransform: "uppercase",
-  color: "var(--x-color-accent)",
-};
+function libraryTabButtonStyle(active: boolean): CSSProperties {
+  return {
+    minHeight: "36px",
+    padding: "0 14px",
+    borderRadius: "10px",
+    border: "none",
+    background: active ? "var(--x-color-panel)" : "transparent",
+    color: active ? "var(--x-color-ink)" : "var(--x-color-ink-muted)",
+    fontSize: "13px",
+    fontWeight: 800,
+    cursor: "pointer",
+    boxShadow: active ? "0 4px 12px var(--x-color-shadow-soft)" : "none",
+    whiteSpace: "nowrap",
+  };
+}
 
-const titleStyle = (isMobile: boolean): CSSProperties => ({
-  margin: 0,
-  fontSize: isMobile ? "28px" : "34px",
-  lineHeight: 1.05,
-  color: "var(--x-color-ink)",
-});
-
-const subtitleStyle: CSSProperties = {
-  margin: 0,
-  color: "var(--x-color-ink-muted)",
-  fontSize: "14px",
+const headerSearchStyle: CSSProperties = {
+  minWidth: 0,
 };
 
 const headerMetaStyle: CSSProperties = {
@@ -490,6 +564,7 @@ const headerMetaStyle: CSSProperties = {
   flexWrap: "wrap",
   gap: "10px",
   alignItems: "center",
+  justifyContent: "flex-end",
 };
 
 function chipStyle(kind: "neutral" | "info"): CSSProperties {

@@ -17,8 +17,10 @@ export function DesktopEditorScreen({
   savingAlbum,
   savingTrack,
   replacingFile,
+  savingAccompaniment,
   coverInputRef,
   replaceInputRef,
+  accompanimentInputRef,
   onBackFromEditor,
   onChangeAlbumDraft,
   onChangeTrackDraft,
@@ -30,6 +32,9 @@ export function DesktopEditorScreen({
   onDeleteTrack,
   onPickReplaceFile,
   onReplaceSelected,
+  onPickAccompanimentFile,
+  onAccompanimentSelected,
+  onDeleteAccompaniment,
 }: {
   editorMode: EditorMode;
   selectedAlbumDetail: AlbumRecord | null;
@@ -41,8 +46,10 @@ export function DesktopEditorScreen({
   savingAlbum: boolean;
   savingTrack: boolean;
   replacingFile: boolean;
+  savingAccompaniment: boolean;
   coverInputRef: RefObject<HTMLInputElement | null>;
   replaceInputRef: RefObject<HTMLInputElement | null>;
+  accompanimentInputRef: RefObject<HTMLInputElement | null>;
   onBackFromEditor: () => void;
   onChangeAlbumDraft: (draft: AlbumDraft) => void;
   onChangeTrackDraft: (draft: TrackDraft) => void;
@@ -54,6 +61,9 @@ export function DesktopEditorScreen({
   onDeleteTrack: () => Promise<void>;
   onPickReplaceFile: () => void;
   onReplaceSelected: (file: File | null) => Promise<void>;
+  onPickAccompanimentFile: () => void;
+  onAccompanimentSelected: (file: File | null) => Promise<void>;
+  onDeleteAccompaniment: () => Promise<void>;
 }) {
   return (
     <div style={screenStackStyle}>
@@ -172,6 +182,24 @@ export function DesktopEditorScreen({
               </label>
               <div style={editorHintStyle}>
                 当前文件：{editingMusicDetail?.file_name || "未命名"} {editingMusicDetail?.file_type ? `· ${editingMusicDetail.file_type}` : ""}
+              </div>
+              <div style={accompanimentCardStyle}>
+                <div style={fieldLabelStyle}>伴奏文件</div>
+                <div style={editorHintStyle}>
+                  {editingMusicDetail?.accompaniment_file_name
+                    ? `${editingMusicDetail.accompaniment_file_name}${editingMusicDetail.accompaniment_file_type ? ` · ${editingMusicDetail.accompaniment_file_type}` : ""}`
+                    : "还没有伴奏。上传后播放器可以切换「伴奏模式」。"}
+                </div>
+                <div style={editorActionBarStyle}>
+                  <button type="button" style={secondaryButtonStyle} onClick={onPickAccompanimentFile} disabled={savingAccompaniment}>
+                    {savingAccompaniment ? "处理中…" : editingMusicDetail?.accompaniment_file_name ? "更换伴奏" : "上传伴奏"}
+                  </button>
+                  {editingMusicDetail?.accompaniment_file_name ? (
+                    <button type="button" style={dangerButtonStyle} onClick={() => void onDeleteAccompaniment()} disabled={savingAccompaniment}>
+                      移除伴奏
+                    </button>
+                  ) : null}
+                </div>
               </div>
               <div style={editorActionBarStyle}>
                 <button type="button" style={primaryButtonStyle} onClick={() => void onSaveTrack()} disabled={savingTrack}>
@@ -320,6 +348,15 @@ const editorActionBarStyle: CSSProperties = {
 const editorHintStyle: CSSProperties = {
   fontSize: "12px",
   color: "var(--x-color-ink-muted)",
+};
+
+const accompanimentCardStyle: CSSProperties = {
+  display: "grid",
+  gap: "10px",
+  padding: "14px",
+  borderRadius: "16px",
+  border: "1px dashed var(--x-color-line)",
+  background: "var(--x-color-panel-alt)",
 };
 
 const emptyStateStyle: CSSProperties = {

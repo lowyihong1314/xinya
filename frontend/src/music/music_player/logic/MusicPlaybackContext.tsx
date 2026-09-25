@@ -2,8 +2,10 @@ import { createContext, useContext, useEffect, useMemo, useRef, useState } from 
 import type { ReactNode } from "react";
 
 import { useUserState } from "../../../app/UserState";
-import type { AlbumRecord, MusicRecord } from "./types";
+import type { AlbumRecord, MusicRecord, PlaybackCommandAction, PlaybackDeviceRecord, PlaybackDeviceState } from "./types";
 import { addOneMinute, fetchLastPlayedMusic } from "./api";
+import { getWebPlaybackDeviceId, getWebPlaybackDeviceName } from "./playbackDevice";
+import { usePlaybackDeviceSync, type RemotePlaybackView } from "./usePlaybackDeviceSync";
 
 type RepeatMode = "off" | "all" | "one";
 
@@ -20,6 +22,35 @@ type MusicPlaybackContextValue = {
   shuffleEnabled: boolean;
   repeatMode: RepeatMode;
   autoplayKey: number;
+  /** 伴奏模式：有伴奏文件的歌播放伴奏版。 */
+  accompanimentMode: boolean;
+  toggleAccompanimentMode: () => void;
+  /** 一人一设备：服务端状态（含在线设备列表）。 */
+  remotePlayback: PlaybackDeviceState | null;
+  remoteDeviceName: string | null;
+  isActiveDevice: boolean;
+  /** 本机是遥控器时的远端视图（歌 / 进度 / 播放中），本机出声时为 null。 */
+  remoteControl: RemotePlaybackView | null;
+  devices: PlaybackDeviceRecord[];
+  activeDeviceId: string | null;
+  thisDeviceId: string;
+  /** 设备选择器：把出声切到某台设备。 */
+  transferTo: (deviceId: string) => void;
+  /** 遥控指令，发给出声的设备。 */
+  sendRemoteCommand: (action: PlaybackCommandAction, payload?: Record<string, unknown>) => void;
+  /** 本机拖了进度：立刻同步给遥控器。 */
+  reportSeek: () => void;
+  /** 其他设备接管时递增，播放器据此暂停 <audio>。 */
+  pauseSignal: number;
+  /** 播放器在 <audio> 真正开始播放时调用：抢占为活动设备。 */
+  notifyLocalPlay: () => void;
+  /** 播放器每次 timeupdate 上报位置和时长（只写 ref，不触发渲染）。 */
+  reportPlaybackPosition: (positionMs: number, durationMs?: number) => void;
+  /** 「在此设备播放」：抢占并从远端位置继续。 */
+  takeOverPlayback: () => void;
+  /** 接管后要跳到的位置（毫秒），播放器用过一次后调用 consumeResumePosition 清掉。 */
+  resumePositionMs: number | null;
+  consumeResumePosition: () => void;
   setAlbums: (albums: AlbumRecord[]) => void;
   setLibraryMusics: (musics: MusicRecord[]) => void;
   setQueue: (musics: MusicRecord[]) => void;
@@ -40,6 +71,16 @@ type MusicPlaybackContextValue = {
 
 const QUEUE_STORAGE_KEY = "xinya.music.queue.ids";
 const CURRENT_STORAGE_KEY = "xinya.music.current.id";
+const ACCOMPANIMENT_STORAGE_KEY = "xinya.music.accompaniment";
+const MINUTE_MS = 60_000;
+
+function readStoredAccompanimentMode() {
+  try {
+    return window.localStorage.getItem(ACCOMPANIMENT_STORAGE_KEY) === "1";
+  } catch {
+    return false;
+  }
+}
 
 const MusicPlaybackContext = createContext<MusicPlaybackContextValue | null>(null);
 
@@ -54,11 +95,106 @@ export function MusicPlaybackProvider({ children }: { children: ReactNode }) {
   const [shuffleEnabled, setShuffleEnabled] = useState(false);
   const [shuffleQueueIds, setShuffleQueueIds] = useState<number[]>([]);
   const [repeatMode, setRepeatMode] = useState<RepeatMode>("off");
+  const [accompanimentMode, setAccompanimentMode] = useState<boolean>(readStoredAccompanimentMode);
   const [autoplayKey, setAutoplayKey] = useState(0);
+  const [pauseSignal, setPauseSignal] = useState(0);
+  const [resumePositionMs, setResumePositionMs] = useState<number | null>(null);
+  const positionMsRef = useRef(0);
+  const durationMsRef = useRef(0);
+  const deviceId = useMemo(() => getWebPlaybackDeviceId(), []);
+  const deviceName = useMemo(() => getWebPlaybackDeviceName(), []);
   const [restoredState, setRestoredState] = useState(false);
   const attemptedRemoteRestoreRef = useRef(false);
 
   const musicMap = useMemo(() => new Map(libraryMusics.map((music) => [music.id, music])), [libraryMusics]);
+
+  // 本机作为出声设备时执行的本地动作（遥控指令 / 切换到本机）。
+  const isPlayingRef = useRef(isPlaying);
+  isPlayingRef.current = isPlaying;
+  const musicMapRef = useRef(musicMap);
+  musicMapRef.current = musicMap;
+
+  function startLocally(musicId: number | null, positionMs: number, autoplay: boolean) {
+    if (musicId != null && musicMapRef.current.has(musicId)) {
+      setQueueIds((current) => (current.includes(musicId) ? current : Array.from(new Set([...current, musicId]))));
+      positionMsRef.current = positionMs;
+      setResumePositionMs(positionMs);
+      setCurrentMusicIdState(musicId);
+    }
+    setHasPlaybackSession(true);
+    if (autoplay) setAutoplayKey((value) => value + 1);
+  }
+
+  function executeCommand(action: PlaybackCommandAction, payload: Record<string, unknown>) {
+    switch (action) {
+      case "play":
+        setAutoplayKey((value) => value + 1);
+        return;
+      case "pause":
+        setPauseSignal((value) => value + 1);
+        return;
+      case "toggle":
+        if (isPlayingRef.current) setPauseSignal((value) => value + 1);
+        else setAutoplayKey((value) => value + 1);
+        return;
+      case "next":
+        playRelative(1);
+        return;
+      case "previous":
+        playRelative(-1);
+        return;
+      case "seek": {
+        const position = Number(payload.position_ms);
+        if (Number.isFinite(position)) {
+          positionMsRef.current = position;
+          setResumePositionMs(Math.max(0, position));
+        }
+        return;
+      }
+      case "play_music": {
+        const musicId = Number(payload.music_id);
+        const queueIdsPayload = Array.isArray(payload.queue_ids)
+          ? (payload.queue_ids as unknown[]).map((value) => Number(value)).filter((value) => Number.isFinite(value))
+          : null;
+        if (queueIdsPayload && queueIdsPayload.length) {
+          setQueueIds(queueIdsPayload.filter((id) => musicMapRef.current.has(id)));
+        }
+        if (Number.isFinite(musicId)) startLocally(musicId, 0, true);
+        return;
+      }
+      case "set_queue": {
+        const ids = Array.isArray(payload.queue_ids)
+          ? (payload.queue_ids as unknown[]).map((value) => Number(value)).filter((value) => Number.isFinite(value))
+          : [];
+        setQueueIds(ids.filter((id) => musicMapRef.current.has(id)));
+        return;
+      }
+      default:
+        return;
+    }
+  }
+
+  const deviceSync = usePlaybackDeviceSync({
+    enabled: isAuthenticated && !loadingUser,
+    deviceId,
+    deviceName,
+    kind: "web",
+    isPlaying,
+    currentMusicId,
+    getPositionMs: () => positionMsRef.current,
+    getDurationMs: () => durationMsRef.current,
+    onRemoteTakeover: () => {
+      // 别的设备出声了：本机暂停，变成遥控器；队列不清，随时可以切回来。
+      setIsPlaying(false);
+      setPauseSignal((value) => value + 1);
+    },
+    onTransferredToMe: (state) => {
+      startLocally(state.music_id ?? null, state.position_ms || 0, Boolean(state.resume || state.is_playing));
+    },
+    onCommand: executeCommand,
+  });
+  const deviceSyncRef = useRef(deviceSync);
+  deviceSyncRef.current = deviceSync;
   const queue = useMemo(
     () => queueIds.map((id) => musicMap.get(id)).filter((music): music is MusicRecord => Boolean(music)),
     [queueIds, musicMap],
@@ -115,29 +251,67 @@ export function MusicPlaybackProvider({ children }: { children: ReactNode }) {
   }, [currentMusicId, restoredState]);
 
   useEffect(() => {
+    try {
+      window.localStorage.setItem(ACCOMPANIMENT_STORAGE_KEY, accompanimentMode ? "1" : "0");
+    } catch {
+      // 存不进去只影响记忆偏好
+    }
+  }, [accompanimentMode]);
+
+  // 随机顺序只在「队列成员变化」时重排：换歌不重洗，否则随机模式下会重复播、无法回退。
+  // 队列新增的歌随机插入到当前曲之后，移除的歌直接剔除。
+  const currentMusicIdRef = useRef<number | null>(currentMusicId);
+  currentMusicIdRef.current = currentMusicId;
+  useEffect(() => {
     if (!queueIds.length) {
       setShuffleQueueIds([]);
       return;
     }
-    const next = buildStableShuffleIds(queueIds, currentMusicId);
-    setShuffleQueueIds((current) => (current.join(",") === next.join(",") ? current : next));
-  }, [queueIds, currentMusicId]);
-
-  // Track play minutes: call addOneMinute every 60s while a song is playing.
-  const playingMusicIdRef = useRef<number | null>(null);
-  useEffect(() => {
-    playingMusicIdRef.current = isPlaying ? currentMusicId : null;
-  }, [isPlaying, currentMusicId]);
-
-  useEffect(() => {
-    if (!isPlaying || !currentMusicId) return;
-    const timer = window.setInterval(() => {
-      const id = playingMusicIdRef.current;
-      if (id != null) {
-        void addOneMinute(id).catch(() => undefined);
+    setShuffleQueueIds((current) => {
+      const queueSet = new Set(queueIds);
+      const kept = current.filter((id) => queueSet.has(id));
+      const keptSet = new Set(kept);
+      const added = queueIds.filter((id) => !keptSet.has(id));
+      if (!added.length && kept.length === current.length) {
+        return current;
       }
-    }, 60_000);
-    return () => window.clearInterval(timer);
+      if (!kept.length) {
+        return buildStableShuffleIds(queueIds, currentMusicIdRef.current);
+      }
+      const shuffledAdded = buildStableShuffleIds(added, null);
+      const currentIndex = currentMusicIdRef.current != null ? kept.indexOf(currentMusicIdRef.current) : -1;
+      const insertAt = currentIndex >= 0 ? currentIndex + 1 : kept.length;
+      return [...kept.slice(0, insertAt), ...shuffledAdded, ...kept.slice(insertAt)];
+    });
+  }, [queueIds]);
+
+  // 听歌分钟：累计「真正在播放」的毫秒数，暂停/缓冲只停表不清零，每满 60 秒上报一次；
+  // 未满 60 秒的部分在切歌时保留，归到下一首继续累计。
+  const playedMsRef = useRef(0);
+  const lastTickRef = useRef<number | null>(null);
+  useEffect(() => {
+    if (!isPlaying || currentMusicId == null) {
+      lastTickRef.current = null;
+      return;
+    }
+    lastTickRef.current = performance.now();
+    const tick = () => {
+      const now = performance.now();
+      if (lastTickRef.current != null) {
+        playedMsRef.current += now - lastTickRef.current;
+      }
+      lastTickRef.current = now;
+      while (playedMsRef.current >= MINUTE_MS) {
+        playedMsRef.current -= MINUTE_MS;
+        void addOneMinute(currentMusicId).catch(() => undefined);
+      }
+    };
+    const timer = window.setInterval(tick, 1000);
+    return () => {
+      window.clearInterval(timer);
+      tick();
+      lastTickRef.current = null;
+    };
   }, [isPlaying, currentMusicId]);
 
   useEffect(() => {
@@ -230,6 +404,15 @@ export function MusicPlaybackProvider({ children }: { children: ReactNode }) {
   }
 
   function selectMusic(musicId: number) {
+    const remote = deviceSyncRef.current.remote;
+    if (remote) {
+      // 本机是遥控器：点歌就让出声的设备去播，本机只更新显示。
+      const nextQueue = queueIds.includes(musicId) ? queueIds : [...queueIds, musicId];
+      void deviceSyncRef.current.sendCommand("play_music", { music_id: musicId, queue_ids: nextQueue });
+      setCurrentMusicIdState(musicId);
+      setHasPlaybackSession(true);
+      return;
+    }
     setCurrentMusicIdState(musicId);
     setHasPlaybackSession(true);
     setAutoplayKey((value) => value + 1);
@@ -368,6 +551,36 @@ export function MusicPlaybackProvider({ children }: { children: ReactNode }) {
       shuffleEnabled,
       repeatMode,
       autoplayKey,
+      accompanimentMode,
+      toggleAccompanimentMode: () => setAccompanimentMode((value) => !value),
+      remotePlayback: deviceSync.state,
+      remoteDeviceName: deviceSync.remoteDeviceName,
+      isActiveDevice: deviceSync.isActiveDevice,
+      remoteControl: deviceSync.remote,
+      devices: deviceSync.devices,
+      activeDeviceId: deviceSync.activeDeviceId,
+      thisDeviceId: deviceId,
+      transferTo: (targetId: string) => {
+        void deviceSyncRef.current.transferTo(targetId);
+      },
+      sendRemoteCommand: (action, payload) => {
+        void deviceSyncRef.current.sendCommand(action, payload);
+      },
+      reportSeek: () => deviceSyncRef.current.reportSeek(),
+      pauseSignal,
+      resumePositionMs,
+      consumeResumePosition: () => setResumePositionMs(null),
+      notifyLocalPlay: () => {
+        void deviceSyncRef.current.claim();
+      },
+      reportPlaybackPosition: (positionMs: number, durationMs?: number) => {
+        positionMsRef.current = positionMs;
+        if (typeof durationMs === "number" && Number.isFinite(durationMs)) durationMsRef.current = durationMs;
+      },
+      takeOverPlayback: () => {
+        // 「在此设备播放」= 在选择器里选中本机。
+        void deviceSyncRef.current.transferTo(deviceId);
+      },
       setAlbums,
       setLibraryMusics,
       setQueue: (musics) => setQueueIds(normalizeQueue(musics.map((music) => music.id))),
@@ -380,7 +593,15 @@ export function MusicPlaybackProvider({ children }: { children: ReactNode }) {
       playFromQueue,
       playRelative,
       handleTrackEnded,
-      toggleShuffle: () => setShuffleEnabled((value) => !value),
+      toggleShuffle: () =>
+        setShuffleEnabled((value) => {
+          const next = !value;
+          if (next) {
+            // 开启随机时重洗一次，并把当前曲放在最前面。
+            setShuffleQueueIds(buildStableShuffleIds(queueIds, currentMusicId));
+          }
+          return next;
+        }),
       cycleRepeatMode: () =>
         setRepeatMode((value) => {
           if (value === "off") return "all";
@@ -399,7 +620,7 @@ export function MusicPlaybackProvider({ children }: { children: ReactNode }) {
         }
       },
     }),
-    [albums, libraryMusics, queue, orderedQueue, currentMusic, currentMusicId, isPlaying, hasPlaybackSession, shuffleEnabled, repeatMode, autoplayKey, musicMap],
+    [albums, libraryMusics, queue, orderedQueue, currentMusic, currentMusicId, isPlaying, hasPlaybackSession, shuffleEnabled, repeatMode, autoplayKey, accompanimentMode, musicMap, deviceSync.state, deviceSync.remote, deviceSync.remoteDeviceName, deviceSync.isActiveDevice, deviceSync.devices, deviceSync.activeDeviceId, deviceId, pauseSignal, resumePositionMs],
   );
 
   return <MusicPlaybackContext.Provider value={value}>{children}</MusicPlaybackContext.Provider>;

@@ -3,6 +3,10 @@ import type {
   LastPlayedMusicResponse,
   MinuteLogsResponse,
   MusicRecord,
+  PlaybackCommandAction,
+  PlaybackCommandMessage,
+  PlaybackDeviceState,
+  PlaylistRecord,
 } from "./types";
 import type { MusicUploadDraft } from "./workspaceTypes";
 import { apiFetch } from "../../../js/apiFetch";
@@ -129,6 +133,7 @@ export async function uploadMusic(albumId: number, upload: MusicUploadDraft) {
   form.append("album_id", String(albumId));
   form.append("title", upload.title);
   form.append("files", upload.file);
+  if (upload.accompaniment) form.append("accompaniment", upload.accompaniment);
   const response = await apiFetch("/api/music/upload", {
     method: "POST",
     credentials: "include",
@@ -162,6 +167,145 @@ export async function replaceMusicFile(musicId: number, file: File) {
     method: "POST",
     credentials: "include",
     body: form,
+  });
+  return parseJson<{ success?: boolean; music?: MusicRecord }>(response);
+}
+
+// ---- 一人一设备播放 ----
+export async function fetchPlaybackChannel(deviceId?: string | null) {
+  const response = await apiFetch("/api/music/playback/channel", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    credentials: "include",
+    body: JSON.stringify({ device_id: deviceId ?? null }),
+  });
+  return parseJson<{ channel_key: string; room: string; state?: PlaybackDeviceState }>(response);
+}
+
+export async function transferPlayback(targetDeviceId: string, requestedBy?: string | null) {
+  const response = await apiFetch("/api/music/playback/transfer", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    credentials: "include",
+    body: JSON.stringify({ device_id: targetDeviceId, requested_by: requestedBy ?? null }),
+  });
+  return parseJson<PlaybackDeviceState>(response);
+}
+
+export async function sendPlaybackCommand(payload: {
+  target_device_id: string | null;
+  action: PlaybackCommandAction;
+  payload?: Record<string, unknown>;
+  requested_by?: string | null;
+}) {
+  const response = await apiFetch("/api/music/playback/command", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    credentials: "include",
+    body: JSON.stringify(payload),
+  });
+  return parseJson<PlaybackCommandMessage>(response);
+}
+
+export async function sendPlaybackHeartbeat(payload: {
+  device_id: string;
+  device_name: string;
+  kind?: "web" | "android";
+  music_id: number | null;
+  position_ms: number;
+  duration_ms?: number;
+  is_playing: boolean;
+  claim?: boolean;
+}) {
+  const response = await apiFetch("/api/music/playback/heartbeat", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    credentials: "include",
+    body: JSON.stringify(payload),
+  });
+  return parseJson<PlaybackDeviceState>(response);
+}
+
+export async function releasePlayback(deviceId: string) {
+  const response = await apiFetch("/api/music/playback/release", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    credentials: "include",
+    body: JSON.stringify({ device_id: deviceId }),
+  });
+  return parseJson<PlaybackDeviceState>(response);
+}
+
+// ---- 我的歌单（歌单与用户多对多）----
+export async function fetchPlaylists() {
+  const response = await apiFetch("/api/music/playlists", { credentials: "include" });
+  return parseJson<{ playlists?: PlaylistRecord[]; public_playlists?: PlaylistRecord[] }>(response);
+}
+
+export async function createPlaylist(payload: { name: string; description?: string; music_ids?: number[]; is_public?: boolean }) {
+  const response = await apiFetch("/api/music/playlist", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    credentials: "include",
+    body: JSON.stringify(payload),
+  });
+  return parseJson<{ success?: boolean; playlist?: PlaylistRecord }>(response);
+}
+
+export async function savePlaylist(
+  playlistId: number,
+  payload: { name?: string; description?: string; music_ids?: number[]; is_public?: boolean },
+) {
+  const response = await apiFetch(`/api/music/playlist/${playlistId}`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    credentials: "include",
+    body: JSON.stringify(payload),
+  });
+  return parseJson<{ success?: boolean; playlist?: PlaylistRecord }>(response);
+}
+
+export async function deletePlaylist(playlistId: number) {
+  const response = await apiFetch(`/api/music/playlist/${playlistId}`, {
+    method: "DELETE",
+    credentials: "include",
+  });
+  return parseJson<{ success?: boolean }>(response);
+}
+
+export async function addPlaylistMember(playlistId: number, handle: string) {
+  const response = await apiFetch(`/api/music/playlist/${playlistId}/members`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    credentials: "include",
+    body: JSON.stringify({ username: handle }),
+  });
+  return parseJson<{ success?: boolean; playlist?: PlaylistRecord; already_member?: boolean }>(response);
+}
+
+export async function removePlaylistMember(playlistId: number, userId: number) {
+  const response = await apiFetch(`/api/music/playlist/${playlistId}/members/${userId}`, {
+    method: "DELETE",
+    credentials: "include",
+  });
+  return parseJson<{ success?: boolean; playlist?: PlaylistRecord; left?: boolean }>(response);
+}
+
+export async function uploadAccompaniment(musicId: number, file: File) {
+  const form = new FormData();
+  form.append("file", file);
+  const response = await apiFetch(`/api/music/accompaniment/${musicId}`, {
+    method: "POST",
+    credentials: "include",
+    body: form,
+  });
+  return parseJson<{ success?: boolean; music?: MusicRecord }>(response);
+}
+
+export async function deleteAccompaniment(musicId: number) {
+  const response = await apiFetch(`/api/music/accompaniment/${musicId}`, {
+    method: "DELETE",
+    credentials: "include",
   });
   return parseJson<{ success?: boolean; music?: MusicRecord }>(response);
 }

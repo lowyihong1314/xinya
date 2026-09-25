@@ -15,6 +15,7 @@ function filenameToTitle(fileName: string) {
 function MusicUploadDialog({ onResolve }: MusicUploadDialogProps) {
   const [title, setTitle] = useState("");
   const [file, setFile] = useState<File | null>(null);
+  const [accompaniment, setAccompaniment] = useState<File | null>(null);
   const [titleTouched, setTitleTouched] = useState(false);
   const [error, setError] = useState("");
 
@@ -36,7 +37,7 @@ function MusicUploadDialog({ onResolve }: MusicUploadDialogProps) {
       setError("请选择音频文件");
       return;
     }
-    onResolve({ title: trimmedTitle, file });
+    onResolve({ title: trimmedTitle, file, accompaniment });
   }
 
   return (
@@ -46,7 +47,7 @@ function MusicUploadDialog({ onResolve }: MusicUploadDialogProps) {
         <div style={headerStyle}>
           <div style={eyebrowStyle}>Music Upload</div>
           <h3 style={titleStyle}>添加歌曲</h3>
-          <p style={messageStyle}>输入歌曲名称，并选择要上传的音频文件。</p>
+          <p style={messageStyle}>输入歌曲名称，选择原唱音频；伴奏可以现在一起传，也可以之后再补。</p>
         </div>
 
         <div style={formStyle}>
@@ -74,6 +75,17 @@ function MusicUploadDialog({ onResolve }: MusicUploadDialogProps) {
               style={fileInputStyle}
             />
             {file ? <span style={fileNameStyle}>{file.name}</span> : null}
+          </label>
+
+          <label style={fieldStyle}>
+            <span style={fieldLabelStyle}>伴奏文件（可选）</span>
+            <input
+              type="file"
+              accept={musicAudioUploadAccept}
+              onChange={(event) => setAccompaniment(event.target.files?.[0] || null)}
+              style={fileInputStyle}
+            />
+            {accompaniment ? <span style={fileNameStyle}>{accompaniment.name}</span> : null}
           </label>
 
           {error ? <div style={errorStyle}>{error}</div> : null}

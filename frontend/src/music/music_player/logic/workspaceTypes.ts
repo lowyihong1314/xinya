@@ -13,6 +13,8 @@ export type TrackDraft = {
 export type MusicUploadDraft = {
   title: string;
   file: File;
+  /** 可选：同时上传的伴奏文件。 */
+  accompaniment?: File | null;
 };
 
 export type PlaylistDraft = {

@@ -2,7 +2,7 @@ import type { AlbumRecord, MusicRecord, RepeatMode } from "../../music/music_pla
 import type { ListeningSessionRecord } from "../../music/music_player/ui/shared/listeningActivityShared";
 import { resolveNativePlugin } from "./capacitor";
 
-export type NativeMusicListenerEvent = "trackChanged" | "trackEnded" | "playStateChanged";
+export type NativeMusicListenerEvent = "trackChanged" | "trackEnded" | "playStateChanged" | "playbackTransferred";
 
 export type NativeMusicListenerHandle = {
   remove: () => Promise<void> | void;
@@ -18,6 +18,10 @@ export type MusicSnapshotPayload = {
   hasPlaybackSession?: boolean;
   shuffleEnabled?: boolean;
   repeatMode?: RepeatMode;
+  accompanimentMode?: boolean;
+  deviceId?: string | null;
+  deviceName?: string;
+  pausedByRemoteDevice?: boolean;
   progressMs?: number;
   durationMs?: number;
   listeningTimezone?: string;
@@ -40,6 +44,13 @@ export interface NativeMusicPlugin {
   playRelative(options: { step: -1 | 1 }): Promise<MusicSnapshotPayload>;
   toggleShuffle(): Promise<MusicSnapshotPayload>;
   cycleRepeat(): Promise<MusicSnapshotPayload>;
+  /** 伴奏模式开关（旧版原生插件没有这两个方法，调用方需容错）。 */
+  toggleAccompanimentMode?(): Promise<MusicSnapshotPayload>;
+  setAccompanimentMode?(options: { enabled: boolean }): Promise<MusicSnapshotPayload>;
+  /** 一人一设备：在此设备接管播放（旧版原生插件没有）。 */
+  takeOverPlayback?(): Promise<MusicSnapshotPayload>;
+  pause?(): Promise<MusicSnapshotPayload>;
+  resume?(): Promise<MusicSnapshotPayload>;
   seekTo(options: { positionMs: number }): Promise<MusicSnapshotPayload>;
   addListener(
     event: NativeMusicListenerEvent,

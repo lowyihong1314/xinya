@@ -1,7 +1,7 @@
 import type { EditorMode, WorkspaceScreen } from "./workspaceTypes";
 import { MUSIC_PLAYER_PATH } from "../../router/paths";
 
-export type MusicPlayerRouteSection = "browse" | "player" | "queue" | "history";
+export type MusicPlayerRouteSection = "browse" | "player" | "queue" | "playlists" | "history";
 
 export type MusicPlayerRouteState = {
   section: MusicPlayerRouteSection;
@@ -62,6 +62,7 @@ function parseQueryRouteState(searchParams: URLSearchParams): MusicPlayerRouteSt
     section:
       sectionParam === "player" ||
       sectionParam === "queue" ||
+      sectionParam === "playlists" ||
       sectionParam === "history"
         ? sectionParam
         : "browse",
@@ -98,7 +99,7 @@ function parsePathRouteState(pathname: string): Partial<MusicPlayerRouteState> {
   const segments = relativePath.split("/").filter(Boolean);
   const [first, second, third] = segments;
 
-  if (first === "player" || first === "queue" || first === "history") {
+  if (first === "player" || first === "queue" || first === "playlists" || first === "history") {
     return { section: first };
   }
 
@@ -169,6 +170,7 @@ export function parseMusicPlayerRouteStateFromLocation(
   if (
     pathState.section === "player" ||
     pathState.section === "queue" ||
+    pathState.section === "playlists" ||
     pathState.section === "history"
   ) {
     return normalizeMusicPlayerRouteState({
@@ -195,6 +197,7 @@ export function normalizeMusicPlayerRouteState(
     section:
       routeState.section === "player" ||
       routeState.section === "queue" ||
+      routeState.section === "playlists" ||
       routeState.section === "history"
         ? routeState.section
         : "browse",
@@ -262,7 +265,7 @@ export function normalizeMusicPlayerRouteState(
 function buildMusicPlayerPath(routeState: MusicPlayerRouteState) {
   const next = normalizeMusicPlayerRouteState(routeState);
 
-  if (next.section === "player" || next.section === "queue" || next.section === "history") {
+  if (next.section === "player" || next.section === "queue" || next.section === "playlists" || next.section === "history") {
     return `${MUSIC_PLAYER_PATH}/${next.section}`;
   }
 

@@ -1,6 +1,6 @@
 import type { CSSProperties } from "react";
 
-export type MusicPlaybackSection = "browse" | "player" | "queue" | "history";
+export type MusicPlaybackSection = "browse" | "player" | "queue" | "playlists" | "history";
 
 export type MusicSectionTab = {
   key: MusicPlaybackSection;
@@ -48,8 +48,8 @@ function mobileBottomNavStyle(columnCount: number): CSSProperties {
     zIndex: 40,
     display: "grid",
     gridTemplateColumns: `repeat(${columnCount}, minmax(0, 1fr))`,
-    gap: "8px",
-    padding: "8px 12px calc(8px + env(safe-area-inset-bottom, 0px))",
+    gap: "4px",
+    padding: "0 8px env(safe-area-inset-bottom, 0px)",
     background: "linear-gradient(180deg, var(--x-color-panel-glass), var(--x-color-panel-strong))",
     borderTop: "1px solid var(--x-color-line)",
     backdropFilter: "blur(18px)",
@@ -60,12 +60,12 @@ function mobileBottomNavStyle(columnCount: number): CSSProperties {
 function mobileTabButtonStyle(active: boolean): CSSProperties {
   return {
     position: "relative",
-    minHeight: "54px",
+    minHeight: "44px",
     display: "grid",
     placeItems: "center",
     padding: 0,
-    border: active ? "1px solid var(--x-color-line-soft)" : "1px solid transparent",
-    borderRadius: "16px",
+    border: "none",
+    borderRadius: "12px",
     background: active ? "var(--x-color-panel)" : "transparent",
     color: active ? "var(--x-color-accent-strong)" : "var(--x-color-ink-muted)",
     cursor: "pointer",
@@ -74,9 +74,9 @@ function mobileTabButtonStyle(active: boolean): CSSProperties {
 
 function tabIconShellStyle(active: boolean): CSSProperties {
   return {
-    width: "40px",
-    height: "40px",
-    borderRadius: "14px",
+    width: "34px",
+    height: "34px",
+    borderRadius: "11px",
     display: "grid",
     placeItems: "center",
     background: active ? "var(--x-color-accent-soft)" : "var(--x-color-panel-alt)",
@@ -88,10 +88,10 @@ function tabIconShellStyle(active: boolean): CSSProperties {
 
 const mobileTabCountStyle: CSSProperties = {
   position: "absolute",
-  top: "8px",
-  right: "12px",
-  minWidth: "18px",
-  height: "18px",
+  top: "3px",
+  right: "10px",
+  minWidth: "16px",
+  height: "16px",
   display: "grid",
   placeItems: "center",
   padding: "0 5px",

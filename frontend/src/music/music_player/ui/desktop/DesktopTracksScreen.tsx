@@ -3,7 +3,6 @@ import type { CSSProperties } from "react";
 import { formatMusicHeat } from "../../logic/musicHeatUtils";
 import type { MusicRecord } from "../../logic/types";
 import type { MusicUploadDraft } from "../../logic/workspaceTypes";
-import { MusicSearchInput } from "../shared/MusicSearchInput";
 import { showMusicUploadDialog } from "../shared/MusicUploadDialog";
 
 export function DesktopTracksScreen({
@@ -27,6 +26,8 @@ export function DesktopTracksScreen({
   uploadingMusic,
   hasSelectedAlbum,
   onQueueTrack,
+  onAddToPlaylist,
+  onPickAccompanimentForTrack,
 }: {
   albumName: string;
   albumDescription: string;
@@ -48,6 +49,8 @@ export function DesktopTracksScreen({
   uploadingMusic: boolean;
   hasSelectedAlbum: boolean;
   onQueueTrack: (musicId: number) => void;
+  onAddToPlaylist?: (musicId: number) => void;
+  onPickAccompanimentForTrack?: (musicId: number) => void;
 }) {
   async function handleAddMusicClick() {
     if (uploadingMusic) return;
@@ -103,9 +106,8 @@ export function DesktopTracksScreen({
           </div>
         ) : null}
 
-        <div style={searchRowStyle(canManage && hasSelectedAlbum)}>
-          <MusicSearchInput value={search} onChange={onChangeSearch} />
-          {canManage && hasSelectedAlbum ? (
+        {canManage && hasSelectedAlbum ? (
+          <div style={searchRowStyle(false)}>
             <button
               type="button"
               style={primaryButtonStyle}
@@ -114,8 +116,8 @@ export function DesktopTracksScreen({
             >
               {uploadingMusic ? "上传中…" : "添加歌曲"}
             </button>
-          ) : null}
-        </div>
+          </div>
+        ) : null}
 
         {filteredMusics.length ? (
           <div style={trackListStyle}>
@@ -124,7 +126,10 @@ export function DesktopTracksScreen({
                 <button type="button" style={trackPlayButtonStyle} onClick={() => onSelectTrack(music.id)}>
                   <span style={trackIndexStyle}>{String((trackPage - 1) * 20 + index + 1).padStart(2, "0")}</span>
                   <span style={trackMainStyle}>
-                    <span style={trackNameStyle}>{music.title}</span>
+                    <span style={trackNameStyle}>
+                      {music.title}
+                      {music.has_accompaniment ? <span style={accompanimentBadgeStyle}>伴奏</span> : null}
+                    </span>
                     <span style={trackMetaStyle}>
                       {music.album?.name || albumName}
                       {" · "}
@@ -136,6 +141,21 @@ export function DesktopTracksScreen({
                   <button type="button" style={secondaryButtonStyle} onClick={() => onQueueTrack(music.id)}>
                     +列队
                   </button>
+                  {onAddToPlaylist ? (
+                    <button type="button" style={secondaryButtonStyle} onClick={() => onAddToPlaylist(music.id)}>
+                      +歌单
+                    </button>
+                  ) : null}
+                  {canManage && onPickAccompanimentForTrack ? (
+                    <button
+                      type="button"
+                      style={ghostButtonStyle}
+                      onClick={() => onPickAccompanimentForTrack(music.id)}
+                      title={music.has_accompaniment ? "更换这首歌的伴奏文件" : "给这首歌上传伴奏文件"}
+                    >
+                      {music.has_accompaniment ? "换伴奏" : "上传伴奏"}
+                    </button>
+                  ) : null}
                   {canManage ? (
                     <button type="button" style={ghostButtonStyle} onClick={() => void onOpenTrackEditor(music.id)}>
                       编辑
@@ -293,6 +313,20 @@ const trackMainStyle: CSSProperties = {
   display: "grid",
   gap: "4px",
   minWidth: 0,
+};
+
+const accompanimentBadgeStyle: CSSProperties = {
+  display: "inline-block",
+  marginLeft: "6px",
+  padding: "1px 6px",
+  borderRadius: "999px",
+  fontSize: "10px",
+  fontWeight: 800,
+  lineHeight: 1.5,
+  verticalAlign: "middle",
+  color: "var(--x-color-accent-strong)",
+  background: "var(--x-color-accent-soft)",
+  border: "1px solid var(--x-color-accent-border)",
 };
 
 const trackNameStyle: CSSProperties = {

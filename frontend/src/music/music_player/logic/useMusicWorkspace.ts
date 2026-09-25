@@ -5,6 +5,7 @@ import { useUserState } from "../../../app/UserState";
 import { showConfirmDialog } from "../../../js/dialogs";
 import {
   createAlbum,
+  deleteAccompaniment,
   deleteAlbum,
   deleteMusic,
   editAlbum,
@@ -15,6 +16,7 @@ import {
   fetchMinuteLogs,
   fetchMusicList,
   replaceMusicFile,
+  uploadAccompaniment,
   uploadAlbumCover,
   uploadMusic,
 } from "./api";
@@ -83,6 +85,7 @@ export function useMusicWorkspace({
   const { user, isMobile, isAuthenticated } = useUserState();
   const {
     currentMusicId,
+    setAlbums: setPlaybackAlbums,
     setLibraryMusics: setPlaybackLibraryMusics,
     setCurrentMusicId,
     setQueue,
@@ -94,6 +97,9 @@ export function useMusicWorkspace({
 
   const coverInputRef = useRef<HTMLInputElement | null>(null);
   const replaceInputRef = useRef<HTMLInputElement | null>(null);
+  const accompanimentInputRef = useRef<HTMLInputElement | null>(null);
+  // 「上传伴奏 / 换伴奏」按钮点在哪首歌上；null 表示编辑页里正在编辑的那首。
+  const accompanimentTargetRef = useRef<number | null>(null);
 
   const [albums, setAlbums] = useState<AlbumRecord[]>([]);
   const [libraryMusics, setLibraryMusics] = useState<MusicRecord[]>([]);
@@ -108,6 +114,7 @@ export function useMusicWorkspace({
   const [savingTrack, setSavingTrack] = useState(false);
   const [uploadingMusicState, setUploadingMusicState] = useState(false);
   const [replacingFile, setReplacingFile] = useState(false);
+  const [savingAccompaniment, setSavingAccompaniment] = useState(false);
   const [toast, setToast] = useState<Toast>(null);
   const [minuteLogs, setMinuteLogs] = useState<MinuteLogRecord[]>([]);
   const [listeningLoading, setListeningLoading] = useState(false);
@@ -390,6 +397,7 @@ export function useMusicWorkspace({
       const [albumList, musicListPayload] = await Promise.all([fetchAlbums(), fetchMusicList()]);
       const allMusics = musicListPayload.musics || [];
       setAlbums(albumList);
+      setPlaybackAlbums(albumList);
       setLibraryMusics(allMusics);
       setPlaybackLibraryMusics(allMusics);
       setMusics(allMusics);
@@ -428,6 +436,7 @@ export function useMusicWorkspace({
       const [albumList, musicListPayload, minuteLogPayload] = responses;
       const allMusics = musicListPayload.musics || [];
       setAlbums(albumList);
+      setPlaybackAlbums(albumList);
       setLibraryMusics(allMusics);
       setPlaybackLibraryMusics(allMusics);
       if (selectedAlbumId == null) {
@@ -628,6 +637,49 @@ export function useMusicWorkspace({
     }
   }
 
+  function pickAccompanimentFor(musicId: number) {
+    accompanimentTargetRef.current = musicId;
+    accompanimentInputRef.current?.click();
+  }
+
+  async function handleAccompanimentSelected(file: File | null) {
+    const targetId = accompanimentTargetRef.current ?? editingMusicId;
+    accompanimentTargetRef.current = null;
+    if (!targetId || !file) return;
+    setSavingAccompaniment(true);
+    try {
+      const payload = await uploadAccompaniment(targetId, file);
+      if (payload.music && payload.music.id === editingMusicId) {
+        setEditingMusicDetail(payload.music);
+      }
+      setToast({ type: "success", text: "伴奏已上传" });
+      await refreshWorkspace({ preserveScreen: true });
+    } catch (error) {
+      setToast({ type: "error", text: error instanceof Error ? error.message : "上传伴奏失败" });
+    } finally {
+      setSavingAccompaniment(false);
+      if (accompanimentInputRef.current) accompanimentInputRef.current.value = "";
+    }
+  }
+
+  async function handleDeleteAccompaniment() {
+    if (!editingMusicId) return;
+    if (!(await showConfirmDialog({ message: "确定移除这首歌的伴奏文件吗？", tone: "danger" }))) return;
+    setSavingAccompaniment(true);
+    try {
+      const payload = await deleteAccompaniment(editingMusicId);
+      if (payload.music) {
+        setEditingMusicDetail(payload.music);
+      }
+      setToast({ type: "success", text: "伴奏已移除" });
+      await refreshWorkspace({ preserveScreen: true });
+    } catch (error) {
+      setToast({ type: "error", text: error instanceof Error ? error.message : "移除伴奏失败" });
+    } finally {
+      setSavingAccompaniment(false);
+    }
+  }
+
   return {
     state: {
       isMobile,
@@ -665,10 +717,12 @@ export function useMusicWorkspace({
       savingTrack,
       uploadingMusic: uploadingMusicState,
       replacingFile,
+      savingAccompaniment,
       screen,
       editorMode,
       coverInputRef,
       replaceInputRef,
+      accompanimentInputRef,
       albumTrackCountMap,
     },
     actions: {
@@ -698,6 +752,9 @@ export function useMusicWorkspace({
       handleSaveTrack,
       handleDeleteTrack,
       handleReplaceSelected,
+      handleAccompanimentSelected,
+      handleDeleteAccompaniment,
+      pickAccompanimentFor,
       openAlbums: () => routeActions.openAlbums(),
       backFromEditor: () => {
         routeActions.openAlbumTracks(selectedAlbumId, { resetTrackPage: false });

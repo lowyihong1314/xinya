@@ -1,6 +1,6 @@
 import type { CSSProperties } from "react";
 
-type MusicPlaybackSection = "browse" | "player" | "queue" | "history";
+type MusicPlaybackSection = "browse" | "player" | "queue" | "playlists" | "history";
 
 type MusicSectionTab = {
   key: MusicPlaybackSection;
@@ -31,7 +31,6 @@ export function DesktopMusicSectionSidebar({
       <section style={sidebarShellStyle(viewportHeight)}>
         <div style={tabbarCopyStyle}>
           <div style={tabbarEyebrowStyle}>Control Panel</div>
-          <div style={tabbarTitleStyle}>佛曲资料库</div>
           <div style={tabbarMetaStyle}>
             {currentMusicTitle
               ? `${currentMusicTitle}${isPlaying ? " · 播放中" : ""}`
