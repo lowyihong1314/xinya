@@ -1,6 +1,6 @@
 import type { ReactNode } from "react";
 import type { RouteObject } from "react-router-dom";
-import { createHashRouter, Navigate, useLocation, useParams } from "react-router-dom";
+import { createHashRouter, Navigate, useLocation, useParams, useRouteError } from "react-router-dom";
 
 import { LoginPage } from "../../../app/LoginPage";
 import { useUserState } from "../../../app/UserState";
@@ -18,6 +18,24 @@ function PortalErrorPage({ message }: { message: string }) {
   return (
     <div style={errorPageStyle}>
       <div style={errorCardStyle}>{message}</div>
+    </div>
+  );
+}
+
+// 路由渲染出错时兜底，避免整页空白。
+function PortalRouteErrorPage() {
+  const error = useRouteError();
+  const message = error instanceof Error ? error.message : "页面载入失败";
+  console.error("Music portal route error", error);
+  return (
+    <div style={errorPageStyle}>
+      <div style={errorCardStyle}>
+        <div style={{ fontWeight: 700, marginBottom: "8px" }}>页面出错了</div>
+        <div style={{ fontSize: "13px", opacity: 0.8 }}>{message}</div>
+        <button type="button" style={errorButtonStyle} onClick={() => window.location.reload()}>
+          重新载入
+        </button>
+      </div>
     </div>
   );
 }
@@ -73,6 +91,7 @@ export const musicPortalRouter = createHashRouter([
   {
     path: "/",
     element: <MusicPortalLayout />,
+    errorElement: <PortalRouteErrorPage />,
     children: [
       { index: true, element: <Navigate to={MUSIC_PLAYER_PATH} replace /> },
       { path: "login", element: <LoginPage /> },
@@ -89,10 +108,11 @@ export const musicPortalRouter = createHashRouter([
 ]);
 
 const errorPageStyle = {
-  minHeight: "calc(100vh - 60px)",
+  minHeight: "calc(100dvh - var(--x-navbar-height, 60px))",
   display: "grid",
   placeItems: "center",
   padding: "24px",
+  boxSizing: "border-box" as const,
 };
 
 const errorCardStyle = {
@@ -101,4 +121,16 @@ const errorCardStyle = {
   background: "rgba(255,255,255,0.84)",
   color: "var(--x-color-ink)",
   boxShadow: "0 18px 36px var(--x-color-shadow-soft)",
+};
+
+const errorButtonStyle = {
+  marginTop: "14px",
+  minHeight: "38px",
+  padding: "0 16px",
+  borderRadius: "12px",
+  border: "1px solid var(--x-color-line)",
+  background: "var(--x-color-panel)",
+  color: "var(--x-color-ink)",
+  fontWeight: 700,
+  cursor: "pointer",
 };

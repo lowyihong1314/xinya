@@ -5,6 +5,7 @@ import { AiQuestionDrawer } from "./AiQuestionDrawer";
 import { createSet, deleteSet, getSet, updateSet } from "./api";
 import { OPTION_COLORS, OPTION_SHAPES } from "./types";
 import type { QuizGameQuestion } from "./types";
+import { useMusicViewport } from "../../shared/useMusicViewport";
 
 type EditableQuestion = QuizGameQuestion & { key: string };
 
@@ -41,6 +42,7 @@ export function QuestionEditorPage({
   onClose: () => void;
   onSaved: () => void;
 }) {
+  const viewport = useMusicViewport();
   const [title, setTitle] = useState("");
   const [description, setDescription] = useState("");
   const [questionTime, setQuestionTime] = useState(30);
@@ -251,14 +253,14 @@ export function QuestionEditorPage({
 
   if (loading) {
     return (
-      <main style={pageStyle}>
+      <main style={{ ...pageStyle, ...viewport.shellStyle }}>
         <div style={centerMsg}>读取题库中…</div>
       </main>
     );
   }
 
   return (
-    <main style={pageStyle}>
+    <main style={{ ...pageStyle, ...viewport.shellStyle }}>
       <div style={shellStyle} ref={topRef}>
         <header style={topBarStyle}>
           <button type="button" onClick={onClose} style={ghostBtnStyle}>

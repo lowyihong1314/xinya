@@ -3,6 +3,7 @@ import {
   useContext,
   useEffect,
   useMemo,
+  useRef,
   useState,
 } from "react";
 import type { ReactNode } from "react";
@@ -80,6 +81,9 @@ export function UserStateProvider({
   const [user, setUser] = useState<UserData | null>(null);
   const [isMobile, setIsMobile] = useState(initialIsMobile);
   const [loadingUser, setLoadingUser] = useState(true);
+  // 首次读取完成后，窗口聚焦触发的后台刷新不再把 loadingUser 置 true，
+  // 否则依赖 loadingUser 的路由守卫会整棵卸载页面，丢掉主持端等页面状态。
+  const initialLoadDoneRef = useRef(false);
 
   useEffect(() => {
     void refreshUser();
@@ -100,7 +104,9 @@ export function UserStateProvider({
   }, []);
 
   async function refreshUser() {
-    setLoadingUser(true);
+    if (!initialLoadDoneRef.current) {
+      setLoadingUser(true);
+    }
     try {
       const nextUser = await fetchCurrentUser();
       if (nextUser.state === "unavailable") {
@@ -119,6 +125,7 @@ export function UserStateProvider({
       });
       return nextUser.user;
     } finally {
+      initialLoadDoneRef.current = true;
       setLoadingUser(false);
     }
   }

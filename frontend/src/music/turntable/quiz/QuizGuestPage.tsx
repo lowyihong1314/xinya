@@ -7,11 +7,13 @@ import { useBaseNavbarVisibility } from "../../../router/AppChromeContext";
 import { getQuizSession } from "./api";
 import { connectQuizSocket } from "./quizSocket";
 import type { QuizSessionSnapshot } from "./types";
+import { useMusicViewport } from "../../shared/useMusicViewport";
 
 const GUEST_ID_STORAGE_KEY = "xinya.quiz.guestId";
 const GUEST_NAME_STORAGE_KEY = "xinya.quiz.guestName";
 
 export function QuizGuestPage() {
+  const viewport = useMusicViewport();
   useBaseNavbarVisibility(false);
 
   const location = useLocation();
@@ -153,7 +155,7 @@ export function QuizGuestPage() {
 
   if (loading) {
     return (
-      <main style={pageStyle}>
+      <main style={{ ...pageStyle, ...viewport.shellStyle }}>
         <div style={centerMsgStyle}>读取抢答活动中...</div>
       </main>
     );
@@ -171,7 +173,7 @@ export function QuizGuestPage() {
   }
 
   return (
-    <main style={pageStyle}>
+    <main style={{ ...pageStyle, ...viewport.shellStyle }}>
       <div style={shellStyle}>
         <header style={headerStyle}>
           <span style={kickerStyle}>Quiz</span>
@@ -317,7 +319,7 @@ const noticeStyle: CSSProperties = {
 };
 
 const centerMsgStyle: CSSProperties = {
-  minHeight: "100vh",
+  minHeight: "100%",
   display: "grid",
   placeItems: "center",
   color: "var(--x-color-ink-muted)",

@@ -13,6 +13,7 @@ import {
 } from "./api";
 import { connectQuizSocket } from "./quizSocket";
 import type { QuizSessionSnapshot } from "./types";
+import { useMusicViewport } from "../../shared/useMusicViewport";
 
 const HOST_TOKEN_STORAGE_KEY = "xinya.quiz.hostToken";
 const MIN_WAIT = 3;
@@ -21,6 +22,7 @@ const MAX_WAIT = 600;
 type Notice = { tone: "success" | "error" | "info"; text: string };
 
 export function QuizHostPage({ onBack }: { onBack: () => void }) {
+  const viewport = useMusicViewport();
   const { isAuthenticated } = useUserState();
   const [snapshot, setSnapshot] = useState<QuizSessionSnapshot | null>(null);
   const [waitSeconds, setWaitSeconds] = useState(6);
@@ -166,14 +168,14 @@ export function QuizHostPage({ onBack }: { onBack: () => void }) {
 
   if (loading) {
     return (
-      <main style={pageStyle}>
+      <main style={{ ...pageStyle, ...viewport.shellStyle }}>
         <div style={centerMessageStyle}>读取抢答活动中...</div>
       </main>
     );
   }
 
   return (
-    <main style={pageStyle}>
+    <main style={{ ...pageStyle, ...viewport.shellStyle }}>
       <div style={shellStyle}>
         <header style={topBarStyle}>
           <button type="button" onClick={onBack} style={iconTextButtonStyle}>
@@ -382,7 +384,7 @@ const noticeStyle = (tone: Notice["tone"]): CSSProperties => ({
 });
 
 const centerMessageStyle: CSSProperties = {
-  minHeight: "100vh",
+  minHeight: "100%",
   display: "grid",
   placeItems: "center",
   color: "var(--x-color-ink-muted)",

@@ -6,8 +6,10 @@ import { useEnsureDesignTokens } from "../../../../theme/designTokens";
 import { CHANGYOU_PATH, getChangyouRoomPath } from "../../../router/paths";
 import { createChangyouRoom, fetchChangyouRooms, type ChangyouRoom } from "./api";
 import { ChangyouRoomController } from "./ChangyouRoomController";
+import { useMusicViewport } from "../../../shared/useMusicViewport";
 
 export function ChangyouRoomPage() {
+  const viewport = useMusicViewport();
   useEnsureDesignTokens();
 
   const navigate = useNavigate();
@@ -68,7 +70,7 @@ export function ChangyouRoomPage() {
   }
 
   return (
-    <div style={pageStyle}>
+    <div style={{ ...pageStyle, ...viewport.shellStyle }}>
       <div style={pageInnerStyle}>
         <div style={topBarStyle}>
           <button type="button" onClick={() => navigate(CHANGYOU_PATH)} style={backButtonStyle}>

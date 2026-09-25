@@ -106,7 +106,7 @@ export function LoginPage() {
 }
 
 const pageStyle: CSSProperties = {
-  minHeight: "calc(100vh - 60px)",
+  minHeight: "calc(100dvh - var(--x-navbar-height, 60px))",
   display: "flex",
   alignItems: "center",
   justifyContent: "center",

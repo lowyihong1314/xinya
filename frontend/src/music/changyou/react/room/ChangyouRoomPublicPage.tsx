@@ -4,7 +4,7 @@ import { useNavigate, useParams } from "react-router-dom";
 
 import { useBaseNavbarVisibility } from "../../../../router/AppChromeContext";
 import { CHANGYOU_ROOM_PATH } from "../../../router/paths";
-import { ensureProjectionBlocks, isChordLine, splitBlocksForDoublePage, type LyricProjectionBlock } from "../projection";
+import { ensureProjectionBlocks, isChordLine, isSectionBoundary, splitBlocksForDoublePage, type LyricProjectionBlock } from "../projection";
 import type { SongbookEntry } from "../types";
 import { connectChangyouRoom } from "./socket";
 import { fetchChangyouRoomCurrent, type ChangyouRoom, type ChangyouRoomNotification } from "./api";
@@ -122,16 +122,6 @@ function readStoredBoolean(storageKey: string, fallback: boolean) {
 
 function isWideChar(char: string) {
   return /[\u1100-\u115F\u2E80-\uA4CF\uAC00-\uD7A3\uF900-\uFAFF\uFE10-\uFE19\uFE30-\uFE6F\uFF00-\uFF60\uFFE0-\uFFE6]/.test(char);
-}
-
-function isSectionBoundary(line: string) {
-  const trimmed = line.trim();
-  if (!trimmed) return false;
-  if (trimmed.endsWith(":")) return true;
-  if (/^[A-Z][A-Z0-9 /+#&().-]*\^?$/.test(trimmed) && trimmed === trimmed.toUpperCase()) {
-    return true;
-  }
-  return false;
 }
 
 function normalizeLineForWeight(line: string) {
@@ -463,7 +453,21 @@ export function ChangyouRoomPublicPage({
   }, [roomId]);
 
   useEffect(() => {
-    const socket = connectChangyouRoom(roomId);
+    let cancelled = false;
+    // 每次 connect（含断线重连）都重新拉 /current 做对账，避免公屏停在断线前的旧画面。
+    const resyncRoom = () => {
+      fetchChangyouRoomCurrent(roomId)
+        .then((response) => {
+          if (cancelled) return;
+          setRoom((current) => (current ? { ...current, ...response.room } : response.room));
+          setEntry(response.entry || null);
+          setRoomUpdateTick((value) => value + 1);
+        })
+        .catch(() => {
+          /* 对账失败不打断公屏；下一次事件或重连会再试 */
+        });
+    };
+    const socket = connectChangyouRoom(roomId, { onConnect: resyncRoom });
     socket.on("changyou_room_update", (payload) => {
       setRoom((current) => (current ? { ...current, ...payload.room } : payload.room || current));
       setEntry(payload.entry || null);
@@ -475,6 +479,7 @@ export function ChangyouRoomPublicPage({
       setActiveNotification(nextNotification);
     });
     return () => {
+      cancelled = true;
       socket.disconnect();
     };
   }, [roomId]);

@@ -10,11 +10,13 @@ import { connectMirrorSocket } from "./mirrorSocket";
 import { SelfieCapture } from "./SelfieCapture";
 import { FIRST_THOUGHT_HINTS, RATING_REMINDERS, SCORE_COLORS, SCORE_ITEMS, SKIP_VALUE } from "./types";
 import type { MirrorPlayerSnapshot } from "./types";
+import { useMusicViewport } from "../../shared/useMusicViewport";
 
 const GUEST_ID_KEY = "xinya.mirror.guestId";
 const GUEST_NAME_KEY = "xinya.mirror.guestName";
 
 export function MirrorPlayerPage() {
+  const viewport = useMusicViewport();
   useBaseNavbarVisibility(false);
 
   const location = useLocation();
@@ -148,7 +150,7 @@ export function MirrorPlayerPage() {
   }
 
   return (
-    <main style={pageStyle}>
+    <main style={{ ...pageStyle, ...viewport.shellStyle }}>
       <div style={shellStyle}>
         {notice ? <div style={noticeStyle}>{notice}</div> : null}
 
@@ -394,7 +396,7 @@ const shellStyle: CSSProperties = {
   width: "min(560px, calc(100% - 24px))",
   margin: "0 auto",
   padding: "18px 0 40px",
-  minHeight: "100vh",
+  minHeight: "100%",
   display: "flex",
   flexDirection: "column",
   justifyContent: "center",

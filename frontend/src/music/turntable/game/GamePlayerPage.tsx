@@ -7,13 +7,15 @@ import { useBaseNavbarVisibility } from "../../../router/AppChromeContext";
 import { connectGameSocket } from "./gameSocket";
 import { OPTION_COLORS, OPTION_SHAPES } from "./types";
 import type { LeaderRow, MyResult, PlayerSnapshot, PublicQuestion, RevealData } from "./types";
+import { useMusicViewport } from "../../shared/useMusicViewport";
 
 const GUEST_ID_KEY = "xinya.quizgame.guestId";
 const GUEST_NAME_KEY = "xinya.quizgame.guestName";
 
-type Phase = "join" | "lobby" | "question" | "reveal" | "podium";
+type Phase = "join" | "lobby" | "question" | "reveal" | "podium" | "kicked";
 
 export function GamePlayerPage() {
+  const viewport = useMusicViewport();
   useBaseNavbarVisibility(false);
 
   const location = useLocation();
@@ -48,8 +50,10 @@ export function GamePlayerPage() {
     if (!token) setNotice("缺少游戏 token");
   }, [token]);
 
+  const kicked = phase === "kicked";
+
   useEffect(() => {
-    if (!joined || !token || !guestName.trim()) return;
+    if (!joined || !token || !guestName.trim() || kicked) return;
     let socket: Socket | null = connectGameSocket();
     socketRef.current = socket;
 
@@ -116,9 +120,23 @@ export function GamePlayerPage() {
       const roundTrip = receivedAt - payload.client_sent_at_ms;
       setServerOffsetMs(payload.server_now_ms + roundTrip / 2 - receivedAt);
     };
+    // Kicked (or join refused because we're banned): stop auto-rejoining.
+    const onKicked = (payload?: { message?: string }) => {
+      setNotice(payload?.message || "你已被主持人移出");
+      setPhase("kicked");
+      socket?.disconnect();
+    };
+    const onError = (p: { message?: string; reason?: string }) => {
+      if (p?.reason === "banned") {
+        onKicked(p);
+        return;
+      }
+      setNotice(p?.message || "连接失败");
+    };
 
     socket.on("connect", join);
     socket.on("disconnect", () => setConnected(false));
+    socket.on("game:kicked", onKicked);
     socket.on("game:player", onSnapshot);
     socket.on("game:question", onQuestion);
     socket.on("game:reveal", onReveal);
@@ -127,7 +145,7 @@ export function GamePlayerPage() {
     socket.on("game:answered", onAnswered);
     socket.on("game:answer_rejected", onRejected);
     socket.on("game:time:pong", onPong);
-    socket.on("game:error", (p: { message?: string }) => setNotice(p?.message || "连接失败"));
+    socket.on("game:error", onError);
     if (socket.connected) join();
     const pingTimer = window.setInterval(() => socket?.emit("game:time:ping", { client_sent_at_ms: Date.now() }), 5000);
 
@@ -138,7 +156,7 @@ export function GamePlayerPage() {
       socketRef.current = null;
       setConnected(false);
     };
-  }, [joined, token, guestName, guestId]);
+  }, [joined, token, guestName, guestId, kicked]);
 
   function handleJoin() {
     const name = guestName.trim();
@@ -165,7 +183,7 @@ export function GamePlayerPage() {
   const secondsLeft = Math.ceil(remainingMs / 1000);
 
   return (
-    <main style={pageStyle}>
+    <main style={{ ...pageStyle, ...viewport.shellStyle }}>
       <div style={shellStyle}>
         {notice ? <div style={noticeStyle}>{notice}</div> : null}
 
@@ -185,6 +203,14 @@ export function GamePlayerPage() {
             <button type="button" onClick={handleJoin} style={joinBtnStyle} disabled={!token}>
               加入游戏 🚀
             </button>
+          </section>
+        ) : null}
+
+        {phase === "kicked" ? (
+          <section style={centerCardStyle}>
+            <div style={{ fontSize: "56px" }}>🚪</div>
+            <div style={bigTitleStyle}>你已被主持人移出</div>
+            <div style={mutedStyle}>如有疑问请联系主持人</div>
           </section>
         ) : null}
 
@@ -328,7 +354,7 @@ const shellStyle: CSSProperties = {
   width: "min(560px, calc(100% - 24px))",
   margin: "0 auto",
   padding: "18px 0 40px",
-  minHeight: "100vh",
+  minHeight: "100%",
   display: "flex",
   flexDirection: "column",
   justifyContent: "center",

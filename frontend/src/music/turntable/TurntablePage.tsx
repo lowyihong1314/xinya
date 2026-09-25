@@ -6,6 +6,7 @@ import { GameHostPage } from "./game/GameHostPage";
 import { MirrorHostPage } from "./mirror/MirrorHostPage";
 import { QuizHostPage } from "./quiz/QuizHostPage";
 import { TurntableSpinnerPage } from "./spinner/TurntableSpinnerPage";
+import { useMusicViewport } from "../shared/useMusicViewport";
 
 type ActivityMode = "quiz" | "game" | "turntable" | "mirror";
 
@@ -37,6 +38,7 @@ const ACTIVITY_ITEMS: Array<{
 ];
 
 export function TurntablePage() {
+  const viewport = useMusicViewport();
   const [activeMode, setActiveMode] = useState<ActivityMode | null>(null);
   const detailActive = activeMode !== null;
 
@@ -59,7 +61,7 @@ export function TurntablePage() {
   }
 
   return (
-    <main aria-label="转盘" style={pageStyle(false)}>
+    <main aria-label="转盘" style={{ ...pageStyle(false), ...viewport.shellStyle }}>
       <div style={menuShellStyle}>
         {ACTIVITY_ITEMS.map((item) => (
           <button key={item.key} type="button" onClick={() => setActiveMode(item.key)} style={activityButtonStyle}>
@@ -81,7 +83,8 @@ function pageStyle(fullscreen: boolean): CSSProperties {
 
 const menuShellStyle: CSSProperties = {
   width: "min(760px, calc(100% - 32px))",
-  minHeight: "calc(100vh - 60px)",
+  minHeight: "100%",
+  boxSizing: "border-box",
   margin: "0 auto",
   display: "grid",
   gridTemplateColumns: "repeat(auto-fit, minmax(240px, 1fr))",

@@ -104,6 +104,11 @@ export function AppLayout() {
     [navbarHeight, navbarVisible],
   );
 
+  // 给纯 CSS 的地方用：calc(100dvh - var(--x-navbar-height))。
+  useEffect(() => {
+    document.documentElement.style.setProperty("--x-navbar-height", `${navbarVisible ? navbarHeight : 0}px`);
+  }, [navbarHeight, navbarVisible]);
+
   return (
     <AppChromeProvider value={chromeValue}>
       <div style={shellStyle}>

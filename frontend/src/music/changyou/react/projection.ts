@@ -1,3 +1,7 @@
+import { isChordLine, isSectionBoundary } from "./shared/chords";
+
+export { isChordLine, isSectionBoundary } from "./shared/chords";
+
 export type LyricProjectionBlock = {
   id: string;
   lines: string[];
@@ -26,27 +30,6 @@ type ProjectionBlockLike = Partial<LyricProjectionBlock> & {
 
 function isWideChar(char: string) {
   return /[\u1100-\u115F\u2E80-\uA4CF\uAC00-\uD7A3\uF900-\uFAFF\uFE10-\uFE19\uFE30-\uFE6F\uFF00-\uFF60\uFFE0-\uFFE6]/.test(char);
-}
-
-export function isSectionBoundary(line: string) {
-  const trimmed = line.trim();
-  if (!trimmed) return false;
-  if (trimmed.endsWith(":")) return true;
-  if (/^[A-Z][A-Z0-9 /+#&().-]*\^?$/.test(trimmed) && trimmed === trimmed.toUpperCase()) {
-    return true;
-  }
-  return false;
-}
-
-function isChordLikeToken(token: string) {
-  return /^([A-G](?:#|b)?)([^/]*?)(?:\/([A-G](?:#|b)?))?$/.test(token.trim());
-}
-
-export function isChordLine(line: string) {
-  const pieces = line.split(/(\s+|\|)/).filter(Boolean);
-  const meaningful = pieces.filter((piece) => piece.trim() && piece !== "|");
-  if (!meaningful.length) return false;
-  return meaningful.every(isChordLikeToken);
 }
 
 function isLyricLine(line: string) {

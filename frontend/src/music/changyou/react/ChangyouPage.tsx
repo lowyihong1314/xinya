@@ -6,6 +6,7 @@ import { useEnsureDesignTokens } from "../../../theme/designTokens";
 import { CHANGYOU_ROOM_PATH, getChangyouDetailPath } from "../../router/paths";
 import { fetchSongbookEntries } from "./api";
 import type { SongbookEntry } from "./types";
+import { useMusicViewport } from "../../shared/useMusicViewport";
 
 const PAGE_SIZE = 20;
 const VARIANT_OPTIONS: Array<{ key: "" | "C" | "G"; label: string }> = [
@@ -38,6 +39,7 @@ function buildPagination(currentPage: number, totalPages: number) {
 }
 
 export function ChangyouPage() {
+  const viewport = useMusicViewport();
   useEnsureDesignTokens();
 
   const navigate = useNavigate();
@@ -95,7 +97,7 @@ export function ChangyouPage() {
   }, [page, safePage]);
 
   return (
-    <div style={pageStyle}>
+    <div style={{ ...pageStyle, ...viewport.shellStyle }}>
       <div style={pageInnerStyle}>
         <section style={heroGridStyle(isMobile)}>
           <div style={heroPrimaryStyle(isMobile)}>

@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import type { MouseEvent as ReactMouseEvent } from "react";
 import QRCode from "qrcode";
 import { useNavigate } from "react-router-dom";
@@ -113,8 +113,10 @@ import {
   type ChangyouRoom,
   updateChangyouRoomMarker,
 } from "../api";
+import { useMusicViewport } from "../../../../shared/useMusicViewport";
 
 export function ChangyouRoomController({ roomId }: { roomId: string }) {
+  const viewport = useMusicViewport();
   useEnsureDesignTokens();
 
   const navigate = useNavigate();
@@ -145,6 +147,10 @@ export function ChangyouRoomController({ roomId }: { roomId: string }) {
   });
   const [qrDataUrl, setQrDataUrl] = useState("");
   const [marking, setMarking] = useState(false);
+  // 标记请求的递增序号：键盘连按会并发多个 POST，只接受最新序号的响应，避免晚到的旧响应覆盖新状态。
+  const markerRequestSeqRef = useRef(0);
+  // 最新一次已发出（尚未收到响应）的标记位置；undefined 表示没有在途请求。
+  const pendingMarkerIndexRef = useRef<number | null | undefined>(undefined);
   const [notifying, setNotifying] = useState(false);
   const [notificationValue, setNotificationValue] = useState("");
   const [roomPickerOpen, setRoomPickerOpen] = useState(false);
@@ -295,12 +301,28 @@ export function ChangyouRoomController({ roomId }: { roomId: string }) {
 
   useEffect(() => {
     if (!roomId) return;
-    const socket = connectChangyouRoom(roomId);
+    let cancelled = false;
+    // 每次 connect（含断线重连）都重新拉一次 /current 做对账：
+    // 断线期间的投放/标记不会补发，只 re-join 房间会停在旧画面。首次连接也拉一次，
+    // 顺便补上「初始 GET 已返回、socket 尚未 join」这段空窗；多一个 GET 无害。
+    const resyncRoom = () => {
+      fetchChangyouRoomCurrent(roomId)
+        .then((response) => {
+          if (cancelled) return;
+          setRoom((current) => (current ? { ...current, ...response.room } : response.room));
+          setProjectedEntry(response.entry || null);
+        })
+        .catch(() => {
+          /* 对账失败不打断页面；下一次事件或重连会再试 */
+        });
+    };
+    const socket = connectChangyouRoom(roomId, { onConnect: resyncRoom });
     socket.on("changyou_room_update", (payload) => {
       setRoom((current) => (current ? { ...current, ...payload.room } : payload.room || current));
       setProjectedEntry(payload.entry || null);
     });
     return () => {
+      cancelled = true;
       socket.disconnect();
     };
   }, [roomId]);
@@ -543,16 +565,24 @@ export function ChangyouRoomController({ roomId }: { roomId: string }) {
 
   async function handleUpdateMarker(markerIndex: number | null) {
     if (!roomId || !room) return;
+    const requestSeq = markerRequestSeqRef.current + 1;
+    markerRequestSeqRef.current = requestSeq;
+    pendingMarkerIndexRef.current = markerIndex;
     setMarking(true);
     setError("");
     try {
       const response = await updateChangyouRoomMarker(roomId, { marker_index: markerIndex });
+      if (requestSeq !== markerRequestSeqRef.current) return; // 已有更新的请求，丢弃旧响应
       setRoom(response.room);
       setProjectedEntry(response.entry || null);
     } catch (err) {
+      if (requestSeq !== markerRequestSeqRef.current) return;
       setError(err instanceof Error ? err.message : "更新标记失败");
     } finally {
-      setMarking(false);
+      if (requestSeq === markerRequestSeqRef.current) {
+        pendingMarkerIndexRef.current = undefined;
+        setMarking(false);
+      }
     }
   }
 
@@ -572,7 +602,9 @@ export function ChangyouRoomController({ roomId }: { roomId: string }) {
 
   async function handleMoveMarker(step: -1 | 1) {
     if (!currentProjectedHighlightableIndices.length) return;
-    const activeMarkerIndex = roomProjection?.marker_index ?? null;
+    // 连按时以最新已发出的位置为基准，否则第二次按键会基于尚未更新的旧 marker 重复发同一位置
+    const activeMarkerIndex =
+      pendingMarkerIndexRef.current !== undefined ? pendingMarkerIndexRef.current : (roomProjection?.marker_index ?? null);
     const fallbackPosition = step > 0 ? -1 : currentProjectedHighlightableIndices.length;
     const currentPosition =
       activeMarkerIndex == null ? fallbackPosition : currentProjectedHighlightableIndices.indexOf(activeMarkerIndex);
@@ -650,7 +682,7 @@ export function ChangyouRoomController({ roomId }: { roomId: string }) {
   if (!room) return <div style={stateStyle}>{error || "房间不存在或已过期。"}</div>;
 
   return (
-    <div style={pageStyle(hideNav)}>
+    <div style={{ ...pageStyle(hideNav), ...viewport.shellStyle }}>
       <div style={pageInnerStyle}>
         <div style={topBarStyle(isMobile)}>
           <button type="button" onClick={() => navigate(CHANGYOU_ROOM_PATH)} style={backButtonStyle(isMobile)}>

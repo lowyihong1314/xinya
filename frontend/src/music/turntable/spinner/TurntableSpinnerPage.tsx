@@ -13,6 +13,7 @@ import {
 } from "./turntableRandom";
 import { TurntableSettingsPanel } from "./TurntableSettingsPanel";
 import type { SlotMachineRoundResult, SlotMachineSettings, SlotUser } from "./types";
+import { useMusicViewport } from "../../shared/useMusicViewport";
 
 const SETTINGS_KEY = "xinya.slotmachine.settings";
 const USED_IDS_KEY = "xinya.slotmachine.usedIdsPerSlot";
@@ -22,6 +23,7 @@ type ViewMode = "home" | "settings";
 type Notice = { tone: "success" | "error" | "info"; text: string };
 
 export function TurntableSpinnerPage({ onBack }: { onBack: () => void }) {
+  const viewport = useMusicViewport();
   const { isAuthenticated } = useUserState();
   const [settings, setSettings] = useState<SlotMachineSettings>(() => loadSettings());
   const [usedIdsPerSlot, setUsedIdsPerSlot] = useState<number[][]>(() => loadUsedIds());
@@ -178,7 +180,7 @@ export function TurntableSpinnerPage({ onBack }: { onBack: () => void }) {
   const hasAnyCandidates = settings.slots.some((s) => s.candidates.length > 0);
 
   return (
-    <main style={pageStyle}>
+    <main style={{ ...pageStyle, ...viewport.shellStyle }}>
       <div style={shellStyle}>
         <header style={topBarStyle}>
           <button type="button" onClick={onBack} style={iconTextButtonStyle}>

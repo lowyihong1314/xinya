@@ -9,10 +9,12 @@ import { MirrorAvatar } from "./MirrorAvatar";
 import { buildMirrorPlayerUrl, connectMirrorSocket } from "./mirrorSocket";
 import { FIRST_THOUGHT_HINTS, RATING_REMINDERS } from "./types";
 import type { MirrorHostSnapshot } from "./types";
+import { useMusicViewport } from "../../shared/useMusicViewport";
 
 const HOST_TOKEN_STORAGE_KEY = "xinya.mirror.hostToken";
 
 export function MirrorHostPage({ onBack }: { onBack: () => void }) {
+  const viewport = useMusicViewport();
   const { isAuthenticated } = useUserState();
   const [snapshot, setSnapshot] = useState<MirrorHostSnapshot | null>(null);
   const [loading, setLoading] = useState(true);
@@ -142,7 +144,7 @@ export function MirrorHostPage({ onBack }: { onBack: () => void }) {
 
   if (!isAuthenticated) {
     return (
-      <main style={pageStyle}>
+      <main style={{ ...pageStyle, ...viewport.shellStyle }}>
         <div style={shellStyle}>
           <TopBar onBack={onBack} />
           <div style={infoCardStyle}>请先登录（组织者）才能主持这个活动。</div>
@@ -153,7 +155,7 @@ export function MirrorHostPage({ onBack }: { onBack: () => void }) {
 
   if (loading) {
     return (
-      <main style={pageStyle}>
+      <main style={{ ...pageStyle, ...viewport.shellStyle }}>
         <div style={shellStyle}>
           <TopBar onBack={onBack} />
           <div style={infoCardStyle}>准备活动房间中…</div>
@@ -163,7 +165,7 @@ export function MirrorHostPage({ onBack }: { onBack: () => void }) {
   }
 
   return (
-    <main style={pageStyle}>
+    <main style={{ ...pageStyle, ...viewport.shellStyle }}>
       <button type="button" onClick={onBack} style={exitFabStyle} title="退出主持">
         <i className="fas fa-xmark" aria-hidden="true" /> 退出
       </button>
@@ -371,7 +373,7 @@ const ghostBtnStyle: CSSProperties = {
   cursor: "pointer",
 };
 const centerStyle: CSSProperties = {
-  minHeight: "calc(100vh - 80px)",
+  minHeight: "100%",
   display: "flex",
   flexDirection: "column",
   alignItems: "center",

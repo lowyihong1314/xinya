@@ -4,11 +4,14 @@ import QRCode from "qrcode";
 import type { Socket } from "socket.io-client";
 
 import { useUserState } from "../../../app/UserState";
-import { createGameSession, listSets } from "./api";
+import { createGameSession, getGameSession, listSets } from "./api";
 import { buildGamePlayerUrl, connectGameSocket } from "./gameSocket";
 import { QuestionEditorPage } from "./QuestionEditorPage";
 import { OPTION_COLORS, OPTION_SHAPES } from "./types";
 import type { HostSnapshot, LeaderRow, PlayerRow, PublicQuestion, QuizGameSet, RevealData } from "./types";
+import { useMusicViewport } from "../../shared/useMusicViewport";
+
+const HOST_TOKEN_STORAGE_KEY = "xinya.quizgame.hostToken";
 
 type Mode =
   | { name: "setup" }
@@ -16,6 +19,7 @@ type Mode =
   | { name: "live"; token: string; title: string };
 
 export function GameHostPage({ onBack }: { onBack: () => void }) {
+  const viewport = useMusicViewport();
   const { isAuthenticated } = useUserState();
   const [mode, setMode] = useState<Mode>({ name: "setup" });
   const [sets, setSets] = useState<QuizGameSet[]>([]);
@@ -40,7 +44,27 @@ export function GameHostPage({ onBack }: { onBack: () => void }) {
       setLoading(false);
       return;
     }
-    void reloadSets();
+    let active = true;
+    async function boot() {
+      // A refresh must not orphan a live room: restore the token if the
+      // backend still knows the session, otherwise forget it.
+      const storedToken = window.localStorage.getItem(HOST_TOKEN_STORAGE_KEY);
+      if (storedToken) {
+        try {
+          const session = await getGameSession(storedToken);
+          if (!active) return;
+          window.localStorage.setItem(HOST_TOKEN_STORAGE_KEY, session.room_token);
+          setMode({ name: "live", token: session.room_token, title: session.title });
+        } catch {
+          window.localStorage.removeItem(HOST_TOKEN_STORAGE_KEY);
+        }
+      }
+      if (active) await reloadSets();
+    }
+    void boot();
+    return () => {
+      active = false;
+    };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isAuthenticated]);
 
@@ -49,6 +73,7 @@ export function GameHostPage({ onBack }: { onBack: () => void }) {
     setError(null);
     try {
       const { token } = await createGameSession(set.id);
+      window.localStorage.setItem(HOST_TOKEN_STORAGE_KEY, token);
       setMode({ name: "live", token, title: set.title });
     } catch (e) {
       setError(e instanceof Error ? e.message : "创建游戏失败");
@@ -71,12 +96,22 @@ export function GameHostPage({ onBack }: { onBack: () => void }) {
   }
 
   if (mode.name === "live") {
-    return <GameLiveHost token={mode.token} title={mode.title} onExit={() => { void reloadSets(); setMode({ name: "setup" }); }} />;
+    return (
+      <GameLiveHost
+        token={mode.token}
+        title={mode.title}
+        onExit={() => {
+          window.localStorage.removeItem(HOST_TOKEN_STORAGE_KEY);
+          void reloadSets();
+          setMode({ name: "setup" });
+        }}
+      />
+    );
   }
 
   // ── setup ──
   return (
-    <main style={pageStyle}>
+    <main style={{ ...pageStyle, ...viewport.shellStyle }}>
       <div style={setupShellStyle}>
         <header style={topBarStyle}>
           <button type="button" onClick={onBack} style={ghostBtnStyle}>
@@ -136,6 +171,7 @@ export function GameHostPage({ onBack }: { onBack: () => void }) {
 /* ═══════════════════ live big screen ═══════════════════ */
 
 function GameLiveHost({ token, title, onExit }: { token: string; title: string; onExit: () => void }) {
+  const viewport = useMusicViewport();
   const [status, setStatus] = useState<string>("lobby");
   const [players, setPlayers] = useState<PlayerRow[]>([]);
   const [playerCount, setPlayerCount] = useState(0);
@@ -256,7 +292,7 @@ function GameLiveHost({ token, title, onExit }: { token: string; title: string; 
   const isLastQuestion = question ? question.index + 1 >= question.total : false;
 
   return (
-    <main style={livePageStyle}>
+    <main style={{ ...livePageStyle, ...viewport.shellStyle }}>
       <button type="button" onClick={onExit} style={exitFabStyle} title="退出主持">
         <i className="fas fa-xmark" aria-hidden="true" /> 退出
       </button>
@@ -276,9 +312,19 @@ function GameLiveHost({ token, title, onExit }: { token: string; title: string; 
           <div style={mutedStyle}>位玩家已加入</div>
           <div style={chipsStyle}>
             {players.map((p) => (
-              <span key={p.id} style={{ ...chipStyle, opacity: p.online ? 1 : 0.4 }}>
+              <button
+                key={p.id}
+                type="button"
+                title="点击移出"
+                onClick={() => {
+                  if (window.confirm(`移出 ${p.name}？`)) {
+                    socketRef.current?.emit("game:host:kick", { room_token: token, guest_id: p.id });
+                  }
+                }}
+                style={{ ...chipStyle, opacity: p.online ? 1 : 0.4 }}
+              >
                 {p.name}
-              </span>
+              </button>
             ))}
           </div>
           <button type="button" onClick={() => emit("game:host:start")} disabled={playerCount === 0} style={bigActionBtnStyle}>
@@ -427,14 +473,14 @@ const newSetBtnStyle: CSSProperties = { marginTop: "20px", width: "100%", minHei
 const livePageStyle: CSSProperties = { minHeight: "100vh", background: "var(--x-color-canvas)", color: "var(--x-color-ink)", padding: "20px", boxSizing: "border-box" };
 const exitFabStyle: CSSProperties = { position: "fixed", top: "12px", right: "16px", zIndex: 9, display: "inline-flex", alignItems: "center", gap: "6px", padding: "8px 16px", border: "1px solid var(--x-color-line)", borderRadius: "999px", background: "var(--x-color-panel)", color: "var(--x-color-ink)", fontWeight: 800, cursor: "pointer" };
 
-const lobbyStyle: CSSProperties = { minHeight: "calc(100vh - 40px)", display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: "12px", textAlign: "center" };
+const lobbyStyle: CSSProperties = { minHeight: "100%", display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: "12px", textAlign: "center" };
 const lobbyTitleStyle: CSSProperties = { fontSize: "clamp(28px,4vw,44px)", margin: 0 };
 const qrCardStyle: CSSProperties = { background: "white", borderRadius: "18px", padding: "14px", boxShadow: "0 10px 30px var(--x-color-shadow-soft)" };
 const joinHintStyle: CSSProperties = { fontSize: "18px", fontWeight: 700 };
 const pcountStyle: CSSProperties = { fontSize: "clamp(40px,7vw,72px)", fontWeight: 900, color: "var(--x-color-accent)", lineHeight: 1 };
 const mutedStyle: CSSProperties = { color: "var(--x-color-ink-muted)", fontWeight: 700 };
 const chipsStyle: CSSProperties = { display: "flex", flexWrap: "wrap", gap: "10px", justifyContent: "center", maxWidth: "900px", maxHeight: "30vh", overflow: "auto" };
-const chipStyle: CSSProperties = { background: "var(--x-color-panel-alt)", padding: "8px 18px", borderRadius: "999px", fontWeight: 700 };
+const chipStyle: CSSProperties = { background: "var(--x-color-panel-alt)", padding: "8px 18px", borderRadius: "999px", fontWeight: 700, border: "none", color: "inherit", font: "inherit", cursor: "pointer" };
 const bigActionBtnStyle: CSSProperties = { minHeight: "58px", padding: "0 40px", border: "none", borderRadius: "14px", background: "var(--x-color-accent)", color: "white", fontSize: "22px", fontWeight: 900, cursor: "pointer", boxShadow: "0 10px 26px var(--x-color-shadow-soft)" };
 const ghostActionBtnStyle: CSSProperties = { minHeight: "48px", padding: "0 22px", border: "1px solid var(--x-color-line)", borderRadius: "10px", background: "var(--x-color-panel)", color: "var(--x-color-ink)", fontWeight: 900, fontSize: "16px", cursor: "pointer" };
 
@@ -472,7 +518,7 @@ const interLbStyle: CSSProperties = { maxWidth: "640px", margin: "0 auto", width
 const interRowStyle: CSSProperties = { display: "flex", justifyContent: "space-between", alignItems: "center", background: "var(--x-color-panel-alt)", borderRadius: "12px", padding: "10px 20px", fontWeight: 700, fontSize: "18px" };
 const statusRowStyle: CSSProperties = { display: "flex", alignItems: "center", justifyContent: "space-between", gap: "12px", flexWrap: "wrap" };
 
-const podiumStyle: CSSProperties = { minHeight: "calc(100vh - 40px)", display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: "16px" };
+const podiumStyle: CSSProperties = { minHeight: "100%", display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: "16px" };
 const podiumStageStyle: CSSProperties = { display: "flex", alignItems: "flex-end", gap: "18px", height: "300px" };
 const pillarStyle: CSSProperties = { width: "clamp(90px,12vw,150px)", borderRadius: "14px 14px 0 0", display: "flex", alignItems: "flex-start", justifyContent: "center", paddingTop: "12px", fontSize: "44px", marginTop: "8px" };
 const podiumColors = ["linear-gradient(180deg,#ffd23f,#c98f00)", "linear-gradient(180deg,#cfd8ff,#8899cc)", "linear-gradient(180deg,#ffb37a,#b96a2e)"];
