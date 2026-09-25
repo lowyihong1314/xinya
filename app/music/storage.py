@@ -143,14 +143,18 @@ def detect_audio_mime(ext):
     return "application/octet-stream"
 
 
-def stream_music_file(music):
-    file_path = os.path.join(MUSIC_DIR, music.file_name)
+def stream_music_file(music, variant="vocal"):
+    # variant="accompaniment" 时串流伴奏文件，WMA 转码缓存也用独立的 key，互不覆盖。
+    file_name = music.accompaniment_file_name if variant == "accompaniment" else music.file_name
+    if not file_name:
+        return jsonify({"error": "这首歌没有伴奏文件"}), 404
+    file_path = os.path.join(MUSIC_DIR, file_name)
     if not os.path.exists(file_path):
         return jsonify({"error": "文件不存在"}), 404
 
     ext = os.path.splitext(file_path)[1].lower()
     if ext == ".wma":
-        return _stream_wma_as_mp3(file_path, music)
+        return _stream_wma_as_mp3(file_path, music, file_name, _cache_key(music.id, variant))
 
     mime_type = detect_audio_mime(ext)
     if mime_type == "application/octet-stream":
@@ -162,14 +166,20 @@ def stream_music_file(music):
         file_path,
         mimetype=mime_type,
         as_attachment=False,
-        download_name=music.file_name,
+        download_name=file_name,
     )
 
 
 def delete_music_file(file_name):
+    if not file_name:
+        return
     file_path = os.path.join(MUSIC_DIR, file_name)
     if os.path.exists(file_path):
         os.remove(file_path)
+
+
+def _cache_key(music_id, variant="vocal"):
+    return f"{music_id}_acc" if variant == "accompaniment" else str(music_id)
 
 
 def serve_album_image(filename):
@@ -185,20 +195,25 @@ def serve_album_image(filename):
     )
 
 
-def delete_music_cache(music_id):
-    cache_path = os.path.join(CACHE_DIR, f"{music_id}.mp3")
-    if os.path.exists(cache_path):
-        os.remove(cache_path)
+def delete_music_cache(music_id, variant=None):
+    # 不传 variant 就把主音频和伴奏两份转码缓存一起清掉。
+    variants = [variant] if variant else ["vocal", "accompaniment"]
+    for item in variants:
+        cache_path = os.path.join(CACHE_DIR, f"{_cache_key(music_id, item)}.mp3")
+        if os.path.exists(cache_path):
+            os.remove(cache_path)
 
 
-def _stream_wma_as_mp3(file_path, music):
-    cached_mp3_path = os.path.join(CACHE_DIR, f"{music.id}.mp3")
+def _stream_wma_as_mp3(file_path, music, source_file_name=None, cache_key=None):
+    source_file_name = source_file_name or music.file_name
+    cache_key = cache_key or _cache_key(music.id)
+    cached_mp3_path = os.path.join(CACHE_DIR, f"{cache_key}.mp3")
     if os.path.exists(cached_mp3_path) and not DEBUG_FORCE_TRANSCODE:
         return send_file(
             cached_mp3_path,
             mimetype="audio/mpeg",
             as_attachment=False,
-            download_name=f"{os.path.splitext(music.file_name)[0]}.mp3",
+            download_name=f"{os.path.splitext(source_file_name)[0]}.mp3",
         )
 
     tmp_mp3_path = os.path.join(CACHE_DIR, f"tmp_{uuid.uuid4().hex}.mp3")
@@ -214,7 +229,7 @@ def _stream_wma_as_mp3(file_path, music):
             cached_mp3_path,
             mimetype="audio/mpeg",
             as_attachment=False,
-            download_name=f"{os.path.splitext(music.file_name)[0]}.mp3",
+            download_name=f"{os.path.splitext(source_file_name)[0]}.mp3",
         )
     except subprocess.CalledProcessError as exc:
         return jsonify({"error": "WMA 转码失败", "detail": str(exc)}), 500

@@ -31,6 +31,10 @@ class Music(db.Model):
     cover_url = db.Column(db.String(255), nullable=True)
     play_minutes = db.Column(db.Float, nullable=False, default=0.0)
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
+    # 伴奏版音频（可选）：和主音频一样存在 MUSIC_DIR 下，播放器的「伴奏模式」会切到这个文件。
+    accompaniment_file_name = db.Column(db.String(255), nullable=True)
+    accompaniment_file_type = db.Column(db.String(50), nullable=True)
+    accompaniment_file_size = db.Column(db.BigInteger, nullable=True)
 
     album = db.relationship('Album', back_populates='musics')
     artist = db.relationship('Artist', back_populates='musics')
@@ -52,12 +56,16 @@ class Music(db.Model):
             "duration": self.duration,
             "cover_url": self.cover_url,
             "play_minutes": self.play_minutes,
-            "created_at": self.created_at.isoformat()
+            "created_at": self.created_at.isoformat(),
+            "has_accompaniment": bool(self.accompaniment_file_name),
+            "accompaniment_file_name": self.accompaniment_file_name,
+            "accompaniment_file_type": self.accompaniment_file_type,
+            "accompaniment_file_size": self.accompaniment_file_size,
         }
 
-    def to_dict_full(self):
+    def to_dict_full(self, album_total_minutes=None):
         data = self.to_dict()
-        data["album"] = self.album.to_dict() if self.album else None
+        data["album"] = self.album.to_dict(total_minutes=album_total_minutes) if self.album else None
         return data
 
 
@@ -135,7 +143,10 @@ class Album(db.Model):
     musics = db.relationship('Music', back_populates='album', cascade="all, delete-orphan")
     artist = db.relationship('Artist', back_populates='albums')
 
-    def to_dict(self):
+    def to_dict(self, total_minutes=None):
+        # total_minutes 由调用方用一条聚合 SQL 算好传进来；不传才回退到懒加载 musics 求和。
+        if total_minutes is None:
+            total_minutes = sum(m.play_minutes for m in self.musics)
         data = {
             "id": self.id,
             "name": self.name,
@@ -145,7 +156,7 @@ class Album(db.Model):
             "release_date": self.release_date.isoformat() if self.release_date else None,
             "description": self.description,
             "created_at": self.created_at.isoformat(),
-            "album_total_minutes": sum(m.play_minutes for m in self.musics),
+            "album_total_minutes": total_minutes,
         }
         return data
 
@@ -176,29 +187,79 @@ class Artist(db.Model):
 playlist_music = db.Table(
     'playlist_music',
     db.Column('playlist_id', db.Integer, db.ForeignKey('playlist.id'), nullable=False),
-    db.Column('music_id', db.Integer, db.ForeignKey('music.id'), nullable=False)
+    db.Column('music_id', db.Integer, db.ForeignKey('music.id'), nullable=False),
+    # 歌单内的顺序；旧行为 0，按 position 再按 music_id 排。
+    db.Column('position', db.Integer, nullable=False, default=0, server_default='0'),
 )
+
+# 歌单成员：歌单和用户多对多。创建者（Playlist.user_id）也在这张表里，成员都能加歌减歌和播放。
+playlist_member = db.Table(
+    'playlist_member',
+    db.Column('playlist_id', db.Integer, db.ForeignKey('playlist.id', ondelete='CASCADE'), primary_key=True),
+    db.Column('user_id', db.Integer, db.ForeignKey('user_data.id', ondelete='CASCADE'), primary_key=True),
+    db.Column('joined_at', db.DateTime, default=datetime.utcnow, nullable=False),
+)
+
 
 class Playlist(db.Model):
     __tablename__ = 'playlist'
     id = db.Column(db.Integer, primary_key=True)
     name = db.Column(db.String(255), nullable=False)
-    user_id = db.Column(db.Integer, db.ForeignKey('user_data.id'))   # 谁创建的
+    user_id = db.Column(db.Integer, db.ForeignKey('user_data.id'))   # 谁创建的（拥有者）
     cover_url = db.Column(db.String(255), nullable=True)
     description = db.Column(db.Text, nullable=True)
+    # 公开歌单：所有登录用户都能看到并播放，但只有成员能改。
+    is_public = db.Column(db.Boolean, nullable=False, default=False, server_default='0')
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
 
-    musics = db.relationship('Music', secondary=playlist_music, backref='playlists')
+    musics = db.relationship(
+        'Music',
+        secondary=playlist_music,
+        backref='playlists',
+        order_by=(playlist_music.c.position, playlist_music.c.music_id),
+    )
+    members = db.relationship('User', secondary=playlist_member, backref=db.backref('shared_playlists', lazy='dynamic'))
 
-    def to_dict(self):
+    def is_member(self, user_id):
+        if user_id is None:
+            return False
+        if self.user_id == user_id:
+            return True
+        return any(member.id == user_id for member in self.members)
+
+    def owner_label(self):
+        owner = next((member for member in self.members if member.id == self.user_id), None)
+        if owner is None:
+            return None
+        return getattr(owner, "display_name", None) or owner.username
+
+    def to_dict(self, viewer_id=None):
+        members = []
+        seen = set()
+        for member in self.members:
+            if member.id in seen:
+                continue
+            seen.add(member.id)
+            members.append({
+                "id": member.id,
+                "username": member.username,
+                "display_name": getattr(member, "display_name", None) or member.username,
+                "is_owner": member.id == self.user_id,
+            })
         return {
             "id": self.id,
             "name": self.name,
             "user_id": self.user_id,
+            "owner_id": self.user_id,
+            "is_owner": viewer_id is not None and viewer_id == self.user_id,
+            "is_public": bool(self.is_public),
+            "owner_name": self.owner_label(),
+            "can_edit": viewer_id is not None and self.is_member(viewer_id),
             "cover_url": self.cover_url,
             "description": self.description,
             "created_at": self.created_at.isoformat(),
             "music_ids": [music.id for music in self.musics],
+            "members": members,
         }
 
 

@@ -1,8 +1,10 @@
 from flask import Blueprint, request
 from flask_login import login_required
 
+from flask_login import current_user
+
 from app.auth import permission_required
-from . import services
+from . import playback_session, services
 from .storage import serve_album_image
 
 
@@ -19,6 +21,7 @@ def upload_music():
         request.form.get("artist_id"),
         request.form.get("title"),
         request.form.getlist("titles"),
+        accompaniment_file=request.files.get("accompaniment"),
     )
 
 
@@ -63,8 +66,8 @@ def edit_album(album_id):
 @music_bp.route("/list", methods=["GET"])
 def list_music():
     return services.list_music(
-        int(request.args.get("page", 1)),
-        int(request.args.get("per_page", 20)),
+        request.args.get("page", 1, type=int) or 1,
+        request.args.get("per_page", 20, type=int) or 20,
     )
 
 
@@ -75,7 +78,28 @@ def music_detail(music_id):
 
 @music_bp.route("/download/<int:music_id>", methods=["GET"])
 def download_music(music_id):
-    return services.download_music(music_id)
+    variant = "accompaniment" if request.args.get("variant") == "accompaniment" else "vocal"
+    return services.download_music(music_id, variant=variant)
+
+
+# 伴奏文件：GET 串流，POST 上传/更换，DELETE 移除。
+@music_bp.route("/accompaniment/<int:music_id>", methods=["GET"])
+def download_accompaniment(music_id):
+    return services.download_music(music_id, variant="accompaniment")
+
+
+@music_bp.route("/accompaniment/<int:music_id>", methods=["POST"])
+@login_required
+@permission_required("music_edit")
+def upload_accompaniment(music_id):
+    return services.upload_accompaniment(music_id, request.files.get("file"))
+
+
+@music_bp.route("/accompaniment/<int:music_id>", methods=["DELETE"])
+@login_required
+@permission_required("music_edit")
+def delete_accompaniment(music_id):
+    return services.delete_accompaniment(music_id)
 
 
 @music_bp.route("/edit/<int:music_id>", methods=["POST"])
@@ -157,6 +181,19 @@ def delete_playlist(playlist_id):
     return services.delete_playlist(playlist_id)
 
 
+# 歌单成员（多对多）：创建者加成员，成员可自行退出。
+@music_bp.route("/playlist/<int:playlist_id>/members", methods=["POST"])
+@login_required
+def add_playlist_member(playlist_id):
+    return services.add_playlist_member(playlist_id, request.get_json() or {})
+
+
+@music_bp.route("/playlist/<int:playlist_id>/members/<int:user_id>", methods=["DELETE"])
+@login_required
+def remove_playlist_member(playlist_id, user_id):
+    return services.remove_playlist_member(playlist_id, user_id)
+
+
 @music_bp.route("/queue", methods=["GET"])
 @login_required
 def get_queue_state():
@@ -179,3 +216,79 @@ def get_playlist_state():
 @login_required
 def save_playlist_state():
     return services.save_playlist_state(request.get_json() or {})
+
+
+# ---- 一人一设备播放 + 远程遥控（Spotify Connect 式）----
+@music_bp.route("/playback/channel", methods=["POST"])
+@login_required
+def playback_channel():
+    """签发 socket 订阅钥匙，并返回当前状态（含在线设备列表）。"""
+    device_id = (request.get_json(silent=True) or {}).get("device_id")
+    return {
+        "channel_key": playback_session.issue_channel_key(current_user.id),
+        "room": playback_session.socket_room(current_user.id),
+        "state": playback_session.public_state(current_user.id, is_active_for=device_id),
+    }
+
+
+@music_bp.route("/playback/active", methods=["GET"])
+@login_required
+def playback_active():
+    return playback_session.public_state(current_user.id, is_active_for=request.args.get("device_id"))
+
+
+@music_bp.route("/playback/heartbeat", methods=["POST"])
+@login_required
+def playback_heartbeat():
+    data = request.get_json(silent=True) or {}
+    try:
+        return playback_session.heartbeat(
+            current_user.id,
+            data.get("device_id"),
+            data.get("device_name"),
+            data.get("kind"),
+            data.get("music_id"),
+            data.get("position_ms") or 0,
+            data.get("duration_ms") or 0,
+            bool(data.get("is_playing")),
+            claim=bool(data.get("claim")),
+        )
+    except ValueError as exc:
+        return {"error": str(exc)}, 400
+
+
+@music_bp.route("/playback/transfer", methods=["POST"])
+@login_required
+def playback_transfer():
+    """设备选择器：把出声的设备切到 device_id。"""
+    data = request.get_json(silent=True) or {}
+    try:
+        return playback_session.transfer(current_user.id, data.get("device_id"), requested_by=data.get("requested_by"))
+    except LookupError as exc:
+        return {"error": str(exc)}, 404
+
+
+@music_bp.route("/playback/command", methods=["POST"])
+@login_required
+def playback_command():
+    """遥控：play / pause / toggle / next / previous / seek / play_music / set_queue。"""
+    data = request.get_json(silent=True) or {}
+    try:
+        return playback_session.command(
+            current_user.id,
+            data.get("target_device_id"),
+            data.get("action"),
+            data.get("payload") or {},
+            requested_by=data.get("requested_by"),
+        )
+    except ValueError as exc:
+        return {"error": str(exc)}, 400
+    except LookupError as exc:
+        return {"error": str(exc)}, 404
+
+
+@music_bp.route("/playback/release", methods=["POST"])
+@login_required
+def playback_release():
+    data = request.get_json(silent=True) or {}
+    return playback_session.release(current_user.id, data.get("device_id"))
