@@ -339,7 +339,7 @@ export function SalesIncomeWorkspace() {
     [salesDocuments, typeFilter, searchQuery],
   );
 
-  const { page, setPage, totalPages, total, pageRows } = usePagedRows(
+  const { page, setPage, totalPages, total, pageRows, pageSize, setPageSize } = usePagedRows(
     filteredDocuments,
     isMobile ? 8 : 12,
     `${typeFilter}|${searchQuery}`,
@@ -700,7 +700,7 @@ export function SalesIncomeWorkspace() {
             <div style={emptyStyle}>没有匹配的销售记录。</div>
           ) : (
             <div style={{ display: "grid", gap: "8px", padding: "12px 14px 14px" }}>
-              <TablePagination page={page} totalPages={totalPages} total={total} onPage={setPage} />
+              <TablePagination page={page} totalPages={totalPages} total={total} onPage={setPage} pageSize={pageSize} onPageSize={setPageSize} />
 
               <div style={tableWrapStyle}>
                 <table className="sales-table">

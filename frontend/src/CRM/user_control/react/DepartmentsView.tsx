@@ -34,7 +34,7 @@ export function DepartmentsView(props: DepartmentsViewProps) {
     gap: 8,
     ratio: 2,
   });
-  const { page, setPage, totalPages, total, pageRows } = usePagedRows(
+  const { page, setPage, totalPages, total, pageRows, pageSize: activePageSize, setPageSize } = usePagedRows(
     props.departmentUsers,
     pageSize,
     props.selectedDepartmentId,
@@ -207,6 +207,8 @@ export function DepartmentsView(props: DepartmentsViewProps) {
             totalPages={totalPages}
             total={total}
             onPage={setPage}
+            pageSize={activePageSize}
+            onPageSize={setPageSize}
           />
         ) : null}
 

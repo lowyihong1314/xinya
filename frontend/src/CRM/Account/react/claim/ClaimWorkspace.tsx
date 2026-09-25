@@ -6,6 +6,7 @@ import { useUserState } from "../../../../app/UserState";
 import { downloadBlobOrShare } from "../../../../js/browserActions";
 import { showConfirmDialog, showPromptDialog } from "../../../../js/dialogs";
 import { showEventPicker } from "../../../shared/showEventPicker";
+import { usePageSizeChoice } from "../../../shared/TablePagination";
 import { render_sign_modal } from "../../../../../../static/js/sign_tools.js";
 import { decideClaim, deleteClaim, downloadClaimReport, fetchClaims, readClaimBill, submitClaim, updateClaimEvent } from "./api";
 import { buildClaimFormData, buildInitialCreateState, validateCreateState } from "./submitCreate";
@@ -43,7 +44,7 @@ const PAGE_SIZE_MOBILE = 6;
 export function ClaimWorkspace() {
   const { user, isMobile } = useUserState();
   const accountUser = (user as AccountUser | null) ?? null;
-  const pageSize = 15;
+  const [pageSize, setPageSize] = usePageSizeChoice(15);
   const [searchParams, setSearchParams] = useSearchParams();
 
   const detailClaimId = useMemo(() => {
@@ -625,6 +626,10 @@ export function ClaimWorkspace() {
           pageCount={pageCount}
           total={filteredClaims.length}
           pageSize={pageSize}
+          onPageSizeChange={(size) => {
+            setPageSize(size);
+            setPage(1);
+          }}
           onPageChange={setPage}
           onOpen={(claimId) => openDetail(claimId)}
           selectedClaimIds={selectedClaimIds}

@@ -561,7 +561,7 @@ function RosterView({ members, loading, error }: { members: RosterMember[]; load
     });
   }, [members, query, filter]);
 
-  const { page, totalPages, total, pageRows, setPage } = usePagedRows(filtered);
+  const { page, totalPages, total, pageRows, setPage, pageSize, setPageSize } = usePagedRows(filtered);
   const activeCount = members.filter((m) => m.active).length;
   const permanentCount = members.filter((m) => m.permanent).length;
 
@@ -597,7 +597,7 @@ function RosterView({ members, loading, error }: { members: RosterMember[]; load
           onChange={(e) => { setQuery(e.target.value); setPage(1); }}
         />
       </div>
-      <TablePagination page={page} totalPages={totalPages} total={total} onPage={setPage} />
+      <TablePagination page={page} totalPages={totalPages} total={total} onPage={setPage} pageSize={pageSize} onPageSize={setPageSize} />
       <div style={tableWrapStyle}>
         <table className="mrp-table">
           <thead>
@@ -656,7 +656,7 @@ function ListView({
   onToggleRow: (id: number, checked: boolean) => void;
   onToggleAll: (ids: number[], checked: boolean) => void;
 }) {
-  const { page, totalPages, total, pageRows, setPage } = usePagedRows(entries);
+  const { page, totalPages, total, pageRows, setPage, pageSize, setPageSize } = usePagedRows(entries);
   if (loading) return <div style={emptyStyle}>加载中…</div>;
   if (!entries.length) return <div style={emptyStyle}>{config.emptyListText}</div>;
 
@@ -665,7 +665,7 @@ function ListView({
 
   return (
     <div style={{ display: "grid", gap: "8px", padding: "12px 14px 4px" }}>
-      <TablePagination page={page} totalPages={totalPages} total={total} onPage={setPage} />
+      <TablePagination page={page} totalPages={totalPages} total={total} onPage={setPage} pageSize={pageSize} onPageSize={setPageSize} />
       <div style={tableWrapStyle}>
       <table className="mrp-table">
         <thead>

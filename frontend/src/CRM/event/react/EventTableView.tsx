@@ -260,7 +260,7 @@ export function EventTableView(props: {
               <div style={emptyStyle}>没有匹配的活动。</div>
             ) : (
               <div style={{ padding: "0 14px 14px" }}>
-                <TablePagination page={paged.page} totalPages={paged.totalPages} total={paged.total} onPage={paged.setPage} />
+                <TablePagination page={paged.page} totalPages={paged.totalPages} total={paged.total} onPage={paged.setPage} pageSize={paged.pageSize} onPageSize={paged.setPageSize} />
                 <div style={tableWrapStyle}>
                   <table className="fw-table">
                     <thead>

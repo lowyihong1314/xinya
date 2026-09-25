@@ -29,6 +29,7 @@ type ClaimListProps = {
   pageCount: number;
   total: number;
   pageSize: number;
+  onPageSizeChange: (size: number) => void;
   onPageChange: (page: number) => void;
   onOpen: (claimId: number) => void;
   selectedClaimIds: Set<number>;
@@ -77,7 +78,9 @@ export function ClaimList(props: ClaimListProps) {
     page,
     pageCount,
     total,
+    pageSize,
     onPageChange,
+    onPageSizeChange,
     onOpen,
     selectedClaimIds,
     selectedCount,
@@ -234,7 +237,7 @@ export function ClaimList(props: ClaimListProps) {
             ) : null}
           </div>
 
-          <TablePagination page={page} totalPages={pageCount} total={total} onPage={onPageChange} />
+          <TablePagination page={page} totalPages={pageCount} total={total} onPage={onPageChange} pageSize={pageSize} onPageSize={onPageSizeChange} />
 
           <div style={tableWrapStyle}>
             <table className="claim-table">

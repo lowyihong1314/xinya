@@ -7,7 +7,7 @@ import { useUserState } from "../../../app/UserState";
 import { getUserPermissionNames } from "../../../app/permissions";
 import { showConfirmDialog } from "../../../js/dialogs";
 import { LAMP_META } from "../../../lamp/lampMeta";
-import { usePagedRows } from "../../shared/TablePagination";
+import { TablePagination, usePagedRows } from "../../shared/TablePagination";
 import { sortArrow, sortRows, sortableThStyle, toggleSort, type SortState } from "../../Account/react/shared/tableSort";
 import { OpenWindowModal } from "../../fahui/OpenWindowModal";
 import { deleteLampRegistration, fetchLampRegistrations, updateLampRegistration } from "./api";
@@ -367,26 +367,14 @@ export function LampWorkspacePage() {
 
         {!loading && filtered.length ? (
           <div style={{ display: "grid", gap: "8px", padding: "12px 14px 4px" }}>
-            <nav style={pagerStyle}>
-              <button
-                type="button"
-                onClick={() => paged.setPage(Math.max(1, paged.page - 1))}
-                disabled={paged.page <= 1}
-                style={{ ...pageBtnStyle, ...(paged.page <= 1 ? pageBtnDisabledStyle : null) }}
-              >
-                上一页
-              </button>
-              <span style={pageIndicatorStyle}>{`${paged.page} / ${paged.totalPages}`}</span>
-              <button
-                type="button"
-                onClick={() => paged.setPage(Math.min(paged.totalPages, paged.page + 1))}
-                disabled={paged.page >= paged.totalPages}
-                style={{ ...pageBtnStyle, ...(paged.page >= paged.totalPages ? pageBtnDisabledStyle : null) }}
-              >
-                下一页
-              </button>
-              <span style={mutedStyle}>{`共 ${paged.total} 条`}</span>
-            </nav>
+            <TablePagination
+              page={paged.page}
+              totalPages={paged.totalPages}
+              total={paged.total}
+              onPage={paged.setPage}
+              pageSize={paged.pageSize}
+              onPageSize={paged.setPageSize}
+            />
             <div style={tableWrapStyle}>
               <table className="lamp-table">
                 <thead>

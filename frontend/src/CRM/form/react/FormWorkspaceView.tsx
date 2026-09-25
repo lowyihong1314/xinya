@@ -445,7 +445,7 @@ export function FormWorkspaceView(props: {
         {!props.loading && !props.forms.length ? <div style={emptyStyle}>暂无报名表。</div> : null}
         {!props.loading && props.forms.length ? (
           <div style={{ display: "grid", gap: "8px", padding: "12px 14px 4px" }}>
-          <TablePagination page={formsPaged.page} totalPages={formsPaged.totalPages} total={formsPaged.total} onPage={formsPaged.setPage} />
+          <TablePagination page={formsPaged.page} totalPages={formsPaged.totalPages} total={formsPaged.total} onPage={formsPaged.setPage} pageSize={formsPaged.pageSize} onPageSize={formsPaged.setPageSize} />
           <div style={tableWrapStyle}>
             <table className="fw-table">
               <thead>
@@ -546,7 +546,7 @@ function MembersTab({
       {members.length && !filtered.length ? <div style={emptyInlineStyle}>没有匹配的报名成员。</div> : null}
       {filtered.length ? (
         <>
-        <TablePagination page={paged.page} totalPages={paged.totalPages} total={paged.total} onPage={paged.setPage} />
+        <TablePagination page={paged.page} totalPages={paged.totalPages} total={paged.total} onPage={paged.setPage} pageSize={paged.pageSize} onPageSize={paged.setPageSize} />
         <div style={tableWrapStyle}>
           <table className="fw-table">
             <thead>

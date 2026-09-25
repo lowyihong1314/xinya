@@ -48,6 +48,7 @@ import {
   updateYlpOrderStatus,
 } from "./api";
 import { showEventPicker } from "../shared/showEventPicker";
+import { PageSizePicker, usePageSizeChoice } from "../shared/TablePagination";
 import { PaiweiPreviewGrid } from "./PaiweiPreview";
 import { YlpDrawer } from "./YlpDrawer";
 import { YlpItemModal } from "./YlpItemModal";
@@ -74,7 +75,7 @@ import type {
   YlpVersionEventBinding,
 } from "./types";
 
-const PAGE_SIZE = 8;
+const DEFAULT_PAYMENT_PAGE_SIZE = 8;
 const YLP_ORDER_PAGE_SIZE = 15;
 
 // 版本即年份（2025_YLP ↔ 2025 年）；只有今年版本的订单可以修改，历史版本只读、只能复制到今年。
@@ -467,10 +468,11 @@ export function FahuiPage() {
           matchesPaymentWorkspace(payment, currentWorkspace) && matchesPaymentQuery(payment, normalizedPaymentQuery),
       )
     : [];
-  const paymentTotalPages = Math.max(1, Math.ceil(workspacePayments.length / PAGE_SIZE));
+  const [paymentPageSize, setPaymentPageSize] = usePageSizeChoice(DEFAULT_PAYMENT_PAGE_SIZE);
+  const paymentTotalPages = Math.max(1, Math.ceil(workspacePayments.length / paymentPageSize));
   const paymentPage = currentWorkspace ? paymentPageByWorkspace[currentWorkspace] : 1;
   const safePaymentPage = Math.min(paymentPage, paymentTotalPages);
-  const pagedPayments = workspacePayments.slice((safePaymentPage - 1) * PAGE_SIZE, safePaymentPage * PAGE_SIZE);
+  const pagedPayments = workspacePayments.slice((safePaymentPage - 1) * paymentPageSize, safePaymentPage * paymentPageSize);
   const ylpTotalPages = Math.max(1, ylpPagination?.pages || 1);
   const ylpSafePage = Math.min(ylpPage, ylpTotalPages);
   const selectedPayment =
@@ -1453,6 +1455,13 @@ export function FahuiPage() {
             style={styles.searchInput}
           />
           <p style={styles.summary}>{`共 ${workspacePayments.length} 条，当前第 ${safePaymentPage}/${paymentTotalPages} 页`}</p>
+          <PageSizePicker
+            pageSize={paymentPageSize}
+            onPageSize={(size) => {
+              setPaymentPageSize(size);
+              updatePaymentPage(workspace, 1);
+            }}
+          />
         </section>
 
         {paymentLoading ? <section style={styles.stateCard}>加载中…</section> : null}

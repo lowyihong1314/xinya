@@ -187,7 +187,7 @@ export function HomeAlbumPage() {
           hasAnyHomeEvent ? (
             <>
               {renderFeaturedEvent(homeEvents.nextEvent, cardImageUrls, navigate, isMobile)}
-              {renderUpcomingList(homeEvents.upcomingList, navigate)}
+              {renderUpcomingList(homeEvents.upcomingList, navigate, isMobile)}
               {renderPastSection(
                 pagedPastEvents,
                 cardImageUrls,
@@ -420,7 +420,7 @@ function renderFeaturedEvent(
   );
 }
 
-function renderUpcomingList(entries: CardEventEntry[], navigate: (path: string) => void) {
+function renderUpcomingList(entries: CardEventEntry[], navigate: (path: string) => void, isMobile: boolean) {
   if (!entries.length) {
     return null;
   }
@@ -445,16 +445,16 @@ function renderUpcomingList(entries: CardEventEntry[], navigate: (path: string) 
               id={`home-upcoming-${event.id}`}
               type="button"
               className="home-list-row"
-              style={listRowStyle}
+              style={listRowStyle(isMobile)}
               onClick={() => navigate(`/event/${event.id}`)}
             >
-              <div style={listDateColStyle}>
+              <div style={listDateColStyle(isMobile)}>
                 <div style={listDayStyle}>{start.getDate()}</div>
                 <div style={listMonthStyle}>{start.getMonth() + 1} 月</div>
               </div>
               <div style={listMainStyle}>
                 <div style={listNameStyle}>{name}</div>
-                <div style={listMetaStyle}>
+                <div style={listMetaStyle(isMobile)}>
                   {formatCardDate(start)}
                   {timeRange ? ` · ${timeRange}` : ""}
                   {event.location ? ` · ${event.location}` : ""}
@@ -1233,30 +1233,43 @@ const featuredCtaStyle: CSSProperties = {
 
 const listWrapStyle: CSSProperties = {
   display: "grid",
+  // 列宽必须允许缩到 0，否则行内 nowrap 的文字会把整列撑出屏幕。
+  gridTemplateColumns: "minmax(0, 1fr)",
   gap: "10px",
-};
-
-const listRowStyle: CSSProperties = {
-  display: "flex",
-  alignItems: "center",
-  gap: "14px",
   width: "100%",
-  padding: "12px 16px",
-  textAlign: "left",
-  borderRadius: "var(--x-radius-md)",
-  border: "1px solid var(--x-color-line)",
-  background: "var(--x-color-panel)",
-  cursor: "pointer",
-  transition: "background 160ms ease, border-color 160ms ease, box-shadow 160ms ease",
+  minWidth: 0,
 };
 
-const listDateColStyle: CSSProperties = {
-  display: "grid",
-  placeItems: "center",
-  minWidth: "46px",
-  paddingRight: "14px",
-  borderRight: "1px solid var(--x-color-line)",
-};
+function listRowStyle(isMobile: boolean): CSSProperties {
+  return {
+    display: "flex",
+    alignItems: "center",
+    gap: isMobile ? "10px" : "14px",
+    width: "100%",
+    maxWidth: "100%",
+    minWidth: 0,
+    boxSizing: "border-box",
+    overflow: "hidden",
+    padding: isMobile ? "10px 12px" : "12px 16px",
+    textAlign: "left",
+    borderRadius: "var(--x-radius-md)",
+    border: "1px solid var(--x-color-line)",
+    background: "var(--x-color-panel)",
+    cursor: "pointer",
+    transition: "background 160ms ease, border-color 160ms ease, box-shadow 160ms ease",
+  };
+}
+
+function listDateColStyle(isMobile: boolean): CSSProperties {
+  return {
+    display: "grid",
+    placeItems: "center",
+    flex: "0 0 auto",
+    minWidth: isMobile ? "40px" : "46px",
+    paddingRight: isMobile ? "10px" : "14px",
+    borderRight: "1px solid var(--x-color-line)",
+  };
+}
 
 const listDayStyle: CSSProperties = {
   fontFamily: "var(--x-font-serif)",
@@ -1276,8 +1289,9 @@ const listMainStyle: CSSProperties = {
   display: "flex",
   flexDirection: "column",
   gap: "4px",
-  flex: 1,
+  flex: "1 1 0%",
   minWidth: 0,
+  overflow: "hidden",
 };
 
 const listNameStyle: CSSProperties = {
@@ -1290,15 +1304,20 @@ const listNameStyle: CSSProperties = {
   textOverflow: "ellipsis",
 };
 
-const listMetaStyle: CSSProperties = {
-  fontSize: "12.5px",
-  color: "var(--x-color-ink-muted)",
-  whiteSpace: "nowrap",
-  overflow: "hidden",
-  textOverflow: "ellipsis",
-};
+function listMetaStyle(isMobile: boolean): CSSProperties {
+  return {
+    fontSize: "12.5px",
+    color: "var(--x-color-ink-muted)",
+    // 手机上允许换行，桌面上单行省略。
+    whiteSpace: isMobile ? "normal" : "nowrap",
+    overflow: "hidden",
+    textOverflow: "ellipsis",
+    overflowWrap: "anywhere",
+  };
+}
 
 const listBadgeStyle: CSSProperties = {
+  flex: "0 0 auto",
   padding: "3px 10px",
   borderRadius: "999px",
   background: "var(--x-color-accent-soft)",
@@ -1309,6 +1328,7 @@ const listBadgeStyle: CSSProperties = {
 };
 
 const listArrowStyle: CSSProperties = {
+  flex: "0 0 auto",
   fontSize: "20px",
   color: "var(--x-color-ink-muted)",
   marginLeft: "2px",

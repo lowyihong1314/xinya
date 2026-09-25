@@ -31,7 +31,7 @@ export function MembersView(props: MembersViewProps) {
     gap: 8,
     ratio: 2,
   });
-  const { page, setPage, totalPages, total, pageRows } = usePagedRows(
+  const { page, setPage, totalPages, total, pageRows, pageSize: activePageSize, setPageSize } = usePagedRows(
     props.users,
     pageSize,
     props.search,
@@ -109,6 +109,8 @@ export function MembersView(props: MembersViewProps) {
         totalPages={totalPages}
         total={total}
         onPage={setPage}
+        pageSize={activePageSize}
+        onPageSize={setPageSize}
       />
 
       {props.loading ? <div style={styles.placeholderStyle}>读取中…</div> : null}

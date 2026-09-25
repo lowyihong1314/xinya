@@ -614,7 +614,7 @@ export function RegisterWorkspace() {
               {exportingReport ? "生成 Report…" : "导出 Report"}
             </button>
           </div>
-          <TablePagination page={paged.page} totalPages={paged.totalPages} total={paged.total} onPage={paged.setPage} />
+          <TablePagination page={paged.page} totalPages={paged.totalPages} total={paged.total} onPage={paged.setPage} pageSize={paged.pageSize} onPageSize={paged.setPageSize} />
           <div style={tableWrapStyle}>
             <table className="fin-table">
               <thead>

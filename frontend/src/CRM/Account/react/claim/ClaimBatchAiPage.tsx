@@ -734,30 +734,42 @@ const imageCardStyle: CSSProperties = {
   display: "grid",
 };
 
+// 缩略图容器固定 16:10；图片用绝对定位铺满，这样再高的收据照片也撑不开卡片。
 const imageWrapStyle: CSSProperties = {
+  position: "relative",
   width: "100%",
+  minWidth: 0,
+  minHeight: 0,
   aspectRatio: "16 / 10",
+  overflow: "hidden",
   background: "var(--x-color-panel-alt)",
   borderBottom: "1px solid var(--x-color-line-soft)",
 };
 
 const imagePreviewButtonStyle: CSSProperties = {
   ...imageWrapStyle,
+  display: "block",
   padding: 0,
+  margin: 0,
   border: "none",
+  borderBottom: "1px solid var(--x-color-line-soft)",
   cursor: "zoom-in",
-  display: "grid",
-  placeItems: "center",
 };
 
 const imageStyle: CSSProperties = {
+  position: "absolute",
+  inset: 0,
   display: "block",
   width: "100%",
   height: "100%",
+  maxWidth: "100%",
+  maxHeight: "100%",
   objectFit: "cover",
 };
 
 const pdfThumbStyle: CSSProperties = {
+  position: "absolute",
+  inset: 0,
   width: "100%",
   height: "100%",
   display: "grid",
