@@ -10,7 +10,7 @@ also auto-reveals once every online player has answered.
 
 from flask import request
 from flask_login import current_user
-from flask_socketio import emit, join_room
+from flask_socketio import emit, join_room, leave_room
 
 from app.extensions import socketio
 
@@ -163,7 +163,14 @@ def handle_game_host_kick(data):
         token = services.normalize_token(data.get("room_token") or data.get("token"))
         guest_id = str(data.get("guest_id") or "").strip()
         if guest_id:
-            services.kick_player(token, guest_id)
+            _, sids = services.kick_player(token, guest_id)
+            room = _room(token)
+            for sid in sids:
+                emit("game:kicked", {"reason": "kicked", "message": "你已被主持人移出"}, to=sid)
+                try:
+                    leave_room(room, sid=sid)
+                except Exception:  # noqa: BLE001 - sid may live on another worker; the client disconnects itself
+                    pass
         emit(
             "game:players",
             {"players": services.player_list(token), "player_count": len(services._load_players(token))},

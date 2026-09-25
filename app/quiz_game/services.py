@@ -68,6 +68,10 @@ def scored_key(token, q_index):
     return f"quizg:{token}:scored:{q_index}"
 
 
+def banned_key(token):
+    return f"quizg:{token}:banned"
+
+
 def sid_map_key():
     return "quizg:sid_map"
 
@@ -178,8 +182,8 @@ def create_session(user_id, set_id):
         "created_by_user_id": user_id,
         "created_at_ms": current_ms,
     }
-    # A fresh room starts with no players / answers.
-    redis_client.delete(players_key(token), answers_key(token))
+    # A fresh room starts with no players / answers / bans.
+    redis_client.delete(players_key(token), answers_key(token), banned_key(token))
     return _save_session(session)
 
 
@@ -240,6 +244,8 @@ def add_player(token, guest_id, guest_name, sid=None):
     name = _clean_text(guest_name, MAX_NAME_LENGTH)
     if not name:
         raise QuizGameError("请先输入名字", 400, "missing_name")
+    if is_banned(token, guest_id):
+        raise QuizGameError("你已被主持人移出", 403, "banned")
 
     players = _load_players(token)
     player = players.get(guest_id) or {"id": guest_id, "score": 0, "streak": 0, "lastGain": 0}
@@ -273,12 +279,43 @@ def mark_offline_by_sid(sid):
     return token
 
 
+def is_banned(token, guest_id):
+    if not guest_id:
+        return False
+    return bool(redis_client.sismember(banned_key(token), guest_id))
+
+
+def sids_for_guest(token, guest_id):
+    """All socket ids currently mapped to this guest in this room."""
+    target = f"{token}|{guest_id}"
+    raw = redis_client.hgetall(sid_map_key()) or {}
+    sids = []
+    for sid, value in raw.items():
+        if isinstance(sid, bytes):
+            sid = sid.decode("utf-8", "ignore")
+        if isinstance(value, bytes):
+            value = value.decode("utf-8", "ignore")
+        if value == target:
+            sids.append(sid)
+    return sids
+
+
 def kick_player(token, guest_id):
+    """Remove a player and ban their guest_id for the rest of the room's life.
+
+    Returns (session, sids) so the socket layer can notify / detach the
+    player's live connections.
+    """
     session = require_session(token)
     token = session["room_token"]
+    redis_client.sadd(banned_key(token), guest_id)
+    redis_client.expire(banned_key(token), GAME_TTL_SECONDS)
     redis_client.hdel(players_key(token), guest_id)
     redis_client.hdel(answers_key(token), guest_id)
-    return session
+    sids = sids_for_guest(token, guest_id)
+    if sids:
+        redis_client.hdel(sid_map_key(), *sids)
+    return session, sids
 
 
 # ─────────────────────── question / answer helpers ───────────────────────

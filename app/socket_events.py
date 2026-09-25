@@ -230,6 +230,34 @@ def handle_quiz_host_close(data):
         _handle_quiz_error(exc)
 
 
+# One leaderboard broadcast per room per window; taps inside the window are
+# merged into the next flush. The flag lives in Redis so all eventlet workers
+# share it.
+QUIZ_LEADERBOARD_THROTTLE_MS = 250
+QUIZ_LEADERBOARD_FLAG_TTL_MS = 5000  # safety net if a flush greenlet dies
+
+
+def _schedule_quiz_leaderboard_broadcast(token):
+    key = quiz_services.leaderboard_pending_key(token)
+    if not redis_client.set(key, "1", nx=True, px=QUIZ_LEADERBOARD_FLAG_TTL_MS):
+        # A flush is already pending; it reads Redis after this tap landed.
+        return
+    socketio.start_background_task(_flush_quiz_leaderboard, token, key)
+
+
+def _flush_quiz_leaderboard(token, key):
+    socketio.sleep(QUIZ_LEADERBOARD_THROTTLE_MS / 1000)
+    # Clear the flag *before* reading, so a tap that lands after this read
+    # schedules its own flush instead of being lost.
+    redis_client.delete(key)
+    try:
+        snapshot = quiz_services.build_snapshot(token)
+    except Exception as exc:  # noqa: BLE001 - room may have expired mid-window
+        print("⚠️ Quiz leaderboard flush skipped:", exc)
+        return
+    socketio.emit("quiz:leaderboard", snapshot, to=quiz_services.socket_room(token))
+
+
 @socketio.on("quiz:guest:tap")
 def handle_quiz_guest_tap(data):
     try:
@@ -241,7 +269,9 @@ def handle_quiz_guest_tap(data):
             data.get("guest_name"),
             data.get("client_clicked_at_ms"),
         )
-        emit("quiz:leaderboard", snapshot, to=quiz_services.socket_room(snapshot["room_token"]))
+        # Don't fan the whole board out on every tap: coalesce into one
+        # broadcast per room per throttle window.
+        _schedule_quiz_leaderboard_broadcast(snapshot["room_token"])
     except Exception as exc:
         if isinstance(exc, quiz_services.QuizError):
             emit(
@@ -258,3 +288,4 @@ from app.quiz_game import socket_events as _quiz_game_socket_events  # noqa: E40
 
 # Register the 「别人眼中的我」 socket handlers on the same server.
 from app.mirror import socket_events as _mirror_socket_events  # noqa: E402,F401
+from app.music import socket_events as _music_socket_events  # noqa: E402,F401

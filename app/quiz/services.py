@@ -49,6 +49,11 @@ def guests_key(token):
     return f"quiz:{token}:guests"
 
 
+def leaderboard_pending_key(token):
+    """Throttle flag: set while a coalesced leaderboard broadcast is scheduled."""
+    return f"quiz:{token}:lb_pending"
+
+
 def sid_map_key():
     return "quiz:sid_map"
 

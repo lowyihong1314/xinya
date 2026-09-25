@@ -44,6 +44,20 @@ def _serialize_entry(entry, include_content=False):
     return data
 
 
+def _apply_override(data, override, user, include_content=False):
+    """把一条 SongbookUserEdit 套用到已序列化的 entry 上（_apply_version 与批量版共用）。"""
+    editor_name = (getattr(user, "display_name", None) or getattr(user, "username", None) or f"用户 {override.user_id}") if user else f"用户 {override.user_id}"
+    data["active_version"] = "user"
+    data["active_version_label"] = f"{editor_name} 的编辑版"
+    data["active_editor_user_id"] = override.user_id
+    data["active_editor_name"] = editor_name
+    data["has_user_override"] = current_user.is_authenticated and override.user_id == current_user.id
+    data["user_override_updated_at"] = override.updated_at.isoformat() if override.updated_at else None
+    if include_content:
+        data["content"] = override.content
+    return data
+
+
 def _apply_version(entry, include_content=False, editor_user_id=None, version_kind=None):
     data = _serialize_entry(entry, include_content=include_content)
     override = None
@@ -63,16 +77,37 @@ def _apply_version(entry, include_content=False, editor_user_id=None, version_ki
         )
     if override:
         user = User.query.get(override.user_id)
-        editor_name = (getattr(user, "display_name", None) or getattr(user, "username", None) or f"用户 {override.user_id}") if user else f"用户 {override.user_id}"
-        data["active_version"] = "user"
-        data["active_version_label"] = f"{editor_name} 的编辑版"
-        data["active_editor_user_id"] = override.user_id
-        data["active_editor_name"] = editor_name
-        data["has_user_override"] = current_user.is_authenticated and override.user_id == current_user.id
-        data["user_override_updated_at"] = override.updated_at.isoformat() if override.updated_at else None
-        if include_content:
-            data["content"] = override.content
+        _apply_override(data, override, user, include_content=include_content)
     return data
+
+
+def _apply_current_user_version_bulk(entries, include_content=False):
+    """列表用：一次查出当前用户对这批 entry 的编辑版，再在内存里套用。
+
+    结果与对每首歌调用 _apply_version(entry) 完全一致，只是把 N 条 songbook_user_edit 查询合成一条。
+    """
+    if not entries:
+        return []
+    if not current_user.is_authenticated:
+        return [_serialize_entry(entry, include_content=include_content) for entry in entries]
+
+    entry_ids = [entry.id for entry in entries]
+    overrides = (
+        SongbookUserEdit.query.join(User, User.id == SongbookUserEdit.user_id)
+        .filter(SongbookUserEdit.base_entry_id.in_(entry_ids), SongbookUserEdit.user_id == current_user.id)
+        .all()
+    )
+    override_by_entry_id = {override.base_entry_id: override for override in overrides}
+    editor = User.query.get(current_user.id) if override_by_entry_id else None
+
+    results = []
+    for entry in entries:
+        data = _serialize_entry(entry, include_content=include_content)
+        override = override_by_entry_id.get(entry.id)
+        if override:
+            _apply_override(data, override, editor, include_content=include_content)
+        results.append(data)
+    return results
 
 
 def _list_versions(entry):
@@ -220,7 +255,7 @@ def list_songbook_entries():
     if include_unpublished and not _current_user_can_view_unpublished():
         return jsonify({"error": "没有权限查看未发布歌曲"}), 403
     entries = _query_entries(include_unpublished=include_unpublished).all()
-    return jsonify({"entries": [_apply_version(entry, include_content=False) for entry in entries]})
+    return jsonify({"entries": _apply_current_user_version_bulk(entries, include_content=False)})
 
 
 @songbook_bp.get("/entry/<int:entry_id>")
