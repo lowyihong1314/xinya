@@ -111,6 +111,8 @@ public final class NativeMusicRepository {
         public final double playMinutes;
         public final String createdAt;
         public final AlbumRecord album;
+        /** 是否有伴奏版音频（服务器 has_accompaniment）。 */
+        public final boolean hasAccompaniment;
 
         MusicRecord(
             int id,
@@ -126,6 +128,25 @@ public final class NativeMusicRepository {
             String createdAt,
             AlbumRecord album
         ) {
+            this(id, title, albumId, artistId, fileName, fileType, fileSize, duration, coverUrl, playMinutes, createdAt, album, false);
+        }
+
+        MusicRecord(
+            int id,
+            String title,
+            Integer albumId,
+            Integer artistId,
+            String fileName,
+            String fileType,
+            Long fileSize,
+            Integer duration,
+            String coverUrl,
+            double playMinutes,
+            String createdAt,
+            AlbumRecord album,
+            boolean hasAccompaniment
+        ) {
+            this.hasAccompaniment = hasAccompaniment;
             this.id = id;
             this.title = title;
             this.albumId = albumId;
@@ -162,7 +183,8 @@ public final class NativeMusicRepository {
                 normalizeCoverUrl(baseUrl, data.optString("cover_url", "")),
                 optDouble(data, "play_minutes"),
                 nullableString(data.optString("created_at", "")),
-                album
+                album,
+                data.optBoolean("has_accompaniment", false)
             );
         }
 
@@ -180,6 +202,7 @@ public final class NativeMusicRepository {
             obj.put("play_minutes", playMinutes);
             obj.put("created_at", createdAt);
             obj.put("album", album != null ? album.toJSObject() : null);
+            obj.put("has_accompaniment", hasAccompaniment);
             return obj;
         }
     }
@@ -438,6 +461,40 @@ public final class NativeMusicRepository {
             body.put("current_music_id", JSONObject.NULL);
         }
         sendJson(normalizeBaseUrl(baseUrl) + "/api/music/queue", cookie, authorizationHeader, "POST", body);
+    }
+
+    /**
+     * 一人一设备播放心跳。claim=true 表示本设备抢占为活动设备。
+     * 返回服务端状态：active_device_id / active_device_name / is_active / music_id / position_ms。
+     */
+    public static JSONObject playbackHeartbeat(
+        String baseUrl,
+        String cookie,
+        String authorizationHeader,
+        String deviceId,
+        String deviceName,
+        int musicId,
+        long positionMs,
+        long durationMs,
+        boolean isPlaying,
+        boolean claim
+    ) throws Exception {
+        JSONObject body = new JSONObject();
+        body.put("device_id", deviceId);
+        body.put("device_name", deviceName);
+        body.put("kind", "android");
+        if (musicId > 0) body.put("music_id", musicId);
+        body.put("position_ms", positionMs);
+        body.put("duration_ms", durationMs);
+        body.put("is_playing", isPlaying);
+        body.put("claim", claim);
+        return sendJson(normalizeBaseUrl(baseUrl) + "/api/music/playback/heartbeat", cookie, authorizationHeader, "POST", body);
+    }
+
+    public static void playbackRelease(String baseUrl, String cookie, String authorizationHeader, String deviceId) throws Exception {
+        JSONObject body = new JSONObject();
+        body.put("device_id", deviceId);
+        sendJson(normalizeBaseUrl(baseUrl) + "/api/music/playback/release", cookie, authorizationHeader, "POST", body);
     }
 
     public static void addOneMinute(String baseUrl, String cookie, int musicId) throws Exception {

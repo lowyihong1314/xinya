@@ -15,6 +15,7 @@ import android.os.Bundle;
 import android.os.Handler;
 import android.os.IBinder;
 import android.os.Looper;
+import android.os.SystemClock;
 import android.util.Log;
 import android.webkit.CookieManager;
 
@@ -34,7 +35,7 @@ import com.google.android.exoplayer2.ExoPlayer;
 import com.google.android.exoplayer2.MediaItem;
 import com.google.android.exoplayer2.Player;
 import com.google.android.exoplayer2.audio.AudioAttributes;
-import com.google.android.exoplayer2.source.ConcatenatingMediaSource;
+import com.google.android.exoplayer2.source.MediaSource;
 import com.google.android.exoplayer2.source.ProgressiveMediaSource;
 import com.google.android.exoplayer2.upstream.DefaultDataSource;
 import com.google.android.exoplayer2.upstream.DefaultHttpDataSource;
@@ -129,6 +130,23 @@ public class MusicService extends MediaBrowserServiceCompat {
     private final List<NativeMusicRepository.AlbumRecord> catalogAlbums = new ArrayList<>();
     private final List<NativeMusicRepository.MusicRecord> catalogMusics = new ArrayList<>();
     private long catalogLoadedAtMs = 0L;
+    private static final String PREF_ACCOMPANIMENT = "accompaniment_mode";
+    private static final String PREF_DEVICE_ID = "playback_device_id";
+    private static final long PLAYBACK_HEARTBEAT_MS = 10_000L;
+    /** 一人一设备：本机的设备 id / 名称，以及是否已被其他设备接管。 */
+    private String playbackDeviceId = "";
+    private String playbackDeviceName = "";
+    private volatile boolean pausedByRemoteDevice = false;
+    private volatile boolean needsClaim = true;
+    private final Runnable playbackHeartbeatRunner = new Runnable() {
+        @Override
+        public void run() {
+            sendPlaybackHeartbeat(false);
+            scheduleHeartbeat();
+        }
+    };
+    /** 伴奏模式：有伴奏的歌用伴奏版 URL（车机端的播放列表也遵守）。 */
+    private volatile boolean accompanimentMode = false;
 
     // Album art cache — keeps last downloaded bitmap + its URL.
     private Bitmap currentArtBitmap = null;
@@ -136,27 +154,23 @@ public class MusicService extends MediaBrowserServiceCompat {
     private final ExecutorService coverFetchExecutor = Executors.newSingleThreadExecutor();
     private final ExecutorService catalogExecutor = Executors.newSingleThreadExecutor();
     private final ExecutorService playbackMetricExecutor = Executors.newSingleThreadExecutor();
+    // ── Listening-minute accounting ──────────────────────────────────────────
+    //
+    // Instead of a 60 s timer that restarts on every state change (and therefore
+    // drops the partial minute on pause / buffering / track switch), we accumulate
+    // the real wall-clock time spent with ExoPlayer in the "isPlaying" state.
+    // Buffering and pauses simply freeze the accumulator; each full 60 000 ms is
+    // reported once for the track that is playing at that moment. The remainder
+    // below 60 s is carried over across track changes so no listening time is lost.
+    private static final long MINUTE_MS = 60_000L;
+    private long playbackAccumulatedMs = 0L;
+    private long playbackSegmentStartMs = -1L;
     private final Runnable playbackMinuteReporter = new Runnable() {
         @Override
         public void run() {
-            if (player == null || !player.isPlaying() || currentTrackId <= 0 || baseUrl == null || baseUrl.isEmpty()) {
-                return;
-            }
-            final int musicId = currentTrackId;
-            final String baseUrlSnapshot = getEffectiveBaseUrl();
-            final String targetUrl = baseUrlSnapshot + "/api/music/add_one_minute/" + musicId;
-            final String cookie = CookieManager.getInstance().getCookie(targetUrl);
-            playbackMetricExecutor.execute(() -> {
-                try {
-                    String authorizationHeader = NativeAuthSessionStore.getAuthorizationHeader(MusicService.this, baseUrlSnapshot);
-                    String effectiveCookie = authorizationHeader == null ? cookie : null;
-                    NativeMusicRepository.addOneMinute(baseUrlSnapshot, effectiveCookie, authorizationHeader, musicId);
-                    Log.d(TAG, "addOneMinute reported for musicId=" + musicId);
-                } catch (Exception e) {
-                    Log.w(TAG, "addOneMinute failed: " + e.getMessage());
-                }
-            });
-            mainHandler.postDelayed(this, 60_000);
+            foldPlaybackSegment();
+            reportAccumulatedMinutes();
+            schedulePlaybackMinuteTick();
         }
     };
 
@@ -169,6 +183,16 @@ public class MusicService extends MediaBrowserServiceCompat {
         baseUrl = NativeMusicRepository.normalizeBaseUrl(
             prefs.getString(PREF_BASE_URL, DEFAULT_AUTO_BASE_URL)
         );
+        accompanimentMode = prefs.getBoolean(PREF_ACCOMPANIMENT, false);
+        playbackDeviceId = prefs.getString(PREF_DEVICE_ID, "");
+        if (playbackDeviceId == null || playbackDeviceId.isEmpty()) {
+            playbackDeviceId = "android-" + java.util.UUID.randomUUID().toString();
+            prefs.edit().putString(PREF_DEVICE_ID, playbackDeviceId).apply();
+        }
+        String model = Build.MODEL != null ? Build.MODEL.trim() : "";
+        String manufacturer = Build.MANUFACTURER != null ? Build.MANUFACTURER.trim() : "";
+        playbackDeviceName = (model.toLowerCase().startsWith(manufacturer.toLowerCase()) ? model : (manufacturer + " " + model)).trim();
+        if (playbackDeviceName.isEmpty()) playbackDeviceName = "Android 手机";
         loadCatalogSnapshot();
         notificationManager = getSystemService(NotificationManager.class);
         createNotificationChannel();
@@ -177,8 +201,20 @@ public class MusicService extends MediaBrowserServiceCompat {
 
     @Override
     public int onStartCommand(Intent intent, int flags, int startId) {
+        // 通知栏 / 蓝牙 / 车机的媒体按键都经由 MediaButtonReceiver 以 startForegroundService 送进来，
+        // 必须先 startForeground 再交给 MediaSession 处理，否则按键无效且会触发 ANR 级异常。
+        if (intent != null && Intent.ACTION_MEDIA_BUTTON.equals(intent.getAction())) {
+            ensureForeground();
+            MediaButtonReceiver.handleIntent(mediaSession, intent);
+            return START_NOT_STICKY;
+        }
+        if (intent == null && playlist.isEmpty()) {
+            // 系统重启服务但已无播放内容：直接退出，不挂一个「准备播放」的死通知。
+            stopSelf();
+            return START_NOT_STICKY;
+        }
         ensureForeground();
-        return START_STICKY;
+        return START_NOT_STICKY;
     }
 
     @Override
@@ -194,6 +230,7 @@ public class MusicService extends MediaBrowserServiceCompat {
     public void onDestroy() {
         coverFetchExecutor.shutdown();
         catalogExecutor.shutdown();
+        mainHandler.removeCallbacks(playbackHeartbeatRunner);
         playbackMetricExecutor.shutdown();
         mainHandler.removeCallbacks(playbackMinuteReporter);
         recycleBitmap();
@@ -213,6 +250,10 @@ public class MusicService extends MediaBrowserServiceCompat {
                 .build(),
             true
         );
+        // 拔耳机 / 断蓝牙时自动暂停，避免突然外放。
+        player.setHandleAudioBecomingNoisy(true);
+        // 熄屏后保持 CPU 与 Wi-Fi 唤醒，不然串流播到一半会停。
+        player.setWakeMode(C.WAKE_MODE_NETWORK);
 
         player.addListener(new Player.Listener() {
             @Override
@@ -231,6 +272,16 @@ public class MusicService extends MediaBrowserServiceCompat {
                 updatePlaybackMinuteReporting();
                 updateNotification();
                 emitPlayStateChanged(isPlaying);
+                if (isPlaying) {
+                    // 本机开始播放：抢占为活动设备（第一次或被别人接管过之后）。
+                    pausedByRemoteDevice = false;
+                    if (needsClaim) {
+                        sendPlaybackHeartbeat(true);
+                    }
+                    scheduleHeartbeat();
+                } else {
+                    mainHandler.removeCallbacks(playbackHeartbeatRunner);
+                }
             }
 
             @Override
@@ -282,15 +333,187 @@ public class MusicService extends MediaBrowserServiceCompat {
 
             @Override
             public void onSeekTo(long pos) { seekTo(pos); }
+
+            @Override
+            public void onStop() { stop(); }
+
+            @Override
+            public void onSkipToQueueItem(long id) {
+                runOnPlayerThread(() -> {
+                    for (int i = 0; i < playlist.size(); i++) {
+                        if (playlist.get(i).id == (int) id) {
+                            skipToIndex(i);
+                            return;
+                        }
+                    }
+                });
+            }
+
+            @Override
+            public void onSetShuffleMode(int shuffleMode) {
+                boolean enabled = shuffleMode == PlaybackStateCompat.SHUFFLE_MODE_ALL
+                    || shuffleMode == PlaybackStateCompat.SHUFFLE_MODE_GROUP;
+                setShuffleEnabled(enabled);
+                emitModeChanged("shuffleChanged", "shuffleEnabled", enabled);
+            }
+
+            @Override
+            public void onSetRepeatMode(int repeatMode) {
+                int exoMode;
+                if (repeatMode == PlaybackStateCompat.REPEAT_MODE_ONE) exoMode = Player.REPEAT_MODE_ONE;
+                else if (repeatMode == PlaybackStateCompat.REPEAT_MODE_ALL
+                    || repeatMode == PlaybackStateCompat.REPEAT_MODE_GROUP) exoMode = Player.REPEAT_MODE_ALL;
+                else exoMode = Player.REPEAT_MODE_OFF;
+                setRepeatMode(exoMode);
+                emitModeChanged("repeatChanged", "repeatMode", repeatModeLabel(exoMode));
+            }
         });
+        mediaSession.setSessionActivity(
+            PendingIntent.getActivity(
+                this, 0,
+                new Intent(this, MainActivity.class)
+                    .setFlags(Intent.FLAG_ACTIVITY_SINGLE_TOP | Intent.FLAG_ACTIVITY_CLEAR_TOP),
+                PendingIntent.FLAG_UPDATE_CURRENT | PendingIntent.FLAG_IMMUTABLE
+            )
+        );
         mediaSession.setActive(true);
         setSessionToken(mediaSession.getSessionToken());
         updatePlaybackState();
     }
 
+    private static String repeatModeLabel(int exoMode) {
+        if (exoMode == Player.REPEAT_MODE_ONE) return "one";
+        if (exoMode == Player.REPEAT_MODE_ALL) return "all";
+        return "off";
+    }
+
+    private void emitModeChanged(String event, String key, Object value) {
+        if (eventCallback == null) return;
+        JSObject payload = new JSObject();
+        if (value instanceof Boolean) payload.put(key, (Boolean) value);
+        else payload.put(key, String.valueOf(value));
+        eventCallback.emit(event, payload);
+    }
+
+    /** 把当前播放列表同步到 MediaSession 的队列，Android Auto 的「队列」页面靠它显示。 */
+    private void syncSessionQueue() {
+        if (mediaSession == null) return;
+        List<MediaSessionCompat.QueueItem> queue = new ArrayList<>();
+        for (PlaylistItem item : playlist) {
+            MediaDescriptionCompat description = new MediaDescriptionCompat.Builder()
+                .setMediaId(MEDIA_MUSIC_PREFIX + item.id)
+                .setTitle(nonEmpty(item.title, "Untitled"))
+                .setSubtitle(nonEmpty(item.album, DEFAULT_ALBUM_LABEL))
+                .setIconUri(resolveArtworkUri(item.coverUrl))
+                .build();
+            queue.add(new MediaSessionCompat.QueueItem(description, item.id));
+        }
+        try {
+            mediaSession.setQueue(queue);
+            mediaSession.setQueueTitle(DEFAULT_ALBUM_LABEL);
+        } catch (Exception e) {
+            Log.w(TAG, "setQueue failed: " + e.getMessage());
+        }
+    }
+
     // ── Public API ───────────────────────────────────────────────────────────
 
     public void setEventCallback(EventCallback callback) { eventCallback = callback; }
+
+    public String getPlaybackDeviceId() { return playbackDeviceId; }
+
+    public String getPlaybackDeviceName() { return playbackDeviceName; }
+
+    public boolean isPausedByRemoteDevice() { return pausedByRemoteDevice; }
+
+    /** JS 端点了「在此设备播放」：先 claim 再继续播。 */
+    public void takeOverPlayback() {
+        needsClaim = true;
+        pausedByRemoteDevice = false;
+        sendPlaybackHeartbeat(true);
+        resume();
+    }
+
+    private void scheduleHeartbeat() {
+        mainHandler.removeCallbacks(playbackHeartbeatRunner);
+        if (player != null && player.isPlaying()) {
+            mainHandler.postDelayed(playbackHeartbeatRunner, PLAYBACK_HEARTBEAT_MS);
+        }
+    }
+
+    /**
+     * 上报心跳（或抢占）。服务端回 is_active=false 说明别的设备正在播：本机暂停并通知 JS 显示横幅。
+     * 这是 WebView 被杀后唯一还在工作的同步通道，所以放在原生服务里。
+     */
+    private void sendPlaybackHeartbeat(boolean claim) {
+        if (baseUrl == null || baseUrl.isEmpty() || playbackDeviceId.isEmpty()) return;
+        final String baseUrlSnapshot = getEffectiveBaseUrl();
+        final int musicId = currentTrackId;
+        final long positionMs = player != null ? Math.max(player.getCurrentPosition(), 0L) : 0L;
+        final long durationMs = player != null && player.getDuration() > 0 ? player.getDuration() : 0L;
+        final boolean playing = player != null && player.isPlaying();
+        String cookieSnapshot = null;
+        try {
+            cookieSnapshot = CookieManager.getInstance().getCookie(baseUrlSnapshot + "/api/music/playback/heartbeat");
+        } catch (Exception ignored) {
+        }
+        final String cookie = cookieSnapshot;
+        if (claim) needsClaim = false;
+        playbackMetricExecutor.execute(() -> {
+            try {
+                String authorizationHeader = NativeAuthSessionStore.getAuthorizationHeader(MusicService.this, baseUrlSnapshot);
+                String effectiveCookie = authorizationHeader == null ? cookie : null;
+                if (authorizationHeader == null && (effectiveCookie == null || effectiveCookie.isEmpty())) {
+                    return; // 未登录：不做设备同步
+                }
+                JSONObject state = NativeMusicRepository.playbackHeartbeat(
+                    baseUrlSnapshot, effectiveCookie, authorizationHeader,
+                    playbackDeviceId, playbackDeviceName, musicId, positionMs, durationMs, playing, claim
+                );
+                if (state == null) return;
+                boolean isActive = state.optBoolean("is_active", true);
+                String activeName = state.optString("active_device_name", "");
+                if (!isActive && !state.optBoolean("stale", false)) {
+                    mainHandler.post(() -> {
+                        if (player != null && player.isPlaying()) {
+                            pausedByRemoteDevice = true;
+                            needsClaim = true;
+                            player.pause();
+                            Log.d(TAG, "Paused: playback taken over by " + activeName);
+                        }
+                        if (eventCallback != null) {
+                            JSObject payload = new JSObject();
+                            payload.put("activeDeviceName", activeName);
+                            payload.put("activeDeviceId", state.optString("active_device_id", ""));
+                            eventCallback.emit("playbackTransferred", payload);
+                        }
+                    });
+                }
+            } catch (Exception e) {
+                Log.w(TAG, "playback heartbeat failed: " + e.getMessage());
+            }
+        });
+    }
+
+    private void releasePlaybackDevice() {
+        if (baseUrl == null || baseUrl.isEmpty() || playbackDeviceId.isEmpty() || needsClaim) return;
+        needsClaim = true;
+        final String baseUrlSnapshot = getEffectiveBaseUrl();
+        String cookieSnapshot = null;
+        try {
+            cookieSnapshot = CookieManager.getInstance().getCookie(baseUrlSnapshot + "/api/music/playback/release");
+        } catch (Exception ignored) {
+        }
+        final String cookie = cookieSnapshot;
+        playbackMetricExecutor.execute(() -> {
+            try {
+                String authorizationHeader = NativeAuthSessionStore.getAuthorizationHeader(MusicService.this, baseUrlSnapshot);
+                NativeMusicRepository.playbackRelease(baseUrlSnapshot, authorizationHeader == null ? cookie : null, authorizationHeader, playbackDeviceId);
+            } catch (Exception e) {
+                Log.w(TAG, "playback release failed: " + e.getMessage());
+            }
+        });
+    }
 
     public void setBaseUrl(String baseUrl) {
         String normalized = NativeMusicRepository.normalizeBaseUrl(baseUrl);
@@ -307,6 +530,23 @@ public class MusicService extends MediaBrowserServiceCompat {
             clearCatalog();
         }
         runOnPlayerThread(this::updatePlaybackMinuteReporting);
+    }
+
+    public void setAccompanimentMode(boolean enabled) {
+        accompanimentMode = enabled;
+        getSharedPreferences(PREFS_NAME, MODE_PRIVATE).edit().putBoolean(PREF_ACCOMPANIMENT, enabled).apply();
+    }
+
+    public boolean isAccompanimentMode() {
+        return accompanimentMode;
+    }
+
+    public String buildPlaybackUrl(NativeMusicRepository.MusicRecord music) {
+        String normalizedBaseUrl = getEffectiveBaseUrl();
+        if (accompanimentMode && music.hasAccompaniment) {
+            return normalizedBaseUrl + "/api/music/accompaniment/" + music.id;
+        }
+        return normalizedBaseUrl + "/api/music/download/" + music.id;
     }
 
     public void setCatalog(
@@ -353,15 +593,16 @@ public class MusicService extends MediaBrowserServiceCompat {
                     : null;
             }
 
-            ConcatenatingMediaSource concat = new ConcatenatingMediaSource();
+            List<MediaSource> sources = new ArrayList<>();
             for (PlaylistItem item : items) {
-                concat.addMediaSource(buildMediaSource(item.url, cookieHeader, authorizationHeader));
+                sources.add(buildMediaSource(item.url, cookieHeader, authorizationHeader));
             }
 
             int safeStart = Math.max(0, Math.min(startIndex, items.size() - 1));
-            player.setMediaSource(concat);
+            player.setMediaSources(sources);
             player.setRepeatMode(exoRepeatMode);
             player.setShuffleModeEnabled(shuffleEnabled);
+            syncSessionQueue();
             player.prepare();
             player.seekToDefaultPosition(safeStart);
             if (positionMs > 0) {
@@ -386,6 +627,114 @@ public class MusicService extends MediaBrowserServiceCompat {
         });
     }
 
+    /**
+     * Swaps playback sources of already-loaded playlist items without reloading the
+     * whole playlist. Items other than the one currently playing are replaced in place
+     * (remove + add at the same index), which does not disturb the current item.
+     * The current item is only re-sourced when its new URL is a local (non-http)
+     * source that differs from what is playing, and then the position and
+     * play-when-ready state are preserved. Dropping the current item's cached URL
+     * (network fallback) never interrupts playback.
+     *
+     * @param urlById resolved playback URL per track id (missing ids are left untouched)
+     */
+    public void updatePlaylistSources(Map<Integer, String> urlById) {
+        updatePlaylistSources(urlById, false);
+    }
+
+    /**
+     * @param forceCurrent true 时连正在播放的那一项也换源（例如原唱 / 伴奏切换），
+     *                     位置和播放状态保留；false 时当前项只接受本地缓存源。
+     */
+    public void updatePlaylistSources(Map<Integer, String> urlById, boolean forceCurrent) {
+        if (urlById == null || urlById.isEmpty()) return;
+        runOnPlayerThread(() -> {
+            if (player == null || playlist.isEmpty()) return;
+            if (player.getMediaItemCount() != playlist.size()) {
+                Log.w(TAG, "updatePlaylistSources skipped: player/playlist size mismatch");
+                return;
+            }
+
+            String authorizationHeader = NativeAuthSessionStore.getAuthorizationHeader(MusicService.this);
+            String cookieHeader = null;
+            int currentIndex = player.getCurrentMediaItemIndex();
+
+            for (int i = 0; i < playlist.size(); i++) {
+                PlaylistItem item = playlist.get(i);
+                String nextUrl = urlById.get(item.id);
+                if (nextUrl == null) continue;
+                nextUrl = nextUrl.trim();
+                if (nextUrl.isEmpty() || nextUrl.equals(item.url)) continue;
+
+                if (i == currentIndex) {
+                    if (isRemoteUrl(nextUrl) && !forceCurrent) {
+                        // Never downgrade the playing item to a network stream mid-play.
+                        continue;
+                    }
+                    if (cookieHeader == null && authorizationHeader == null) {
+                        cookieHeader = safeGetCookie(nextUrl);
+                    }
+                    PlaylistItem replacement = new PlaylistItem(item.id, nextUrl, item.title, item.album, item.coverUrl);
+                    long positionMs = Math.max(player.getCurrentPosition(), 0L);
+                    // Insert the new source right after the current one, seek into it at the
+                    // same position (play-when-ready is preserved), then drop the old one.
+                    playlist.add(i + 1, replacement);
+                    player.addMediaSource(i + 1, buildMediaSource(nextUrl, cookieHeader, authorizationHeader));
+                    player.seekTo(i + 1, positionMs);
+                    playlist.remove(i);
+                    player.removeMediaItem(i);
+                    Log.d(TAG, "Re-sourced current track " + item.id + " in place at " + positionMs + "ms");
+                    continue;
+                }
+
+                if (cookieHeader == null && authorizationHeader == null) {
+                    cookieHeader = safeGetCookie(nextUrl);
+                }
+                PlaylistItem replacement = new PlaylistItem(item.id, nextUrl, item.title, item.album, item.coverUrl);
+                playlist.set(i, replacement);
+                player.removeMediaItem(i);
+                player.addMediaSource(i, buildMediaSource(nextUrl, cookieHeader, authorizationHeader));
+                currentIndex = player.getCurrentMediaItemIndex();
+            }
+        });
+    }
+
+    /**
+     * Removes a non-current playlist item in place. Returns false (without touching
+     * the player) when the item is the one currently playing or is not loaded, in
+     * which case the caller should fall back to a full playlist reload.
+     */
+    public boolean removePlaylistItemById(int trackId) {
+        return callOnPlayerThread(() -> {
+            if (player == null || playlist.isEmpty() || player.getMediaItemCount() != playlist.size()) {
+                return false;
+            }
+            int currentIndex = player.getCurrentMediaItemIndex();
+            for (int i = 0; i < playlist.size(); i++) {
+                if (playlist.get(i).id != trackId) continue;
+                if (i == currentIndex) return false;
+                playlist.remove(i);
+                player.removeMediaItem(i);
+                syncSessionQueue();
+                return true;
+            }
+            return true;
+        }, false);
+    }
+
+    private static boolean isRemoteUrl(String url) {
+        String lower = url.toLowerCase();
+        return lower.startsWith("http://") || lower.startsWith("https://");
+    }
+
+    private String safeGetCookie(String url) {
+        try {
+            return CookieManager.getInstance().getCookie(url);
+        } catch (Exception e) {
+            return null;
+        }
+    }
+
     public void play(String url, String title, String album, String coverUrl) {
         PlaylistItem item = new PlaylistItem(-1, url, title, album, coverUrl);
         List<PlaylistItem> single = new ArrayList<>();
@@ -404,6 +753,7 @@ public class MusicService extends MediaBrowserServiceCompat {
     public void setRepeatMode(int exoRepeatMode) {
         runOnPlayerThread(() -> {
             if (player != null) player.setRepeatMode(exoRepeatMode);
+            updatePlaybackState();
         });
     }
 
@@ -418,7 +768,28 @@ public class MusicService extends MediaBrowserServiceCompat {
 
     public void resume() {
         runOnPlayerThread(() -> {
-            if (player != null) player.play();
+            if (player == null) return;
+            if (player.getMediaItemCount() == 0) {
+                // 车机 / 蓝牙按了播放但还没有列表：从曲库第一首开始播。
+                catalogExecutor.execute(() -> {
+                    try {
+                        ensureCatalogLoaded();
+                        NativeMusicRepository.MusicRecord first = null;
+                        synchronized (catalogLock) {
+                            List<NativeMusicRepository.MusicRecord> sorted =
+                                NativeMusicRepository.sortAllSongsByListOrder(catalogMusics);
+                            if (!sorted.isEmpty()) first = sorted.get(0);
+                        }
+                        if (first != null) {
+                            loadBrowserSelection(new BrowserSelection(first.id, null), true);
+                        }
+                    } catch (Exception e) {
+                        Log.w(TAG, "resume without playlist failed: " + e.getMessage());
+                    }
+                });
+                return;
+            }
+            player.play();
             updatePlaybackState();
             updatePlaybackMinuteReporting();
             updateNotification();
@@ -427,6 +798,8 @@ public class MusicService extends MediaBrowserServiceCompat {
 
     public void stop() {
         runOnPlayerThread(() -> {
+            mainHandler.removeCallbacks(playbackHeartbeatRunner);
+            releasePlaybackDevice();
             if (player != null) player.stop();
             playlist.clear();
             currentTitle = "";
@@ -434,6 +807,7 @@ public class MusicService extends MediaBrowserServiceCompat {
             currentCoverUrl = "";
             currentTrackId = -1;
             recycleBitmap();
+            syncSessionQueue();
             updatePlaybackState();
             updatePlaybackMinuteReporting();
             emitPlayStateChanged(false);
@@ -467,6 +841,17 @@ public class MusicService extends MediaBrowserServiceCompat {
         return callOnPlayerThread(() -> player != null && player.isPlaying(), false);
     }
 
+    public long getBufferedPositionMs() {
+        return callOnPlayerThread(() -> player == null ? 0L : Math.max(player.getBufferedPosition(), 0L), 0L);
+    }
+
+    public boolean isBuffering() {
+        return callOnPlayerThread(
+            () -> player != null && player.getPlaybackState() == Player.STATE_BUFFERING,
+            false
+        );
+    }
+
     public boolean isPlayWhenReady() {
         return callOnPlayerThread(() -> player != null && player.getPlayWhenReady(), false);
     }
@@ -482,6 +867,7 @@ public class MusicService extends MediaBrowserServiceCompat {
             if (player != null) {
                 player.setShuffleModeEnabled(enabled);
             }
+            updatePlaybackState();
         });
     }
 
@@ -517,7 +903,12 @@ public class MusicService extends MediaBrowserServiceCompat {
 
     @Override
     public BrowserRoot onGetRoot(String clientPackageName, int clientUid, Bundle rootHints) {
-        return new BrowserRoot(MEDIA_ROOT, null);
+        // 告诉 Android Auto：专辑用网格、歌曲用列表来展示。
+        Bundle extras = new Bundle();
+        extras.putBoolean("android.media.browse.CONTENT_STYLE_SUPPORTED", true);
+        extras.putInt("android.media.browse.CONTENT_STYLE_BROWSABLE_HINT", 2);
+        extras.putInt("android.media.browse.CONTENT_STYLE_PLAYABLE_HINT", 1);
+        return new BrowserRoot(MEDIA_ROOT, extras);
     }
 
     @Override
@@ -526,9 +917,12 @@ public class MusicService extends MediaBrowserServiceCompat {
         catalogExecutor.execute(() -> {
             List<MediaBrowserCompat.MediaItem> items;
             try {
-                String nodeId = parentId != null ? parentId : MEDIA_ROOT;
-                if (!MEDIA_ROOT.equals(nodeId)) {
+                try {
                     ensureCatalogLoaded();
+                } catch (Exception e) {
+                    // 根节点没网也要能显示，用缓存或空目录顶上。
+                    if (!MEDIA_ROOT.equals(parentId != null ? parentId : MEDIA_ROOT)) throw e;
+                    Log.w(TAG, "Catalog load for root failed: " + e.getMessage());
                 }
                 items = buildBrowserChildren(parentId);
             } catch (Exception e) {
@@ -700,10 +1094,9 @@ public class MusicService extends MediaBrowserServiceCompat {
     }
 
     private PlaylistItem buildBrowserPlaylistItem(NativeMusicRepository.MusicRecord music) {
-        String normalizedBaseUrl = getEffectiveBaseUrl();
         return new PlaylistItem(
             music.id,
-            normalizedBaseUrl + "/api/music/download/" + music.id,
+            buildPlaybackUrl(music),
             music.title,
             resolveMusicAlbumName(music),
             resolveBrowserCoverUrl(music)
@@ -797,7 +1190,8 @@ public class MusicService extends MediaBrowserServiceCompat {
                         item.optString("cover_url", ""),
                         item.optDouble("play_minutes", 0.0),
                         item.optString("created_at", null),
-                        album
+                        album,
+                        item.optBoolean("has_accompaniment", false)
                     ));
                 }
             }
@@ -858,6 +1252,7 @@ public class MusicService extends MediaBrowserServiceCompat {
                     item.put("cover_url", music.coverUrl);
                     item.put("play_minutes", music.playMinutes);
                     item.put("created_at", music.createdAt);
+                    item.put("has_accompaniment", music.hasAccompaniment);
                     musicArray.put(item);
                 }
                 root.put("musics", musicArray);
@@ -1339,47 +1734,156 @@ public class MusicService extends MediaBrowserServiceCompat {
             PlaybackStateCompat.ACTION_PLAY |
             PlaybackStateCompat.ACTION_PAUSE |
             PlaybackStateCompat.ACTION_PLAY_PAUSE |
+            PlaybackStateCompat.ACTION_STOP |
             PlaybackStateCompat.ACTION_PREPARE_FROM_MEDIA_ID |
             PlaybackStateCompat.ACTION_PLAY_FROM_MEDIA_ID |
             PlaybackStateCompat.ACTION_PLAY_FROM_SEARCH |
             PlaybackStateCompat.ACTION_SKIP_TO_NEXT |
             PlaybackStateCompat.ACTION_SKIP_TO_PREVIOUS |
+            PlaybackStateCompat.ACTION_SKIP_TO_QUEUE_ITEM |
+            PlaybackStateCompat.ACTION_SET_SHUFFLE_MODE |
+            PlaybackStateCompat.ACTION_SET_REPEAT_MODE |
             PlaybackStateCompat.ACTION_SEEK_TO;
 
+        int playbackState = player.getPlaybackState();
         int state;
         if (player.isPlaying()) state = PlaybackStateCompat.STATE_PLAYING;
-        else if (player.getPlaybackState() == Player.STATE_ENDED) state = PlaybackStateCompat.STATE_STOPPED;
+        else if (playbackState == Player.STATE_BUFFERING && player.getPlayWhenReady()) state = PlaybackStateCompat.STATE_BUFFERING;
+        else if (playbackState == Player.STATE_ENDED) state = PlaybackStateCompat.STATE_STOPPED;
+        else if (playbackState == Player.STATE_IDLE && player.getMediaItemCount() == 0) state = PlaybackStateCompat.STATE_STOPPED;
         else state = PlaybackStateCompat.STATE_PAUSED;
 
-        mediaSession.setPlaybackState(new PlaybackStateCompat.Builder()
+        PlaybackStateCompat.Builder builder = new PlaybackStateCompat.Builder()
             .setActions(actions)
-            .setState(state, getPositionMs(), player.isPlaying() ? 1.0f : 0.0f)
-            .build());
+            .setState(state, getPositionMs(), player.isPlaying() ? 1.0f : 0.0f);
+        if (currentTrackId > 0) {
+            builder.setActiveQueueItemId(currentTrackId);
+        }
+        mediaSession.setPlaybackState(builder.build());
+        mediaSession.setShuffleMode(
+            player.getShuffleModeEnabled() ? PlaybackStateCompat.SHUFFLE_MODE_ALL : PlaybackStateCompat.SHUFFLE_MODE_NONE
+        );
+        int repeat = player.getRepeatMode();
+        mediaSession.setRepeatMode(
+            repeat == Player.REPEAT_MODE_ONE ? PlaybackStateCompat.REPEAT_MODE_ONE
+                : repeat == Player.REPEAT_MODE_ALL ? PlaybackStateCompat.REPEAT_MODE_ALL
+                : PlaybackStateCompat.REPEAT_MODE_NONE
+        );
     }
 
     private void ensureForeground() {
         promoteNotification(buildFallbackNotification());
     }
 
+    /**
+     * Re-syncs the listening-minute accumulator with the current player state.
+     * Safe to call on every state change: it folds the elapsed time of the running
+     * segment into the accumulator and (re)starts a segment only while actually playing.
+     */
     private void updatePlaybackMinuteReporting() {
         if (Looper.myLooper() != Looper.getMainLooper()) {
             mainHandler.post(this::updatePlaybackMinuteReporting);
             return;
         }
-        mainHandler.removeCallbacks(playbackMinuteReporter);
-        if (player == null || !player.isPlaying() || currentTrackId <= 0 || baseUrl == null || baseUrl.isEmpty()) {
+        foldPlaybackSegment();
+        reportAccumulatedMinutes();
+        schedulePlaybackMinuteTick();
+    }
+
+    private boolean isAccumulatingPlayback() {
+        return player != null && player.isPlaying() && currentTrackId > 0 && baseUrl != null && !baseUrl.isEmpty();
+    }
+
+    /** Adds the running segment (if any) to the accumulator and closes it. */
+    private void foldPlaybackSegment() {
+        if (playbackSegmentStartMs >= 0) {
+            long elapsed = SystemClock.elapsedRealtime() - playbackSegmentStartMs;
+            if (elapsed > 0) {
+                playbackAccumulatedMs += elapsed;
+            }
+            playbackSegmentStartMs = -1L;
+        }
+    }
+
+    /** Reports one add_one_minute per full minute accumulated, keeping the remainder. */
+    private void reportAccumulatedMinutes() {
+        if (currentTrackId <= 0) {
             return;
         }
-        mainHandler.postDelayed(playbackMinuteReporter, 60_000);
+        while (playbackAccumulatedMs >= MINUTE_MS) {
+            playbackAccumulatedMs -= MINUTE_MS;
+            reportOneMinute(currentTrackId);
+        }
+    }
+
+    /** Opens a new segment if playing and schedules the next tick when the minute fills. */
+    private void schedulePlaybackMinuteTick() {
+        mainHandler.removeCallbacks(playbackMinuteReporter);
+        if (!isAccumulatingPlayback()) {
+            return;
+        }
+        playbackSegmentStartMs = SystemClock.elapsedRealtime();
+        long delay = Math.max(MINUTE_MS - playbackAccumulatedMs, 250L);
+        mainHandler.postDelayed(playbackMinuteReporter, delay);
+    }
+
+    private void reportOneMinute(int musicId) {
+        final String baseUrlSnapshot = getEffectiveBaseUrl();
+        final String targetUrl = baseUrlSnapshot + "/api/music/add_one_minute/" + musicId;
+        String cookieSnapshot = null;
+        try {
+            cookieSnapshot = CookieManager.getInstance().getCookie(targetUrl);
+        } catch (Exception ignored) {
+        }
+        final String cookie = cookieSnapshot;
+        playbackMetricExecutor.execute(() -> {
+            try {
+                String authorizationHeader = NativeAuthSessionStore.getAuthorizationHeader(MusicService.this, baseUrlSnapshot);
+                String effectiveCookie = authorizationHeader == null ? cookie : null;
+                NativeMusicRepository.addOneMinute(baseUrlSnapshot, effectiveCookie, authorizationHeader, musicId);
+                Log.d(TAG, "addOneMinute reported for musicId=" + musicId);
+            } catch (Exception e) {
+                Log.w(TAG, "addOneMinute failed: " + e.getMessage());
+            }
+        });
     }
 
     private void promoteNotification(Notification notification) {
         try {
-            if (!isForeground) { startForeground(NOTIFICATION_ID, notification); isForeground = true; return; }
+            boolean playing = player != null && (player.isPlaying()
+                || (player.getPlayWhenReady() && player.getPlaybackState() == Player.STATE_BUFFERING));
+            if (playing || !isForeground) {
+                if (!isForeground) {
+                    startForeground(NOTIFICATION_ID, notification);
+                    isForeground = true;
+                } else {
+                    notificationManager.notify(NOTIFICATION_ID, notification);
+                }
+                if (!playing && player != null && player.getMediaItemCount() > 0) {
+                    // 已暂停：退出前台但保留通知，让用户可以划掉它。
+                    detachForeground();
+                }
+                return;
+            }
+            // 暂停状态下不再是前台服务，只更新通知内容。
             notificationManager.notify(NOTIFICATION_ID, notification);
         } catch (Exception e) {
             Log.e(TAG, "Failed to promote notification", e);
         }
+    }
+
+    private void detachForeground() {
+        if (!isForeground) return;
+        try {
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.N) {
+                stopForeground(STOP_FOREGROUND_DETACH);
+            } else {
+                stopForeground(false);
+            }
+        } catch (Exception e) {
+            Log.w(TAG, "stopForeground(detach) failed: " + e.getMessage());
+        }
+        isForeground = false;
     }
 
     private void createNotificationChannel() {

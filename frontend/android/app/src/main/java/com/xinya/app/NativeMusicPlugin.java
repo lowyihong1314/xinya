@@ -51,10 +51,19 @@ public class NativeMusicPlugin extends Plugin {
     private Integer storedCurrentMusicId = null;
     private String repeatMode = "off";
     private boolean shuffleEnabled = false;
+    /** 伴奏模式（与 MusicService 同步，持久化在服务的 SharedPreferences 里）。 */
+    private boolean accompanimentMode = false;
     private final List<NativeMusicRepository.ListeningSessionRecord> listeningSessions = new ArrayList<>();
     private String listeningTimezone = NativeMusicRepository.DEFAULT_TIMEZONE;
     private int listeningTotalMinutes = 0;
     private int listeningUniqueListeners = 0;
+    /**
+     * Monotonic version of the "structural" state (library, queue, current track,
+     * shuffle/repeat). Carried in getProgress()/getSnapshot() and in the
+     * "snapshotChanged" event so the JS side only pulls the full snapshot when
+     * something other than playback position actually changed.
+     */
+    private long stateVersion = 0L;
 
     private final ServiceConnection connection = new ServiceConnection() {
         @Override
@@ -64,17 +73,40 @@ public class NativeMusicPlugin extends Plugin {
             bound = true;
             binding = false;
             syncServiceBaseUrl();
+            synchronized (stateLock) {
+                accompanimentMode = musicService.isAccompanimentMode();
+            }
             pushCatalogToService();
             musicService.setEventCallback((event, data) -> runOnMainThread(() -> {
+                boolean currentChanged = false;
                 if (musicService != null) {
                     int currentTrackId = musicService.getCurrentTrackId();
                     synchronized (stateLock) {
                         if (currentTrackId > 0 && musicById.containsKey(currentTrackId)) {
+                            Integer previous = storedCurrentMusicId;
                             storedCurrentMusicId = currentTrackId;
+                            currentChanged = previous == null || previous != currentTrackId;
                         }
                     }
                 }
+                if ("shuffleChanged".equals(event)) {
+                    synchronized (stateLock) {
+                        shuffleEnabled = data.optBoolean("shuffleEnabled", shuffleEnabled);
+                    }
+                    emitSnapshotChanged("shuffle");
+                    return;
+                }
+                if ("repeatChanged".equals(event)) {
+                    synchronized (stateLock) {
+                        repeatMode = data.optString("repeatMode", repeatMode);
+                    }
+                    emitSnapshotChanged("repeat");
+                    return;
+                }
                 notifyListeners(event, data);
+                if ("trackChanged".equals(event) || currentChanged) {
+                    emitSnapshotChanged("trackChanged");
+                }
             }));
             flushPendingActions();
         }
@@ -187,7 +219,9 @@ public class NativeMusicPlugin extends Plugin {
             cachedTrackUrls.putAll(nextCachedTrackUrls);
         }
 
-        syncPlaylistPreservingState();
+        // Only swap the sources of loaded items in place; the service decides whether
+        // the currently playing item needs a (position-preserving) re-source at all.
+        syncTrackSourcesToService();
         resolve(call);
     }
 
@@ -217,6 +251,7 @@ public class NativeMusicPlugin extends Plugin {
         try {
             loadPlaylistOnService(musicId, 0L, true);
             persistQueueStateAsync();
+            emitSnapshotChanged("queue");
             resolve(call, buildSnapshot(musicId));
         } catch (Exception e) {
             reject(call, e);
@@ -251,6 +286,7 @@ public class NativeMusicPlugin extends Plugin {
             }
             loadPlaylistOnService(0L, true);
             persistQueueStateAsync();
+            emitSnapshotChanged("queue");
             resolve(call, buildSnapshot());
         } catch (Exception e) {
             reject(call, e);
@@ -283,6 +319,7 @@ public class NativeMusicPlugin extends Plugin {
             }
             loadPlaylistOnService(nextCurrentMusicId, 0L, true);
             persistQueueStateAsync();
+            emitSnapshotChanged("queue");
             resolve(call, buildSnapshot(nextCurrentMusicId));
         } catch (Exception e) {
             reject(call, e);
@@ -297,11 +334,13 @@ public class NativeMusicPlugin extends Plugin {
             return;
         }
 
+        boolean removedCurrent;
         synchronized (stateLock) {
             queueIds.removeIf(id -> id == musicId);
+            removedCurrent = storedCurrentMusicId != null && storedCurrentMusicId == musicId;
             if (queueIds.isEmpty()) {
                 storedCurrentMusicId = null;
-            } else if (storedCurrentMusicId != null && storedCurrentMusicId == musicId) {
+            } else if (removedCurrent) {
                 storedCurrentMusicId = queueIds.get(0);
             }
         }
@@ -309,9 +348,19 @@ public class NativeMusicPlugin extends Plugin {
         if (isQueueEmpty()) {
             stopServicePlayback();
         } else {
-            syncPlaylistPreservingState();
+            // Removing a non-current item is done in place; only fall back to a full
+            // (position-preserving) reload when the playing item itself was removed.
+            boolean removedInPlace = !removedCurrent
+                && ensureServiceBinding(false)
+                && musicService != null
+                && musicService.getCurrentTrackId() > 0
+                && musicService.removePlaylistItemById(musicId);
+            if (!removedInPlace) {
+                syncPlaylistPreservingState();
+            }
         }
         persistQueueStateAsync();
+        emitSnapshotChanged("queue");
         resolve(call, buildSnapshot());
     }
 
@@ -323,6 +372,7 @@ public class NativeMusicPlugin extends Plugin {
         }
         stopServicePlayback();
         persistQueueStateAsync();
+        emitSnapshotChanged("queue");
         resolve(call, buildSnapshot());
     }
 
@@ -345,6 +395,7 @@ public class NativeMusicPlugin extends Plugin {
         try {
             loadPlaylistOnService(musicId, 0L, true);
             persistQueueStateAsync();
+            emitSnapshotChanged("queue");
             resolve(call, buildSnapshot(musicId));
         } catch (Exception e) {
             reject(call, e);
@@ -381,10 +432,66 @@ public class NativeMusicPlugin extends Plugin {
                 musicService.setShuffleEnabled(isShuffleEnabledLocked());
             }
         })) {
+            emitSnapshotChanged("shuffle");
             resolve(call, buildSnapshot());
             return;
         }
         call.reject("Native music service is unavailable");
+    }
+
+    @PluginMethod
+    public void takeOverPlayback(PluginCall call) {
+        if (!runWhenServiceReady(true, () -> {
+            if (musicService != null) musicService.takeOverPlayback();
+            resolve(call, buildSnapshot());
+        })) {
+            call.reject("Native music service is unavailable");
+        }
+    }
+
+    @PluginMethod
+    public void toggleAccompanimentMode(PluginCall call) {
+        boolean next;
+        synchronized (stateLock) {
+            next = !accompanimentMode;
+        }
+        applyAccompanimentMode(call, next);
+    }
+
+    @PluginMethod
+    public void setAccompanimentMode(PluginCall call) {
+        Boolean enabled = call.getBoolean("enabled");
+        if (enabled == null) {
+            call.reject("enabled is required");
+            return;
+        }
+        applyAccompanimentMode(call, enabled);
+    }
+
+    /** 切换伴奏模式后，把队列里每首歌的源换成对应版本；当前曲原位换源并保留进度。 */
+    private void applyAccompanimentMode(PluginCall call, boolean enabled) {
+        Map<Integer, String> urlById = new LinkedHashMap<>();
+        synchronized (stateLock) {
+            accompanimentMode = enabled;
+            for (Integer queueId : queueIds) {
+                NativeMusicRepository.MusicRecord music = musicById.get(queueId);
+                if (music != null) {
+                    urlById.put(music.id, resolvePlaybackUrlLocked(music));
+                }
+            }
+        }
+        if (!runWhenServiceReady(false, () -> {
+            if (musicService == null) return;
+            musicService.setAccompanimentMode(enabled);
+            if (!urlById.isEmpty()) {
+                musicService.updatePlaylistSources(urlById, true);
+            }
+        })) {
+            call.reject("Native music service is unavailable");
+            return;
+        }
+        emitSnapshotChanged("accompaniment");
+        resolve(call, buildSnapshot());
     }
 
     @PluginMethod
@@ -401,6 +508,7 @@ public class NativeMusicPlugin extends Plugin {
                 musicService.setRepeatMode(toExoRepeat(nextMode));
             }
         })) {
+            emitSnapshotChanged("repeat");
             resolve(call, buildSnapshot());
             return;
         }
@@ -492,6 +600,7 @@ public class NativeMusicPlugin extends Plugin {
         }
         if (!runWhenServiceReady(false, () -> {
             musicService.setRepeatMode(toExoRepeat(mode));
+            emitSnapshotChanged("repeat");
             resolve(call, buildSnapshot());
         })) {
             call.reject("Native music service is unavailable");
@@ -533,16 +642,14 @@ public class NativeMusicPlugin extends Plugin {
         }
     }
 
+    /**
+     * Lightweight progress payload for high-frequency polling. Contains scalars only
+     * (no library / queue arrays); {@code stateVersion} tells the caller whether a
+     * full {@link #getSnapshot} is needed.
+     */
     @PluginMethod
     public void getProgress(PluginCall call) {
-        if (!runWhenServiceReady(false, () -> {
-            JSObject result = new JSObject();
-            result.put("positionMs", musicService.getPositionMs());
-            result.put("durationMs", musicService.getDurationMs());
-            result.put("isPlaying", musicService.isPlaying());
-            result.put("currentTrackId", musicService.getCurrentTrackId());
-            resolve(call, result);
-        })) {
+        if (!runWhenServiceReady(false, () -> resolve(call, buildProgress()))) {
             call.reject("Native music service is unavailable");
         }
     }
@@ -550,6 +657,7 @@ public class NativeMusicPlugin extends Plugin {
     @PluginMethod
     public void stop(PluginCall call) {
         stopServicePlayback();
+        emitSnapshotChanged("stop");
         resolve(call, buildSnapshot());
     }
 
@@ -601,6 +709,7 @@ public class NativeMusicPlugin extends Plugin {
             }
         }
         pushCatalogToService();
+        emitSnapshotChanged("library");
     }
 
     private JSObject buildSnapshot() {
@@ -650,14 +759,21 @@ public class NativeMusicPlugin extends Plugin {
 
         long positionMs = 0L;
         long durationMs = 0L;
+        long bufferedMs = 0L;
         boolean isPlaying = false;
+        boolean isBuffering = false;
         if (musicService != null) {
             positionMs = musicService.getPositionMs();
             durationMs = musicService.getDurationMs();
+            bufferedMs = musicService.getBufferedPositionMs();
             isPlaying = musicService.isPlaying();
+            isBuffering = musicService.isBuffering();
         }
 
         JSObject snapshot = new JSObject();
+        snapshot.put("stateVersion", getStateVersion());
+        snapshot.put("bufferedMs", bufferedMs);
+        snapshot.put("isBuffering", isBuffering);
         snapshot.put("albums", albumsArray);
         snapshot.put("musics", musicsArray);
         snapshot.put("queue", queueArray);
@@ -667,6 +783,10 @@ public class NativeMusicPlugin extends Plugin {
         snapshot.put("hasPlaybackSession", hasPlaybackSession);
         snapshot.put("shuffleEnabled", shuffleEnabledSnapshot);
         snapshot.put("repeatMode", repeatModeSnapshot);
+        snapshot.put("accompanimentMode", isAccompanimentModeLocked());
+        snapshot.put("deviceId", musicService != null ? musicService.getPlaybackDeviceId() : "");
+        snapshot.put("deviceName", musicService != null ? musicService.getPlaybackDeviceName() : "");
+        snapshot.put("pausedByRemoteDevice", musicService != null && musicService.isPausedByRemoteDevice());
         snapshot.put("progressMs", positionMs);
         snapshot.put("durationMs", durationMs);
         snapshot.put("listeningTimezone", timezone);
@@ -674,6 +794,117 @@ public class NativeMusicPlugin extends Plugin {
         snapshot.put("listeningTotalMinutes", totalMinutes);
         snapshot.put("listeningUniqueListeners", uniqueListeners);
         return snapshot;
+    }
+
+    private JSObject buildProgress() {
+        Integer currentMusicId;
+        boolean hasPlaybackSession;
+        boolean shuffleEnabledSnapshot;
+        String repeatModeSnapshot;
+        synchronized (stateLock) {
+            currentMusicId = resolveCurrentMusicIdLocked(null);
+            hasPlaybackSession = currentMusicId != null && !queueIds.isEmpty();
+            shuffleEnabledSnapshot = shuffleEnabled;
+            repeatModeSnapshot = repeatMode;
+        }
+
+        long positionMs = 0L;
+        long durationMs = 0L;
+        long bufferedMs = 0L;
+        boolean isPlaying = false;
+        boolean isBuffering = false;
+        int currentTrackId = -1;
+        if (musicService != null) {
+            positionMs = musicService.getPositionMs();
+            durationMs = musicService.getDurationMs();
+            bufferedMs = musicService.getBufferedPositionMs();
+            isPlaying = musicService.isPlaying();
+            isBuffering = musicService.isBuffering();
+            currentTrackId = musicService.getCurrentTrackId();
+        }
+
+        JSObject result = new JSObject();
+        result.put("positionMs", positionMs);
+        result.put("durationMs", durationMs);
+        result.put("bufferedPositionMs", bufferedMs);
+        result.put("isPlaying", isPlaying);
+        result.put("isBuffering", isBuffering);
+        result.put("currentTrackId", currentTrackId);
+        result.put("currentMusicId", currentMusicId);
+        result.put("hasPlaybackSession", hasPlaybackSession);
+        result.put("shuffleEnabled", shuffleEnabledSnapshot);
+        result.put("repeatMode", repeatModeSnapshot);
+        result.put("accompanimentMode", isAccompanimentModeLocked());
+        result.put("pausedByRemoteDevice", musicService != null && musicService.isPausedByRemoteDevice());
+        result.put("stateVersion", getStateVersion());
+        return result;
+    }
+
+    private boolean isAccompanimentModeLocked() {
+        synchronized (stateLock) {
+            return accompanimentMode;
+        }
+    }
+
+    private long getStateVersion() {
+        synchronized (stateLock) {
+            return stateVersion;
+        }
+    }
+
+    /**
+     * Bumps the structural state version and pushes a "snapshotChanged" event so the
+     * web layer knows a full getSnapshot() is worth doing.
+     */
+    private void emitSnapshotChanged(String reason) {
+        long version;
+        synchronized (stateLock) {
+            stateVersion += 1;
+            version = stateVersion;
+        }
+        JSObject payload = new JSObject();
+        payload.put("reason", reason);
+        payload.put("version", version);
+        runOnMainThread(() -> notifyListeners("snapshotChanged", payload));
+    }
+
+    /**
+     * Pushes the resolved playback URL of every queued track to the service, which
+     * swaps only the media items whose source actually changed (never reloading the
+     * whole playlist and never interrupting the current item on a downgrade).
+     */
+    private void syncTrackSourcesToService() {
+        if (!ensureServiceBinding(false) || musicService == null || musicService.getCurrentTrackId() <= 0) {
+            return;
+        }
+        Map<Integer, String> urlById = new LinkedHashMap<>();
+        synchronized (stateLock) {
+            for (Integer queueId : queueIds) {
+                NativeMusicRepository.MusicRecord music = musicById.get(queueId);
+                if (music == null) continue;
+                urlById.put(music.id, resolvePlaybackUrlLocked(music));
+            }
+        }
+        if (urlById.isEmpty()) {
+            return;
+        }
+        try {
+            musicService.updatePlaylistSources(urlById);
+        } catch (Exception e) {
+            Log.w(TAG, "syncTrackSourcesToService failed", e);
+        }
+    }
+
+    private String resolvePlaybackUrlLocked(NativeMusicRepository.MusicRecord music) {
+        if (accompanimentMode && music.hasAccompaniment) {
+            // 伴奏版不走本地缓存，直接串流。
+            return baseUrl + "/api/music/accompaniment/" + music.id;
+        }
+        String playbackUrl = cachedTrackUrls.get(music.id);
+        if (playbackUrl == null || playbackUrl.trim().isEmpty()) {
+            playbackUrl = baseUrl + "/api/music/download/" + music.id;
+        }
+        return playbackUrl;
     }
 
     private void loadPlaylistOnService(long positionMs, boolean playWhenReady) throws Exception {
@@ -695,10 +926,7 @@ public class NativeMusicPlugin extends Plugin {
             for (Integer queueId : queueIds) {
                 NativeMusicRepository.MusicRecord music = musicById.get(queueId);
                 if (music == null) continue;
-                String playbackUrl = cachedTrackUrls.get(music.id);
-                if (playbackUrl == null || playbackUrl.trim().isEmpty()) {
-                    playbackUrl = baseUrlSnapshot + "/api/music/download/" + music.id;
-                }
+                String playbackUrl = resolvePlaybackUrlLocked(music);
                 playlistItems.add(
                     new MusicService.PlaylistItem(
                         music.id,
